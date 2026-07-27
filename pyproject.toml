@@ -11,6 +11,7 @@ dependencies = [
     "pydantic>=2",
     "pydantic-settings>=2",
     "pyyaml>=6",
+    "sqlalchemy>=2",
 ]
 
 [project.optional-dependencies]
@@ -28,6 +29,7 @@ pipeline = [
 ]
 anthropic = ["anthropic>=0.40"]
 openai = ["openai>=1.50"]
+postgres = ["psycopg[binary]>=3"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
