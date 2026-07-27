@@ -28,6 +28,7 @@ from eval.run_baseline import format_report, run_baseline  # noqa: E402
 from receipts.extract.clients.fake import FakeVLMClient  # noqa: E402
 from receipts.extract.schema import (  # noqa: E402
     DocumentType,
+    Legibility,
     LineItem,
     Merchant,
     ReceiptExtraction,
@@ -57,7 +58,10 @@ def _good() -> ReceiptExtraction:
 
 
 def _triage() -> TriageResult:
+    # GOOD legibility keeps the clean receipt at a perfect confidence so it
+    # stays auto-approved under real scoring.
     return TriageResult(document_type=DocumentType.POS_RECEIPT,
+                        legibility=Legibility.GOOD,
                         estimated_line_item_count=2)
 
 
@@ -98,6 +102,8 @@ def test_run_baseline_with_injected_client_scores_golden_set(tmp_path):
     assert report.n_receipts == 1
     # The scripted extraction matches the label, so the run is clean end to end.
     assert report.critical_field_accuracy == 1.0
+    # Real confidence scoring: the clean receipt scores 1.000 and auto-approves.
+    assert report.n_auto_approved == 1
     # A results file was written under the injected results_dir.
     assert list((tmp_path / "results").glob("*.json"))
 

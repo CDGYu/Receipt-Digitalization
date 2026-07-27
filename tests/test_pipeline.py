@@ -27,6 +27,7 @@ from eval.metrics import EvalReport  # noqa: E402
 from receipts.extract.clients.fake import FakeVLMClient  # noqa: E402
 from receipts.extract.schema import (  # noqa: E402
     DocumentType,
+    Legibility,
     LineItem,
     Merchant,
     ReceiptExtraction,
@@ -58,7 +59,10 @@ def _good() -> ReceiptExtraction:
 
 
 def _triage() -> TriageResult:
+    # GOOD legibility keeps the clean receipt at a perfect confidence so it
+    # stays auto-approved under real scoring.
     return TriageResult(document_type=DocumentType.POS_RECEIPT,
+                        legibility=Legibility.GOOD,
                         estimated_line_item_count=2)
 
 
@@ -96,10 +100,13 @@ def test_run_receipt_returns_normalized_extraction_and_report(tmp_path):
     _write_png(png)
     client = FakeVLMClient([_triage(), _good()])
 
-    extraction, report = run_receipt(png, client, CTX)
+    extraction, report, triage_result = run_receipt(png, client, CTX)
 
     assert isinstance(extraction, ReceiptExtraction)
     assert isinstance(report, ValidationReport)
+    # The triage result is returned too, so callers can score confidence
+    # without re-running triage.
+    assert isinstance(triage_result, TriageResult)
     # Call order: triage first, extraction second (proves the fake script maps
     # to the real sequence).
     assert len(client.calls) == 2
@@ -136,7 +143,8 @@ def test_build_eval_pipeline_runs_end_to_end_via_run_eval(tmp_path):
     assert report.n_receipts == 1
     assert report.critical_field_accuracy == 1.0
     assert report.line_item_f1 == 1.0
-    # Placeholder confidence 1.0 clears the auto-approve threshold.
+    # The clean receipt scores a perfect 1.000 under real confidence scoring,
+    # clearing the auto-approve threshold.
     assert report.n_auto_approved == 1
     assert report.auto_approval_precision == 1.0
 

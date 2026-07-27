@@ -23,7 +23,7 @@ from typing import Callable
 
 from .extract.clients.base import VLMClient
 from .extract.extractor import PreparedImage, extract_with_repair, triage
-from .extract.schema import ReceiptExtraction
+from .extract.schema import ReceiptExtraction, TriageResult
 from .normalize import normalize
 from .preprocess.image_ops import (
     fix_orientation,
@@ -32,6 +32,7 @@ from .preprocess.image_ops import (
     to_base64,
     to_rgb,
 )
+from .score.confidence import score_confidence
 from .validate.context import ValidationContext
 from .validate.report import ValidationReport
 
@@ -63,16 +64,18 @@ def run_receipt(
     ctx: ValidationContext,
     *,
     max_attempts: int = 1,
-) -> tuple[ReceiptExtraction, ValidationReport]:
+) -> tuple[ReceiptExtraction, ValidationReport, TriageResult]:
     """Run one receipt end to end: preprocess -> triage -> extract(+repair) ->
     normalize.
 
     ``max_attempts`` is the total number of extraction attempts the model is
     given: the initial extract plus up to ``max_attempts - 1`` repair rounds, so
-    the default of 1 is a single extract with no repair. Returns the normalized
-    winning extraction paired with the validation report for that attempt (the
-    report reflects what the model produced and the repair loop reasoned about;
-    normalization is safe canonicalization applied on top).
+    the default of 1 is a single extract with no repair. Returns a triple of the
+    normalized winning extraction, the validation report for that attempt, and
+    the triage result. The report reflects what the model produced and the
+    repair loop reasoned about (normalization is safe canonicalization applied
+    on top); the triage result is returned so callers can fold its legibility
+    and issue signals into confidence scoring without re-running triage.
 
     Works with any :class:`VLMClient` -- a real client from the factory or the
     offline ``FakeVLMClient``.
@@ -86,7 +89,7 @@ def run_receipt(
         ctx=ctx,
         max_repairs=max(0, max_attempts - 1),
     )
-    return normalize(outcome.extraction), outcome.report
+    return normalize(outcome.extraction), outcome.report, triage_result
 
 
 def _find_image(images_dir: Path, stem: str, suffixes: tuple[str, ...]) -> Path | None:
@@ -109,13 +112,14 @@ def build_eval_pipeline(
 
     Returns ``pipeline_fn(label_path)`` that locates the image whose stem matches
     the label file's stem under ``images_dir``, runs it through
-    :func:`run_receipt`, and returns ``(extraction, confidence)``. A missing
-    image raises a clear :class:`FileNotFoundError`.
+    :func:`run_receipt`, folds the validation report and triage signals into a
+    confidence via :func:`receipts.score.confidence.score_confidence`, and
+    returns ``(extraction, confidence)``. A missing image raises a clear
+    :class:`FileNotFoundError`.
 
-    Confidence scoring does not exist yet (P3.T4 / M3), so this returns a
-    PLACEHOLDER ``Decimal("1.0")``. Real confidence -- folding the validation
-    report plus the triage and self-consistency signals into one score -- lands
-    with the score module; swap it in here when it does.
+    Self-consistency is not run in the straight-line M1 path, so ``consistency``
+    is ``None`` here; when self-consistency lands (M6) its result should be
+    threaded through to lower confidence on disputed fields.
     """
     images_dir = Path(images_dir)
 
@@ -127,9 +131,8 @@ def build_eval_pipeline(
                 f"No image for label {stem!r} under {images_dir} "
                 f"(tried suffixes: {', '.join(image_suffixes)})"
             )
-        extraction, _report = run_receipt(image_path, client, ctx)
-        # PLACEHOLDER confidence -- the real score arrives with the score module
-        # (P3.T4 / M3), which will read _report + triage/consistency signals.
-        return extraction, Decimal("1.0")
+        extraction, report, triage_result = run_receipt(image_path, client, ctx)
+        confidence = score_confidence(extraction, report, triage_result, consistency=None)
+        return extraction, confidence
 
     return pipeline_fn
