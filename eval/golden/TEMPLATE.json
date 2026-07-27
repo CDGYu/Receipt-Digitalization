@@ -1,0 +1,80 @@
+{
+  "merchant": {
+    "name": "GREENFIELD GROCERY",
+    "branch": "Katipunan Branch",
+    "address": "142 Katipunan Ave, Quezon City",
+    "tax_id": "123-456-789-000",
+    "phone": "+63 2 8123 4567"
+  },
+  "receipt": {
+    "number": "OR-000148215",
+    "date": "2026-03-14",
+    "date_raw": "03/14/2026",
+    "time": "18:42",
+    "currency": "PHP",
+    "decimal_convention": "point",
+    "cashier": "M. Santos",
+    "terminal": "POS-03"
+  },
+  "line_items": [
+    {
+      "position": 0,
+      "description_raw": "RICE 5KG PREMIUM",
+      "sku": "4801234567890",
+      "qty": "1",
+      "unit": "pc",
+      "unit_price": "285.00",
+      "line_total": "285.00",
+      "modifiers": []
+    },
+    {
+      "position": 1,
+      "description_raw": "COOKING OIL 1L",
+      "sku": "4809876543210",
+      "qty": "2",
+      "unit": "pc",
+      "unit_price": "92.50",
+      "line_total": "185.00",
+      "modifiers": []
+    },
+    {
+      "position": 2,
+      "description_raw": "EGGS TRAY 30",
+      "sku": "4805555512345",
+      "qty": "1",
+      "unit": "tray",
+      "unit_price": "210.00",
+      "line_total": "210.00",
+      "modifiers": []
+    }
+  ],
+  "totals": {
+    "subtotal": "680.00",
+    "tax": "81.60",
+    "tax_breakdown": [
+      {
+        "label": "VAT 12%",
+        "base": "680.00",
+        "rate": "0.12",
+        "amount": "81.60"
+      }
+    ],
+    "discount": "0.00",
+    "total": "761.60",
+    "tender": "1000.00",
+    "change": "238.40"
+  },
+  "payment": {
+    "method": "CASH",
+    "card_last4": null
+  },
+  "meta": {
+    "is_handwritten": false,
+    "is_refund": false,
+    "legibility": "good",
+    "ambiguous_fields": [],
+    "unreadable_regions": [],
+    "receipt_is_inconsistent": false,
+    "notes": "Worked example. Copy this file to labels/{id}.json and replace every value with what the receipt image actually shows. Money stays as JSON strings so the Decimal scale (e.g. \"761.60\") is preserved."
+  }
+}
