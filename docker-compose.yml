@@ -1,0 +1,29 @@
+# Local Postgres for development. Production and dev use Postgres; the test
+# suite uses SQLite only, so this is not required to run the tests.
+#
+# Start it with:   docker compose up -d
+# Then point the app at it:
+#   DATABASE_URL=postgresql+psycopg://receipts:receipts@localhost:5432/receipts
+#
+# (The psycopg driver is the optional "postgres" extra: pip install -e ".[postgres]".)
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: receipts-postgres
+    environment:
+      POSTGRES_USER: receipts
+      POSTGRES_PASSWORD: receipts
+      POSTGRES_DB: receipts
+    ports:
+      - "5432:5432"
+    volumes:
+      - receipts_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U receipts -d receipts"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  receipts_pgdata:
