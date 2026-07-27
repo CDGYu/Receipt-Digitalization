@@ -1,0 +1,43 @@
+# Tunable validation config. Everything here is overridable per deployment
+# without a code change. Loaded by RuleConfig.from_yaml().
+#
+# Tighten tolerances only when you can show on the golden set that it does not
+# increase false-positive findings — every spurious finding costs accuracy by
+# polluting the repair prompt.
+
+# KEEP `rel` SMALL. Rounding error is bounded in cents, not proportional to
+# magnitude. rel: 0.005 grants +/-4.75 on a 949.20 total, which excuses a
+# misread digit entirely. 0.0002 grants +/-0.19 -- absorbs rounding, catches
+# misreads.
+default_tolerance:
+  rel: 0.0002     # 0.02% safety valve for very large totals
+  floor: 0.02     # absolute cents floor, does the real work
+
+tolerances:
+  # Weighed goods (0.734 kg x 249.50) round at 3dp -> raise the FLOOR, not rel.
+  R021:
+    rel: 0.0005
+    floor: 0.05
+  # Sum-of-lines accumulates per-line rounding, handled by scaling the floor
+  # with line count at call time.
+  R020:
+    rel: 0.0002
+    floor: 0.05
+  R024:
+    rel: 0.0005
+    floor: 0.10
+
+# Plausibility bounds
+max_plausible_total: 1000000
+min_plausible_total: 0.01
+max_receipt_age_years: 10
+future_date_slack_days: 1
+max_qty: 10000
+max_tax_rate: 0.35
+unit_price_outlier_factor: 100
+
+# Behaviour switches
+require_line_items: true
+# Escalate R060 (total not found in the OCR text layer) from WARN to ERROR.
+# Only enable once you actually run an OCR pass alongside the VLM.
+strict_ocr_grounding: false

@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Test / type / lint caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Secrets & local env
+.env
+.env.*
+!.env.example
+
+# Generated data & exports (receipts may contain PII)
+eval/golden/images/
+*.xlsx
+
+# OS / editor
+.DS_Store
+Thumbs.db
