@@ -13,7 +13,11 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8"]
+dev = [
+    "pytest>=8",
+    "ruff>=0.6",
+    "mypy>=1.8",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -22,3 +26,33 @@ where = ["src"]
 pythonpath = ["src", "."]
 testpaths = ["tests"]
 addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+# The existing codebase makes a few deliberate, consistent style choices that
+# these pyupgrade/bugbear rules would otherwise flag. The rules stay enabled in
+# general; we only opt out of the patterns the code intentionally uses, so no
+# existing source under src/, eval/, or tests/ needs to change.
+ignore = [
+    "UP035",  # imports Callable/Iterable from `typing` on purpose (not collections.abc)
+    "UP037",  # quoted type annotations are used intentionally
+    "UP042",  # `class X(str, Enum)` is the project's chosen enum base pattern
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Re-exports: names imported to build a module's public API are not "unused".
+"__init__.py" = ["F401"]
+# Intentional zip() over sequences known to be equal length in the align logic.
+"src/receipts/validate/rules.py" = ["B905"]
+# Test-file conveniences: pragmatic import order and a deliberate zip().
+"tests/test_eval_metrics.py" = ["I001", "B905"]
+# Imports kept for readability / import-smoke checks in this test module.
+"tests/test_extractor.py" = ["F401"]
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true
+warn_unused_ignores = false
