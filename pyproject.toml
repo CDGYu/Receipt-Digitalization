@@ -18,6 +18,13 @@ dev = [
     "ruff>=0.6",
     "mypy>=1.8",
 ]
+pipeline = [
+    "pillow>=10",
+    "opencv-python-headless>=4.9",
+    "pillow-heif>=0.16",
+    "pypdfium2>=4",
+    "openpyxl>=3.1",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]
