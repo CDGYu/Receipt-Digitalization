@@ -211,6 +211,7 @@ so the whole pipeline can be exercised offline at zero API cost.
 |---|---|---|
 | `RECEIPT_SYSTEM_SPEC.md` | 1,625 | The build spec. 19 sections: architecture, seven-table data model, all prompt text, the 28-rule catalogue, confidence scoring, Excel layout, a ~90-function inventory, milestones M0–M7, eval metrics |
 | `VLM_AND_DATA.md` | 383 | Model layer walkthrough, hosted vs. self-hosted, runtime call sequence, cost budget, dataset sourcing, the handwriting gap, bootstrapping plan |
+| `IMPLEMENTATION_PLAN.md` | - | Task-level build plan: 10 phases, 34 tasks across frontend, backend, database, and algorithm polish, with the code review's fixes folded in |
 | `README.md` | — | This file |
 
 ### Implementation
@@ -392,6 +393,8 @@ optimisation).
 
 ## 8. Status: built vs. remaining
 
+> The full task-level breakdown of everything remaining, across frontend, backend, database, and algorithm polish, lives in `IMPLEMENTATION_PLAN.md` (dependency-ordered phases mapped to milestones M0-M7).
+
 ### Built and tested
 
 - Extraction schema, all prompts, tool-schema preparation, response parsing
@@ -461,8 +464,8 @@ in auto-approval rate.
 
 ```bash
 cd receipt-digitizer
-pip install pydantic pyyaml pytest
-PYTHONPATH=src python -m pytest tests/ -q      # 103 passed, no network needed
+pip install -e ".[dev]"     # installs pydantic + pyyaml + pytest
+python -m pytest            # 103 passed; pyproject sets pythonpath=src and testpaths=tests
 ```
 
 ---
@@ -472,6 +475,7 @@ PYTHONPATH=src python -m pytest tests/ -q      # 103 passed, no network needed
 | If you want to... | Read |
 |---|---|
 | Understand the project | This file |
+| See the full task breakdown / what is left to build | `IMPLEMENTATION_PLAN.md` |
 | Build a module | `RECEIPT_SYSTEM_SPEC.md` §14 (function inventory) |
 | Know what order to build in | `RECEIPT_SYSTEM_SPEC.md` §15 (milestones) |
 | Change a prompt | `src/receipts/extract/prompts.py` — then bump `PROMPT_VERSION` and re-run eval |
