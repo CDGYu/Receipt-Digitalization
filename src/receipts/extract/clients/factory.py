@@ -17,9 +17,10 @@ from config.settings import Settings
 from .base import VLMClient
 from .fake import FakeVLMClient
 
-# §17 has no VLM_BASE_URL, so the provider id selects the endpoint: a hosted
-# OpenAI key talks to OpenAI; the self-hosted ids point at their usual local
-# ports (vLLM :8000, Ollama :11434). Override by running behind these defaults.
+# VLM_BASE_URL, when set, selects the endpoint for any OpenAI-family provider;
+# otherwise the provider id picks a default: a hosted OpenAI key talks to OpenAI,
+# and the self-hosted ids point at their usual local ports (vLLM :8000,
+# Ollama :11434).
 _OPENAI_BASE_URLS: dict[str, str] = {
     "openai": "https://api.openai.com/v1",
     "openai_compat": "http://localhost:8000/v1",
@@ -53,9 +54,12 @@ def make_client(settings: Settings) -> VLMClient:
         model = _require(settings.vlm_model_extract, provider, "VLM_MODEL_EXTRACT")
         from .openai_compat import OpenAICompatClient  # lazy: optional SDK
 
+        # An explicitly configured base URL wins; otherwise fall back to the
+        # provider's default endpoint.
+        base_url = settings.vlm_base_url or _OPENAI_BASE_URLS[provider]
         return OpenAICompatClient(
             model_id=model,
-            base_url=_OPENAI_BASE_URLS[provider],
+            base_url=base_url,
             api_key=key,
         )
 

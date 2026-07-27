@@ -65,3 +65,17 @@ def test_money_thresholds_are_decimal(monkeypatch):
 
 def test_get_settings_returns_a_settings_instance():
     assert isinstance(get_settings(), Settings)
+
+
+def test_vlm_base_url_maps_from_env(monkeypatch):
+    # A custom/local OpenAI-compatible endpoint arrives via VLM_BASE_URL.
+    monkeypatch.setenv("VLM_BASE_URL", "http://localhost:11435/v1")
+    settings = Settings(_env_file=None)
+    assert settings.vlm_base_url == "http://localhost:11435/v1"
+
+
+def test_vlm_base_url_defaults_to_none(monkeypatch):
+    # Unset -> None, so the factory falls back to the provider's default endpoint.
+    monkeypatch.delenv("VLM_BASE_URL", raising=False)
+    settings = Settings(_env_file=None)
+    assert settings.vlm_base_url is None

@@ -29,6 +29,8 @@ class Settings(BaseSettings):
     # --- Model provider (§17: Model) ------------------------------------- #
     vlm_provider: str = "fake"
     vlm_api_key: str | None = None
+    # Maps VLM_BASE_URL; overrides the provider default for OpenAI-compatible endpoints.
+    vlm_base_url: str | None = None
     vlm_model_extract: str | None = None
     vlm_model_triage: str | None = None
     vlm_max_tokens: int = 4096
