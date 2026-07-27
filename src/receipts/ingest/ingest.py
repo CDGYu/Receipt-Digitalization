@@ -174,11 +174,18 @@ def expand_pdf(path: Path, out_dir: Path) -> list[Path]:
     try:
         out_paths: list[Path] = []
         for index in range(len(pdf)):
+            # Close the page and its render bitmap each iteration; leaving them
+            # for the GC leaks per-page pdfium objects and triggers warnings.
             page = pdf[index]
-            image = page.render(scale=scale).to_pil()
-            out_path = out_dir / f"page_{index:04d}.png"
-            image.save(out_path, format="PNG")
-            out_paths.append(out_path)
+            bitmap = page.render(scale=scale)
+            try:
+                image = bitmap.to_pil()
+                out_path = out_dir / f"page_{index:04d}.png"
+                image.save(out_path, format="PNG")
+                out_paths.append(out_path)
+            finally:
+                bitmap.close()
+                page.close()
         return out_paths
     finally:
         pdf.close()

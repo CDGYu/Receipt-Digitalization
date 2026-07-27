@@ -164,7 +164,9 @@ def critical_field_accuracy(
         truth.merchant.name or ""
     )
     date_ok = predicted.receipt.date == truth.receipt.date
-    total_ok = within_tolerance(predicted.totals.total, truth.totals.total)
+    # _money_agree (not within_tolerance) so two null totals count as agreement,
+    # symmetric with the date field's null==null; a null vs a value still fails.
+    total_ok = _money_agree(predicted.totals.total, truth.totals.total)
     return name_ok and date_ok and total_ok
 
 

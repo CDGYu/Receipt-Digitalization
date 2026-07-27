@@ -134,6 +134,20 @@ def test_critical_field_accuracy_wrong_date_is_false():
     ) is False
 
 
+def test_critical_field_accuracy_both_null_total_agrees():
+    # Two null totals agree, consistent with the date field's null==null.
+    assert critical_field_accuracy(
+        _extraction(total=None), _extraction(total=None)
+    ) is True
+
+
+def test_critical_field_accuracy_one_null_total_is_false():
+    # A null total against a real one is still a mismatch, not agreement.
+    assert critical_field_accuracy(
+        _extraction(total="224.00"), _extraction(total=None)
+    ) is False
+
+
 # --------------------------------------------------------------------------- #
 # calibration_curve
 # --------------------------------------------------------------------------- #

@@ -122,13 +122,21 @@ class S3Storage:
         self._client().delete_object(Bucket=self.bucket, Key=key)
 
 
-def make_image_key(receipt_id: UUID, variant: str) -> str:
+def make_image_key(
+    receipt_id: UUID, variant: str, when: datetime | None = None
+) -> str:
     """Deterministic blob key for one variant of a receipt image.
 
-    Layout ``receipts/{yyyy}/{mm}/{id}/{variant}.jpg`` using the current UTC year
-    and month. Partitioning by year/month keeps any single directory or object
-    prefix from growing without bound, and keying by ``receipt_id`` keeps every
-    variant of a receipt (original, deskewed, ...) together under one folder.
+    Layout ``receipts/{yyyy}/{mm}/{id}/{variant}.jpg`` using the year and month
+    of ``when`` (defaulting to the current UTC time). Partitioning by year/month
+    keeps any single directory or object prefix from growing without bound, and
+    keying by ``receipt_id`` keeps every variant of a receipt (original,
+    deskewed, ...) together under one folder.
+
+    Callers minting several variants of the *same* receipt should pass a single
+    shared ``when`` so every variant lands in the same yyyy/mm folder -- relying
+    on the wall clock could split them across a month rollover.
     """
-    now = datetime.now(UTC)
-    return f"receipts/{now:%Y}/{now:%m}/{receipt_id}/{variant}.jpg"
+    if when is None:
+        when = datetime.now(UTC)
+    return f"receipts/{when:%Y}/{when:%m}/{receipt_id}/{variant}.jpg"

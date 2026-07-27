@@ -18,7 +18,9 @@ _DMY_RE = re.compile(r"(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})")
 _TIME_FORMATS = ("%H:%M:%S", "%H:%M", "%I:%M:%S %p", "%I:%M %p")
 
 
-def parse_date(raw: str, hint_format: str | None = None) -> tuple[date | None, bool]:
+def parse_date(
+    raw: str, hint_format: str | None = None, today: date | None = None
+) -> tuple[date | None, bool]:
     """Parse ``raw`` into ``(date, was_ambiguous)``.
 
     * A valid ISO ``YYYY-MM-DD`` (``.``/``/`` separators accepted) -> ``(date, False)``.
@@ -26,10 +28,16 @@ def parse_date(raw: str, hint_format: str | None = None) -> tuple[date | None, b
     * If both are <= 12 and the order is unknown -> ``(None, True)``.
     * ``hint_format`` (a ``strptime`` format) is tried first when provided.
     * Anything else -> ``(None, False)``.
+
+    ``today`` anchors the sliding window used to expand a 2-digit year; it
+    defaults to :meth:`date.today` but can be injected so the 2-digit-year
+    branch is deterministic and testable rather than wall-clock dependent.
     """
     if not raw or not raw.strip():
         return (None, False)
     s = raw.strip()
+    if today is None:
+        today = date.today()
 
     if hint_format:
         try:
@@ -48,7 +56,7 @@ def parse_date(raw: str, hint_format: str | None = None) -> tuple[date | None, b
     dmy = _DMY_RE.fullmatch(s)
     if dmy:
         first, second, tail = int(dmy[1]), int(dmy[2]), dmy[3]
-        year = int(tail) if len(tail) == 4 else expand_two_digit_year(int(tail), date.today())
+        year = int(tail) if len(tail) == 4 else expand_two_digit_year(int(tail), today)
         if first > 12 and second > 12:
             return (None, False)  # neither can be a month
         if first > 12:

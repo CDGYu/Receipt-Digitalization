@@ -168,6 +168,16 @@ def test_expand_two_digit_year_sliding_window():
     assert expand_two_digit_year(26, date(2026, 1, 1)) == 2026
 
 
+def test_parse_date_two_digit_year_uses_injected_today():
+    # 2-digit-year DMY (day > 12 so the order is unambiguous). Injecting `today`
+    # makes the sliding-window expansion deterministic and testable without
+    # depending on the wall clock.
+    assert parse_date("13/04/26", today=date(2026, 1, 1)) == (date(2026, 4, 13), False)
+    # Sliding-window branch: '85' is >50 years ahead of 2026, so it slides back
+    # a century to 1985 rather than forward to 2085.
+    assert parse_date("13/04/85", today=date(2026, 1, 1)) == (date(1985, 4, 13), False)
+
+
 # --------------------------------------------------------------------------- #
 # text.clean_text / normalize_merchant_name / normalize_currency
 # --------------------------------------------------------------------------- #

@@ -79,8 +79,15 @@ def export_workbook(
 
     ``ids[i]`` supplies the ``receipt_id`` for each receipt when provided;
     otherwise the 1-based index is used. Missing values become empty cells --
-    nothing is invented.
+    nothing is invented. When ``ids`` is given it must match ``receipts`` in
+    length; a mismatch raises ``ValueError`` before anything is written.
     """
+    if ids is not None and len(ids) != len(receipts):
+        raise ValueError(
+            f"ids has {len(ids)} entries but there are {len(receipts)} receipts; "
+            "they must be the same length"
+        )
+
     wb = Workbook()
 
     receipts_ws = wb.active

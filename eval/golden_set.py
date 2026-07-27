@@ -125,11 +125,17 @@ def load_manifest(manifest_path: Path) -> dict[str, dict]:
     """Load the id -> metadata sidecar, or ``{}`` when it is absent.
 
     A present-but-non-object manifest also collapses to ``{}`` so downstream
-    counting stays simple.
+    counting stays simple, and a malformed or unreadable file does the same --
+    this stays a report-only helper that never raises.
     """
     if not manifest_path.exists():
         return {}
-    data = json.loads(manifest_path.read_text(encoding="utf-8"))
+    try:
+        data = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        # Report-only helper: a malformed or unreadable manifest collapses to
+        # {} rather than raising out of composition_stats.
+        return {}
     return data if isinstance(data, dict) else {}
 
 

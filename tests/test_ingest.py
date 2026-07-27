@@ -16,14 +16,16 @@ from __future__ import annotations
 import importlib.util
 import io
 import uuid
-from datetime import date
+from datetime import UTC, date, datetime
 from decimal import Decimal
+from unittest import mock
 
 import pytest
 
 pytest.importorskip("PIL")
 pytest.importorskip("pypdfium2")
 
+import pypdfium2  # noqa: E402
 from PIL import Image  # noqa: E402
 
 from receipts.ingest import (  # noqa: E402
@@ -125,6 +127,24 @@ def test_make_image_key_layout():
     assert len(parts[2]) == 2 and parts[2].isdigit()  # mm
     assert parts[3] == str(receipt_id)
     assert parts[4] == "original.jpg"
+
+
+def test_make_image_key_uses_injected_when_for_partition():
+    receipt_id = uuid.uuid4()
+    key = make_image_key(receipt_id, "original", when=datetime(2023, 5, 9, tzinfo=UTC))
+    parts = key.split("/")
+    assert parts[1] == "2023"  # yyyy taken from `when`, not the wall clock
+    assert parts[2] == "05"    # mm taken from `when`
+
+
+def test_make_image_key_same_when_keeps_variants_in_one_folder():
+    # Two variants of one receipt minted with the same `when` share a folder,
+    # even across a month rollover a wall-clock read could straddle.
+    receipt_id = uuid.uuid4()
+    when = datetime(2023, 5, 31, 23, 59, tzinfo=UTC)
+    original = make_image_key(receipt_id, "original", when=when)
+    deskewed = make_image_key(receipt_id, "deskewed", when=when)
+    assert original.rsplit("/", 1)[0] == deskewed.rsplit("/", 1)[0]
 
 
 # --------------------------------------------------------------------------- #
@@ -269,6 +289,26 @@ def test_expand_pdf_returns_one_png_per_page(tmp_path):
         with Image.open(page_path) as opened:
             opened.load()
             assert opened.size[0] > 0 and opened.size[1] > 0
+
+
+def test_expand_pdf_closes_per_page_render_bitmaps(tmp_path):
+    # Regression: each page's render bitmap must be closed inside the loop, not
+    # left for the GC -- otherwise pypdfium2 leaks per-page objects and warns.
+    page1 = Image.new("RGB", (200, 300), (255, 0, 0))
+    page2 = Image.new("RGB", (200, 300), (0, 0, 255))
+    pdf_path = tmp_path / "two_pages.pdf"
+    page1.save(pdf_path, "PDF", save_all=True, append_images=[page2])
+
+    with mock.patch.object(
+        pypdfium2.PdfBitmap,
+        "close",
+        autospec=True,
+        side_effect=pypdfium2.PdfBitmap.close,
+    ) as bitmap_close:
+        pages = expand_pdf(pdf_path, tmp_path / "pages")
+
+    assert len(pages) == 2
+    assert bitmap_close.call_count == 2  # one render bitmap explicitly closed per page
 
 
 # --------------------------------------------------------------------------- #

@@ -153,6 +153,16 @@ def test_headers_are_frozen_on_both_sheets(tmp_path):
     assert wb["LineItems"].freeze_panes == "A2"
 
 
+def test_export_workbook_rejects_ids_length_mismatch(tmp_path):
+    # Fail fast: a short ids list must raise before any cells are written, not
+    # IndexError partway through the sheet.
+    receipts = [_receipt_one(), _receipt_two()]
+    out = tmp_path / "book.xlsx"
+    with pytest.raises(ValueError):
+        export_workbook(receipts, out_path=out, ids=["only-one"])
+    assert not out.exists()
+
+
 def test_receipt_id_falls_back_to_index_when_ids_absent(tmp_path):
     receipts = [_receipt_one(), _receipt_two()]
     out = tmp_path / "book.xlsx"

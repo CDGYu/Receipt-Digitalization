@@ -108,6 +108,13 @@ def test_load_manifest_reads_sidecar(tmp_path):
     assert load_manifest(path) == {"r1": {"category": "handwritten"}}
 
 
+def test_load_manifest_malformed_returns_empty(tmp_path):
+    # A malformed manifest is a report-time problem, not a crash: return {}.
+    path = tmp_path / "manifest.json"
+    path.write_text("{ not valid json", encoding="utf-8")
+    assert load_manifest(path) == {}
+
+
 # --------------------------------------------------------------------------- #
 # composition_stats
 # --------------------------------------------------------------------------- #
@@ -138,6 +145,22 @@ def test_composition_stats_counts_from_manifest(tmp_path):
     assert stats["holdout_count"] == 2
     assert stats["targets"]["printed_clean"] == 0.60
     assert stats["targets"]["holdout"] == "0.20-0.30"
+
+
+def test_composition_stats_malformed_manifest_is_safe(tmp_path):
+    # A malformed manifest must not blow up the report helper: size counts still
+    # work and the manifest-derived breakdown collapses to empty.
+    labels_dir = tmp_path / "labels"
+    labels_dir.mkdir()
+    (labels_dir / "r1.json").write_text(_VALID_LABEL, encoding="utf-8")
+
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text("{ not valid json", encoding="utf-8")
+
+    stats = composition_stats(labels_dir, manifest_path)
+    assert stats["total"] == 1
+    assert stats["by_category"] == {}
+    assert stats["holdout_count"] == 0
 
 
 def test_composition_stats_without_manifest_has_empty_breakdown(tmp_path):
