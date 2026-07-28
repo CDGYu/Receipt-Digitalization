@@ -1,4 +1,4 @@
-"""The review API's app factory and read routes (P4.T4, spec §14.9).
+"""The review API's app factory and routes (P4.T4/T5, spec §14.9).
 
 :func:`create_app` is the one place that assembles the service: it wires the
 four pieces of state Task 3's guards already read off ``app.state``
@@ -8,8 +8,10 @@ install_session_middleware`, which refuses to start without
 ``SESSION_SECRET`` -- see its docstring for why that is a hard failure and
 not a generated default), mounts the auth router
 (:func:`~receipts.review.auth.build_auth_router`), installs the error
-handlers, and installs this task's read routes: ``GET /health``,
-``GET /receipts``, ``GET /receipts/{id}``, ``GET /metrics``.
+handlers, and installs the read routes (Task 4: ``GET /health``,
+``GET /receipts``, ``GET /receipts/{id}``, ``GET /metrics``) and the write
+routes (Task 5: ``POST /upload``, ``PATCH /receipts/{id}``, the signed image
+routes, the review queue routes, ``GET /export/xlsx``).
 
 Error handling lives in one place (:func:`_install_error_handlers`) so every
 route gets it for free instead of repeating a ``try/except`` per handler:
@@ -25,30 +27,84 @@ not put SQL, a traceback, or a storage path in a response body.
 
 from __future__ import annotations
 
+import logging
+import mimetypes
+import shutil
+import tempfile
 import uuid
 from datetime import date
 from decimal import Decimal
-from typing import Annotated, Any
+from pathlib import Path
+from typing import Annotated, Any, Literal
 
-from fastapi import Depends, FastAPI, HTTPException, Query, Request
-from fastapi.responses import JSONResponse
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response, UploadFile
+from fastapi.responses import FileResponse, JSONResponse
 from sqlalchemy import func, select, text
 from sqlalchemy.exc import DBAPIError
+from sqlalchemy.orm import Session
+from starlette.background import BackgroundTask
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from config.settings import Settings, get_settings
 
-from ..ingest.ingest import ReceiptJob
-from ..persist.models import Receipt
-from ..persist.repository import get_findings, get_receipt, query_receipts
+from ..export.xlsx import export_workbook
+from ..ingest.ingest import ReceiptJob, ingest_bytes
+from ..persist.models import Receipt, ReviewTask
+from ..persist.repository import (
+    apply_corrections,
+    create_pending_receipt,
+    get_findings,
+    get_receipt,
+    query_receipts,
+)
+from ..persist.users import ROLE_ADMIN
 from ..score.confidence import ReceiptStatus
 from ..score.thresholds import AUTO_APPROVE_THRESHOLD, REVIEW_THRESHOLD
-from .auth import SessionUser, build_auth_router, install_session_middleware, require_user
-from .queue import queue_stats
-from .schemas import ErrorBody, ErrorDetail, HealthStatus, MetricsResponse, ReceiptListResponse
-from .serializers import receipt_detail, receipt_summary
+from .auth import (
+    SessionUser,
+    build_auth_router,
+    install_session_middleware,
+    require_role,
+    require_upload,
+    require_user,
+    sign_url,
+    verify_signature,
+)
+from .queue import close_task, next_task, queue_stats
+from .schemas import (
+    CorrectionPatch,
+    ErrorBody,
+    ErrorDetail,
+    HealthStatus,
+    MetricsResponse,
+    ReceiptListResponse,
+)
+from .serializers import build_export_rows, receipt_detail, receipt_summary
 
 __all__ = ["create_app"]
+
+logger = logging.getLogger(__name__)
+
+#: The image blob route's signed payload is ``f"{receipt_id}|{variant}"``,
+#: joined with a bare ``|`` (see ``auth.sign_url``'s docstring). That is only
+#: unambiguous if ``variant`` cannot itself contain ``|`` or otherwise shift
+#: the join boundary, so it is typed as a closed set rather than a free
+#: string -- FastAPI rejects anything outside it with 422 before either
+#: image route ever builds or checks a signature.
+ImageVariant = Literal["original", "processed"]
+
+#: Past this many matching receipts, ``GET /export/xlsx`` refuses rather than
+#: truncating (see that route's docstring). A module global, not a local
+#: constant inside the route, specifically so a test can lower it with
+#: ``monkeypatch.setattr(api_module, "_EXPORT_MAX_ROWS", ...)`` without a
+#: database of five thousand receipts.
+_EXPORT_MAX_ROWS = 5000
+
+#: Receipt statuses ``GET /export/xlsx`` leaves out unless ``status=`` names
+#: one of them explicitly (ambiguity resolution #4): a pending row is an
+#: upload in flight rather than a transaction, and a rejected one is a
+#: duplicate the pipeline deliberately keeps out of exports.
+_EXPORT_EXCLUDED_BY_DEFAULT = frozenset({ReceiptStatus.PENDING, ReceiptStatus.REJECTED})
 
 
 def _default_submit(job: ReceiptJob) -> Any:
@@ -203,6 +259,354 @@ def _install_read_routes(app: FastAPI) -> None:
 
 
 # --------------------------------------------------------------------------- #
+# Write routes (P4.T5)
+# --------------------------------------------------------------------------- #
+
+
+def _task_summary(task: ReviewTask) -> dict[str, Any]:
+    """A :class:`~receipts.persist.models.ReviewTask` row as JSON."""
+    return {
+        "id": str(task.id),
+        "receipt_id": str(task.receipt_id),
+        "reason": task.reason,
+        "priority": task.priority,
+        "assigned_to": task.assigned_to,
+        "state": task.state.value,
+        "opened_at": task.opened_at.isoformat(),
+        "closed_at": task.closed_at.isoformat() if task.closed_at is not None else None,
+    }
+
+
+def _image_key_for(receipt: Receipt, variant: ImageVariant) -> str:
+    """The blob key for ``variant`` of ``receipt``, falling back to the original.
+
+    ``processed_image_key`` is only ever set once a preprocessing pass has
+    actually run; a receipt still awaiting (or that never got) one has no
+    processed variant, and the original is always the honest fallback rather
+    than a 404 on a perfectly valid receipt.
+    """
+    if variant == "processed" and receipt.processed_image_key:
+        return receipt.processed_image_key
+    return receipt.image_key
+
+
+def _query_export_receipts(
+    session: Session,
+    *,
+    status: ReceiptStatus | None,
+    merchant_id: uuid.UUID | None,
+    date_from: date | None,
+    date_to: date | None,
+    min_confidence: Decimal | None,
+    limit: int,
+) -> list[Receipt]:
+    """Receipts for ``GET /export/xlsx``: the same filters as
+    :func:`~receipts.persist.repository.query_receipts`, plus the
+    export-only exclusion of ``PENDING``/``REJECTED`` unless ``status``
+    names one of them explicitly.
+
+    A dedicated query rather than a call to ``query_receipts`` because that
+    function's ``status`` filter is a single equality -- it has no way to
+    express "every status except these two" -- and the export exclusion
+    needs exactly that. Ordered ``created_at`` then ``id``, matching
+    ``query_receipts``, so the two entry points never disagree about paging
+    order.
+    """
+    query = select(Receipt)
+    if status is not None:
+        query = query.where(Receipt.status == status)
+    else:
+        query = query.where(Receipt.status.not_in(_EXPORT_EXCLUDED_BY_DEFAULT))
+    if merchant_id is not None:
+        query = query.where(Receipt.merchant_id == merchant_id)
+    if date_from is not None:
+        query = query.where(Receipt.txn_date >= date_from)
+    if date_to is not None:
+        query = query.where(Receipt.txn_date <= date_to)
+    if min_confidence is not None:
+        query = query.where(Receipt.confidence >= min_confidence)
+
+    query = query.order_by(Receipt.created_at, Receipt.id).limit(limit)
+    return list(session.scalars(query))
+
+
+def _install_write_routes(app: FastAPI) -> None:
+    @app.post("/upload", status_code=202)
+    async def upload(
+        request: Request,
+        file: UploadFile,
+        user: Annotated[SessionUser | None, Depends(require_upload)],
+    ) -> Any:
+        """Store the upload, write a ``pending`` row, then queue it (§14.1, D4).
+
+        The row is committed *before* ``submit`` is called, on purpose: a
+        job the queue loses (an evicted Redis entry, a worker that dies
+        before it persists) must be a visible stuck ``pending`` row, not a
+        blob on disk with nothing in the database (ambiguity resolution --
+        "nothing is silently dropped"). If ``submit`` itself raises, the row
+        already exists and is visible, so this returns 503 naming the
+        receipt id (a caller can retry the same id via ``receipts
+        reprocess``, P4.T5) and logs the failure -- it does not undo the
+        commit.
+        """
+        settings = request.app.state.settings
+        storage = request.app.state.storage
+        data = await file.read()
+
+        try:
+            job = ingest_bytes(
+                data,
+                file.filename or "upload",
+                storage,
+                source="api",
+                max_mb=settings.max_upload_mb,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+        with request.app.state.session_factory() as session:
+            create_pending_receipt(session, job)
+            session.commit()
+
+        try:
+            request.app.state.submit(job)
+        except Exception:
+            logger.exception(
+                "receipt %s was accepted and stored but could not be queued", job.id
+            )
+            raise HTTPException(
+                status_code=503,
+                detail=(
+                    f"receipt {job.id} was accepted and stored, but could not be "
+                    "queued for processing; it is safe to retry"
+                ),
+            ) from None
+
+        return {"receipt_id": str(job.id), "image_key": job.image_key, "status": "pending"}
+
+    @app.patch("/receipts/{receipt_id}")
+    def patch_receipt(
+        receipt_id: uuid.UUID,
+        patch: CorrectionPatch,
+        request: Request,
+        user: Annotated[SessionUser, Depends(require_user)],
+    ) -> dict[str, Any]:
+        """Apply a reviewer's edits, attributed to the **session** user.
+
+        ``corrected_by=user.username`` -- not a shared key, not a client-
+        supplied field -- is the entire reason session auth exists (see
+        ``auth.py``'s module docstring): a correction must be traceable to a
+        real account. ``apply_corrections`` owns its own transaction (it
+        commits or rolls back itself), so this route does not wrap it in a
+        second one, and its return value is the already-committed, already
+        re-read ``Receipt`` -- serializing it directly here avoids a second,
+        redundant fetch for data ``apply_corrections`` just finished writing.
+        """
+        raw_patch = patch.model_dump(exclude_unset=True, mode="json")
+        with request.app.state.session_factory() as session:
+            receipt = apply_corrections(
+                session, receipt_id, raw_patch, corrected_by=user.username
+            )
+            findings = get_findings(session, receipt_id)
+            return receipt_detail(receipt, findings)
+
+    @app.get("/receipts/{receipt_id}/image")
+    def get_image_url(
+        receipt_id: uuid.UUID,
+        request: Request,
+        user: Annotated[SessionUser, Depends(require_user)],
+        variant: ImageVariant = "original",
+    ) -> dict[str, str]:
+        """An app-signed, expiring link to the blob sub-route (§6.1).
+
+        Not ``storage.url()``: ``LocalStorage`` returns a ``file://`` URI
+        (unusable in a browser and a disclosure of a server path) while
+        ``S3Storage`` presigns properly, so the two backends would behave
+        differently in the review UI. Signing ``f"{receipt_id}|{variant}"``
+        here, independent of the storage backend, is what keeps the two
+        deployments identical from a client's point of view.
+        """
+        with request.app.state.session_factory() as session:
+            receipt = get_receipt(session, receipt_id)
+            if receipt is None:
+                raise HTTPException(status_code=404, detail=f"no receipt with id {receipt_id}")
+
+        settings = request.app.state.settings
+        signature, exp = sign_url(
+            f"{receipt_id}|{variant}",
+            secret=settings.session_secret,
+            ttl_s=settings.image_url_ttl_s,
+        )
+        return {
+            "url": f"/receipts/{receipt_id}/image/blob?variant={variant}&exp={exp}&sig={signature}"
+        }
+
+    @app.get("/receipts/{receipt_id}/image/blob")
+    def get_image_blob(
+        receipt_id: uuid.UUID,
+        request: Request,
+        variant: ImageVariant = "original",
+        exp: int = Query(...),
+        sig: str = Query(...),
+    ) -> Response:
+        """Stream the actual bytes. No session dependency, on purpose.
+
+        This has to work from a bare ``<img src="...">`` tag, which sends no
+        cookie and no header a caller controls -- the HMAC signature over
+        ``(receipt_id, variant, exp)`` is what authorizes the request
+        instead. ``receipt_id`` is parsed as a ``uuid.UUID`` path parameter
+        and ``variant`` is a closed set (see :data:`ImageVariant`) *before*
+        the signed message is rebuilt -- both are what keep the ``|``-joined
+        construction in ``sign_url``/``verify_signature`` unambiguous (see
+        their docstrings).
+        """
+        settings = request.app.state.settings
+        if not verify_signature(
+            f"{receipt_id}|{variant}",
+            secret=settings.session_secret,
+            signature=sig,
+            exp=exp,
+        ):
+            raise HTTPException(status_code=403, detail="invalid or expired image link")
+
+        with request.app.state.session_factory() as session:
+            receipt = get_receipt(session, receipt_id)
+            if receipt is None:
+                raise HTTPException(status_code=404, detail=f"no receipt with id {receipt_id}")
+            key = _image_key_for(receipt, variant)
+
+        data = request.app.state.storage.get(key)
+        media_type = mimetypes.guess_type(key)[0] or "application/octet-stream"
+        return Response(content=data, media_type=media_type)
+
+    @app.get("/review/next")
+    def review_next(
+        request: Request,
+        user: Annotated[SessionUser, Depends(require_user)],
+    ) -> dict[str, Any]:
+        """Claim the next task for the caller, with a compact receipt payload.
+
+        ``{"task": null}`` (200, not 204) on an empty queue -- one response
+        shape for the client to parse rather than an empty-body special
+        case. The receipt payload is deliberately the light
+        ``receipt_summary`` (id, status, confidence, merchant, date,
+        currency, total), not the full ``receipt_detail`` with line items
+        and findings: enough for a reviewer to triage which task they picked
+        up, with the detail screen (``GET /receipts/{id}``) one click away.
+        """
+        with request.app.state.session_factory() as session:
+            task = next_task(session, assignee=user.username)
+            if task is None:
+                session.commit()
+                return {"task": None}
+            receipt = get_receipt(session, task.receipt_id)
+            payload = {
+                "task": _task_summary(task),
+                "receipt": receipt_summary(receipt) if receipt is not None else None,
+            }
+            session.commit()
+            return payload
+
+    @app.post("/review/{task_id}/complete")
+    def review_complete(
+        task_id: uuid.UUID,
+        request: Request,
+        user: Annotated[SessionUser, Depends(require_user)],
+    ) -> dict[str, Any]:
+        """Close a task. Only its assignee or an admin may.
+
+        ``{task_id}`` is a **review task** id, not a receipt id -- it
+        follows ``GET /review/next`` in the spec (ambiguity resolution #1).
+        Checked before ``close_task`` runs, so an unauthorized caller cannot
+        move ``closed_at`` even once: ``close_task`` is itself idempotent
+        (a second close on an already-closed task does not move the
+        timestamp), but that idempotency is not a substitute for the
+        permission check.
+        """
+        with request.app.state.session_factory() as session:
+            task = session.get(ReviewTask, task_id)
+            if task is None:
+                raise HTTPException(status_code=404, detail=f"no review task with id {task_id}")
+            if task.assigned_to != user.username and user.role != ROLE_ADMIN:
+                raise HTTPException(
+                    status_code=403,
+                    detail="only the assignee or an admin may complete this task",
+                )
+            task = close_task(session, task_id)
+            session.commit()
+            return _task_summary(task)
+
+    @app.get("/export/xlsx")
+    def export_xlsx(
+        request: Request,
+        admin: Annotated[SessionUser, Depends(require_role(ROLE_ADMIN))],
+        status: ReceiptStatus | None = None,
+        merchant_id: uuid.UUID | None = None,
+        date_from: date | None = None,
+        date_to: date | None = None,
+        min_confidence: Decimal | None = None,
+    ) -> FileResponse:
+        """Stream the §13 workbook. Admin only (D3).
+
+        Fetches ``_EXPORT_MAX_ROWS + 1`` rows -- the same "fetch one past
+        the limit" trick ``GET /receipts`` uses for ``has_more`` -- and
+        refuses with 400 rather than truncating when that many actually
+        come back: a silently shortened export reads as a complete ledger,
+        which is worse than making the caller narrow the filter and ask
+        again.
+
+        The workbook is written under ``tempfile.mkdtemp()``, not a
+        ``tempfile.TemporaryDirectory()`` context manager entered around the
+        ``return``: a ``FileResponse`` streams the file lazily, after this
+        function has already returned, and a ``with`` block's ``__exit__``
+        (which deletes the directory) runs as part of that same ``return``
+        -- before Starlette ever gets to open the path. Cleanup is instead a
+        ``BackgroundTask`` that runs after the response has been fully
+        sent, which is the documented pattern for exactly this case.
+        """
+        settings = request.app.state.settings
+        with request.app.state.session_factory() as session:
+            rows = _query_export_receipts(
+                session,
+                status=status,
+                merchant_id=merchant_id,
+                date_from=date_from,
+                date_to=date_to,
+                min_confidence=min_confidence,
+                limit=_EXPORT_MAX_ROWS + 1,
+            )
+            if len(rows) > _EXPORT_MAX_ROWS:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"this export matches more than {_EXPORT_MAX_ROWS} receipts; "
+                        "narrow the filter (status, merchant, or date range) and try again"
+                    ),
+                )
+            extractions, export_rows = build_export_rows(
+                session,
+                rows,
+                secret=settings.session_secret,
+                image_url_ttl_s=settings.export_image_url_ttl_s,
+            )
+
+        tmpdir = tempfile.mkdtemp(prefix="receipts-export-")
+        out_path = Path(tmpdir) / "receipts-export.xlsx"
+        try:
+            export_workbook(extractions, out_path, rows=export_rows)
+        except Exception:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+            raise
+
+        return FileResponse(
+            out_path,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            filename="receipts-export.xlsx",
+            background=BackgroundTask(shutil.rmtree, tmpdir, ignore_errors=True),
+        )
+
+
+# --------------------------------------------------------------------------- #
 # App factory
 # --------------------------------------------------------------------------- #
 
@@ -218,8 +622,8 @@ def create_app(
 
     Populates the four ``app.state`` attributes Task 3's guards already read
     (``session_factory``, ``storage``, ``settings``, ``submit``), then wires
-    session auth, the auth router, the error handlers, and this task's read
-    routes, in that order.
+    session auth, the auth router, the error handlers, and the read and
+    write routes, in that order.
 
     ``install_session_middleware`` is called unconditionally: an app with no
     ``SESSION_SECRET`` must fail at construction, not serve unauthenticated
@@ -235,4 +639,5 @@ def create_app(
     app.include_router(build_auth_router())
     _install_error_handlers(app)
     _install_read_routes(app)
+    _install_write_routes(app)
     return app

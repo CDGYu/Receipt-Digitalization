@@ -1,4 +1,4 @@
-"""JSON serializers for the review API's read routes (P4.T4, spec §14.9).
+"""JSON serializers for the review API's read and write routes (P4.T4/T5, spec §14.9).
 
 Two rules from the data model carry straight into these functions:
 
@@ -17,17 +17,36 @@ Two rules from the data model carry straight into these functions:
     the kind this project has already shipped once (an eval artifact
     claiming 100% precision on zero receipts). :func:`receipt_detail` passes
     the column through verbatim.
+
+:func:`build_export_rows` (P4.T5) is the write side's one addition: it turns
+persisted ``Receipt`` rows back into the ``(ReceiptExtraction,
+ReceiptExportRow)`` pairs :func:`receipts.export.xlsx.export_workbook` wants.
+It lives here, not in :mod:`receipts.export.xlsx`, so that module stays
+decoupled from the ORM (ADR-0010) -- the serializer sits on the API side of
+that boundary.
 """
 
 from __future__ import annotations
 
+import uuid
 from datetime import date as date_cls
 from decimal import Decimal
 from typing import Any
 
-from ..persist.models import LineItem, Receipt, ValidationFinding
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
-__all__ = ["money", "receipt_detail", "receipt_summary"]
+from ..export.xlsx import ReceiptExportRow
+from ..extract.schema import ExtractionMeta, ReceiptExtraction, ReceiptMeta, Totals
+from ..extract.schema import LineItem as ExtractLineItem
+from ..extract.schema import Merchant as ExtractMerchant
+from ..extract.schema import Modifier as ExtractModifier
+from ..extract.schema import Payment as ExtractPayment
+from ..persist.models import LineItem, Receipt, ReviewTask, ValidationFinding
+from ..validate.report import Severity
+from .auth import sign_url
+
+__all__ = ["build_export_rows", "money", "receipt_detail", "receipt_summary"]
 
 
 def money(value: Decimal | None) -> str | None:
@@ -131,3 +150,167 @@ def receipt_detail(receipt: Receipt, findings: list[ValidationFinding]) -> dict[
         "line_items": [_line_item(item) for item in receipt.line_items],
         "findings": [_finding(finding) for finding in findings],
     }
+
+
+# --------------------------------------------------------------------------- #
+# Export (P4.T5, ``GET /export/xlsx``)
+# --------------------------------------------------------------------------- #
+
+
+def _export_extraction(receipt: Receipt) -> ReceiptExtraction:
+    """Rebuild a :class:`~receipts.extract.schema.ReceiptExtraction` from one
+    persisted ``Receipt`` (plus its ``line_items``), for
+    :func:`receipts.export.xlsx.export_workbook`.
+
+    **Lossy against the full extraction schema.** ``tax_breakdown``,
+    ``prices_include_tax``, ``meta.ambiguous_fields``,
+    ``meta.unreadable_regions``, ``meta.notes``, and the merchant's
+    ``address``/``tax_id``/``phone``/``branch`` are not columns on
+    ``receipts`` -- they were never persisted past the extraction run that
+    produced them, so there is nothing here to rebuild them from. They are
+    left at their schema defaults (``[]``/``None``/``False``), never
+    invented.
+
+    **Lossless for every column §13 (and this codebase's
+    ``export/xlsx.py``) actually writes to a cell**, because the database is
+    the source of truth and Excel is output only (ADR-0010): every one of
+    ``_RECEIPT_HEADERS`` / ``_LINEITEM_HEADERS`` / ``_REVIEW_HEADERS`` /
+    ``_SUMMARY_HEADERS`` in :mod:`receipts.export.xlsx` reads either directly
+    off a ``receipts``/``line_items`` column reproduced here, or off the
+    :class:`~receipts.export.xlsx.ReceiptExportRow` companion this function's
+    caller (:func:`build_export_rows`) builds alongside it.
+    """
+    return ReceiptExtraction(
+        merchant=ExtractMerchant(name=receipt.merchant_name_raw),
+        receipt=ReceiptMeta(
+            number=receipt.receipt_number,
+            date=receipt.txn_date.isoformat() if receipt.txn_date is not None else None,
+            date_raw=receipt.date_raw,
+            time=receipt.txn_time.strftime("%H:%M") if receipt.txn_time is not None else None,
+            currency=receipt.currency,
+        ),
+        line_items=[
+            ExtractLineItem(
+                position=item.position,
+                description_raw=item.description_raw,
+                sku=item.sku,
+                qty=item.qty,
+                unit=item.unit,
+                unit_price=item.unit_price,
+                line_total=item.line_total,
+                modifiers=[ExtractModifier(**modifier) for modifier in item.modifiers],
+            )
+            for item in receipt.line_items
+        ],
+        totals=Totals(
+            subtotal=receipt.subtotal,
+            tax=receipt.tax_total,
+            discount=receipt.discount_total,
+            total=receipt.total,
+            tender=receipt.tender_amount,
+            change=receipt.change_amount,
+        ),
+        payment=ExtractPayment(method=receipt.payment_method, card_last4=receipt.card_last4),
+        meta=ExtractionMeta(
+            is_handwritten=receipt.is_handwritten,
+            legibility=receipt.legibility,
+            receipt_is_inconsistent=receipt.receipt_is_inconsistent,
+        ),
+    )
+
+
+def _export_image_url(receipt_id: uuid.UUID, *, secret: str, ttl_s: int) -> str:
+    """A signed link to the receipt's original image, valid for ``ttl_s``.
+
+    Same construction as ``GET /receipts/{id}/image`` in ``review/api.py``
+    (``sign_url`` over ``"{receipt_id}|{variant}"``, a relative link to the
+    unauthenticated blob sub-route) -- deliberately the *original*, not
+    ``processed``, since export is a financial record and the original is
+    what was actually photographed. Callers who open the workbook get
+    ``ttl_s`` (``settings.export_image_url_ttl_s``, a day by default) rather
+    than the few minutes the review screen's own links get, because anyone
+    holding the file can open the links until they expire -- see the
+    export route's docstring.
+    """
+    signature, exp = sign_url(f"{receipt_id}|original", secret=secret, ttl_s=ttl_s)
+    return f"/receipts/{receipt_id}/image/blob?variant=original&exp={exp}&sig={signature}"
+
+
+def build_export_rows(
+    session: Session,
+    receipts: list[Receipt],
+    *,
+    secret: str,
+    image_url_ttl_s: int,
+) -> tuple[list[ReceiptExtraction], list[ReceiptExportRow]]:
+    """The ``(ReceiptExtraction, ReceiptExportRow)`` pairs ``export_workbook`` wants.
+
+    ``receipts[i]`` and the two returned lists' ``i``-th entries always
+    describe the same row -- callers must not reorder one list without the
+    other.
+
+    Two batched joins, not one query per receipt:
+
+      * ``review_tasks`` -- the ``reason``/``priority`` a receipt was routed
+        to review with, keyed by ``receipt_id`` (unique per §6.7, so at most
+        one task per receipt). ``None``/``None`` when a receipt was never
+        queued (auto-approved, or already reviewed and the task closed and
+        never reopened).
+      * ``validation_findings`` -- folded into
+        :attr:`~receipts.export.xlsx.ReceiptExportRow.has_unresolved_error`,
+        true when any ``ERROR``-severity finding for the receipt is not
+        ``resolved_by_repair`` (mirrors the ``report.findings`` computation
+        :class:`~receipts.export.xlsx.ReceiptExportRow`'s own docstring
+        describes, adapted because export has ORM rows, not a
+        ``ValidationReport``).
+
+    Every image link is signed with ``secret``/``image_url_ttl_s`` -- the
+    caller passes ``settings.session_secret`` and
+    ``settings.export_image_url_ttl_s`` so the links this function mints
+    verify against the same secret the blob route checks and expire on the
+    export-specific (longer) TTL, not the review screen's.
+    """
+    if not receipts:
+        return [], []
+
+    ids = [receipt.id for receipt in receipts]
+
+    tasks_by_receipt: dict[uuid.UUID, ReviewTask] = {
+        task.receipt_id: task
+        for task in session.scalars(select(ReviewTask).where(ReviewTask.receipt_id.in_(ids)))
+    }
+
+    findings_by_receipt: dict[uuid.UUID, list[ValidationFinding]] = {}
+    for finding in session.scalars(
+        select(ValidationFinding).where(ValidationFinding.receipt_id.in_(ids))
+    ):
+        findings_by_receipt.setdefault(finding.receipt_id, []).append(finding)
+
+    extractions: list[ReceiptExtraction] = []
+    rows: list[ReceiptExportRow] = []
+    for receipt in receipts:
+        extractions.append(_export_extraction(receipt))
+
+        task = tasks_by_receipt.get(receipt.id)
+        findings = findings_by_receipt.get(receipt.id, [])
+        has_unresolved_error = any(
+            finding.severity is Severity.ERROR and not finding.resolved_by_repair
+            for finding in findings
+        )
+
+        rows.append(
+            ReceiptExportRow(
+                receipt_id=str(receipt.id),
+                status=receipt.status,
+                confidence=receipt.confidence,
+                review_reason=task.reason if task is not None else None,
+                review_priority=task.priority if task is not None else None,
+                has_unresolved_error=has_unresolved_error,
+                image_url=_export_image_url(receipt.id, secret=secret, ttl_s=image_url_ttl_s),
+                merchant_name=(
+                    receipt.merchant.canonical_name if receipt.merchant is not None else None
+                ),
+            )
+        )
+
+    return extractions, rows
