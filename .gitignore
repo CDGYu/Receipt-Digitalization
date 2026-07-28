@@ -40,3 +40,6 @@ Thumbs.db
 
 # SDD scratch (subagent-driven-development ledger)
 .superpowers/
+
+# local baseline run output
+baseline_run.log

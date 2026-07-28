@@ -161,6 +161,26 @@ off the form (these say "Total Sales (VAT Inclusive)"), and when it is true (or
 unknown) accept `Σ lines ≈ total` as well as `Σ lines ≈ subtotal`. Do **not**
 widen the tolerance to paper over it. Never renumber R020.
 
+## DEFERRED — do this LAST, after the system is built
+
+**ISSUE-001: run the first real baseline.** Parked by the user on 2026-07-28 with
+"I will do this after I build the system." Full diagnosis, the exact resume steps,
+and what to expect are in **`docs/KNOWN_ISSUES.md`** — read that, do not
+re-derive it.
+
+One-line summary: everything needed is in place (labels, images, pipeline, scorer,
+harness) and the three labels validate with zero findings, but
+`python -m eval.run_baseline` has never completed. Two attempts failed — one to a
+timeout bug (since fixed in `1f9f122`), one to the process being killed mid-run.
+The open blocker is that `granite3.2-vision:2b` on CPU takes ~262s per call, so a
+run is 30–60 min and dies to any interruption. **Recommended fix: point the
+baseline at a hosted tool-capable model** (the commented-out Gemini block in
+`.env`; rotate that key first, it was echoed in terminal output).
+
+Until this is done there are **no real accuracy numbers**, and therefore no
+threshold calibration (P3.T6 / P8.T1) and no way to judge a prompt or rule change.
+Do not treat any precision claim as measured before it runs.
+
 ## Blockers that need the user
 
 1. Label the golden set (M0) — required for a baseline and calibration.
@@ -218,6 +238,8 @@ widen the tolerance to paper over it. Never renumber R020.
   inventory, §15 milestones, §16 eval, §17 config, §18 traps, §19 DoD.
 - `README.md` (overview, §5 design decisions), `VLM_AND_DATA.md` (model/data).
 - `IMPLEMENTATION_PLAN.md` — the phased task list (authoritative).
+- **`docs/KNOWN_ISSUES.md`** — parked problems with their diagnosis and resume
+  steps. ISSUE-001 (the baseline run) is the deferred final task.
 - `docs/adr/` — implementation decisions (**0001–0010**; see `docs/adr/README.md`).
   0001 `Decimal` money path · 0002 provider abstraction/config · 0003 confidence
   penalties · 0004 portable persistence + Docker · 0005 tooling/offline tests ·

@@ -94,6 +94,17 @@ review, fix what it blocks on, re-verify, then fast-forward merge to `master`.
 - **P8.T2 —** grow the held-out set until a ≥99% claim has a credible confidence
   interval (it cannot be validated on a handful of receipts).
 
+*LAST TASK — deferred by the user until the system is built*
+- **ISSUE-001 — run the first real baseline.** See **`docs/KNOWN_ISSUES.md`** for
+  the full diagnosis and exact resume steps; do not re-derive it. Everything is in
+  place and the three golden labels validate with zero findings, but
+  `python -m eval.run_baseline` has never completed: the local CPU model takes
+  ~262s per call, so a run is 30–60 min and dies to any interruption. Recommended
+  fix is to point the baseline at a hosted tool-capable model (the commented-out
+  Gemini block in `.env` — **rotate that key first**, it was echoed in terminal
+  output). Until this runs there are **no measured accuracy numbers**, so
+  calibration (P3.T6 / P8.T1) stays blocked and no precision claim is real.
+
 *Still open from earlier phases*
 - **P2.T2 — R060/R061 OCR grounding (DECISION NEEDED):** the two grounding rules
   need a raw text layer nothing currently produces. Options: have the model
@@ -120,5 +131,9 @@ just sent and run a real baseline.">
 - Phase 3 (persistence) complete and merged; only **P3.T6 calibration** remains
   from it, blocked on the golden set.
 - Next task: **Phase 4** — auth decision (P4.T2), then P4.T3 API / P4.T4 worker.
-- Blocked-on-user: golden set, tool-capable provider, auth / frontend / grounding
-  decisions.
+- Golden set is **live**: 3 hand-verified real receipts (labels + images), all
+  validating with zero findings.
+- **Deferred to LAST: ISSUE-001, the first real baseline run** — see
+  `docs/KNOWN_ISSUES.md`. No measured accuracy numbers exist until then.
+- Blocked-on-user: a tool-capable provider (for ISSUE-001), and the auth /
+  frontend / grounding decisions.
