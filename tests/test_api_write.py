@@ -47,7 +47,7 @@ from sqlalchemy import event, select  # noqa: E402
 import receipts.review.api as api_module  # noqa: E402
 from config.settings import Settings  # noqa: E402
 from receipts.ingest.storage import LocalStorage, make_image_key  # noqa: E402
-from receipts.persist.models import Base, Correction, Receipt, ReviewTask  # noqa: E402
+from receipts.persist.models import Base, Correction, Merchant, Receipt, ReviewTask  # noqa: E402
 from receipts.persist.session import make_engine, make_session_factory  # noqa: E402
 from receipts.persist.users import ROLE_ADMIN, ROLE_REVIEWER, create_user  # noqa: E402
 from receipts.review.api import create_app  # noqa: E402
@@ -555,20 +555,42 @@ def test_export_does_not_issue_one_query_per_receipt_for_line_items_or_merchant(
     becomes 5,000-10,000 round trips at the route's own
     ``_EXPORT_MAX_ROWS`` design point. ``_query_export_receipts`` now
     eager-loads both with ``selectinload``, so the statement count must not
-    grow with the number of matching receipts: five receipts here should
-    still cost at most one batched query per relationship, not five.
+    grow with the number of matching receipts.
+
+    Two of the extra receipts get **distinct** ``Merchant`` rows, on
+    purpose: every other receipt fixture in this module leaves
+    ``merchant_id`` NULL, and a many-to-one lazy loader skips the query
+    entirely when the local FK is NULL -- a NULL-only fixture would record
+    zero merchant statements whether or not ``selectinload(Receipt.
+    merchant)`` is present, discriminating on nothing (this is exactly the
+    gap a re-review caught in the first version of this test). Two
+    *distinct* merchants close it a second way too: SQLAlchemy's lazy
+    loader checks the session's identity map before it queries, so if both
+    receipts pointed at the *same* merchant, the second access could be
+    served from the map with no second query even without eager loading.
+    Distinct merchants force two genuinely separate per-object SELECTs when
+    unbatched. The third extra receipt (plus ``receipt_id``/
+    ``other_receipt_id`` from ``admin_client``'s own fixture) keeps
+    ``merchant_id`` NULL, which also exercises the ``merchant is None``
+    fallback in :func:`~receipts.review.serializers.build_export_rows`.
     """
     # admin_client's own fixture already seeded two receipts (receipt_id,
-    # other_receipt_id); add three more so a per-receipt query pattern is
-    # unmistakable against a batched one.
+    # other_receipt_id, both merchant_id=NULL); add three more so a
+    # per-receipt query pattern is unmistakable against a batched one.
     with session_factory() as session:
-        for _ in range(3):
+        merchant_a = Merchant(id=uuid.uuid4(), canonical_name="Merchant A", name_variants=[])
+        merchant_b = Merchant(id=uuid.uuid4(), canonical_name="Merchant B", name_variants=[])
+        session.add_all([merchant_a, merchant_b])
+        session.flush()
+
+        for merchant_id in (merchant_a.id, merchant_b.id, None):
             extra_id = uuid.uuid4()
             session.add(
                 Receipt(
                     id=extra_id,
                     status=ReceiptStatus.AUTO_APPROVED,
                     confidence=Decimal("0.900"),
+                    merchant_id=merchant_id,
                     merchant_name_raw="EXTRA CO",
                     txn_date=date(2026, 7, 3),
                     currency="USD",
@@ -594,6 +616,7 @@ def test_export_does_not_issue_one_query_per_receipt_for_line_items_or_merchant(
     assert response.status_code == 200
     line_item_queries = [s for s in statements if "line_items" in s.lower()]
     merchant_queries = [s for s in statements if "merchants" in s.lower()]
-    # Five qualifying receipts, at most one batched SELECT each -- not five.
+    # Five qualifying receipts (two with distinct real merchants), at most
+    # one batched SELECT each -- not five, and not two for merchant either.
     assert len(line_item_queries) <= 1
     assert len(merchant_queries) <= 1
