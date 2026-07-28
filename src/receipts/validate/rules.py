@@ -20,7 +20,7 @@ import unicodedata
 from abc import ABC, abstractmethod
 from datetime import date
 from decimal import Decimal, InvalidOperation
-from typing import ClassVar, Iterable
+from typing import ClassVar, Iterable, NamedTuple
 
 from ..extract.schema import ReceiptExtraction
 from .context import ValidationContext
@@ -127,6 +127,66 @@ def sum_line_nets(r: ReceiptExtraction) -> Decimal | None:
             return None
         total += net
     return total
+
+
+class Comparand(NamedTuple):
+    """A figure the line-item sum may legitimately equal.
+
+    `label` is prompt-facing text (the finding names it), `key` is the stable
+    short name recorded in the finding context, `field_path` is what a reviewer
+    would edit if this figure is the wrong one.
+    """
+
+    key: str
+    label: str
+    value: Decimal
+    field_path: str
+
+
+def tax_convention_comparands(
+    prices_include_tax: bool | None,
+    *,
+    net: Comparand | None,
+    gross: Comparand | None,
+) -> list[Comparand]:
+    """Which figures a line-item sum may equal, given the document's convention.
+
+    `net` is the comparand for an Amount column that EXCLUDES tax; `gross` for
+    one that INCLUDES it (Philippine BIR "SALES INVOICE" forms, EU-style gross
+    pricing — there `subtotal` is the net-of-tax base and the lines add up to
+    `total`).
+
+      * ``False`` -> net only.
+      * ``True``  -> gross only. An explicit flag is honoured, never softened.
+      * ``None``  -> either is acceptable, so the rule fires only when NEITHER
+        fits. This is the common path: nothing in the pipeline sets the flag,
+        most documents do not state a convention, and assuming one turns a
+        receipt that reconciles perfectly (R022 passes) into a false ERROR that
+        blocks auto-approval, burns a repair call, and pressures the model into
+        changing numbers that are already right.
+
+    A comparand whose value is missing is dropped, so an empty result means the
+    rule cannot run and must SKIP rather than fire on a figure it does not have.
+    """
+    candidates: list[Comparand | None] = []
+    if prices_include_tax is not True:
+        candidates.append(net)
+    if prices_include_tax is not False:
+        candidates.append(gross)
+    return [c for c in candidates if c is not None]
+
+
+def render_comparisons(line_sum: Decimal, comparands: Iterable[Comparand]) -> str:
+    """Render the attempted comparisons for a prompt-facing finding message.
+
+    Produces e.g. `vs subtotal 892.86 -> difference 107.14; vs total ...`. Every
+    comparison that was tried is named with its own difference, so the repair
+    prompt can see which reading is closer instead of guessing.
+    """
+    return "; ".join(
+        f"vs {c.label} {m(c.value)} -> difference {m(line_sum - c.value)}"
+        for c in comparands
+    )
 
 
 def parse_iso_date(value: str | None) -> date | None:
@@ -318,33 +378,79 @@ class LineItemsPresent(Rule):
 class LineItemsSumToSubtotal(Rule):
     id = "R020"
     severity = Severity.ERROR
-    description = "Sum of line items equals the printed subtotal."
+    description = (
+        "Sum of line items equals the printed subtotal, or the total when the "
+        "line amounts are tax-inclusive."
+    )
+
+    def _comparands(self, r) -> list[Comparand]:
+        """The figures the line sum may equal under the document's convention.
+
+        Net of tax the lines equal `subtotal`; tax-inclusive they equal `total`.
+        `totals.prices_include_tax` picks one; null accepts either.
+        """
+        t = r.totals
+        return tax_convention_comparands(
+            t.prices_include_tax,
+            net=(
+                Comparand("subtotal", "subtotal", t.subtotal, "totals.subtotal")
+                if t.subtotal is not None
+                else None
+            ),
+            gross=(
+                Comparand(
+                    "total", "total (amounts read as tax-inclusive)", t.total, "totals.total"
+                )
+                if t.total is not None
+                else None
+            ),
+        )
 
     def applies(self, r, ctx) -> bool:
-        return r.totals.subtotal is not None and sum_line_nets(r) is not None
+        # A null subtotal is R024's case (the fallback), so this rule keeps its
+        # spec contract of skipping there — the two must not report the same
+        # problem twice.
+        return (
+            r.totals.subtotal is not None
+            and bool(self._comparands(r))
+            and sum_line_nets(r) is not None
+        )
 
     def check(self, r, ctx) -> list[Finding]:
         total = sum_line_nets(r)
+        if total is None:  # gated by applies(); a rule must never raise
+            return []
+
         tol = ctx.tol(self.id)
         # Per-line rounding accumulates, so scale the floor with line count.
         tol["floor"] = max(tol["floor"], Decimal("0.01") * len(r.line_items))
 
-        if within_tolerance(total, r.totals.subtotal, **tol):
+        comparands = self._comparands(r)
+        if any(within_tolerance(total, c.value, **tol) for c in comparands):
             return []
 
-        diff = total - r.totals.subtotal
+        lead = (
+            f"Line items sum to {m(total)} across {len(r.line_items)} items and "
+            f"reconcile with no printed figure: {render_comparisons(total, comparands)}."
+        )
+        if len(comparands) > 1:
+            lead += (
+                " Both readings of the amount column were tried (net of tax, where "
+                "the lines sum to subtotal; tax-inclusive, where they sum to total) "
+                "and neither fits."
+            )
         return [
             self.finding(
-                f"Line items sum to {m(total)} across {len(r.line_items)} items, "
-                f"but the extracted subtotal is {m(r.totals.subtotal)} "
-                f"(difference {m(diff)}). Either an item is missing, an item was "
-                "read twice, one line amount is wrong, or the subtotal is wrong.",
-                field_paths=["line_items", "totals.subtotal"],
+                f"{lead} Either an item is missing, an item was read twice, one "
+                "line amount is wrong, or a printed figure is wrong. Do not adjust "
+                "a number that is printed correctly to make the arithmetic close.",
+                field_paths=["line_items", *(c.field_path for c in comparands)],
                 context={
                     "line_sum": str(total),
-                    "subtotal": str(r.totals.subtotal),
-                    "difference": str(diff),
                     "item_count": len(r.line_items),
+                    "prices_include_tax": r.totals.prices_include_tax,
+                    "compared_against": {c.key: str(c.value) for c in comparands},
+                    "differences": {c.key: str(total - c.value) for c in comparands},
                 },
             )
         ]
@@ -470,6 +576,28 @@ class LineItemsSumToTotal(Rule):
     severity = Severity.WARN
     description = "Fallback for receipts with no printed subtotal."
 
+    def _comparands(self, r, total: Decimal) -> list[Comparand]:
+        """Same convention split as R020, with no subtotal to lean on.
+
+        Net of tax the lines equal `total - tax + discount`; tax-inclusive they
+        equal `total` outright.
+        """
+        t = r.totals
+        tax = t.tax or Decimal(0)
+        disc = discount_magnitude(t.discount)
+        return tax_convention_comparands(
+            t.prices_include_tax,
+            net=Comparand(
+                "implied_net",
+                f"total({m(total)}) - tax({m(tax)}) + discount({m(disc)}) =",
+                total - tax + disc,
+                "totals.total",
+            ),
+            gross=Comparand(
+                "total", "total (amounts read as tax-inclusive)", total, "totals.total"
+            ),
+        )
+
     def applies(self, r, ctx) -> bool:
         return (
             r.totals.subtotal is None
@@ -479,27 +607,36 @@ class LineItemsSumToTotal(Rule):
 
     def check(self, r, ctx) -> list[Finding]:
         line_sum = sum_line_nets(r)
-        tax = r.totals.tax or Decimal(0)
-        disc = discount_magnitude(r.totals.discount)
-        implied = r.totals.total - tax + disc
+        if line_sum is None or r.totals.total is None:  # gated by applies()
+            return []
 
         tol = ctx.tol(self.id)
         tol["floor"] = max(tol["floor"], Decimal("0.01") * len(r.line_items))
 
-        if within_tolerance(line_sum, implied, **tol):
+        comparands = self._comparands(r, r.totals.total)
+        if any(within_tolerance(line_sum, c.value, **tol) for c in comparands):
             return []
 
+        lead = (
+            f"No subtotal was printed, so line items were checked against the total: "
+            f"items sum to {m(line_sum)}, {render_comparisons(line_sum, comparands)}."
+        )
+        if len(comparands) > 1:
+            lead += (
+                " Both readings of the amount column were tried (net of tax, where "
+                "the lines sum to total minus tax; tax-inclusive, where they sum to "
+                "the total itself) and neither fits."
+            )
         return [
             self.finding(
-                f"No subtotal was printed, so line items were checked against the "
-                f"total: items sum to {m(line_sum)}, but total({m(r.totals.total)}) "
-                f"- tax({m(tax)}) + discount({m(disc)}) implies {m(implied)} "
-                f"(difference {m(line_sum - implied)}). Items may be missing.",
+                f"{lead} Items may be missing. Keep the printed figures as they are.",
                 field_paths=["line_items", "totals.total"],
                 context={
                     "line_sum": str(line_sum),
-                    "implied": str(implied),
-                    "difference": str(line_sum - implied),
+                    "item_count": len(r.line_items),
+                    "prices_include_tax": r.totals.prices_include_tax,
+                    "compared_against": {c.key: str(c.value) for c in comparands},
+                    "differences": {c.key: str(line_sum - c.value) for c in comparands},
                 },
             )
         ]

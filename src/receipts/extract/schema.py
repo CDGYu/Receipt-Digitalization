@@ -124,6 +124,13 @@ class Totals(BaseModel):
     though the model is told to emit discounts as negative numbers. The
     normalisation layer flips the sign. Validation rules defensively use
     abs() so they behave correctly under either convention.
+
+    NOTE ON TAX CONVENTION:
+
+    `prices_include_tax` records whether the line-item Amount column is gross or
+    net. It changes which figure the line items are expected to sum to, so R020
+    and R024 read it. It is NOT money — it is the document's stated convention,
+    and null (the usual case) means the document does not state one.
     """
 
     model_config = _MODEL_CONFIG
@@ -135,6 +142,16 @@ class Totals(BaseModel):
     total: Decimal | None = None
     tender: Decimal | None = None
     change: Decimal | None = None
+    prices_include_tax: bool | None = Field(
+        default=None,
+        description=(
+            "Whether the line-item amounts already include tax. true = tax-inclusive, "
+            "so the line amounts sum to total (common on tax invoices, e.g. a "
+            "Philippine BIR SALES INVOICE, where subtotal is the net-of-VAT tax "
+            "base). false = amounts are net of tax, so they sum to subtotal. "
+            "null if the receipt does not state which - do not guess."
+        ),
+    )
 
 
 class Payment(BaseModel):

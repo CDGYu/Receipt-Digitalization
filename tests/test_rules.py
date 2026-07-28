@@ -15,6 +15,7 @@ from decimal import Decimal
 
 import pytest
 
+from eval.golden_set import DEFAULT_LABELS_DIR, load_labels
 from receipts.extract.schema import (
     ConsistencyResult,
     DocumentType,
@@ -30,6 +31,7 @@ from receipts.extract.schema import (
     TriageResult,
 )
 from receipts.validate.context import RuleConfig, ValidationContext
+from receipts.validate.report import Severity
 from receipts.validate.rules import RULES, normalize_desc, within_tolerance
 from receipts.validate.validator import validate
 
@@ -246,6 +248,196 @@ def test_R024_fallback_when_no_subtotal(ctx):
 
 def test_R024_silent_when_subtotal_present(ctx):
     assert not fired(clean_receipt(), ctx, "R024")
+
+
+# --------------------------------------------------------------------------- #
+# Tax-inclusive line pricing (R020 / R024)
+#
+# On a Philippine BIR "SALES INVOICE" the Amount column is VAT-INCLUSIVE, so
+# the lines sum to `total` while `subtotal` is the net-of-VAT tax base. R020
+# used to assume the opposite convention and failed by exactly the VAT, turning
+# a receipt that reconciles (R022 passes) into a false ERROR.
+# --------------------------------------------------------------------------- #
+
+
+def vat_inclusive_receipt() -> ReceiptExtraction:
+    """Shaped like the real BIR sales invoices in the golden set.
+
+    892.86 net + 107.14 VAT = 1000.00 total, and the single line amount is the
+    VAT-INCLUSIVE 1000.00 -- so the lines sum to `total`, not `subtotal`.
+    """
+    return ReceiptExtraction(
+        merchant=Merchant(name="METRO OIL SUBIC, INC.", tax_id="221-193-789-09013"),
+        receipt=ReceiptMeta(number="1811158", date="2026-03-23", currency="PHP"),
+        line_items=[
+            LineItem(position=0, description_raw="CLEAN DIESEL", qty=D("9.8"),
+                     unit_price=D("102.00"), line_total=D("1000.00")),
+        ],
+        totals=Totals(subtotal=D("892.86"), tax=D("107.14"), total=D("1000.00")),
+    )
+
+
+def with_doubled_line(r: ReceiptExtraction) -> ReceiptExtraction:
+    """Read the 497.50 line twice: 1345.00, far above subtotal AND total."""
+    dup = copy.deepcopy(r.line_items[-1])
+    r.line_items.append(dup)
+    for index, item in enumerate(r.line_items):
+        item.position = index
+    return r
+
+
+# R020 ---------------------------------------------------------------------- #
+
+
+def test_R020_accepts_vat_inclusive_lines_when_convention_unknown(ctx):
+    """THE reported bug: nothing sets the flag, so both readings are allowed."""
+    assert not fired(vat_inclusive_receipt(), ctx, "R020")
+
+
+def test_R020_message_reports_both_comparisons_when_convention_unknown(ctx):
+    r = clean_receipt()
+    r.line_items.pop()  # 350.00 -- matches neither 847.50 nor 949.20
+    finding = validate(r, ctx).by_rule("R020")[0]
+    assert finding.severity is Severity.ERROR
+    for number in ("350", "847.50", "949.20", "497.50", "599.20"):
+        assert number in finding.message, finding.message
+    assert "totals.subtotal" in finding.field_paths
+    assert "totals.total" in finding.field_paths
+
+
+def test_R020_honours_explicit_net_convention(ctx):
+    """prices_include_tax=False must not be quietly ignored: the same receipt
+    that passes under the unknown convention has to error once the document
+    says its amounts are net of tax."""
+    r = vat_inclusive_receipt()
+    r.totals.prices_include_tax = False
+    assert fired(r, ctx, "R020")
+
+
+def test_R020_honours_explicit_inclusive_convention(ctx):
+    """Mirror image: net-priced lines (sum == subtotal != total) must error when
+    the document says the amounts already include tax."""
+    r = clean_receipt()
+    r.totals.prices_include_tax = True
+    assert fired(r, ctx, "R020")
+
+
+def test_R020_silent_when_convention_matches_declared_flag(ctx):
+    net = clean_receipt()
+    net.totals.prices_include_tax = False
+    assert not fired(net, ctx, "R020")
+
+    gross = vat_inclusive_receipt()
+    gross.totals.prices_include_tax = True
+    assert not fired(gross, ctx, "R020")
+
+
+def test_R020_still_catches_missing_line_item(ctx):
+    """Silent-case discipline: accepting either reading must not blunt the rule."""
+    r = clean_receipt()
+    r.line_items.pop()  # 350.00 vs subtotal 847.50 / total 949.20
+    assert fired(r, ctx, "R020")
+
+
+def test_R020_still_catches_double_counted_line_item(ctx):
+    r = with_doubled_line(clean_receipt())  # 1345.00, above both figures
+    assert fired(r, ctx, "R020")
+
+
+def test_R020_skips_when_the_needed_comparand_is_missing(ctx):
+    """Declared tax-inclusive but no total printed: skip, never fire blind."""
+    r = vat_inclusive_receipt()
+    r.totals.prices_include_tax = True
+    r.totals.total = None
+    assert not fired(r, ctx, "R020")
+
+
+# R024 (the no-subtotal fallback) -------------------------------------------- #
+
+
+def test_R024_accepts_vat_inclusive_lines_when_convention_unknown(ctx):
+    r = vat_inclusive_receipt()
+    r.totals.subtotal = None  # only the VAT-inclusive total is printed
+    assert not fired(r, ctx, "R024")
+
+
+def test_R024_honours_explicit_net_convention(ctx):
+    r = vat_inclusive_receipt()
+    r.totals.subtotal = None
+    r.totals.prices_include_tax = False
+    assert fired(r, ctx, "R024")
+
+
+def test_R024_honours_explicit_inclusive_convention(ctx):
+    """Lines sum to total - tax (the net reading) but the document says the
+    amounts include tax, so the comparison against `total` must fail."""
+    r = clean_receipt()
+    r.totals.subtotal = None
+    r.totals.prices_include_tax = True
+    assert fired(r, ctx, "R024")
+
+
+def test_R024_still_catches_missing_line_item(ctx):
+    r = clean_receipt()
+    r.totals.subtotal = None
+    r.line_items.pop()
+    assert fired(r, ctx, "R024")
+
+
+def test_R024_still_catches_double_counted_line_item(ctx):
+    r = with_doubled_line(clean_receipt())
+    r.totals.subtotal = None
+    assert fired(r, ctx, "R024")
+
+
+def test_R024_message_reports_both_comparisons_when_convention_unknown(ctx):
+    r = clean_receipt()
+    r.totals.subtotal = None
+    r.line_items.pop()
+    finding = validate(r, ctx).by_rule("R024")[0]
+    assert finding.severity is Severity.WARN
+    for number in ("350", "847.50", "949.20"):
+        assert number in finding.message, finding.message
+
+
+def test_R020_and_R024_do_not_both_report(ctx):
+    """R024 is the fallback for a null subtotal; R020 owns the case where a
+    subtotal is printed. A broken receipt must not be reported twice."""
+    missing_subtotal = clean_receipt()
+    missing_subtotal.totals.subtotal = None
+    missing_subtotal.line_items.pop()
+    report = validate(missing_subtotal, ctx)
+    assert report.fired("R024")
+    assert not report.fired("R020")
+
+
+# --------------------------------------------------------------------------- #
+# Real-corpus regression
+#
+# The three committed labels are hand-verified Philippine BIR sales invoices.
+# They reconcile (R022 passes on all three), so a clean validator run must
+# produce ZERO errors. Before the convention fix, every one of them raised a
+# false R020 ERROR of exactly the VAT amount.
+# --------------------------------------------------------------------------- #
+
+GOLDEN_TODAY = date(2026, 7, 28)
+
+try:
+    GOLDEN_LABELS = load_labels(DEFAULT_LABELS_DIR)
+except Exception:  # labels are PII and may be absent -- skip, never error
+    GOLDEN_LABELS = {}
+
+
+@pytest.mark.parametrize("label_id", sorted(GOLDEN_LABELS) or [None])
+def test_real_corpus_labels_produce_no_errors(label_id):
+    if label_id is None:
+        pytest.skip("no labels in eval/golden/labels")
+    report = validate(
+        GOLDEN_LABELS[label_id],
+        ValidationContext(today=GOLDEN_TODAY, config=RuleConfig()),
+    )
+    errors = report.by_severity(Severity.ERROR)
+    assert not errors, f"{label_id}: " + " | ".join(f.render() for f in errors)
 
 
 def test_R025_tax_bands_do_not_sum(ctx):

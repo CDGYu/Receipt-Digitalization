@@ -796,11 +796,11 @@ Each rule is a function `(ReceiptExtraction, ValidationContext) -> list[Finding]
 | `R012` | `merchant_present` | WARN | `merchant.name` is not null |
 | `R013` | `line_items_present` | WARN | At least one line item, unless triage said 0 expected |
 | **Arithmetic** | | | |
-| `R020` | `line_items_sum_to_subtotal` | ERROR | `Σ line_total ≈ subtotal` (skipped if subtotal null) |
+| `R020` | `line_items_sum_to_subtotal` | ERROR | `Σ line_total ≈ subtotal`, or `≈ total` when the amount column is tax-inclusive (skipped if subtotal null) |
 | `R021` | `line_item_math` | ERROR | Per row: `qty × unit_price ≈ line_total` (skipped if any null) |
 | `R022` | `totals_equation` | ERROR | `subtotal + tax − discount ≈ total` |
 | `R023` | `tender_change` | WARN | `tender − total ≈ change` |
-| `R024` | `line_items_sum_to_total` | WARN | Fallback when subtotal is null: `Σ line_total ≈ total − tax + discount` |
+| `R024` | `line_items_sum_to_total` | WARN | Fallback when subtotal is null: `Σ line_total ≈ total − tax + discount`, or `≈ total` when the amount column is tax-inclusive |
 | `R025` | `tax_breakdown_sums` | WARN | `Σ tax_breakdown[].amount ≈ tax` |
 | **Plausibility** | | | |
 | `R030` | `date_parseable` | ERROR | `receipt.date` is a real calendar date |
@@ -825,6 +825,8 @@ Each rule is a function `(ReceiptExtraction, ValidationContext) -> list[Finding]
 | `R070` | `consistency_agreement` | WARN | Field disagreed across self-consistency runs (§11) |
 
 **R052 deserves emphasis.** The most common structural failure is a model emitting `SUBTOTAL 847.50` as a line item, which then breaks `R020` in a confusing way. Catch it explicitly so the repair prompt gets a clear message instead of an arithmetic complaint.
+
+**R020/R024 and the tax convention.** Whether the line-item amount column is net of tax or tax-inclusive is a property of the *document*, not of the extraction. On a Philippine BIR "SALES INVOICE" the amounts include VAT, so `Σ line_total == total` while `subtotal` is the net-of-VAT tax base — and `R022` still reconciles. `totals.prices_include_tax` records the convention: `False` compares the line sum against `subtotal`, `True` against `total`, and `null` (the usual case, since the document rarely states it) accepts **either** and fires only when neither fits, naming both comparisons in the finding. Assuming a convention here is what turns a correct extraction into a false ERROR that blocks auto-approval, burns a repair call, and pressures the model into changing numbers that are already right.
 
 ### 10.4 The validator
 
