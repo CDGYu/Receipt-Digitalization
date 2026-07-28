@@ -1,0 +1,5 @@
+Single-database Alembic environment for the seven-table receipt schema (spec §6).
+
+The database URL is resolved at runtime in env.py: `-x db_url=...` >
+`DATABASE_URL` (config.settings.Settings) > `sqlite:///receipts.db`.
+Run migrations with `python -m alembic upgrade head`; see alembic.ini for more.
