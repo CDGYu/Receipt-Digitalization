@@ -46,15 +46,9 @@
     "is_handwritten": true,
     "is_refund": false,
     "legibility": "poor",
-    "ambiguous_fields": [
-      "line_items[0].qty",
-      "line_items[0].unit_price"
-    ],
-    "unreadable_regions": [
-      "quantity column",
-      "unit cost column"
-    ],
+    "ambiguous_fields": [],
+    "unreadable_regions": [],
     "receipt_is_inconsistent": false,
-    "notes": "BIR sales invoice: pre-printed form, handwritten values, WORST legibility of the three. VERIFY qty AND unit_price: the qty glyph reads as 9.8 / 98 / 78 and the unit cost is circled with a strike-through mark; 1000.00 / 102.00 = 9.80 is why 9.8 was chosen. The form pre-prints SIX product rows (PREMIUM 97, PREMIUM 95, REGULAR 91, CLEAN DIESEL, POWER DIESEL, MOTOR OIL) and only CLEAN DIESEL is filled in - the other five are blank template rows and must NOT be emitted as line items. 892.86 was written on the 'VAT-Exempt Sales' line, yet VAT of 107.14 was added and 892.86 + 107.14 = 1000.00, so it behaves as VATable Sales; the arithmetic reconciles even though the label placement is wrong. 'IDEAL SOURCE' is the BUYER (Sold To), not the merchant. The footer TIN 000-296-795-000 belongs to the PRINTER (Midland Press), not the merchant."
+    "notes": "BIR sales invoice: pre-printed form, handwritten values, WORST legibility of the three. USER-VERIFIED 2026-07-28: qty is 9.8 (the glyph can read as 98/78) and unit_price is 102.00 (circled, with a strike-through mark through the description column); 1000.00 / 102.00 = 9.80 corroborates. A vertical pen stroke runs down the empty AMOUNT rows - it is a void/nil marker, not a value. The form pre-prints SIX product rows (PREMIUM 97, PREMIUM 95, REGULAR 91, CLEAN DIESEL, POWER DIESEL, MOTOR OIL) and only CLEAN DIESEL is filled in - the other five are blank template rows and must NOT be emitted as line items. 892.86 was written on the 'VAT-Exempt Sales' line, yet VAT of 107.14 was added and 892.86 + 107.14 = 1000.00, so it behaves as VATable Sales; the arithmetic reconciles even though the label placement is wrong. 'IDEAL SOURCE' is the BUYER (Sold To), not the merchant. The footer TIN 000-296-795-000 belongs to the PRINTER (Midland Press), not the merchant."
   }
 }
