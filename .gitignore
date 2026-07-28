@@ -43,3 +43,6 @@ Thumbs.db
 
 # local baseline run output
 baseline_run.log
+smoke_*.log
+smoke_*.err
+smoke_pid.txt
