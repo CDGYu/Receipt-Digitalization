@@ -24,6 +24,7 @@ Three rules from the spec are load-bearing here:
 
 from __future__ import annotations
 
+import math
 import re
 import uuid
 from dataclasses import dataclass
@@ -36,6 +37,7 @@ from typing import Any, Callable
 
 from pydantic import BaseModel
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from ..extract.clients.base import VLMResponse
@@ -81,23 +83,32 @@ _PAN_MIN_DIGITS = 13
 _PAN_MAX_DIGITS = 19
 
 #: Matches a PAN in the three shapes a model actually emits: unseparated, the
-#: usual 4-4-4-N grouping, and Amex's 4-6-5. Two deliberate design choices keep
-#: it from firing on things that merely look numeric:
+#: usual 4-4-4-N grouping, and Amex's 4-6-5. Separators may be any mix of spaces
+#: and hyphens, because OCR of a worn thermal print reads one of them
+#: differently from the rest (``4111 1111-1111 1111``). Three deliberate design
+#: choices keep it from firing on things that merely look numeric:
 #:
-#:   * separators must be *consistent* (the backreference), so a run of small
-#:     space-separated numbers -- ``"2 18.00 3 20.00 ..."`` -- is not swept up;
-#:   * the lookarounds refuse a match that continues into more digits or into a
-#:     decimal fraction, so ``1234567890123.45`` stays a number and a longer
-#:     digit run is not partially masked.
+#:   * every group in a separated shape is 4-6 digits wide, so a run of small
+#:     space-separated numbers -- ``"2 18.00 3 20.00 ..."`` -- matches nothing,
+#:     and :func:`_mask_pan` re-checks the total digit count either way;
+#:   * ``(?<!\d)`` refuses a match that starts mid-number, and ``(?<!\d\.)``
+#:     refuses one that starts just after a *decimal point*, so the fraction of
+#:     ``0.4111111111111111`` is not mistaken for a card number. A period that is
+#:     **not** preceded by a digit is label punctuation, not a decimal point --
+#:     ``CARD NO.``, ``ACCT NO.``, ``REF.`` is exactly what a receipt prints, and
+#:     the PAN behind it must still be masked;
+#:   * the trailing lookaheads refuse a match that continues into more digits or
+#:     into a decimal fraction, so ``1234567890123.45`` stays a number and a
+#:     longer digit run is never partially masked.
 _PAN_RE = re.compile(
     r"""
-    (?<![\d.])                                              # not mid-number, not a fraction
+    (?<!\d)(?<!\d\.)                          # not mid-number, not a decimal fraction
     (?:
-        \d{4}(?P<sep>[ -])\d{4}(?P=sep)\d{4}(?P=sep)\d{1,4} # 4-4-4-N (Visa, Mastercard, ...)
-      | \d{4}(?P<amex>[ -])\d{6}(?P=amex)\d{5}              # 4-6-5 (Amex)
-      | \d{13,19}                                           # unseparated
+        \d{4}[ -]\d{4}[ -]\d{4}[ -]\d{1,4}    # 4-4-4-N (Visa, Mastercard, ...)
+      | \d{4}[ -]\d{6}[ -]\d{5}               # 4-6-5 (Amex)
+      | \d{13,19}                             # unseparated
     )
-    (?!\d)(?!\.\d)                                          # ... and not the integer part
+    (?!\d)(?!\.\d)                            # ... and not the integer part
     """,
     re.VERBOSE,
 )
@@ -111,36 +122,58 @@ def _mask_pan(match: re.Match[str]) -> str:
     return "*" * (len(digits) - 4) + digits[-4:]
 
 
+def _redact_number(value: int | float, text: str) -> Any:
+    """Mask a numeric scalar whose *digits* look like a PAN, else return it as is.
+
+    A model that emitted the card number as a JSON number would otherwise slip
+    past. The original object is returned untouched when nothing matched, so an
+    ordinary amount keeps its type as well as its value.
+    """
+    masked = _PAN_RE.sub(_mask_pan, text)
+    return masked if masked != text else value
+
+
 def redact_pan(value: Any) -> Any:
     """Strip full card numbers out of ``value``, keeping only the last four.
 
-    Pure and recursive: walks ``dict`` values, ``list``/``tuple`` items, and
-    strings, returning new containers and never mutating the input. Non-string
-    scalars pass through unchanged, except ``int``, which is masked when its
-    digits look like a PAN (a model that emitted the card number as a JSON
-    number would otherwise slip past).
+    Pure and recursive: walks ``dict`` **keys and values**, ``list``/``tuple``
+    items, ``set``/``frozenset`` members, and strings, returning new containers
+    and never mutating the input. Container types are preserved. Numeric scalars
+    are inspected too -- an ``int``, or a ``float`` holding a whole number, is
+    masked when its digits look like a PAN -- and every other scalar passes
+    through unchanged.
 
     What it deliberately does *not* touch, because a rule that fires when it
-    should not is worse than no rule: money (``1234.56``), a 4-digit
-    ``card_last4``, a 16-character hash, dates, and phone-style numbers -- all
-    are shorter than :data:`_PAN_MIN_DIGITS` digits or fail the separator
-    grouping. The one accepted false positive is a 13-19 digit *all-numeric*
-    identifier, which is indistinguishable from a PAN by inspection.
+    should not is worse than no rule: money (``1234.56``, and any ``float`` with
+    a fractional part), a 4-digit ``card_last4``, a 16-character hash, dates, and
+    phone-style numbers -- all are shorter than :data:`_PAN_MIN_DIGITS` digits,
+    fail the separator grouping, or sit behind a decimal point. The one accepted
+    false positive is a 13-19 digit *all-numeric* identifier, which is
+    indistinguishable from a PAN by inspection.
     """
     if isinstance(value, str):
         return _PAN_RE.sub(_mask_pan, value)
     if isinstance(value, bool):
         return value
     if isinstance(value, int):
-        text = str(value)
-        masked = _PAN_RE.sub(_mask_pan, text)
-        return masked if masked != text else value
+        return _redact_number(value, str(value))
+    if isinstance(value, float):
+        # ``4111111111111111.0`` is a PAN that made a detour through a float;
+        # ``1234.56`` is money and must survive untouched, so only a whole
+        # number is inspected -- and a non-finite float has no digits at all.
+        if not math.isfinite(value) or not value.is_integer():
+            return value
+        return _redact_number(value, str(int(value)))
     if isinstance(value, dict):
-        return {key: redact_pan(item) for key, item in value.items()}
+        return {redact_pan(key): redact_pan(item) for key, item in value.items()}
     if isinstance(value, list):
         return [redact_pan(item) for item in value]
     if isinstance(value, tuple):
         return tuple(redact_pan(item) for item in value)
+    if isinstance(value, frozenset):
+        return frozenset(redact_pan(item) for item in value)
+    if isinstance(value, set):
+        return {redact_pan(item) for item in value}
     return value
 
 
@@ -508,9 +541,14 @@ def find_duplicate_by_content(
     other receipts whose merchant is equally unresolved.
 
     The ``merchant_id`` and ``txn_date`` equality is pushed into SQL (they are
-    indexed together, per §6.2). The ``total`` comparison deliberately is not:
-    it stays in Python where it is an exact ``Decimal`` comparison, because
-    SQLite would compare a ``Numeric`` bind parameter as a float (ADR-0001).
+    indexed together, per §6.2). The ``total`` comparison deliberately is not: it
+    stays in Python so the match is one exact ``Decimal`` equality on every
+    backend, independent of how each one gives numeric affinity and scale to a
+    ``Numeric`` bind parameter. (Both backends do round-trip a
+    ``Numeric(14, 4)`` faithfully -- the scale fits inside float64's exactly
+    representable range and the result processor re-quantizes -- so this is about
+    keeping one comparison with one documented semantics, not about correcting a
+    lossy backend.)
     """
     if total is None or txn_date is None:
         return None
@@ -572,29 +610,68 @@ def _coerce_optional_text(value: Any) -> str | None:
     return None if value is None else str(value)
 
 
+def _bounded_optional_text(column_name: str) -> Callable[[Any], str | None]:
+    """A coercion for a length-bounded ``String(n)`` column on ``receipts``.
+
+    The limit is read from the model column rather than repeated here, so widening
+    ``currency`` to ``String(4)`` needs no change in this module. Overlong text is
+    a ``ValueError`` because the backends disagree about it: Postgres raises a
+    ``DataError`` and SQLite stores it anyway, so without this check a reviewer's
+    edit that works in development fails in production.
+    """
+    limit: int | None = getattr(Receipt.__table__.c[column_name].type, "length", None)
+
+    def coerce(value: Any) -> str | None:
+        text = _coerce_optional_text(value)
+        if text is not None and limit is not None and len(text) > limit:
+            raise ValueError(
+                f"{column_name} holds at most {limit} characters, got {len(text)} ({text!r})"
+            )
+        return text
+
+    return coerce
+
+
 def _coerce_money(value: Any) -> Decimal | None:
-    """A ``Numeric`` column value, as ``Decimal``.
+    """A ``Numeric`` column value, as a **finite** ``Decimal``.
 
     ``float`` is refused outright (ADR-0001 / §18): ``0.1`` is not one tenth, and
     a reviewer's "correction" that silently lands 0.0000001 off would fail the
     validator's cent-bounded tolerances later and look like a model error. Pass a
     ``Decimal`` or the printed string.
+
+    ``NaN`` and ``Infinity`` are refused too, and for a sharper reason: they are
+    *legal* ``Decimal``s, so ``"nan"`` parses, passes the float guard, and reaches
+    the column -- where SQLite stores NULL (the amount is destroyed with no error
+    and no flag) while the ``corrections`` row still records ``NaN``, leaving the
+    audit trail disagreeing with the row it describes. On Postgres it persists and
+    poisons every later comparison and sum. A money column holds an amount or
+    nothing; it never holds "not a number".
     """
     if value is None:
         return None
-    if isinstance(value, Decimal):
-        return value
     if isinstance(value, bool) or isinstance(value, float):
         raise ValueError(
             f"money must be a Decimal or a string, not {type(value).__name__} ({value!r}); "
             "a float cannot represent an exact amount"
         )
-    if isinstance(value, int):
-        return Decimal(value)
-    try:
-        return Decimal(str(value).strip())
-    except InvalidOperation as exc:
-        raise ValueError(f"not a decimal amount: {value!r}") from exc
+    if isinstance(value, Decimal):
+        amount = value
+    elif isinstance(value, int):
+        amount = Decimal(value)
+    else:
+        try:
+            amount = Decimal(str(value).strip())
+        except InvalidOperation as exc:
+            raise ValueError(f"not a decimal amount: {value!r}") from exc
+
+    if not amount.is_finite():
+        raise ValueError(
+            f"money must be a finite amount, not {value!r}; "
+            "a non-finite value would destroy the stored amount and make the "
+            "corrections audit row disagree with the column"
+        )
+    return amount
 
 
 def _coerce_int(value: Any) -> int:
@@ -654,7 +731,7 @@ _RECEIPT_FIELDS: dict[str, tuple[str, Callable[[Any], Any]]] = {
     "receipt.date": ("txn_date", _coerce_date),
     "receipt.date_raw": ("date_raw", _coerce_optional_text),
     "receipt.time": ("txn_time", _coerce_time),
-    "receipt.currency": ("currency", _coerce_optional_text),
+    "receipt.currency": ("currency", _bounded_optional_text("currency")),
     "totals.subtotal": ("subtotal", _coerce_money),
     "totals.tax": ("tax_total", _coerce_money),
     "totals.discount": ("discount_total", _coerce_money),
@@ -752,6 +829,12 @@ def apply_corrections(
     path is resolved and coerced *before* anything is mutated, so an unmappable
     path raises ``ValueError`` with the offending path and the database is left
     exactly as it was. Any failure rolls back.
+
+    **Every rejected patch raises ``ValueError``**, including one that only the
+    database can refuse -- swapping two ``line_items[i].position`` values trips
+    the non-deferrable ``uq_line_items_receipt_position`` at flush time, and a
+    caller told to expect ``ValueError`` should not have to catch
+    ``IntegrityError`` as well. The database error is chained as ``__cause__``.
     """
     try:
         receipt = get_receipt(session, receipt_id)
@@ -768,23 +851,30 @@ def apply_corrections(
             if change is not None:
                 planned.append(change)
 
-        # Phase 2 -- apply, log, commit.
-        for change in planned:
-            setattr(change.target, change.column, change.after)
-        session.add_all(
-            [
-                Correction(
-                    receipt_id=receipt.id,
-                    field_path=change.field_path,
-                    value_before=_as_text(change.before),
-                    value_after=_as_text(change.after),
-                    corrected_by=corrected_by,
-                )
-                for change in planned
-            ]
-        )
-        receipt.status = ReceiptStatus.REVIEWED
-        session.commit()
+        # Phase 2 -- apply, log, commit. A constraint the plan cannot see is
+        # reported in the documented currency: ValueError, not IntegrityError.
+        try:
+            for change in planned:
+                setattr(change.target, change.column, change.after)
+            session.add_all(
+                [
+                    Correction(
+                        receipt_id=receipt.id,
+                        field_path=change.field_path,
+                        value_before=_as_text(change.before),
+                        value_after=_as_text(change.after),
+                        corrected_by=corrected_by,
+                    )
+                    for change in planned
+                ]
+            )
+            receipt.status = ReceiptStatus.REVIEWED
+            session.commit()
+        except SQLAlchemyError as exc:
+            raise ValueError(
+                f"could not apply corrections to receipt {receipt_id}: "
+                f"the database refused the patch ({type(exc).__name__})"
+            ) from exc
     except Exception:
         session.rollback()
         raise

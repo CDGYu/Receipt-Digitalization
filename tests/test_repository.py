@@ -21,6 +21,7 @@ The load-bearing behaviours pinned down below:
 from __future__ import annotations
 
 import json
+import math
 import uuid
 from datetime import date, time
 from decimal import Decimal
@@ -479,6 +480,49 @@ def test_redact_pan_masks_full_card_numbers() -> None:
     assert redact_pan("CARD 378282246310005 OK") == "CARD ***********0005 OK"
 
 
+def test_redact_pan_masks_a_pan_printed_after_a_label_period() -> None:
+    """``CARD NO.`` / ``ACCT NO.`` / ``REF.`` is exactly what a thermal receipt prints.
+
+    A period before the digits is label punctuation, not a decimal point, so the
+    PAN behind it must still be masked (§18).
+    """
+    assert redact_pan("CARD NO.4111111111111111") == "CARD NO.************1111"
+    assert redact_pan("ACCT NO.4111-1111-1111-1111") == "ACCT NO.************1111"
+    assert redact_pan("REF.378282246310005") == "REF.***********0005"
+
+
+def test_redact_pan_masks_a_pan_with_mixed_separators() -> None:
+    """OCR of a worn thermal print reads one separator differently from the rest."""
+    assert redact_pan("CARD 4111 1111-1111 1111 OK") == "CARD ************1111 OK"
+    assert redact_pan("4111-1111 1111-1111") == "************1111"
+    assert redact_pan("3782-822463 10005") == "***********0005"
+
+
+def test_redact_pan_redacts_dict_keys_as_well_as_values() -> None:
+    assert redact_pan({"4111111111111111": "x"}) == {"************1111": "x"}
+    assert redact_pan({"CARD NO.4111111111111111": {"nested 4111111111111111": 1}}) == {
+        "CARD NO.************1111": {"nested ************1111": 1}
+    }
+    # The silent case survives the walk: an ordinary key is untouched.
+    assert redact_pan({"total": "1234.56"}) == {"total": "1234.56"}
+
+
+def test_redact_pan_masks_a_float_pan_but_not_a_money_float() -> None:
+    assert redact_pan(4111111111111111.0) == "************1111"
+    # Money keeps its type and value -- a float amount is never turned into a mask.
+    assert redact_pan(1234.56) == 1234.56
+    assert redact_pan(18.0) == 18.0
+    # A non-finite float is not a number to inspect; it passes through untouched.
+    assert math.isnan(redact_pan(float("nan")))
+    assert redact_pan(float("inf")) == float("inf")
+
+
+def test_redact_pan_walks_sets() -> None:
+    assert redact_pan({"4111111111111111"}) == {"************1111"}
+    assert redact_pan(frozenset({"CARD 4111111111111111"})) == frozenset({"CARD ************1111"})
+    assert isinstance(redact_pan(frozenset({"x"})), frozenset)
+
+
 def test_redact_pan_is_silent_on_money_hashes_and_last4() -> None:
     for value in (
         "TOTAL 1234.56",
@@ -489,6 +533,13 @@ def test_redact_pan_is_silent_on_money_hashes_and_last4() -> None:
         "phone 555-1234",
         "SUBTOTAL 1234567890123.45",
         "qty 2 x 18.00",
+        # A decimal fraction is still not a PAN, however long it is.
+        "confidence 0.4111111111111111",
+        "amount 1234.5678",
+        # A short run after a label period stays a short run.
+        "REF.1234",
+        # A run of small space-separated numbers is not swept into one match.
+        "2 18.00 3 20.00 4 25.00 5 30.00",
     ):
         assert redact_pan(value) == value
 
@@ -784,6 +835,118 @@ def test_apply_corrections_rejects_a_float_on_the_money_path(engine: sa.Engine) 
         got = get_receipt(session, job.id)
         assert got is not None
         assert got.total == Decimal("761.60")
+
+
+@pytest.mark.parametrize("value", ["nan", "NaN", "inf", "-inf", "Infinity"])
+def test_apply_corrections_rejects_a_non_finite_money_string(
+    engine: sa.Engine, value: str
+) -> None:
+    """``Decimal("nan")`` is a legal Decimal -- and a destroyed money column.
+
+    On SQLite it lands as NULL while the ``corrections`` row records ``NaN``, so
+    the audit trail disagrees with the column it describes. Refuse it outright.
+    """
+    job = _job()
+    with Session(engine) as session:
+        _save(session, job=job)
+        session.commit()
+
+    with Session(engine) as session:
+        with pytest.raises(ValueError):
+            apply_corrections(session, job.id, {"totals.total": value}, "reviewer")
+        session.commit()
+
+    with Session(engine) as session:
+        got = get_receipt(session, job.id)
+        assert got is not None
+        assert got.total == Decimal("761.60")
+        assert got.status is ReceiptStatus.AUTO_APPROVED
+        assert session.scalar(select(sa.func.count()).select_from(Correction)) == 0
+
+
+@pytest.mark.parametrize("value", [Decimal("NaN"), Decimal("Infinity"), Decimal("-Infinity")])
+def test_apply_corrections_rejects_a_non_finite_decimal_passed_directly(
+    engine: sa.Engine, value: Decimal
+) -> None:
+    job = _job()
+    with Session(engine) as session:
+        _save(session, job=job)
+        session.commit()
+
+    with Session(engine) as session:
+        with pytest.raises(ValueError):
+            apply_corrections(session, job.id, {"totals.total": value}, "reviewer")
+        session.commit()
+
+    with Session(engine) as session:
+        got = get_receipt(session, job.id)
+        assert got is not None
+        assert got.total == Decimal("761.60")
+        assert session.scalar(select(sa.func.count()).select_from(Correction)) == 0
+
+
+def test_apply_corrections_position_collision_raises_value_error_and_changes_nothing(
+    engine: sa.Engine,
+) -> None:
+    """A collision that only surfaces at commit still honours the documented contract.
+
+    Integrity holds either way -- nothing partial persists -- but the caller is
+    promised ``ValueError``, not a raw ``IntegrityError``.
+    """
+    job = _job()
+    with Session(engine) as session:
+        _save(session, job=job)
+        session.commit()
+
+    with Session(engine) as session:
+        with pytest.raises(ValueError):
+            apply_corrections(session, job.id, {"line_items[0].position": 1}, "reviewer")
+        session.commit()
+
+    with Session(engine) as session:
+        got = get_receipt(session, job.id)
+        assert got is not None
+        assert [(item.position, item.description_raw) for item in got.line_items] == [
+            (0, "MERLOT"),
+            (1, "CABERNET"),
+        ]
+        assert got.status is ReceiptStatus.AUTO_APPROVED
+        assert session.scalar(select(sa.func.count()).select_from(Correction)) == 0
+
+
+def test_apply_corrections_rejects_text_longer_than_the_column(engine: sa.Engine) -> None:
+    """``currency`` is ``String(3)``: silently stored on SQLite, a ``DataError`` on Postgres."""
+    job = _job()
+    with Session(engine) as session:
+        _save(session, job=job)
+        session.commit()
+
+    with Session(engine) as session:
+        with pytest.raises(ValueError):
+            apply_corrections(session, job.id, {"receipt.currency": "EURO-LONG"}, "reviewer")
+        session.commit()
+
+    with Session(engine) as session:
+        got = get_receipt(session, job.id)
+        assert got is not None
+        assert got.currency == "USD"
+        assert got.status is ReceiptStatus.AUTO_APPROVED
+        assert session.scalar(select(sa.func.count()).select_from(Correction)) == 0
+
+
+def test_apply_corrections_accepts_a_currency_that_fits(engine: sa.Engine) -> None:
+    job = _job()
+    with Session(engine) as session:
+        _save(session, job=job)
+        session.commit()
+
+    with Session(engine) as session:
+        apply_corrections(session, job.id, {"receipt.currency": "EUR"}, "reviewer")
+
+    with Session(engine) as session:
+        got = get_receipt(session, job.id)
+        assert got is not None
+        assert got.currency == "EUR"
 
 
 def test_apply_corrections_on_an_unknown_receipt_raises(engine: sa.Engine) -> None:

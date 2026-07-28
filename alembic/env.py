@@ -25,7 +25,15 @@ from sqlalchemy import engine_from_config, pool
 
 from alembic import context
 from config.settings import Settings
-from receipts.persist import Base
+
+# Straight from ``models``, never from the ``receipts.persist`` package surface:
+# the schema is all a migration needs, and this module imports nothing beyond
+# SQLAlchemy and the project's own enums. The package surface would reach the
+# repository layer and, through it, the image stack (numpy, Pillow) that lives in
+# the optional ``pipeline`` extra -- so ``pip install -e .`` followed by
+# ``alembic upgrade head`` would fail on an import that has nothing to do with
+# the schema. ``tests/test_migrations.py`` pins both halves of this.
+from receipts.persist.models import Base
 
 #: Local fallback when nothing else is configured. Deliberately SQLite: no
 #: driver to install, and no chance of a migration hitting a real database by

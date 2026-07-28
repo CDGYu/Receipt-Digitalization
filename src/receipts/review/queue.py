@@ -122,8 +122,19 @@ def enqueue_review(
       * An ``IN_PROGRESS`` task keeps its state -- someone is working it -- and
         only its priority and reason are refreshed.
 
-    Raises ``ValueError`` for an unknown receipt. Flushes; does not commit.
+    Raises ``ValueError`` for an unknown receipt, and for a **negative
+    priority**: ``-1`` is the sentinel :func:`~receipts.score.confidence.route`
+    returns for "no review needed", so an auto-approved receipt passed here
+    straight from the router would become a task that the more-urgent-wins rule
+    above pins permanently ahead of genuine priority-0 work -- and that no later
+    routing decision could ever demote. ``0`` is the most urgent real priority
+    (§12). Flushes; does not commit.
     """
+    if priority < 0:
+        raise ValueError(
+            f"review priority must be >= 0, got {priority}; "
+            "-1 is route()'s 'no review needed' sentinel, not a queue priority"
+        )
     if session.get(Receipt, receipt_id) is None:
         raise ValueError(f"no receipt with id {receipt_id}")
 

@@ -16,6 +16,9 @@ Three things are pinned down:
 
 from __future__ import annotations
 
+import os
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -100,6 +103,47 @@ def test_migration_schema_matches_orm_metadata(alembic_cfg: Config) -> None:
         engine.dispose()
 
     assert diffs == [], f"migration has drifted from the ORM models: {diffs}"
+
+
+def test_migration_metadata_imports_without_the_image_stack() -> None:
+    """``alembic upgrade head`` must work on a *base* install.
+
+    ``env.py`` needs nothing but the schema, so the module it takes
+    ``Base.metadata`` from must not drag in the optional ``pipeline`` extra
+    (numpy, Pillow, and the ``receipts.ingest`` chain that imports them). Checked
+    in a subprocess because this test session has already imported them.
+    """
+    probe = (
+        "import sys; import receipts.persist.models as m; "
+        "assert m.Base.metadata.tables, 'no tables on the metadata'; "
+        "heavy = [n for n in ('numpy', 'PIL', 'cv2', 'receipts.ingest.dedupe') "
+        "if n in sys.modules]; "
+        "assert not heavy, heavy"
+    )
+    env = {
+        **os.environ,
+        "PYTHONPATH": os.pathsep.join([str(REPO_ROOT / "src"), str(REPO_ROOT)]),
+    }
+    result = subprocess.run(
+        [sys.executable, "-c", probe],
+        capture_output=True,
+        text=True,
+        env=env,
+        cwd=str(REPO_ROOT),
+        timeout=120,
+    )
+
+    assert result.returncode == 0, (
+        "importing the migration's metadata pulled optional pipeline "
+        f"dependencies:\n{result.stdout}\n{result.stderr}"
+    )
+
+
+def test_env_py_imports_metadata_from_the_light_module() -> None:
+    """The import in ``env.py`` is the load-bearing half of the fix above."""
+    source = (ALEMBIC_DIR / "env.py").read_text(encoding="utf-8")
+    assert "from receipts.persist.models import Base" in source
+    assert "from receipts.persist import Base" not in source
 
 
 def test_line_items_fk_cascades_and_position_is_unique(alembic_cfg: Config) -> None:

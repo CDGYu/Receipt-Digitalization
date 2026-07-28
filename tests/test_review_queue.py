@@ -171,6 +171,37 @@ def test_enqueue_review_rejects_an_unknown_receipt(engine: sa.Engine) -> None:
             enqueue_review(session, missing, "quick verify", 2)
 
 
+@pytest.mark.parametrize("priority", [-1, -5])
+def test_enqueue_review_rejects_a_negative_priority(engine: sa.Engine, priority: int) -> None:
+    """``-1`` is the sentinel ``route()`` returns for "no review needed" (§12).
+
+    Enqueuing it would create a task that the more-urgent-wins rule pins
+    permanently ahead of genuine priority-0 work, and nothing can ever demote it.
+    """
+    with Session(engine) as session:
+        receipt = _receipt(session)
+
+        with pytest.raises(ValueError, match="priority"):
+            enqueue_review(session, receipt.id, "auto-approved", priority)
+
+        session.flush()
+        assert list(session.scalars(select(ReviewTask))) == []
+
+
+def test_enqueue_review_rejects_a_negative_priority_on_an_existing_task(
+    engine: sa.Engine,
+) -> None:
+    with Session(engine) as session:
+        receipt = _receipt(session)
+        task = enqueue_review(session, receipt.id, "quick verify", 2)
+
+        with pytest.raises(ValueError, match="priority"):
+            enqueue_review(session, receipt.id, "auto-approved", -1)
+
+        assert task.priority == 2
+        assert task.reason == "quick verify"
+
+
 # --------------------------------------------------------------------------- #
 # next_task
 # --------------------------------------------------------------------------- #
