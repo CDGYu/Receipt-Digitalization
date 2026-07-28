@@ -1,0 +1,843 @@
+"""Repository-layer tests: the persistence read/write API (spec §14.8).
+
+Everything here runs on an in-memory SQLite database with ``PRAGMA
+foreign_keys=ON`` (the same fixture pattern as ``test_models.py``) -- no
+Postgres, no psycopg, no network.
+
+The load-bearing behaviours pinned down below:
+
+  * money survives the round trip as ``Decimal`` at full precision, and a
+    reviewer's correction round-trips as ``Decimal`` too (ADR-0001);
+  * an unparseable or missing date leaves ``txn_date`` NULL and keeps the raw
+    string -- the repository never invents a date;
+  * a full card number (PAN) never reaches ``extraction_runs.raw_response``
+    (spec §18), while money, hashes, and a 4-digit ``card_last4`` are left
+    exactly as they were -- the silent case matters as much as the firing one;
+  * ``apply_corrections`` is transactional: one ``corrections`` row per changed
+    field path, zero rows for a no-op, and nothing at all when a path in the
+    patch cannot be mapped.
+"""
+
+from __future__ import annotations
+
+import json
+import uuid
+from datetime import date, time
+from decimal import Decimal
+
+import pytest
+import sqlalchemy as sa
+from sqlalchemy import create_engine, event, select
+from sqlalchemy.orm import Session
+
+from receipts.extract.clients.base import VLMResponse
+from receipts.extract.schema import (
+    ExtractionMeta,
+    Legibility,
+    Payment,
+    ReceiptExtraction,
+    ReceiptMeta,
+    Totals,
+)
+from receipts.extract.schema import LineItem as ExtractedLineItem
+from receipts.extract.schema import Merchant as ExtractedMerchant
+from receipts.ingest.ingest import ReceiptJob
+from receipts.persist import (
+    Correction,
+    ExtractionRun,
+    LineItem,
+    Merchant,
+    PassName,
+    Receipt,
+    ValidationFinding,
+    apply_corrections,
+    get_receipt,
+    query_receipts,
+    redact_pan,
+    save_extraction,
+    save_extraction_run,
+    save_findings,
+)
+from receipts.persist.models import Base
+from receipts.persist.session import make_engine, make_session_factory
+from receipts.score.confidence import ReceiptStatus
+from receipts.validate.report import Finding, Severity, ValidationReport
+
+PHASH = "0123456789abcdef"
+PROMPT_HASH = "abc123def4560000"
+
+
+@pytest.fixture()
+def engine() -> sa.Engine:
+    """In-memory SQLite with FK enforcement on (mirrors ``test_models.py``)."""
+    eng = create_engine("sqlite+pysqlite:///:memory:")
+
+    @event.listens_for(eng, "connect")
+    def _enable_sqlite_fk(dbapi_conn, _record):
+        cur = dbapi_conn.cursor()
+        cur.execute("PRAGMA foreign_keys=ON")
+        cur.close()
+
+    Base.metadata.create_all(eng)
+    return eng
+
+
+# --------------------------------------------------------------------------- #
+# Builders
+# --------------------------------------------------------------------------- #
+
+
+def _job(receipt_id: uuid.UUID | None = None) -> ReceiptJob:
+    receipt_id = receipt_id or uuid.uuid4()
+    return ReceiptJob(
+        id=receipt_id,
+        image_key=f"receipts/2026/07/{receipt_id}/original.jpg",
+        source="upload",
+        original_filename="receipt.jpg",
+        content_type="image/jpeg",
+    )
+
+
+def _extraction(
+    *,
+    date_iso: str | None = "2026-07-27",
+    date_raw: str | None = None,
+    total: Decimal | None = Decimal("761.60"),
+    card_last4: str | None = "1111",
+    is_handwritten: bool = False,
+    inconsistent: bool = False,
+) -> ReceiptExtraction:
+    return ReceiptExtraction(
+        merchant=ExtractedMerchant(name="TOTAL WINE"),
+        receipt=ReceiptMeta(
+            number="A-1234",
+            date=date_iso,
+            date_raw=date_raw,
+            time="14:30",
+            currency="USD",
+        ),
+        line_items=[
+            ExtractedLineItem(
+                position=0,
+                description_raw="MERLOT",
+                qty=Decimal("2"),
+                unit_price=Decimal("18.00"),
+                line_total=Decimal("36.00"),
+            ),
+            ExtractedLineItem(
+                position=1,
+                description_raw="CABERNET",
+                sku="CAB-1",
+                qty=Decimal("1.5"),
+                unit="btl",
+                unit_price=Decimal("20.00"),
+                line_total=Decimal("30.00"),
+            ),
+        ],
+        totals=Totals(
+            subtotal=Decimal("720.00"),
+            tax=Decimal("41.60"),
+            discount=Decimal("0.00"),
+            total=total,
+            tender=Decimal("800.00"),
+            change=Decimal("38.40"),
+        ),
+        payment=Payment(method="card", card_last4=card_last4),
+        meta=ExtractionMeta(
+            is_handwritten=is_handwritten,
+            legibility=Legibility.GOOD,
+            receipt_is_inconsistent=inconsistent,
+        ),
+    )
+
+
+def _report() -> ValidationReport:
+    return ValidationReport(
+        findings=[
+            Finding(
+                rule_id="R021",
+                severity=Severity.ERROR,
+                message="Line items sum to 66.00 but the subtotal is 720.00.",
+                field_paths=["line_items", "totals.subtotal"],
+                context={"line_sum": "66.00", "subtotal": "720.00"},
+            ),
+            Finding(
+                rule_id="R041",
+                severity=Severity.WARN,
+                message="Implied tax rate is 5.8%.",
+                field_paths=["totals.tax"],
+            ),
+            Finding(
+                rule_id="R011",
+                severity=Severity.INFO,
+                message="receipt.date is null but date_raw was captured.",
+            ),
+        ]
+    )
+
+
+def _save(
+    session: Session,
+    *,
+    extraction: ReceiptExtraction | None = None,
+    status: ReceiptStatus = ReceiptStatus.AUTO_APPROVED,
+    confidence: Decimal = Decimal("0.912"),
+    job: ReceiptJob | None = None,
+) -> Receipt:
+    return save_extraction(
+        session,
+        job or _job(),
+        extraction or _extraction(),
+        ValidationReport(),
+        confidence,
+        status,
+        image_phash=PHASH,
+    )
+
+
+# --------------------------------------------------------------------------- #
+# save_extraction
+# --------------------------------------------------------------------------- #
+
+
+def test_save_extraction_persists_receipt_and_line_items(engine: sa.Engine) -> None:
+    job = _job()
+    with Session(engine) as session:
+        receipt = _save(session, job=job)
+        assert receipt.id == job.id
+        session.commit()
+
+    with Session(engine) as session:
+        got = get_receipt(session, job.id)
+        assert got is not None
+
+        assert got.image_key == job.image_key
+        assert got.image_phash == PHASH
+        assert got.merchant_name_raw == "TOTAL WINE"
+        assert got.receipt_number == "A-1234"
+        assert got.txn_date == date(2026, 7, 27)
+        assert got.txn_time == time(14, 30)
+        assert got.currency == "USD"
+        assert got.payment_method == "card"
+        assert got.card_last4 == "1111"
+        assert got.is_handwritten is False
+        assert got.receipt_is_inconsistent is False
+        assert got.legibility is Legibility.GOOD
+        assert got.status is ReceiptStatus.AUTO_APPROVED
+
+        # Money reads back as Decimal at full precision -- never float.
+        assert isinstance(got.total, Decimal)
+        assert got.total == Decimal("761.60")
+        assert got.subtotal == Decimal("720.00")
+        assert got.tax_total == Decimal("41.60")
+        assert got.discount_total == Decimal("0.00")
+        assert got.tender_amount == Decimal("800.00")
+        assert got.change_amount == Decimal("38.40")
+        assert isinstance(got.confidence, Decimal)
+        assert got.confidence == Decimal("0.912")
+
+        assert [item.position for item in got.line_items] == [0, 1]
+        first, second = got.line_items
+        assert first.description_raw == "MERLOT"
+        assert isinstance(first.qty, Decimal)
+        assert first.qty == Decimal("2")
+        assert first.unit_price == Decimal("18.00")
+        assert first.line_total == Decimal("36.00")
+        assert second.sku == "CAB-1"
+        assert second.unit == "btl"
+        assert second.qty == Decimal("1.5")
+
+
+def test_save_extraction_keeps_date_raw_and_leaves_txn_date_null(engine: sa.Engine) -> None:
+    job = _job()
+    with Session(engine) as session:
+        _save(
+            session,
+            job=job,
+            extraction=_extraction(date_iso=None, date_raw="3/4/26"),
+        )
+        session.commit()
+
+    with Session(engine) as session:
+        got = get_receipt(session, job.id)
+        assert got is not None
+        assert got.txn_date is None
+        assert got.date_raw == "3/4/26"
+
+
+def test_save_extraction_never_invents_a_date_from_an_unparseable_value(
+    engine: sa.Engine,
+) -> None:
+    job = _job()
+    with Session(engine) as session:
+        _save(session, job=job, extraction=_extraction(date_iso="27 July, maybe"))
+        session.commit()
+
+    with Session(engine) as session:
+        got = get_receipt(session, job.id)
+        assert got is not None
+        assert got.txn_date is None
+        # Nothing is silently dropped: the unparseable string is kept verbatim.
+        assert got.date_raw == "27 July, maybe"
+
+
+def test_save_extraction_stores_only_the_last_four_card_digits(engine: sa.Engine) -> None:
+    job = _job()
+    with Session(engine) as session:
+        _save(session, job=job, extraction=_extraction(card_last4="4111111111111111"))
+        session.commit()
+
+    with Session(engine) as session:
+        got = get_receipt(session, job.id)
+        assert got is not None
+        assert got.card_last4 == "1111"
+
+
+def test_save_extraction_carries_meta_flags(engine: sa.Engine) -> None:
+    job = _job()
+    with Session(engine) as session:
+        _save(
+            session,
+            job=job,
+            extraction=_extraction(is_handwritten=True, inconsistent=True),
+            status=ReceiptStatus.NEEDS_REVIEW,
+        )
+        session.commit()
+
+    with Session(engine) as session:
+        got = get_receipt(session, job.id)
+        assert got is not None
+        assert got.is_handwritten is True
+        assert got.receipt_is_inconsistent is True
+        assert got.status is ReceiptStatus.NEEDS_REVIEW
+
+
+def test_save_extraction_falls_back_to_list_order_on_duplicate_positions(
+    engine: sa.Engine,
+) -> None:
+    """All-zero positions (a model that never emitted them) must not collide."""
+    extraction = _extraction()
+    for item in extraction.line_items:
+        item.position = 0
+
+    job = _job()
+    with Session(engine) as session:
+        _save(session, job=job, extraction=extraction)
+        session.commit()
+
+    with Session(engine) as session:
+        got = get_receipt(session, job.id)
+        assert got is not None
+        assert [item.position for item in got.line_items] == [0, 1]
+
+
+def test_get_receipt_returns_none_for_an_unknown_id(engine: sa.Engine) -> None:
+    with Session(engine) as session:
+        assert get_receipt(session, uuid.uuid4()) is None
+
+
+# --------------------------------------------------------------------------- #
+# save_findings
+# --------------------------------------------------------------------------- #
+
+
+def test_save_findings_writes_one_row_per_finding(engine: sa.Engine) -> None:
+    job = _job()
+    with Session(engine) as session:
+        _save(session, job=job)
+        rows = save_findings(session, job.id, _report())
+        assert len(rows) == 3
+        session.commit()
+
+    with Session(engine) as session:
+        stored = list(
+            session.scalars(
+                select(ValidationFinding)
+                .where(ValidationFinding.receipt_id == job.id)
+                .order_by(ValidationFinding.rule_id)
+            )
+        )
+        assert [row.rule_id for row in stored] == ["R011", "R021", "R041"]
+        by_rule = {row.rule_id: row for row in stored}
+        assert by_rule["R021"].severity is Severity.ERROR
+        assert by_rule["R041"].severity is Severity.WARN
+        assert by_rule["R011"].severity is Severity.INFO
+        assert by_rule["R021"].context == {"line_sum": "66.00", "subtotal": "720.00"}
+        assert by_rule["R041"].context == {}
+        assert by_rule["R021"].resolved_by_repair is False
+        assert "720.00" in by_rule["R021"].message
+
+
+def test_save_findings_on_a_clean_report_writes_nothing(engine: sa.Engine) -> None:
+    job = _job()
+    with Session(engine) as session:
+        _save(session, job=job)
+        assert save_findings(session, job.id, ValidationReport()) == []
+        session.commit()
+
+    with Session(engine) as session:
+        assert session.scalar(select(sa.func.count()).select_from(ValidationFinding)) == 0
+
+
+# --------------------------------------------------------------------------- #
+# save_extraction_run + PAN redaction
+# --------------------------------------------------------------------------- #
+
+
+def _response(raw: object) -> VLMResponse:
+    return VLMResponse(
+        parsed=None,
+        raw=raw,
+        model_id="fake-model-1",
+        input_tokens=1500,
+        output_tokens=400,
+        latency_ms=1234,
+        cost_usd=Decimal("0.012345"),
+        parse_error="unterminated string",
+    )
+
+
+def test_save_extraction_run_records_the_audit_row(engine: sa.Engine) -> None:
+    job = _job()
+    with Session(engine) as session:
+        _save(session, job=job)
+        run = save_extraction_run(
+            session, job.id, PassName.EXTRACT, 2, _response({"scripted": 0}), PROMPT_HASH
+        )
+        run_id = run.id
+        session.commit()
+
+    with Session(engine) as session:
+        got = session.get(ExtractionRun, run_id)
+        assert got is not None
+        assert got.receipt_id == job.id
+        assert got.pass_name is PassName.EXTRACT
+        assert got.attempt == 2
+        assert got.model_id == "fake-model-1"
+        assert got.prompt_hash == PROMPT_HASH
+        assert got.input_tokens == 1500
+        assert got.output_tokens == 400
+        assert got.latency_ms == 1234
+        assert isinstance(got.cost_usd, Decimal)
+        assert got.cost_usd == Decimal("0.012345")
+        assert got.raw_response["raw"] == {"scripted": 0}
+        assert got.raw_response["parse_error"] == "unterminated string"
+
+
+def test_save_extraction_run_accepts_a_pass_name_string(engine: sa.Engine) -> None:
+    job = _job()
+    with Session(engine) as session:
+        _save(session, job=job)
+        run = save_extraction_run(
+            session, job.id, "repair", 1, _response("plain text"), PROMPT_HASH
+        )
+        session.commit()
+        assert run.pass_name is PassName.REPAIR
+
+
+def test_save_extraction_run_redacts_a_full_pan(engine: sa.Engine) -> None:
+    job = _job()
+    raw = {
+        "text": "VISA 4111111111111111 APPROVED",
+        "blocks": [
+            "CARD 4111-1111-1111-1111",
+            "CARD 4111 1111 1111 1111",
+            "TOTAL 1234.56",
+        ],
+        "trace_id": PHASH,
+        "card_last4": "1234",
+    }
+    with Session(engine) as session:
+        _save(session, job=job)
+        run = save_extraction_run(session, job.id, PassName.EXTRACT, 1, _response(raw), PROMPT_HASH)
+        run_id = run.id
+        session.commit()
+
+    with Session(engine) as session:
+        stored = json.dumps(session.get(ExtractionRun, run_id).raw_response)
+
+    # No full PAN, in any separator style, survives.
+    assert "4111111111111111" not in stored
+    assert "4111-1111-1111-1111" not in stored
+    assert "4111 1111 1111 1111" not in stored
+    assert "4111" not in stored
+    # The last four digits are still there.
+    assert "1111" in stored
+
+    # The silent case: nothing else was touched.
+    assert "1234.56" in stored
+    assert PHASH in stored
+    assert '"1234"' in stored
+
+
+def test_redact_pan_masks_full_card_numbers() -> None:
+    assert redact_pan("4111111111111111") == "************1111"
+    assert redact_pan("4111 1111 1111 1111") == "************1111"
+    assert redact_pan("4111-1111-1111-1111") == "************1111"
+    # Amex, 4-6-5 grouping and unseparated, keeps only the last four.
+    assert redact_pan("CARD 3782 822463 10005 OK") == "CARD ***********0005 OK"
+    assert redact_pan("CARD 378282246310005 OK") == "CARD ***********0005 OK"
+
+
+def test_redact_pan_is_silent_on_money_hashes_and_last4() -> None:
+    for value in (
+        "TOTAL 1234.56",
+        "last4 1234",
+        PHASH,
+        "prompt_bundle 0123456789abcdef",
+        "2026-07-27 14:30",
+        "phone 555-1234",
+        "SUBTOTAL 1234567890123.45",
+        "qty 2 x 18.00",
+    ):
+        assert redact_pan(value) == value
+
+
+def test_redact_pan_walks_containers_and_never_mutates_its_input() -> None:
+    payload = {
+        "text": "PAN 4111111111111111",
+        "items": ["ok 1234", {"nested": "4111-1111-1111-1111"}],
+        "tokens": 1500,
+        "flag": True,
+        "nothing": None,
+    }
+    out = redact_pan(payload)
+
+    assert out == {
+        "text": "PAN ************1111",
+        "items": ["ok 1234", {"nested": "************1111"}],
+        "tokens": 1500,
+        "flag": True,
+        "nothing": None,
+    }
+    # Pure: the input is untouched.
+    assert payload["text"] == "PAN 4111111111111111"
+    assert payload["items"][1]["nested"] == "4111-1111-1111-1111"
+
+
+def test_redact_pan_masks_a_numeric_pan_but_not_a_small_int() -> None:
+    assert redact_pan(4111111111111111) == "************1111"
+    assert redact_pan(1234) == 1234
+    assert redact_pan(True) is True
+
+
+# --------------------------------------------------------------------------- #
+# query_receipts
+# --------------------------------------------------------------------------- #
+
+
+@pytest.fixture()
+def populated(engine: sa.Engine) -> sa.Engine:
+    """Five receipts spread across statuses, dates, and confidences."""
+    rows = [
+        ("2026-07-01", Decimal("0.950"), ReceiptStatus.AUTO_APPROVED),
+        ("2026-07-05", Decimal("0.880"), ReceiptStatus.AUTO_APPROVED),
+        ("2026-07-10", Decimal("0.400"), ReceiptStatus.NEEDS_REVIEW),
+        ("2026-07-20", Decimal("0.700"), ReceiptStatus.NEEDS_REVIEW),
+        (None, Decimal("0.100"), ReceiptStatus.NEEDS_REVIEW),
+    ]
+    with Session(engine) as session:
+        for date_iso, confidence, status in rows:
+            _save(
+                session,
+                extraction=_extraction(date_iso=date_iso),
+                confidence=confidence,
+                status=status,
+            )
+        session.commit()
+    return engine
+
+
+def test_query_receipts_returns_everything_by_default(populated: sa.Engine) -> None:
+    with Session(populated) as session:
+        assert len(query_receipts(session)) == 5
+
+
+def test_query_receipts_filters_by_status(populated: sa.Engine) -> None:
+    with Session(populated) as session:
+        auto = query_receipts(session, status=ReceiptStatus.AUTO_APPROVED)
+        assert len(auto) == 2
+        assert all(row.status is ReceiptStatus.AUTO_APPROVED for row in auto)
+
+
+def test_query_receipts_filters_by_min_confidence(populated: sa.Engine) -> None:
+    with Session(populated) as session:
+        rows = query_receipts(session, min_confidence=Decimal("0.700"))
+        assert sorted(row.confidence for row in rows) == [
+            Decimal("0.700"),
+            Decimal("0.880"),
+            Decimal("0.950"),
+        ]
+
+
+def test_query_receipts_filters_by_date_range(populated: sa.Engine) -> None:
+    with Session(populated) as session:
+        rows = query_receipts(session, date_from=date(2026, 7, 5), date_to=date(2026, 7, 10))
+        # Range is inclusive at both ends, and the undated receipt is excluded.
+        assert sorted(row.txn_date for row in rows) == [date(2026, 7, 5), date(2026, 7, 10)]
+
+
+def test_query_receipts_filters_compose(populated: sa.Engine) -> None:
+    with Session(populated) as session:
+        rows = query_receipts(
+            session,
+            status=ReceiptStatus.NEEDS_REVIEW,
+            date_from=date(2026, 7, 1),
+            min_confidence=Decimal("0.500"),
+        )
+        assert [row.confidence for row in rows] == [Decimal("0.700")]
+
+
+def test_query_receipts_paginates_deterministically(populated: sa.Engine) -> None:
+    with Session(populated) as session:
+        everything = [row.id for row in query_receipts(session)]
+        first_page = [row.id for row in query_receipts(session, limit=2)]
+        second_page = [row.id for row in query_receipts(session, limit=2, offset=2)]
+        tail = [row.id for row in query_receipts(session, limit=2, offset=4)]
+
+    assert first_page == everything[:2]
+    assert second_page == everything[2:4]
+    assert tail == everything[4:]
+    assert len(set(first_page + second_page + tail)) == 5
+
+
+def test_query_receipts_filters_by_merchant(engine: sa.Engine) -> None:
+    with Session(engine) as session:
+        merchant = Merchant(canonical_name="Total Wine & More")
+        session.add(merchant)
+        session.flush()
+        merchant_id = merchant.id
+
+        mine = save_extraction(
+            session,
+            _job(),
+            _extraction(),
+            ValidationReport(),
+            Decimal("0.900"),
+            ReceiptStatus.AUTO_APPROVED,
+            image_phash=PHASH,
+            merchant_id=merchant_id,
+        )
+        mine_id = mine.id
+        _save(session)  # a second receipt with no merchant
+        session.commit()
+
+    with Session(engine) as session:
+        rows = query_receipts(session, merchant_id=merchant_id)
+        assert [row.id for row in rows] == [mine_id]
+        assert query_receipts(session, merchant_id=uuid.uuid4()) == []
+
+
+# --------------------------------------------------------------------------- #
+# apply_corrections
+# --------------------------------------------------------------------------- #
+
+
+def test_apply_corrections_writes_one_row_per_changed_field(engine: sa.Engine) -> None:
+    job = _job()
+    with Session(engine) as session:
+        _save(session, job=job)
+        session.commit()
+
+    with Session(engine) as session:
+        receipt = apply_corrections(
+            session,
+            job.id,
+            {"totals.total": Decimal("761.61"), "line_items[1].qty": Decimal("3")},
+            "reviewer@example.com",
+        )
+        assert receipt.status is ReceiptStatus.REVIEWED
+
+    with Session(engine) as session:
+        rows = list(
+            session.scalars(
+                select(Correction)
+                .where(Correction.receipt_id == job.id)
+                .order_by(Correction.field_path)
+            )
+        )
+        assert [row.field_path for row in rows] == ["line_items[1].qty", "totals.total"]
+        assert all(row.corrected_by == "reviewer@example.com" for row in rows)
+
+        qty_row, total_row = rows
+        assert Decimal(qty_row.value_before) == Decimal("1.5")
+        assert Decimal(qty_row.value_after) == Decimal("3")
+        assert Decimal(total_row.value_before) == Decimal("761.60")
+        assert Decimal(total_row.value_after) == Decimal("761.61")
+
+        got = get_receipt(session, job.id)
+        assert got is not None
+        assert got.status is ReceiptStatus.REVIEWED
+        assert isinstance(got.total, Decimal)
+        assert got.total == Decimal("761.61")
+        assert got.line_items[1].qty == Decimal("3")
+
+
+def test_apply_corrections_accepts_nested_and_text_patches(engine: sa.Engine) -> None:
+    job = _job()
+    with Session(engine) as session:
+        _save(session, job=job)
+        session.commit()
+
+    with Session(engine) as session:
+        apply_corrections(
+            session,
+            job.id,
+            {
+                "merchant": {"name": "Total Wine & More"},
+                "receipt": {"date": "2026-07-28"},
+                "totals": {"total": "800.00"},
+            },
+            "reviewer",
+        )
+
+    with Session(engine) as session:
+        got = get_receipt(session, job.id)
+        assert got is not None
+        assert got.merchant_name_raw == "Total Wine & More"
+        assert got.txn_date == date(2026, 7, 28)
+        assert isinstance(got.total, Decimal)
+        assert got.total == Decimal("800.00")
+        assert session.scalar(select(sa.func.count()).select_from(Correction)) == 3
+
+
+def test_apply_corrections_noop_patch_writes_no_rows(engine: sa.Engine) -> None:
+    job = _job()
+    with Session(engine) as session:
+        _save(session, job=job)
+        session.commit()
+
+    with Session(engine) as session:
+        apply_corrections(
+            session,
+            job.id,
+            {"totals.total": Decimal("761.6000"), "merchant.name": "TOTAL WINE"},
+            "reviewer",
+        )
+
+    with Session(engine) as session:
+        assert session.scalar(select(sa.func.count()).select_from(Correction)) == 0
+        got = get_receipt(session, job.id)
+        assert got is not None
+        assert got.total == Decimal("761.60")
+        # A reviewer confirming an already-correct receipt is still a review.
+        assert got.status is ReceiptStatus.REVIEWED
+
+
+def test_apply_corrections_empty_patch_is_harmless(engine: sa.Engine) -> None:
+    job = _job()
+    with Session(engine) as session:
+        _save(session, job=job)
+        session.commit()
+
+    with Session(engine) as session:
+        apply_corrections(session, job.id, {}, "reviewer")
+
+    with Session(engine) as session:
+        assert session.scalar(select(sa.func.count()).select_from(Correction)) == 0
+
+
+@pytest.mark.parametrize(
+    "patch",
+    [
+        {"totals.bogus": Decimal("1")},
+        {"nope": "x"},
+        {"line_items[9].qty": Decimal("1")},
+        {"line_items[0].modifiers": "x"},
+        {"totals.total": Decimal("999.99"), "totals.bogus": Decimal("1")},
+    ],
+)
+def test_apply_corrections_rejects_unmappable_paths_and_changes_nothing(
+    engine: sa.Engine, patch: dict
+) -> None:
+    job = _job()
+    with Session(engine) as session:
+        _save(session, job=job)
+        session.commit()
+
+    with Session(engine) as session:
+        with pytest.raises(ValueError):
+            apply_corrections(session, job.id, patch, "reviewer")
+        # The failed call rolled back, so a later commit on the same session
+        # cannot flush a half-applied patch.
+        session.commit()
+
+    with Session(engine) as session:
+        got = get_receipt(session, job.id)
+        assert got is not None
+        assert got.total == Decimal("761.60")
+        assert got.status is ReceiptStatus.AUTO_APPROVED
+        assert session.scalar(select(sa.func.count()).select_from(Correction)) == 0
+
+
+def test_apply_corrections_rejects_a_float_on_the_money_path(engine: sa.Engine) -> None:
+    job = _job()
+    with Session(engine) as session:
+        _save(session, job=job)
+        session.commit()
+
+    with Session(engine) as session:
+        with pytest.raises(ValueError):
+            apply_corrections(session, job.id, {"totals.total": 761.61}, "reviewer")
+
+    with Session(engine) as session:
+        got = get_receipt(session, job.id)
+        assert got is not None
+        assert got.total == Decimal("761.60")
+
+
+def test_apply_corrections_on_an_unknown_receipt_raises(engine: sa.Engine) -> None:
+    with Session(engine) as session:
+        with pytest.raises(ValueError):
+            apply_corrections(session, uuid.uuid4(), {"totals.total": Decimal("1")}, "reviewer")
+
+
+def test_apply_corrections_keeps_only_the_last_four_card_digits(engine: sa.Engine) -> None:
+    job = _job()
+    with Session(engine) as session:
+        _save(session, job=job)
+        session.commit()
+
+    with Session(engine) as session:
+        apply_corrections(
+            session, job.id, {"payment.card_last4": "4111-1111-1111-4242"}, "reviewer"
+        )
+
+    with Session(engine) as session:
+        got = get_receipt(session, job.id)
+        assert got is not None
+        assert got.card_last4 == "4242"
+
+
+# --------------------------------------------------------------------------- #
+# session helpers
+# --------------------------------------------------------------------------- #
+
+
+def test_make_engine_enables_sqlite_foreign_keys() -> None:
+    eng = make_engine("sqlite+pysqlite:///:memory:")
+    with eng.connect() as conn:
+        assert conn.exec_driver_sql("PRAGMA foreign_keys").scalar() == 1
+
+
+def test_make_engine_falls_back_to_the_configured_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DATABASE_URL", "sqlite+pysqlite:///:memory:")
+    eng = make_engine()
+    assert eng.url.database == ":memory:"
+
+
+def test_make_session_factory_produces_working_sessions() -> None:
+    eng = make_engine("sqlite+pysqlite:///:memory:")
+    Base.metadata.create_all(eng)
+    factory = make_session_factory(eng)
+
+    job = _job()
+    with factory() as session:
+        _save(session, job=job)
+        session.commit()
+
+    with factory() as session:
+        got = get_receipt(session, job.id)
+        assert got is not None
+        assert got.total == Decimal("761.60")
+        assert isinstance(got.line_items[0], LineItem)
