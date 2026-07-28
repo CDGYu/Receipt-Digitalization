@@ -24,6 +24,12 @@ htmlcov/
 .env.*
 !.env.example
 
+# Local SQLite databases (the alembic fallback URL is sqlite:///receipts.db,
+# and a dev DB holds real receipt data)
+*.db
+*.sqlite
+*.sqlite3
+
 # Generated data & exports (receipts may contain PII)
 eval/golden/images/
 *.xlsx
