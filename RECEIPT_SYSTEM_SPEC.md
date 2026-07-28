@@ -273,7 +273,8 @@ Seven tables. `receipts` is the head; everything else hangs off it.
 | `is_handwritten` | bool | |
 | `legibility` | enum | good / fair / poor / unreadable |
 | `confidence` | numeric(4,3) | 0.000–1.000 |
-| `status` | enum | pending / auto_approved / needs_review / reviewed / rejected |
+| `confidence_reasons` | jsonb nullable | The `(reason, penalty)` pairs that produced `confidence`, penalties as strings. **Null means "not recorded"; `[]` means "nothing lowered the score"** — the review UI must not collapse the two. Written by `process_receipt`; it cannot be recomputed at read time, because triage issues and `meta.ambiguous_fields` are not persisted (ADR-0012) |
+| `status` | enum | pending / auto_approved / needs_review / reviewed / rejected. A row is `pending` from `POST /upload` until the worker persists. **A machine run never overwrites a `reviewed` row** (ADR-0012) |
 | `image_key` | text | Blob storage key, original |
 | `processed_image_key` | text nullable | Post-deskew |
 | `image_phash` | char(16) | Perceptual hash for dedupe |
@@ -326,6 +327,7 @@ Immutable audit log. One row per model call.
 | `message` | text | Human readable |
 | `context` | jsonb | Numbers involved, for the repair prompt |
 | `resolved_by_repair` | bool | |
+| `created_at` | timestamptz | Write order, so findings read back in the order they were produced |
 
 ### 6.6 `corrections`
 Training data. Every human edit lands here.
@@ -350,6 +352,20 @@ Training data. Every human edit lands here.
 | `assigned_to` | text nullable | |
 | `state` | enum | open / in_progress / done |
 | `opened_at` / `closed_at` | timestamptz | |
+
+### 6.8 `users`
+Who may sign in to the review service. Exists so `corrections.corrected_by` names a
+real account: a shared key cannot attribute a correction to a reviewer, which would
+hollow out the audit trail the review UI depends on (ADR-0012).
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | uuid PK | |
+| `username` | text unique | |
+| `password_hash` | text | stdlib scrypt, encoded `scrypt$n$r$p$salt$hash` |
+| `role` | varchar(16) | `reviewer` / `admin`. Deliberately **not** a DB enum — the migration drift guard runs on SQLite only and cannot see a new enum member |
+| `is_active` | bool | Re-read on every request, so a deactivation takes effect immediately |
+| `created_at` / `updated_at` | timestamptz | |
 
 ---
 
@@ -1426,17 +1442,27 @@ def close_task(task_id: UUID) -> None
 def queue_stats() -> QueueStats
 
 # api.py  (FastAPI routes)
-POST   /upload                    -> ReceiptJob
+POST   /auth/login                -> sets the session cookie
+POST   /auth/logout
+POST   /upload                    -> ReceiptJob (writes a `pending` row first)
 GET    /receipts                  -> paginated list
 GET    /receipts/{id}             -> record + findings + confidence explanation
 PATCH  /receipts/{id}             -> apply corrections
 GET    /receipts/{id}/image       -> signed URL
+GET    /receipts/{id}/image/blob  -> streams the bytes; HMAC-signed, no session
 GET    /review/next               -> next task for the caller
-POST   /review/{id}/complete
-GET    /export/xlsx               -> streams the workbook
+POST   /review/{id}/complete      -> {id} is the TASK id; assignee or admin only
+GET    /export/xlsx               -> returns the workbook
 GET    /health
 GET    /metrics                   -> counts by status, auto-approval rate
 ```
+
+Auth is a signed session cookie carrying the username only, with the role re-read
+per request, plus a separate `X-API-Key` for unattended upload (ADR-0012). Every
+route except `/health`, `/auth/login` and the signed image blob requires a session;
+`/export/xlsx` requires `admin`. The API key authorizes `POST /upload` and nothing
+else — it can neither read a receipt nor write a correction, because a correction
+must name the person who made it.
 
 ### 14.10 `pipeline.py` and `cli.py`
 
@@ -1562,9 +1588,12 @@ VLM_MODEL_EXTRACT=         # main extraction model
 VLM_MODEL_TRIAGE=          # cheaper model is fine here
 VLM_MAX_TOKENS=4096
 VLM_TIMEOUT_S=120
+VLM_USE_TOOLS=            # blank = decide from the provider id
+VLM_MAX_CONCURRENCY=4     # process-global cap on in-flight model calls; 0 = unlimited
 
 # Pipeline
 MAX_REPAIR_ATTEMPTS=1
+MAX_COST_USD_PER_RECEIPT=0.25   # Decimal; 0 disables the ceiling
 CONSISTENCY_RUNS=3         # set 1 to disable
 CONSISTENCY_TEMPERATURE=0.3
 AUTO_APPROVE_THRESHOLD=0.85
@@ -1586,6 +1615,16 @@ DATABASE_URL=
 REDIS_URL=
 STORAGE_BACKEND=local|s3
 S3_BUCKET=
+STORAGE_ROOT=var/blobs    # where STORAGE_BACKEND=local puts blobs
+
+# Service (the review API)
+SESSION_SECRET=           # required; the app refuses to start without it
+RECEIPTS_API_KEY=         # machine upload key; unset rejects every X-API-Key header
+SESSION_COOKIE_SECURE=true
+SESSION_TTL_S=43200       # 12h; a stateless cookie cannot be revoked before this
+IMAGE_URL_TTL_S=300
+EXPORT_IMAGE_URL_TTL_S=86400   # links inside an exported workbook
+DOCS_ENABLED=false        # /docs, /redoc and /openapi.json are off by default
 ```
 
 Tolerances, penalty weights, and per-rule overrides live in `config/rules.yaml` so they can be tuned without redeploying.

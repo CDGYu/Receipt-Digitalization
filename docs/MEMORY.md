@@ -5,26 +5,35 @@ files in "Key references" below. Last updated: **2026-07-28**.
 
 ## Snapshot
 
-- **Branch `feat/service` @ `6d35575`** (1 commit ahead of `master` @ `9b823ea`)
-  — **488 tests passing, ruff clean.**
+- **Branch `feat/service` @ `aad8bba`** (19 commits ahead of `master` @ `9b823ea`)
+  — **644 tests passing, ruff clean.** Phase 4 service work is **complete except
+  `cli.py`** (P4.T5/T6); the whole-branch review is done and its fix wave merged.
 - Merged on `master`: Phase 0 foundations, Phase 1 offline modules, the online
   wiring (config, client factory, M1 pipeline, confidence scoring, one-command
   baseline runner), **Phase 3 persistence** (7-table ORM + `docker-compose.yml`,
   Alembic migrations, repository layer, DB-backed dedupe, review queue, 4-sheet
   XLSX export), plus the R020/R024 VAT-inclusive fix and the currency default
   chain.
-- **On `feat/service`, not yet merged: P4.T4** — `process_receipt`, the RQ
-  worker, and the two VLM guards (see ADR-0011).
+- **On `feat/service`, not yet merged:** **P4.T4** (`process_receipt`, the RQ
+  worker, the two VLM guards — ADR-0011) and **P4.T3** (the review API: `users`
+  table, session auth + roles, machine upload key, eleven routes — ADR-0012).
 - Phase 3 is complete except **P3.T6 calibration** (blocked on ISSUE-001).
 - Dev interpreter **Python 3.14.4**; CI matrix 3.11/3.12.
 - Plan of record: `IMPLEMENTATION_PLAN.md`. Running log: `.superpowers/sdd/progress.md`.
 
 ## Decisions the user has made (do not re-ask)
 
-- **Auth model (P4.T2) — DECIDED 2026-07-28: session auth + role checks
-  (`reviewer` / `admin`), plus a separate API key for machine upload.** Rationale:
-  a shared key cannot attribute a correction to a reviewer, which would hollow out
-  the `corrections` audit trail the review UI depends on. Not yet implemented.
+- **Auth model (P4.T2) — DECIDED 2026-07-28, IMPLEMENTED 2026-07-29: session auth
+  + role checks (`reviewer` / `admin`), plus a separate API key for machine
+  upload.** Rationale: a shared key cannot attribute a correction to a reviewer,
+  which would hollow out the `corrections` audit trail the review UI depends on.
+- **Three more decided with P4.T3 (2026-07-29), all in ADR-0012:** accounts live
+  in a `users` table (not env-declared, not an external IdP); the confidence
+  breakdown is **persisted** at process time (it cannot be honestly recomputed —
+  triage issues and `meta.ambiguous_fields` are not stored); `admin` owns
+  `/export/xlsx` + user management and the API key authorizes `POST /upload` and
+  nothing else; and `POST /upload` writes a `pending` row before queueing so a job
+  the queue loses is a visible stuck row rather than a vanished upload.
 - **ISSUE-001 (the real baseline) is deferred until the system is built** — the
   user's explicit call. Do not start it unprompted.
 
@@ -97,11 +106,20 @@ dropped. Excel is output only; the DB is the source of truth.
   here by passing `normalize` as `extract_with_repair`'s `normalize_fn`;
   `run_receipt` is deliberately unchanged because it feeds the eval baseline.
 
+- **P4.T3 (on `feat/service`) — see ADR-0012:** `persist/users.py` (stdlib scrypt,
+  the user store, and a `python -m receipts.persist.users create <name> --role
+  admin` bootstrap that reads the password from stdin); the `users` table and
+  `receipts.confidence_reasons` (migration `a1c4d2f80b31`, which also adds
+  `validation_findings.created_at`); `review/auth.py` (signed-cookie sessions,
+  `require_user`/`require_role`/`require_upload`, HMAC URL signing);
+  `review/{api,schemas,serializers}.py` — `create_app` plus eleven routes.
+  `save_extraction` is now update-or-insert and **refuses to overwrite a
+  `reviewed` row**; `POST /upload` writes a `pending` row before queueing.
+  `score/thresholds.py` is the single source for `0.85`/`0.60` (was four copies).
+
 ## NOT built yet (remaining work)
 
-- **Phase 4 (service):** `review/api.py` (FastAPI) + **auth** (model decided, see
-  above; not implemented); `cli.py` (P4.T5/T6).
-  (`review/queue.py` and `process_receipt` are already built.)
+- **Phase 4 (service):** `cli.py` (P4.T5/T6) — the only piece left.
 - **Frontend** review UI — framework undecided (Phase 5)
 - `merchants/{fingerprint,registry}.py` + few-shot injection (Phase 6)
 - Self-consistency wired into `run_receipt` (extractor supports it; the M1
@@ -234,16 +252,24 @@ Do not treat any precision claim as measured before it runs.
 
 ## Deferred follow-ups / known minors (non-blocking)
 
+*Fixed during P4.T3 and no longer open: the `CostGuard._as_money` `is_finite()`
+gate; the four-way `0.85`/`0.60` duplication; `enqueue_review`'s check-then-insert
+race; the §17 spec drift (§17 now also carries the service settings); the vacuous
+`eval/results/2026-07-27-1.0.0.json`, which was deleted.*
+
 - Move confidence penalty weights into `config/rules.yaml` (calibration, P3.T6).
-- Consolidate the `0.85`/`0.60` thresholds (duplicated in `route()`, `Settings`,
-  `eval.metrics`) onto `Settings` — do this while wiring P4.T3.
-- **`CostGuard._as_money` (`extract/clients/limits.py`) refuses `float` but has no
-  `is_finite()` gate**, unlike `repository._coerce_money`. A `Decimal("NaN")` cost
-  makes `spent` NaN and `NaN >= ceiling` is always `False`, so the ceiling would
-  silently never fire — the same shape of bug ADR-0007 records. One-line fix.
-- **Three settings now exceed the §17 list** — `VLM_MAX_CONCURRENCY`,
-  `MAX_COST_USD_PER_RECEIPT`, `STORAGE_ROOT` — documented in `config/settings.py`
-  but not in `RECEIPT_SYSTEM_SPEC.md` §17. Absorb them to stop the drift.
+- **Parked from the whole-branch review** (adjudicated, none load-bearing):
+  `apply_corrections` redacts *any* coerced text, so a 13–19-digit
+  `receipt.number` is masked the moment a reviewer merely confirms it (and writes
+  a spurious `corrections` row), while `save_extraction` redacts only
+  `merchant_name_raw` and `payment_method` — the two sides should agree;
+  `_persist_failure` never writes `image_phash`, so a failed receipt keeps `""`
+  and can never later serve as a dedupe **original** (address with Phase 6 dedupe);
+  closing a review task on an auto-approving reprocess also closes one a reviewer
+  had already claimed (revisit with the review UI, P5).
+- **No login rate limiting**, and each attempt costs a full scrypt derivation
+  (~16 MB, ~57 ms) — `POST /auth/login` is an unauthenticated CPU/memory amplifier
+  as well as an enumeration surface. Address before this faces more than a LAN.
 - **`_attempt_prompt_hash` reconstructs each call's prompt** rather than threading
   prompts out of the repair loop. When merchant hints / few-shot land (M5), the
   same values must be passed there or the stored hash drifts from what was sent.

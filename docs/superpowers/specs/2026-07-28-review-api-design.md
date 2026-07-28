@@ -165,7 +165,7 @@ route                       key  reviewer  admin
 --------------------------------------------------
 GET  /health                 y      y       y      (open)
 POST /auth/login             y      y       y      (open)
-POST /auth/logout            -      y       y
+POST /auth/logout            y      y       y   (unguarded — see note)
 POST /upload                 y      y       y
 GET  /receipts               -      y       y
 GET  /receipts/{id}          -      y       y
@@ -176,6 +176,11 @@ POST /review/{id}/complete   -      y       y
 GET  /metrics                -      y       y
 GET  /export/xlsx            -      -       y
 ```
+
+**Implementation note (2026-07-29):** `POST /auth/logout` shipped **unguarded**,
+deviating from the row above. You can only clear your own cookie, and returning
+401 on logout when a session has already expired is user-hostile. Recorded in
+ADR-0012.
 
 ### 5.4 Accepted limits
 
