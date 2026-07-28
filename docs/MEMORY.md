@@ -1,15 +1,18 @@
 # Agent Memory — Receipt Digitization System
 
 Durable working memory for cross-session continuity. Read this first, then the
-files in "Key references" below. Last updated: **2026-07-27**.
+files in "Key references" below. Last updated: **2026-07-28**.
 
 ## Snapshot
 
 - **`master` @ `8cbef5a`** — Phase 0 foundations + Phase 1 offline modules + the
   online wiring (config, client factory, M1 pipeline, confidence scoring,
   one-command baseline runner). 285 tests.
-- **Active branch `feat/db-layer`** — 2 commits ahead (`fb35240` sqlalchemy dep,
-  `5e76ca8` ORM). **292 tests passing, ruff clean.** Not yet merged.
+- **Active branch `feat/db-layer`** — **7 commits ahead**: sqlalchemy/alembic
+  deps, the 7-table ORM + `docker-compose.yml`, Alembic migrations, the
+  repository layer, the handoff docs, and a `.gitignore` chore.
+  **334 tests passing, ruff clean.** Not yet merged — Phase 3 is partly done
+  (P3.T1/T2/T3 complete; P3.T5, P3.T7 remain, P3.T6 is blocked on the golden set).
 - Dev interpreter **Python 3.14.4**; CI matrix 3.11/3.12.
 - Plan of record: `IMPLEMENTATION_PLAN.md`. Running log: `.superpowers/sdd/progress.md`.
 
@@ -44,12 +47,18 @@ dropped. Excel is output only; the DB is the source of truth.
 - `score/`: confidence (score_confidence / explain_confidence / route / ReceiptStatus)
 - `pipeline.py`: prepare_image, run_receipt, build_eval_pipeline
 - `config/settings.py`; `eval/`: metrics, harness, golden_set, run_baseline
-- `persist/models.py` — 7-table ORM + `docker-compose.yml` **(on `feat/db-layer` only)**
 - Foundations: eval harness, golden-set on-ramp, CI, ruff/mypy, float-guard test
+- **On `feat/db-layer` only:** `persist/models.py` (7-table ORM) +
+  `docker-compose.yml`; `alembic/` + `alembic.ini` (migration `b9342906a5a6`
+  creates all 7 tables; a `compare_metadata` test guards ORM/migration drift);
+  `persist/session.py` (`make_engine` / `make_session_factory`);
+  `persist/repository.py` (§14.8: `save_extraction`, `save_extraction_run` with
+  `redact_pan`, `save_findings`, `get_receipt`, `query_receipts`, transactional
+  `apply_corrections`). Alembic's console script is not on PATH — use
+  `python -m alembic`.
 
 ## NOT built yet (remaining work)
 
-- `persist/repository.py` + **Alembic** migrations (P3.T2/P3.T3)
 - dedupe wired to DB + review-queue claim (`FOR UPDATE SKIP LOCKED`) (P3.T5)
 - XLSX `Needs Review` + `Summary` sheets (P3.T7)
 - `review/{queue,api}.py` (FastAPI) + **auth** ; `pipeline.process_receipt`
@@ -102,6 +111,13 @@ dropped. Excel is output only; the DB is the source of truth.
 - `vllm`/`ollama` still require `VLM_API_KEY`; `VLM_BASE_URL` ignored for `anthropic`.
 - Statistical caveat: ≥99% precision can't be validated on a tiny golden set —
   grow the held-out set before trusting that number.
+- `save_extraction` takes `report` (per §14.8) but does **not** write findings —
+  the pipeline must call `save_findings` separately (findings accumulate across
+  passes via `resolved_by_repair`). Revisit if replace-semantics is wanted.
+- `_build_line_items` falls back to list order when emitted positions aren't
+  distinct, so `unique(receipt_id, position)` can't sink a whole receipt.
+- ruff sorts `from alembic import command` as **first-party** in tests (the
+  repo-root `alembic/` dir shadows the package) — don't "fix" that import order.
 
 ## Workflow & conventions
 
