@@ -8,6 +8,7 @@ version = "0.1.0"
 description = "VLM-based receipt digitization: extraction, deterministic validation, and confidence routing."
 requires-python = ">=3.11"
 dependencies = [
+    "alembic>=1.13",
     "pydantic>=2",
     "pydantic-settings>=2",
     "pyyaml>=6",
