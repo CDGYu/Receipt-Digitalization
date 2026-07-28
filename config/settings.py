@@ -130,6 +130,13 @@ class Settings(BaseSettings):
     # expires).
     image_url_ttl_s: int = 300
     export_image_url_ttl_s: int = 86400
+    # Maps DOCS_ENABLED. Whether ``create_app`` publishes ``/openapi.json``,
+    # ``/docs`` and ``/redoc``. FastAPI serves all three by default and none of
+    # them takes a session or a key, so the default here is False: the schema
+    # names every write route, every request body, and the ``X-API-Key`` header
+    # in front of financial records, and a deployment that wants that browsable
+    # should have to say so. Turning it on unregisters nothing else.
+    docs_enabled: bool = False
 
 
 def get_settings() -> Settings:

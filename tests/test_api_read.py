@@ -136,10 +136,23 @@ def session_factory(tmp_path):
     return factory
 
 
+#: Deliberately *not* the ``receipts.score.thresholds`` defaults. ``/metrics``
+#: must echo what this deployment is configured with -- a fixture that left them
+#: at 0.85/0.60 cannot tell "read from Settings" apart from "hardcoded".
+CONFIGURED_AUTO_APPROVE = Decimal("0.95")
+CONFIGURED_REVIEW = Decimal("0.75")
+
+
 @pytest.fixture()
 def settings() -> Settings:
     """Hermetic settings: a developer's ``.env`` must not steer these tests."""
-    return Settings(_env_file=None, session_secret="test-secret", session_cookie_secure=False)
+    return Settings(
+        _env_file=None,
+        session_secret="test-secret",
+        session_cookie_secure=False,
+        auto_approve_threshold=CONFIGURED_AUTO_APPROVE,
+        review_threshold=CONFIGURED_REVIEW,
+    )
 
 
 @pytest.fixture()
@@ -279,9 +292,50 @@ def test_metrics_on_an_empty_database_reports_null_not_a_rate(empty_client):
 
 
 def test_metrics_reports_the_queue_and_the_thresholds(reviewer_client):
+    """The thresholds are **this deployment's**, not the module defaults.
+
+    ``process_receipt`` routes on ``settings.auto_approve_threshold`` /
+    ``settings.review_threshold``, so anything else on ``/metrics`` is a wrong
+    number on the one endpoint an operator uses to reason about auto-approval
+    precision -- and it misleads exactly when calibration moves the cut-off.
+    """
     body = reviewer_client.get("/metrics").json()
     assert body["queue"]["open"] >= 1
-    assert body["thresholds"] == {"auto_approve": "0.85", "review": "0.60"}
+    assert body["thresholds"] == {
+        "auto_approve": str(CONFIGURED_AUTO_APPROVE),
+        "review": str(CONFIGURED_REVIEW),
+    }
+
+
+# --------------------------------------------------------------------------- #
+# The interactive docs are opt-in (DOCS_ENABLED)
+# --------------------------------------------------------------------------- #
+
+DOC_ROUTES = ["/openapi.json", "/docs", "/redoc"]
+
+
+@pytest.mark.parametrize("path", DOC_ROUTES)
+def test_the_docs_are_not_served_by_default(client, path):
+    """FastAPI publishes all three to anyone who can reach the port.
+
+    The schema names every write route, every request body, and the
+    ``X-API-Key`` header, and none of these endpoints takes a session or a key
+    -- so the default must be off. ``client`` here is deliberately the
+    unauthenticated one: that is who could read them.
+    """
+    assert client.get(path).status_code == 404
+
+
+@pytest.mark.parametrize("path", DOC_ROUTES)
+def test_the_docs_can_be_turned_on(session_factory, settings, tmp_path, path):
+    """...and a deployment that wants them opts in, rather than opting out."""
+    app = create_app(
+        session_factory=session_factory,
+        storage=LocalStorage(tmp_path / "docs-blobs"),
+        submit=lambda job: None,
+        settings=settings.model_copy(update={"docs_enabled": True}),
+    )
+    assert TestClient(app).get(path).status_code == 200
 
 
 READ_ROUTES = [

@@ -314,7 +314,10 @@ def test_the_routing_thresholds_are_defined_once():
     from receipts.export.xlsx import _CONFIDENCE_FLOOR
     from receipts.score.thresholds import AUTO_APPROVE_THRESHOLD, REVIEW_THRESHOLD
 
-    settings = Settings()
+    # ``_env_file=None`` like every other Settings fixture here: this asserts
+    # that the *defaults* are wired to one definition, and a developer's .env
+    # setting AUTO_APPROVE_THRESHOLD would otherwise fail it for no defect.
+    settings = Settings(_env_file=None)
     assert settings.auto_approve_threshold == AUTO_APPROVE_THRESHOLD
     assert settings.review_threshold == REVIEW_THRESHOLD
     assert metrics_threshold == AUTO_APPROVE_THRESHOLD

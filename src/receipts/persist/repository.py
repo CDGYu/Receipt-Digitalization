@@ -16,10 +16,13 @@ Three rules from the spec are load-bearing here:
   * **Never invent a date.** An ISO ``receipt.date`` becomes ``txn_date``; a
     missing or unparseable one leaves ``txn_date`` NULL and keeps the printed
     string in ``date_raw``, because a wrong date is worse than a missing one.
-  * **Only ever store the last four card digits** (§18). Two independent
-    defences: :func:`_last4` on the way into ``receipts.card_last4``, and
+  * **Only ever store the last four card digits** (§18). Three independent
+    defences: :func:`_last4` on the way into ``receipts.card_last4``,
     :func:`redact_pan` over everything written to
-    ``extraction_runs.raw_response``.
+    ``extraction_runs.raw_response``, and :func:`redact_pan` again over every
+    free-text value on its way into a column -- whether the model produced it
+    (:func:`save_extraction`) or a reviewer typed it (:func:`_plan_change`,
+    which also covers the ``corrections`` audit copy).
 """
 
 from __future__ import annotations
@@ -36,7 +39,7 @@ from enum import Enum
 from typing import Any, Callable
 
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -262,6 +265,17 @@ def _as_text(value: Any) -> str | None:
 # --------------------------------------------------------------------------- #
 
 
+#: Statuses whose values a **human** owns. :func:`save_extraction` refuses to
+#: write over a row in one of these, because a machine run that did would drop
+#: the reviewer's correction, revert the receipt to a machine value the reviewer
+#: had already rejected (and re-label it ``auto_approved``, so it exports as an
+#: approved transaction), and leave the ``corrections`` audit trail contradicting
+#: the row it describes -- three §18 violations from one silent overwrite.
+#: ``REJECTED`` is deliberately absent: that state is the pipeline's own
+#: duplicate marking, not a human decision.
+_HUMAN_OWNED_STATUSES = frozenset({ReceiptStatus.REVIEWED})
+
+
 def _reasons_json(pairs: list[tuple[str, Decimal]] | None) -> list[dict[str, str]] | None:
     """Encode explain_confidence pairs for the JSON column.
 
@@ -306,6 +320,18 @@ def save_extraction(
     applied to whichever branch runs, so the insert and update paths cannot drift
     apart.
 
+    **A row a human has already reviewed is never updated.** Since ``POST
+    /upload`` writes the ``pending`` row before queueing, a reviewer can re-key a
+    receipt off the paper while the queue is still backed up; the worker then
+    arrives holding a machine extraction of the same id. Applying it would
+    overwrite the reviewer's numbers, re-label the receipt ``auto_approved``, and
+    leave the ``corrections`` rows describing values no longer in the row -- so
+    this raises ``ValueError`` instead (ADR-0006's error currency), naming what
+    the machine run produced. The pipeline turns that into a review task against
+    the row it declined to touch, which is how the attempt stays visible without
+    anything being silently dropped. This covers a reprocess trigger too, for the
+    same reason and at the same place.
+
     Flushes (so ``id`` and the child rows exist) and returns the ORM object
     without committing -- the caller owns the transaction.
     """
@@ -318,7 +344,10 @@ def save_extraction(
 
     fields: dict[str, Any] = dict(
         merchant_id=merchant_id,
-        merchant_name_raw=extraction.merchant.name,
+        # §18: a PAN the model read off the card line and put in a free-text
+        # field must not reach a column either. ``redact_pan`` keeps the last
+        # four and is silent on everything that merely looks numeric.
+        merchant_name_raw=redact_pan(extraction.merchant.name),
         receipt_number=receipt_meta.number,
         txn_date=txn_date,
         txn_time=_parse_iso_time(receipt_meta.time),
@@ -330,7 +359,7 @@ def save_extraction(
         total=extraction.totals.total,
         tender_amount=extraction.totals.tender,
         change_amount=extraction.totals.change,
-        payment_method=extraction.payment.method,
+        payment_method=redact_pan(extraction.payment.method),
         card_last4=_last4(extraction.payment.card_last4),
         is_handwritten=extraction.meta.is_handwritten,
         legibility=extraction.meta.legibility,
@@ -344,6 +373,13 @@ def save_extraction(
     existing = session.get(Receipt, job.id)
     if existing is None:
         receipt = Receipt(id=job.id, **fields)
+    elif existing.status in _HUMAN_OWNED_STATUSES:
+        raise ValueError(
+            f"receipt {job.id} has already been reviewed by a human "
+            f"(status {existing.status.value}) and a machine run must not "
+            f"overwrite it; this run produced status={status.value}, "
+            f"total={extraction.totals.total}, merchant={extraction.merchant.name!r}"
+        )
     else:
         # A PENDING row written at upload, or a retry of a job that already
         # persisted. Update in place: re-inserting would collide on the primary
@@ -587,6 +623,13 @@ def find_duplicate_by_phash(
     ``int("", 16)`` would raise), as is ``exclude_id`` -- pass the receipt's own
     id so it cannot be reported as its own duplicate.
 
+    ``exclude_id`` also drops every row **already marked a duplicate of it**, for
+    the same reason one step further out: those rows hold a copy of this very
+    image, so a re-run of the original would match its own duplicate and be
+    marked a duplicate of it. That closes an ``A -> B -> A`` cycle, empties the
+    original's amounts, and drops *both* rows out of the default export -- the
+    transaction disappears from the ledger with nothing left pointing at it.
+
     An empty ``phash`` argument matches nothing rather than raising: a receipt we
     could not hash must not be declared a duplicate of anything.
 
@@ -598,7 +641,11 @@ def find_duplicate_by_phash(
 
     query = select(Receipt.id, Receipt.image_phash).where(Receipt.image_phash != "")
     if exclude_id is not None:
-        query = query.where(Receipt.id != exclude_id)
+        query = query.where(Receipt.id != exclude_id).where(
+            # ``!=`` alone is NULL (and so excluding) for every row that
+            # duplicates nothing, which is nearly all of them.
+            or_(Receipt.duplicate_of.is_(None), Receipt.duplicate_of != exclude_id)
+        )
     query = query.order_by(Receipt.created_at, Receipt.id)
 
     candidates = session.execute(query).tuples().all()
@@ -656,14 +703,45 @@ def find_duplicate_by_content(
     return session.get(Receipt, match_id) if match_id is not None else None
 
 
+def _reject_cycle(session: Session, new_id: uuid.UUID, existing_id: uuid.UUID) -> None:
+    """Raise ``ValueError`` if pointing ``new_id`` at ``existing_id`` closes a cycle.
+
+    Walks the existing ``duplicate_of`` chain forwards from ``existing_id``. The
+    walk is bounded by ``seen`` rather than by trusting the data, so a cycle that
+    a pre-fix row already contains ends the loop instead of hanging the worker.
+    """
+    seen: set[uuid.UUID] = {existing_id}
+    cursor: uuid.UUID | None = existing_id
+    while cursor is not None:
+        row = session.get(Receipt, cursor)
+        cursor = None if row is None else row.duplicate_of
+        if cursor == new_id:
+            raise ValueError(
+                f"receipt {new_id} cannot be a duplicate of {existing_id}: "
+                f"{existing_id} already resolves back to {new_id}, and a cycle "
+                "would leave both rows rejected with nothing left to follow"
+            )
+        if cursor in seen:
+            return
+        if cursor is not None:
+            seen.add(cursor)
+
+
 def mark_duplicate(session: Session, new_id: uuid.UUID, existing_id: uuid.UUID) -> Receipt:
     """Record that ``new_id`` duplicates ``existing_id`` and return the new row.
 
     The link is one-way and points at the receipt that was already there:
     ``receipts.duplicate_of`` on the *new* row. Both ids must exist -- a
-    dangling self-FK would be accepted by SQLite with foreign keys off -- and a
-    receipt cannot duplicate itself, which would make the chain a cycle. Either
-    case raises ``ValueError`` before anything is written.
+    dangling self-FK would be accepted by SQLite with foreign keys off -- and
+    **the chain must stay acyclic**. Either case raises ``ValueError`` before
+    anything is written.
+
+    Self-reference is only the one-hop case of the cycle rule; the general one is
+    checked by walking ``duplicate_of`` from ``existing_id``. An ``A -> B -> A``
+    pair is not a harmless loop: both rows are ``rejected``, so both drop out of
+    the default export and the transaction leaves the ledger with no un-rejected
+    row left to follow the chain to. Refusing the link keeps the original intact
+    for the caller to report instead.
 
     Flushes; does not commit.
     """
@@ -675,6 +753,7 @@ def mark_duplicate(session: Session, new_id: uuid.UUID, existing_id: uuid.UUID) 
         raise ValueError(f"no receipt with id {new_id}")
     if session.get(Receipt, existing_id) is None:
         raise ValueError(f"no receipt with id {existing_id}")
+    _reject_cycle(session, new_id, existing_id)
 
     _linked_new, linked_existing = link_duplicate(new_id, existing_id)
     new_receipt.duplicate_of = linked_existing
@@ -865,6 +944,16 @@ def _plan_change(
 
     Returns ``None`` when the value is already what is stored (no correction row
     for a no-op), and raises ``ValueError`` when the path cannot be mapped.
+
+    **Coerced text goes through :func:`redact_pan` first** (§18). Only
+    ``payment.card_last4`` is narrowed by :func:`_last4`; every other text path
+    -- ``payment.method`` above all, which is where a reviewer types "VISA
+    4111111111111111" off the slip -- would otherwise land a full card number in
+    ``receipts.payment_method`` *and* in ``corrections.value_after``, and the
+    audit trail is precisely the copy nothing later scrubs. Redacting here rather
+    than at each coercion is what makes the rule hold for every text path at
+    once, including any added later. Non-text values (money, dates, booleans,
+    the legibility enum) are handed on untouched.
     """
     target: Receipt | LineItem
     match = _LINE_ITEM_PATH.match(field_path)
@@ -887,6 +976,8 @@ def _plan_change(
         raise ValueError(f"cannot apply a correction to unknown field path {field_path!r}")
 
     after = coerce(raw_value)
+    if isinstance(after, str):
+        after = redact_pan(after)
     before = getattr(target, column)
     if before == after:
         return None

@@ -34,7 +34,14 @@ from sqlalchemy.orm import Session
 
 from receipts.persist import Receipt, ReviewState, ReviewTask
 from receipts.persist.models import Base
-from receipts.review import QueueStats, close_task, enqueue_review, next_task, queue_stats
+from receipts.review import (
+    QueueStats,
+    close_review_for_receipt,
+    close_task,
+    enqueue_review,
+    next_task,
+    queue_stats,
+)
 from receipts.review.queue import _claim_stmt, _supports_skip_locked
 from receipts.score.confidence import ReceiptStatus
 
@@ -460,6 +467,32 @@ def test_close_task_rejects_an_unknown_id(engine: sa.Engine) -> None:
 
         with pytest.raises(ValueError, match=str(missing)):
             close_task(session, missing)
+
+
+def test_close_review_for_receipt_closes_the_task_a_receipt_has(engine: sa.Engine) -> None:
+    """The inverse of ``enqueue_review``, for a re-run that resolves the flag."""
+    with Session(engine) as session:
+        task = _task(session, 1)
+
+        closed = close_review_for_receipt(session, task.receipt_id)
+
+        assert closed is not None
+        assert closed.id == task.id
+        assert closed.state is ReviewState.DONE
+        assert closed.closed_at is not None
+
+
+def test_close_review_for_receipt_is_a_no_op_for_a_receipt_with_no_task(
+    engine: sa.Engine,
+) -> None:
+    """The common case: an auto-approved receipt never had a task."""
+    with Session(engine) as session:
+        receipt = Receipt(image_key="k", image_phash="", status=ReceiptStatus.AUTO_APPROVED)
+        session.add(receipt)
+        session.flush()
+
+        assert close_review_for_receipt(session, receipt.id) is None
+        assert close_review_for_receipt(session, uuid.uuid4()) is None
 
 
 # --------------------------------------------------------------------------- #

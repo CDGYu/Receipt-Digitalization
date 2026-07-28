@@ -148,6 +148,29 @@ def test_find_duplicate_by_phash_excludes_the_receipt_itself(engine: sa.Engine) 
         assert find_duplicate_by_phash(session, PHASH, exclude_id=mine.id) is None
 
 
+def test_find_duplicate_by_phash_excludes_rows_already_marked_a_duplicate_of_it(
+    engine: sa.Engine,
+) -> None:
+    """The one-step-further case of excluding the receipt itself.
+
+    A row that duplicates ``exclude_id`` holds a copy of that very image, so
+    without this a reprocessed original matches its own copy and is marked a
+    duplicate of it: an ``A <-> B`` cycle in which both rows are ``rejected``
+    and the transaction silently leaves the default export.
+    """
+    with Session(engine) as session:
+        original = _receipt(session)
+        copy = _receipt(session)
+        mark_duplicate(session, copy.id, original.id)
+        session.flush()
+
+        # The copy is still a perfectly good match for anyone else.
+        assert find_duplicate_by_phash(session, PHASH) is not None
+        assert find_duplicate_by_phash(session, PHASH, exclude_id=original.id) is None
+        # ...and excluding an unrelated id does not drop it.
+        assert find_duplicate_by_phash(session, PHASH, exclude_id=uuid.uuid4()) is not None
+
+
 def test_find_duplicate_by_phash_skips_rows_with_no_hash(engine: sa.Engine) -> None:
     with Session(engine) as session:
         _receipt(session, phash="")
@@ -358,6 +381,54 @@ def test_mark_duplicate_rejects_linking_a_receipt_to_itself(engine: sa.Engine) -
             mark_duplicate(session, receipt.id, receipt.id)
 
         assert receipt.duplicate_of is None
+
+
+def test_mark_duplicate_rejects_a_link_that_closes_a_cycle(engine: sa.Engine) -> None:
+    """Self-reference is only the one-hop case of the rule the docstring states.
+
+    ``A <-> B`` leaves both rows ``rejected``, so both drop out of the default
+    export and the transaction leaves the ledger with no un-rejected row left to
+    follow the chain to. Refusing the link keeps the original intact.
+    """
+    with Session(engine) as session:
+        original = _receipt(session)
+        copy = _receipt(session)
+        mark_duplicate(session, copy.id, original.id)
+
+        with pytest.raises(ValueError, match="cycle"):
+            mark_duplicate(session, original.id, copy.id)
+
+        assert original.duplicate_of is None
+        assert copy.duplicate_of == original.id
+
+
+def test_mark_duplicate_rejects_a_cycle_further_down_the_chain(engine: sa.Engine) -> None:
+    """The walk follows ``duplicate_of``, so a longer chain is caught too."""
+    with Session(engine) as session:
+        first = _receipt(session)
+        second = _receipt(session)
+        third = _receipt(session)
+        mark_duplicate(session, third.id, second.id)
+        mark_duplicate(session, second.id, first.id)
+
+        # first -> third would close first -> third -> second -> first.
+        with pytest.raises(ValueError, match="cycle"):
+            mark_duplicate(session, first.id, third.id)
+
+        assert first.duplicate_of is None
+
+
+def test_mark_duplicate_still_allows_a_chain_that_stays_acyclic(engine: sa.Engine) -> None:
+    """The guard must not refuse an ordinary chain of three distinct copies."""
+    with Session(engine) as session:
+        first = _receipt(session)
+        second = _receipt(session)
+        third = _receipt(session)
+        mark_duplicate(session, second.id, first.id)
+        mark_duplicate(session, third.id, second.id)
+
+        assert second.duplicate_of == first.id
+        assert third.duplicate_of == second.id
 
 
 def test_mark_duplicate_does_not_commit(engine: sa.Engine) -> None:

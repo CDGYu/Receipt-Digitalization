@@ -75,7 +75,7 @@ from .preprocess.image_ops import (
     to_base64,
     to_rgb,
 )
-from .review.queue import enqueue_review
+from .review.queue import close_review_for_receipt, enqueue_review
 from .score.confidence import ReceiptStatus, explain_confidence, route, score_confidence
 from .validate.context import ValidationContext
 from .validate.report import ValidationReport
@@ -111,6 +111,19 @@ _MAX_REASON_CHARS = 400
 #: leaves no data at all, which is exactly what priority ``1`` (full re-key)
 #: describes.
 _FAILURE_PRIORITY = 1
+
+#: Statuses that mean the row already holds an extraction of its **own** image,
+#: so a re-run of that id is a reprocess rather than a fresh upload and image
+#: dedupe must not run again (see :func:`_find_duplicate_image`).
+#:
+#: ``PENDING`` is absent because that is exactly the row ``POST /upload`` writes
+#: before the worker has looked at the image -- the ordinary first run, which
+#: must still be deduped. ``REJECTED`` is absent for the opposite reason: it is
+#: the pipeline's own marking for a duplicate, and re-running one must
+#: re-establish the same link rather than skip dedupe and extract over it.
+_ALREADY_EXTRACTED = frozenset(
+    {ReceiptStatus.AUTO_APPROVED, ReceiptStatus.NEEDS_REVIEW, ReceiptStatus.REVIEWED}
+)
 
 
 def prepare_image(image_path: Path, *, max_edge: int = 2048) -> PreparedImage:
@@ -389,6 +402,16 @@ def process_receipt(
     silent drop the rule forbids; raising hands the job back to the queue's
     failed registry, where an operator can see it.
 
+    **A run never overwrites a human's review.** ``POST /upload`` writes the
+    ``pending`` row before it queues, so a reviewer can re-key a receipt off the
+    paper while the queue is backed up and the worker then arrives holding a
+    machine extraction of that same id. Applying it would silently drop the
+    correction and re-approve a number the reviewer rejected, so
+    :func:`~receipts.persist.repository.save_extraction` refuses the write; the
+    run lands in :func:`_persist_failure`, which leaves the reviewed row exactly
+    as the human left it and opens a review task naming the stage and what the
+    run produced. The receipt stays terminal, and the attempt is visible.
+
     **The stored report and the stored score describe the same object.**
     :func:`run_receipt` validates what the model produced and normalizes
     afterwards, so an ambiguous date that the normalizer correctly parks in
@@ -530,9 +553,23 @@ def _find_duplicate_image(
 
     Read-only and on its own short-lived session: this runs *before* any model
     call precisely so a re-upload never reaches a provider.
+
+    **Dedupe is skipped entirely for a receipt that already holds its own
+    extraction** (:data:`_ALREADY_EXTRACTED`). That job is a reprocess, not an
+    upload: its image is by definition already in the table under this very id,
+    and every row that copied it is a *later* duplicate of it. Running dedupe
+    anyway is how a reprocessed original used to be marked a duplicate of its
+    own copy -- emptied of its amounts, flipped to ``rejected``, and dropped out
+    of the export along with the copy, taking the transaction with it.
+    :func:`~receipts.persist.repository.find_duplicate_by_phash` refuses the
+    same link from the other side (it drops candidates whose ``duplicate_of``
+    is this id), so neither defence is load-bearing alone.
     """
     session = session_factory()
     try:
+        current = get_receipt(session, job.id)
+        if current is not None and current.status in _ALREADY_EXTRACTED:
+            return None
         existing = find_duplicate_by_phash(session, phash, exclude_id=job.id)
         return existing.id if existing is not None else None
     finally:
@@ -618,6 +655,10 @@ def _persist_outcome(
         goes through ``redact_pan`` inside
         :func:`~receipts.persist.repository.save_extraction_run` (§18, ADR-0007).
         That function is never bypassed.
+      * An auto-approval **closes** any review task the receipt still has. The
+        queue is keyed on the receipt (``review_tasks.receipt_id`` is UNIQUE),
+        so a re-run that resolves what an earlier run flagged has to say so;
+        otherwise the task outlives the reason for it.
 
     The caller commits (ADR-0006, from the caller's side): one transaction covers
     the row, its children, the findings, the audit trail, and the review task, so
@@ -656,6 +697,12 @@ def _persist_outcome(
 
         if status is not ReceiptStatus.AUTO_APPROVED and priority >= 0:
             enqueue_review(session, receipt.id, reason, priority)
+        elif status is ReceiptStatus.AUTO_APPROVED:
+            # A re-run that auto-approves has answered the question the old task
+            # was asking. Left open, `/review/next` would hand a reviewer an
+            # already-approved receipt and `/metrics` would overstate the
+            # backlog. A receipt with no task is the common case and a no-op.
+            close_review_for_receipt(session, receipt.id)
 
         session.commit()
     except Exception:
@@ -695,6 +742,21 @@ def _persist_failure(
     receipt on the way to recording that it failed. Anything raised from here
     propagates: at that point nothing can be written at all, and letting the
     queue record a failed job is the only remaining way not to drop it.
+
+    Two things the update branch must **not** do:
+
+      * ``confidence_reasons`` is cleared alongside the score. Leaving the old
+        breakdown next to the new ``0.000`` puts a reviewer in front of an
+        explanation that sums to a number the row no longer has -- exactly what
+        D2 (and :func:`_persist_outcome`'s "provably sums to" property) exists
+        to prevent.
+      * A row a human has already **reviewed** keeps its status, its score and
+        its reasons. This function is where
+        :func:`~receipts.persist.repository.save_extraction`'s refusal to
+        overwrite a reviewed row lands, so downgrading it to ``needs_review``
+        with a zero score here would destroy precisely what that refusal was
+        protecting. The task opened below is what makes the attempt visible
+        instead -- its reason carries the stage and what the run produced.
     """
     reason = _truncate(str(failure), _MAX_REASON_CHARS)
     log.warning("Receipt %s failed at stage %r: %s", job.id, failure.stage, failure.cause,
@@ -710,10 +772,14 @@ def _persist_failure(
                 session, job, ReceiptExtraction(), ValidationReport(),
                 Decimal("0"), ReceiptStatus.NEEDS_REVIEW, image_phash=phash,
             )
-        else:
+        elif receipt.status is not ReceiptStatus.REVIEWED:
             receipt.status = ReceiptStatus.NEEDS_REVIEW
             receipt.confidence = Decimal("0")
+            receipt.confidence_reasons = None
         enqueue_review(session, receipt.id, reason, _FAILURE_PRIORITY)
+        # Read back before the commit expires them: these describe the row, and
+        # for a reviewed receipt that is not "needs_review at 0.000".
+        status, confidence = receipt.status, receipt.confidence
         session.commit()
     except Exception:
         session.rollback()
@@ -723,8 +789,8 @@ def _persist_failure(
 
     return ProcessResult(
         receipt_id=job.id,
-        status=ReceiptStatus.NEEDS_REVIEW,
-        confidence=Decimal("0"),
+        status=status,
+        confidence=confidence,
         reason=reason,
         review_priority=_FAILURE_PRIORITY,
         failed_stage=failure.stage,

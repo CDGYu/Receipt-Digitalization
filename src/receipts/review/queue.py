@@ -38,6 +38,7 @@ from ..persist.models import Receipt, ReviewState, ReviewTask
 
 __all__ = [
     "QueueStats",
+    "close_review_for_receipt",
     "close_task",
     "enqueue_review",
     "next_task",
@@ -221,6 +222,26 @@ def close_task(session: Session, task_id: uuid.UUID) -> ReviewTask:
         task.closed_at = datetime.now(UTC)
     session.flush()
     return task
+
+
+def close_review_for_receipt(session: Session, receipt_id: uuid.UUID) -> ReviewTask | None:
+    """Close ``receipt_id``'s review task, if it has one. ``None`` if it does not.
+
+    The inverse of :func:`enqueue_review`, and the counterpart the pipeline needs
+    when a re-run *resolves* what an earlier run flagged: the queue is keyed on
+    the receipt (``review_tasks.receipt_id`` is UNIQUE), so a task left open
+    after the receipt was auto-approved would be handed to a reviewer by
+    ``GET /review/next`` and would keep inflating the ``/metrics`` backlog.
+
+    A receipt with no task is a no-op rather than an error -- the overwhelmingly
+    common case, and a caller should not have to look first. Closing delegates to
+    :func:`close_task`, which is idempotent, so an already-``DONE`` task keeps its
+    original ``closed_at``. Flushes; does not commit.
+    """
+    task = session.scalars(
+        select(ReviewTask).where(ReviewTask.receipt_id == receipt_id)
+    ).one_or_none()
+    return None if task is None else close_task(session, task.id)
 
 
 def queue_stats(session: Session) -> QueueStats:

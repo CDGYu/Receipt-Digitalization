@@ -430,6 +430,99 @@ def test_save_extraction_replaces_line_items_on_a_second_run(engine: sa.Engine) 
         assert session.query(LineItem).count() == 1
 
 
+def test_save_extraction_refuses_to_overwrite_a_reviewed_row(engine: sa.Engine) -> None:
+    """A machine run must never write over a human's review (§18, ADR-0006).
+
+    ``POST /upload`` commits the ``pending`` row before it queues, so a reviewer
+    can re-key a receipt while the worker's job is still waiting. Applying the
+    machine extraction on top would silently drop the correction, re-label the
+    receipt ``auto_approved``, and leave the ``corrections`` rows describing
+    values no longer in the row. ``ValueError`` -- the layer's error currency --
+    is what the pipeline turns into a visible ``needs_review`` task, and what the
+    API turns into a 400.
+    """
+    job = ReceiptJob(id=uuid.uuid4(), image_key="k", source="upload",
+                     original_filename="r.jpg", content_type="image/jpeg")
+    with Session(engine) as session:
+        create_pending_receipt(session, job)
+        session.commit()
+        apply_corrections(
+            session, job.id, {"totals.total": Decimal("999.99")}, corrected_by="alice"
+        )
+
+        machine = ReceiptExtraction(
+            merchant=ExtractedMerchant(name="SUPERMART INC."),
+            totals=Totals(total=Decimal("224.00")),
+        )
+        with pytest.raises(ValueError, match="reviewed"):
+            save_extraction(session, job, machine, ValidationReport(), Decimal("0.93"),
+                            ReceiptStatus.AUTO_APPROVED)
+        session.rollback()
+
+    with Session(engine) as session:
+        receipt = get_receipt(session, job.id)
+        assert receipt is not None
+        assert receipt.status is ReceiptStatus.REVIEWED
+        assert receipt.total == Decimal("999.99")
+
+
+def test_save_extraction_still_updates_every_non_reviewed_status(engine: sa.Engine) -> None:
+    """The refusal is narrow: only a human's own state is protected.
+
+    A retried job whose row is ``pending``, ``needs_review``, ``auto_approved``
+    or ``rejected`` must still be updated in place -- re-inserting would collide
+    on the primary key and lose the receipt on the way to recording it.
+    """
+    for status in (
+        ReceiptStatus.PENDING,
+        ReceiptStatus.NEEDS_REVIEW,
+        ReceiptStatus.AUTO_APPROVED,
+        ReceiptStatus.REJECTED,
+    ):
+        job = ReceiptJob(id=uuid.uuid4(), image_key="k", source="upload",
+                         original_filename="r.jpg", content_type="image/jpeg")
+        with Session(engine) as session:
+            save_extraction(session, job, ReceiptExtraction(), ValidationReport(),
+                            Decimal("0.5"), status)
+            session.commit()
+
+            receipt = save_extraction(
+                session, job, ReceiptExtraction(totals=Totals(total=Decimal("7.00"))),
+                ValidationReport(), Decimal("0.9"), ReceiptStatus.AUTO_APPROVED,
+            )
+            session.commit()
+            assert receipt.total == Decimal("7.00"), status
+            assert receipt.status is ReceiptStatus.AUTO_APPROVED, status
+
+
+def test_save_extraction_redacts_a_pan_the_model_put_in_free_text(engine: sa.Engine) -> None:
+    """§18 again, on the model-driven side of the same hole as ``_plan_change``.
+
+    ``payment.method`` and ``merchant.name`` were copied to their columns
+    verbatim, so a model that read the card line into either landed a full PAN
+    in ``receipts``. Only ``payment.card_last4`` was ever narrowed.
+    """
+    job = _job()
+    with Session(engine) as session:
+        receipt = save_extraction(
+            session,
+            job,
+            ReceiptExtraction(
+                merchant=ExtractedMerchant(name="SUPERMART 4111111111111111"),
+                payment=Payment(method="VISA 4111-1111-1111-1111", card_last4="1111"),
+            ),
+            ValidationReport(),
+            Decimal("0.5"),
+            ReceiptStatus.NEEDS_REVIEW,
+        )
+        session.commit()
+
+        assert receipt.payment_method == "VISA ************1111"
+        assert receipt.merchant_name_raw == "SUPERMART ************1111"
+        # The silent case: a genuine 4-digit last4 is not a PAN and is untouched.
+        assert receipt.card_last4 == "1111"
+
+
 def test_empty_reasons_and_missing_reasons_are_different(engine: sa.Engine) -> None:
     job = ReceiptJob(id=uuid.uuid4(), image_key="k", source="upload",
                      original_filename="r.jpg", content_type="image/jpeg")
@@ -1090,6 +1183,76 @@ def test_apply_corrections_keeps_only_the_last_four_card_digits(engine: sa.Engin
     with Session(engine) as session:
         got = get_receipt(session, job.id)
         assert got is not None
+        assert got.card_last4 == "4242"
+
+
+def test_apply_corrections_redacts_a_pan_typed_into_a_free_text_field(
+    engine: sa.Engine,
+) -> None:
+    """§18 through the correction path, **including the audit copy**.
+
+    Only ``payment.card_last4`` was narrowed by ``_last4``; every other text
+    path went through ``_coerce_optional_text`` untouched, so a reviewer typing
+    the card line off the slip stored a full PAN in ``receipts.payment_method``
+    *and* in ``corrections.value_after`` -- and the audit trail is precisely the
+    copy nothing later scrubs.
+    """
+    job = _job()
+    with Session(engine) as session:
+        _save(session, job=job)
+        session.commit()
+
+    with Session(engine) as session:
+        apply_corrections(
+            session,
+            job.id,
+            {"payment": {"method": "VISA 4111111111111111"},
+             "merchant": {"name": "SUPERMART 4111-1111-1111-1111"}},
+            "reviewer",
+        )
+
+    with Session(engine) as session:
+        got = get_receipt(session, job.id)
+        assert got is not None
+        assert got.payment_method == "VISA ************1111"
+        assert got.merchant_name_raw == "SUPERMART ************1111"
+
+        stored = json.dumps(
+            [row.value_after for row in session.scalars(select(Correction))]
+        )
+        assert "4111111111111111" not in stored
+        assert "4111-1111-1111-1111" not in stored
+        assert "1111" in stored  # the last four survive
+
+
+def test_apply_corrections_leaves_non_pan_text_and_money_alone(engine: sa.Engine) -> None:
+    """The silent case: redaction must not fire on ordinary reviewer edits."""
+    job = _job()
+    with Session(engine) as session:
+        _save(session, job=job)
+        session.commit()
+
+    with Session(engine) as session:
+        apply_corrections(
+            session,
+            job.id,
+            {
+                "merchant.name": "7-ELEVEN 555-1234",
+                "receipt.number": "OR-2026-0001",
+                "receipt.date": "2026-07-20",
+                "totals.total": Decimal("1234.56"),
+                "payment.card_last4": "4242",
+            },
+            "reviewer",
+        )
+
+    with Session(engine) as session:
+        got = get_receipt(session, job.id)
+        assert got is not None
+        assert got.merchant_name_raw == "7-ELEVEN 555-1234"
+        assert got.receipt_number == "OR-2026-0001"
+        assert got.txn_date == date(2026, 7, 20)
+        assert got.total == Decimal("1234.56")
         assert got.card_last4 == "4242"
 
 

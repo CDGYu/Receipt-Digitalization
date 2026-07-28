@@ -10,10 +10,18 @@ Same convention as the persistence layer: every function takes an explicit
 
 from __future__ import annotations
 
-from .queue import QueueStats, close_task, enqueue_review, next_task, queue_stats
+from .queue import (
+    QueueStats,
+    close_review_for_receipt,
+    close_task,
+    enqueue_review,
+    next_task,
+    queue_stats,
+)
 
 __all__ = [
     "QueueStats",
+    "close_review_for_receipt",
     "close_task",
     "enqueue_review",
     "next_task",

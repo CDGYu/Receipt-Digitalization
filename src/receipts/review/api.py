@@ -58,7 +58,6 @@ from ..persist.repository import (
 )
 from ..persist.users import ROLE_ADMIN
 from ..score.confidence import ReceiptStatus
-from ..score.thresholds import AUTO_APPROVE_THRESHOLD, REVIEW_THRESHOLD
 from .auth import (
     SessionUser,
     build_auth_router,
@@ -219,6 +218,18 @@ def _install_read_routes(app: FastAPI) -> None:
         request: Request,
         user: Annotated[SessionUser, Depends(require_user)],
     ) -> Any:
+        """Counts, the queue, and **this deployment's** thresholds (§6.2).
+
+        The thresholds come off ``app.state.settings`` -- the very objects
+        ``process_receipt`` routes on -- not off the
+        :mod:`receipts.score.thresholds` defaults they happen to be seeded
+        from. An operator reads this endpoint to reason about auto-approval
+        precision, so echoing ``0.85``/``0.60`` at a deployment configured for
+        ``0.95``/``0.75`` is a wrong number on exactly the screen that must not
+        carry one -- and it would mislead precisely when P8 calibration moves
+        the cut-off.
+        """
+        settings: Settings = request.app.state.settings
         with request.app.state.session_factory() as session:
             stats = queue_stats(session)
             counts = dict(
@@ -251,8 +262,8 @@ def _install_read_routes(app: FastAPI) -> None:
                 "by_priority": stats.by_priority,
             },
             "thresholds": {
-                "auto_approve": str(AUTO_APPROVE_THRESHOLD),
-                "review": str(REVIEW_THRESHOLD),
+                "auto_approve": str(settings.auto_approve_threshold),
+                "review": str(settings.review_threshold),
             },
         }
 
@@ -359,9 +370,12 @@ def _install_write_routes(app: FastAPI) -> None:
         blob on disk with nothing in the database (ambiguity resolution --
         "nothing is silently dropped"). If ``submit`` itself raises, the row
         already exists and is visible, so this returns 503 naming the
-        receipt id (a caller can retry the same id via ``receipts
-        reprocess``, P4.T5) and logs the failure -- it does not undo the
-        commit.
+        receipt id and logs the failure -- it does not undo the commit. What
+        is left is a stuck ``pending`` row, which ``GET /receipts?status=
+        pending`` lists. Recovery today is re-queueing that same job id
+        through :func:`receipts.worker.enqueue_receipt`, or re-uploading the
+        file; there is no ``receipts reprocess`` command on this branch (the
+        CLI is a later task).
 
         The read is bounded at ``max_bytes + 1``, not unbounded (fix round
         1, F2): ``UploadFile.read()`` with no argument buffers the *entire*
@@ -682,9 +696,25 @@ def create_app(
     ``install_session_middleware`` is called unconditionally: an app with no
     ``SESSION_SECRET`` must fail at construction, not serve unauthenticated
     traffic (see its docstring).
+
+    **The interactive docs are off unless ``DOCS_ENABLED`` says otherwise.**
+    FastAPI's defaults publish ``/openapi.json``, ``/docs`` and ``/redoc`` to
+    anyone who can reach the port, with no session and no key -- which hands an
+    unauthenticated caller the complete write surface: every route path, every
+    request body schema, and the name of the ``X-API-Key`` header. None of that
+    is a secret on its own, and none of it should be free either. Passing
+    ``None`` for the three URLs is what actually unregisters the routes (a
+    dependency on the docs endpoints would still leave the schema reachable
+    through ``/openapi.json``); a deployment that wants them opts in.
     """
     settings = settings or get_settings()
-    app = FastAPI(title="Receipt review API")
+    docs = settings.docs_enabled
+    app = FastAPI(
+        title="Receipt review API",
+        docs_url="/docs" if docs else None,
+        redoc_url="/redoc" if docs else None,
+        openapi_url="/openapi.json" if docs else None,
+    )
     app.state.session_factory = session_factory
     app.state.storage = storage
     app.state.settings = settings
