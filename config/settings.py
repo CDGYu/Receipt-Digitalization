@@ -35,6 +35,13 @@ class Settings(BaseSettings):
     vlm_model_triage: str | None = None
     vlm_max_tokens: int = 4096
     vlm_timeout_s: int = 120
+    # Maps VLM_USE_TOOLS. Whether an OpenAI-compatible endpoint gets a tool-use
+    # request or plain JSON mode. ``None`` means "decide from the provider id",
+    # which is what :func:`~receipts.extract.clients.factory.make_client` does;
+    # set it explicitly when the provider id does not identify the server, e.g.
+    # VLM_PROVIDER=openai pointed at a local Ollama via VLM_BASE_URL. Servers
+    # that reject a ``tools`` payload outright need this false.
+    vlm_use_tools: bool | None = None
 
     # --- Pipeline (§17: Pipeline) ---------------------------------------- #
     max_repair_attempts: int = 1

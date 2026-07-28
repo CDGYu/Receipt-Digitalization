@@ -66,3 +66,36 @@ def test_openai_provider_falls_back_to_default_base_url(monkeypatch):
     )
     assert isinstance(client, OpenAICompatClient)
     assert str(client._client.base_url).rstrip("/") == "https://api.openai.com/v1"
+
+
+def _client(**overrides) -> OpenAICompatClient:
+    """An OpenAI-family client built from an isolated Settings."""
+    kwargs = {
+        "_env_file": None,
+        "vlm_api_key": "k",
+        "vlm_model_extract": "m",
+        **overrides,
+    }
+    client = make_client(Settings(**kwargs))
+    assert isinstance(client, OpenAICompatClient)
+    return client
+
+
+def test_ollama_provider_disables_tools_by_default():
+    # Ollama answers a `tools` payload with a hard 400 for any model that does
+    # not declare the capability, which kills the first call of the pipeline.
+    assert _client(vlm_provider="ollama").use_tools is False
+
+
+def test_hosted_openai_provider_keeps_tools_by_default():
+    # The default must stay on everywhere else -- tool use is the reliable path
+    # for structured output, and only Ollama is known to reject it.
+    assert _client(vlm_provider="openai").use_tools is True
+    assert _client(vlm_provider="vllm").use_tools is True
+
+
+def test_explicit_use_tools_overrides_provider_default():
+    # The escape hatch for a provider id that does not identify the server:
+    # VLM_PROVIDER=openai pointed at a local Ollama via VLM_BASE_URL.
+    assert _client(vlm_provider="openai", vlm_use_tools=False).use_tools is False
+    assert _client(vlm_provider="ollama", vlm_use_tools=True).use_tools is True

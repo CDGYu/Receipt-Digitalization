@@ -28,6 +28,15 @@ _OPENAI_BASE_URLS: dict[str, str] = {
     "ollama": "http://localhost:11434/v1",
 }
 
+# Providers whose servers cannot be assumed to accept a tool-use request, so
+# they default to JSON mode. Ollama rejects `tools` with a hard 400 for any
+# model that does not declare the capability -- most vision models, including
+# moondream and granite3.2-vision -- and that 400 kills the very first (triage)
+# call. vLLM, by contrast, supports tool-calling across its served models, so
+# only Ollama is listed. VLM_USE_TOOLS overrides this either way, which is what
+# a VLM_PROVIDER=openai id pointed at a local Ollama needs.
+_TOOLS_OFF_BY_DEFAULT: frozenset[str] = frozenset({"ollama"})
+
 
 def make_client(settings: Settings) -> VLMClient:
     """Build the client named by ``settings.vlm_provider``.
@@ -57,10 +66,18 @@ def make_client(settings: Settings) -> VLMClient:
         # An explicitly configured base URL wins; otherwise fall back to the
         # provider's default endpoint.
         base_url = settings.vlm_base_url or _OPENAI_BASE_URLS[provider]
+        # Same precedence for tool use: an explicit VLM_USE_TOOLS wins, else the
+        # provider id decides.
+        use_tools = (
+            settings.vlm_use_tools
+            if settings.vlm_use_tools is not None
+            else provider not in _TOOLS_OFF_BY_DEFAULT
+        )
         return OpenAICompatClient(
             model_id=model,
             base_url=base_url,
             api_key=key,
+            use_tools=use_tools,
         )
 
     raise ValueError(
