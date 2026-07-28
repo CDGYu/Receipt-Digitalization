@@ -288,6 +288,11 @@ READ_ROUTES = [
     ("GET", "/receipts", {"reviewer", "admin"}),
     ("GET", "/receipts/{id}", {"reviewer", "admin"}),
     ("GET", "/metrics", {"reviewer", "admin"}),
+    # P4.T5 additions (§5.3): each of these is a bare GET against `receipt_id`
+    # with no body, so it fits this table as a genuine one-line addition.
+    ("GET", "/receipts/{id}/image", {"reviewer", "admin"}),
+    ("GET", "/review/next", {"reviewer", "admin"}),
+    ("GET", "/export/xlsx", {"admin"}),
 ]
 
 
@@ -301,3 +306,56 @@ def test_auth_matrix(clients, method, path, allowed, actor, receipt_id):
         assert response.status_code == 401
     else:
         assert response.status_code == 403
+
+
+# --------------------------------------------------------------------------- #
+# P4.T5: the two write routes whose auth is still pure role/actor (§5.3),
+# but whose request shape (files, a JSON body) does not fit a bare
+# ``clients[actor].request(method, path)`` call. Kept in this module,
+# against the same `clients` fixture, rather than a second matrix in
+# `tests/test_api_write.py` (ambiguity resolution #7).
+#
+# `POST /review/{id}/complete` is deliberately NOT added here: per §5.3 it
+# is "reviewer, admin", but the actual rule (ambiguity resolution #1) is
+# "assignee or admin" -- a reviewer who is not the assignee gets 403 despite
+# holding an allowed role. That is not a role/actor predicate this table's
+# boolean-per-role shape can express; it is covered behaviourally in
+# `tests/test_api_write.py` instead
+# (`test_a_reviewer_cannot_complete_someone_elses_task` and
+# `test_an_admin_can_complete_a_task_assigned_to_someone_else`).
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.parametrize("actor", ["anonymous", "api_key", "reviewer", "admin"])
+def test_upload_auth_matrix(clients, actor):
+    """POST /upload: reviewer and admin may upload; an unauthenticated
+    caller may not.
+
+    ``clients["api_key"]``'s header does not match any configured key (this
+    module's shared ``settings`` fixture never sets ``RECEIPTS_API_KEY`` --
+    see ``require_upload``'s docstring: an unset key rejects every header,
+    including a well-formed one), so it behaves exactly like ``anonymous``
+    here, the same as it does against every other route in this matrix. The
+    positive case -- a correctly configured key genuinely uploading, and
+    genuinely nothing else -- is `test_the_api_key_can_upload_but_nothing_
+    else` in ``tests/test_api_write.py``, which configures a real key.
+    """
+    response = clients[actor].post(
+        "/upload", files={"file": ("r.jpg", b"\xff\xd8\xff\xe0" + b"\x00" * 32, "image/jpeg")}
+    )
+    if actor in {"reviewer", "admin"}:
+        assert response.status_code == 202
+    else:
+        assert response.status_code == 401
+
+
+@pytest.mark.parametrize("actor", ["anonymous", "api_key", "reviewer", "admin"])
+def test_patch_auth_matrix(clients, actor, receipt_id):
+    """PATCH /receipts/{id}: reviewer and admin only -- the machine key
+    authorizes upload and nothing else (§5.3).
+    """
+    response = clients[actor].patch(f"/receipts/{receipt_id}", json={})
+    if actor in {"reviewer", "admin"}:
+        assert response.status_code == 200
+    else:
+        assert response.status_code == 401
