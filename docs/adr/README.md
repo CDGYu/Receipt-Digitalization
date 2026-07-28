@@ -16,6 +16,7 @@ Accepted; supersede it with a new ADR rather than editing history.
 | [0008](0008-review-queue-concurrency.md) | Review-queue concurrency and idempotency | Accepted |
 | [0009](0009-lazy-persistence-package-surface.md) | Lazy `receipts.persist` surface so a base install can migrate | Accepted |
 | [0010](0010-export-decoupled-from-persistence.md) | Export stays decoupled from persistence (`ReceiptExportRow`) | Accepted |
+| [0011](0011-terminal-state-contract-and-vlm-guards.md) | Terminal-state contract + concurrency/cost guards on model calls | Accepted |
 
 Read **0001** first: it is the invariant everything else defers to. **0007** is
 the one to read before touching anything that writes card data or money.
