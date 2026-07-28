@@ -120,7 +120,15 @@ dropped. Excel is output only; the DB is the source of truth.
 
 ## NOT built yet (remaining work)
 
-- **Phase 4 (service):** `cli.py` (P4.T5/T6) — the only piece left.
+- **Phase 4 (service):** `cli.py` (P4.T5/T6) — the only piece left. **Design is
+  approved and committed** (`docs/superpowers/specs/2026-07-29-cli-design.md`,
+  contract in **ADR-0013**); the implementation plan is not written yet. Three
+  decided points that must not be re-litigated: `ingest` writes a `pending` row
+  and does not enqueue (`process` drains the `pending` rows, so both entry points
+  share one work list); `process` enqueues to RQ by default, `--inline` for a
+  no-Redis box, and a missing `REDIS_URL` is a hard failure, never a silent
+  fallback; `reprocess` records every attempt but never overwrites a `reviewed`
+  row, with `--force` extending only to `auto_approved`.
 - **Frontend** review UI — framework undecided (Phase 5)
 - `merchants/{fingerprint,registry}.py` + few-shot injection (Phase 6)
 - Self-consistency wired into `run_receipt` (extractor supports it; the M1

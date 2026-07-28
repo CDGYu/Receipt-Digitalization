@@ -18,6 +18,7 @@ Accepted; supersede it with a new ADR rather than editing history.
 | [0010](0010-export-decoupled-from-persistence.md) | Export stays decoupled from persistence (`ReceiptExportRow`) | Accepted |
 | [0011](0011-terminal-state-contract-and-vlm-guards.md) | Terminal-state contract + concurrency/cost guards on model calls | Accepted |
 | [0012](0012-review-api-auth-and-identity.md) | Review API: identity, the pending row, and the persisted confidence breakdown | Accepted |
+| [0013](0013-cli-contract.md) | CLI contract: one work list, no overrides, no prompts | Accepted (design) |
 
 Read **0001** first: it is the invariant everything else defers to. **0007** is
 the one to read before touching anything that writes card data or money.
