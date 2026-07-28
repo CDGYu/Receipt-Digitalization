@@ -172,6 +172,13 @@ def test_cost_guard_refuses_float_money():
         guard.add(0.01)  # type: ignore[arg-type]
 
 
+@pytest.mark.parametrize("bad", [Decimal("NaN"), Decimal("Infinity"), Decimal("-Infinity")])
+def test_cost_guard_refuses_a_non_finite_amount(bad):
+    """NaN >= ceiling is always False, so the ceiling would silently never fire."""
+    with pytest.raises(ValueError, match="finite"):
+        CostGuard(ceiling=Decimal("0.25")).add(bad)
+
+
 def test_guarded_client_charges_the_guard_and_then_refuses():
     client = _CountingClient(cost=Decimal("0.01"))
     guard = CostGuard(ceiling=Decimal("0.015"))

@@ -70,6 +70,20 @@ def _receipt(session: Session) -> Receipt:
     return receipt
 
 
+@pytest.fixture()
+def receipt_id(engine: sa.Engine) -> uuid.UUID:
+    """A persisted, *committed* receipt id.
+
+    Committed rather than merely flushed: the concurrency test below opens two
+    independent ``Session`` objects against ``engine``, and both must be able
+    to find the row.
+    """
+    with Session(engine) as session:
+        receipt = _receipt(session)
+        session.commit()
+        return receipt.id
+
+
 def _task(
     session: Session,
     priority: int,
@@ -200,6 +214,34 @@ def test_enqueue_review_rejects_a_negative_priority_on_an_existing_task(
 
         assert task.priority == 2
         assert task.reason == "quick verify"
+
+
+def test_concurrent_enqueue_for_one_receipt_does_not_raise(
+    engine: sa.Engine, receipt_id: uuid.UUID
+) -> None:
+    """Two sessions enqueue the same receipt with no coordination.
+
+    The row is UNIQUE on receipt_id, so the check-then-insert this replaces
+    could raise IntegrityError under a real race (ADR-0008's recorded gap).
+
+    This is the honest limit of an offline test: SQLite serializes writers, so
+    it exercises the SAVEPOINT-and-retry code path rather than proving true
+    OS-level concurrency. The retry is what makes the path correct under a
+    genuine race on Postgres.
+    """
+    with Session(engine) as a, Session(engine) as b:
+        enqueue_review(a, receipt_id, "quick verify", 2)
+        enqueue_review(b, receipt_id, "full re-key", 1)
+        a.commit()
+        b.commit()  # must not raise IntegrityError
+
+    with Session(engine) as check:
+        tasks = check.scalars(
+            select(ReviewTask).where(ReviewTask.receipt_id == receipt_id)
+        ).all()
+        assert len(tasks) == 1
+        assert tasks[0].priority == 1  # more urgent wins, as before
+        assert tasks[0].reason == "full re-key"
 
 
 # --------------------------------------------------------------------------- #

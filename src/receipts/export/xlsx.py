@@ -46,6 +46,7 @@ from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 
 from receipts.score.confidence import ReceiptStatus
+from receipts.score.thresholds import REVIEW_THRESHOLD
 
 if TYPE_CHECKING:
     from receipts.extract.schema import ReceiptExtraction
@@ -64,7 +65,7 @@ _ERROR_FILL = PatternFill(fill_type="solid", start_color="FFFFC7CE", end_color="
 
 #: The §12 review threshold, reused as the amber midpoint of the confidence
 #: colour scale so anything below it renders red.
-_CONFIDENCE_FLOOR = Decimal("0.60")
+_CONFIDENCE_FLOOR = REVIEW_THRESHOLD
 
 #: §13.5: column widths sized to content, capped so one long URL cannot push a
 #: column off the screen.

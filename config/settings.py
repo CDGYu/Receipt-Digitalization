@@ -25,6 +25,8 @@ from decimal import Decimal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from receipts.score.thresholds import AUTO_APPROVE_THRESHOLD, REVIEW_THRESHOLD
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -65,8 +67,8 @@ class Settings(BaseSettings):
     max_repair_attempts: int = 1
     consistency_runs: int = 3
     consistency_temperature: float = 0.3
-    auto_approve_threshold: Decimal = Decimal("0.85")
-    review_threshold: Decimal = Decimal("0.60")
+    auto_approve_threshold: Decimal = AUTO_APPROVE_THRESHOLD
+    review_threshold: Decimal = REVIEW_THRESHOLD
     # Maps MAX_COST_USD_PER_RECEIPT. The spend ceiling for one `process_receipt`
     # run, accumulated from ``VLMResponse.cost_usd`` by
     # :class:`~receipts.extract.clients.limits.CostGuard`. Once it is reached the

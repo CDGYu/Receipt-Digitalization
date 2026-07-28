@@ -299,3 +299,23 @@ def test_route_errors_without_null_total_are_not_urgent():
     status, priority, _reason = route(D("0.650"), report, receipt)
     assert status is ReceiptStatus.NEEDS_REVIEW
     assert priority == 2  # 0.60 <= 0.65 < 0.85
+
+
+# --------------------------------------------------------------------------- #
+# The thresholds are defined once, in receipts.score.thresholds, and every
+# other site (Settings, eval.metrics, the export colour scale) reads from
+# there rather than holding its own copy.
+# --------------------------------------------------------------------------- #
+
+
+def test_the_routing_thresholds_are_defined_once():
+    from config.settings import Settings
+    from eval.metrics import AUTO_APPROVE_THRESHOLD as metrics_threshold
+    from receipts.export.xlsx import _CONFIDENCE_FLOOR
+    from receipts.score.thresholds import AUTO_APPROVE_THRESHOLD, REVIEW_THRESHOLD
+
+    settings = Settings()
+    assert settings.auto_approve_threshold == AUTO_APPROVE_THRESHOLD
+    assert settings.review_threshold == REVIEW_THRESHOLD
+    assert metrics_threshold == AUTO_APPROVE_THRESHOLD
+    assert _CONFIDENCE_FLOOR == REVIEW_THRESHOLD

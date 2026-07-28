@@ -192,17 +192,22 @@ def expand_pdf(path: Path, out_dir: Path) -> list[Path]:
 
 
 def ingest_file(
-    path: Path, storage: StorageBackend, source: str = "upload"
+    path: Path,
+    storage: StorageBackend,
+    source: str = "upload",
+    max_mb: int = _DEFAULT_MAX_MB,
 ) -> ReceiptJob:
     """Validate a file, store its original bytes, and return a :class:`ReceiptJob`.
 
     Raises ``ValueError`` with the validation reason when the upload is rejected
     (so callers cannot accidentally proceed on a bad file). On success the bytes
     are written under :func:`make_image_key` and a job describing them is returned.
-    No database write happens (Phase 3).
+    No database write happens (Phase 3). ``max_mb`` defaults to
+    :data:`_DEFAULT_MAX_MB`; the API passes ``settings.max_upload_mb`` so the
+    ceiling is one configured value, not a literal duplicated at every call site.
     """
     path = Path(path)
-    check = validate_upload(path)
+    check = validate_upload(path, max_mb)
     if not check.ok:
         raise ValueError(check.reason)
     return _store_original(
@@ -219,14 +224,18 @@ def ingest_bytes(
     filename: str,
     storage: StorageBackend,
     source: str = "upload",
+    max_mb: int = _DEFAULT_MAX_MB,
 ) -> ReceiptJob:
     """Byte-oriented twin of :func:`ingest_file` (e.g. an HTTP upload body).
 
     Validates the in-memory bytes with the same rules, then stores and returns a
-    :class:`ReceiptJob`. Raises ``ValueError`` on a rejected upload.
+    :class:`ReceiptJob`. Raises ``ValueError`` on a rejected upload. ``max_mb``
+    defaults to :data:`_DEFAULT_MAX_MB`; the API passes ``settings.max_upload_mb``
+    so the ceiling is one configured value, not a literal duplicated at every call
+    site.
     """
     check = _check_upload(
-        Path(filename).suffix, len(data), data[:_HEADER_BYTES], _DEFAULT_MAX_MB
+        Path(filename).suffix, len(data), data[:_HEADER_BYTES], max_mb
     )
     if not check.ok:
         raise ValueError(check.reason)

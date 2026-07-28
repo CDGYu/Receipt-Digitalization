@@ -37,6 +37,7 @@ from ..extract.schema import (
     TriageResult,
 )
 from ..validate.report import ValidationReport
+from .thresholds import AUTO_APPROVE_THRESHOLD, REVIEW_THRESHOLD
 
 # --------------------------------------------------------------------------- #
 # Penalty weights (§12).
@@ -246,8 +247,8 @@ def route(
     report: ValidationReport,
     receipt: ReceiptExtraction,
     *,
-    auto_threshold: Decimal = Decimal("0.85"),
-    review_threshold: Decimal = Decimal("0.60"),
+    auto_threshold: Decimal = AUTO_APPROVE_THRESHOLD,
+    review_threshold: Decimal = REVIEW_THRESHOLD,
 ) -> tuple[ReceiptStatus, int, str]:
     """Map a confidence score to ``(status, review_priority, reason)`` (§12).
 

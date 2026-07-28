@@ -31,12 +31,14 @@ from typing import Any
 from receipts.extract.lineitem_align import align_line_items
 from receipts.extract.paths import flatten
 from receipts.extract.schema import LineItem, ReceiptExtraction
-from receipts.validate.rules import within_tolerance
 
-#: Default auto-approve cut-off (§17 AUTO_APPROVE_THRESHOLD). Used only to
-#: compute the headline auto-approval numbers; the full calibration curve is
-#: reported alongside so the cut-off can be tuned against the golden set.
-AUTO_APPROVE_THRESHOLD = Decimal("0.85")
+# Default auto-approve cut-off (§17 AUTO_APPROVE_THRESHOLD). Used only to
+# compute the headline auto-approval numbers; the full calibration curve is
+# reported alongside so the cut-off can be tuned against the golden set.
+# Re-exported from receipts.score.thresholds -- the single definition -- so
+# existing importers of eval.metrics.AUTO_APPROVE_THRESHOLD keep working.
+from receipts.score.thresholds import AUTO_APPROVE_THRESHOLD as AUTO_APPROVE_THRESHOLD
+from receipts.validate.rules import within_tolerance
 
 _WS = re.compile(r"\s+")
 

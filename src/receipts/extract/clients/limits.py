@@ -202,11 +202,13 @@ class CostGuard:
 
 
 def _as_money(value, label: str) -> Decimal | None:
-    """Coerce an amount to ``Decimal``, refusing ``float`` outright.
+    """Coerce an amount to a **finite** ``Decimal``, refusing ``float`` outright.
 
     Mirrors ``persist.repository._coerce_money``: a ``float`` cannot represent an
     exact amount, and a budget that drifts by a fraction of a cent per call is a
-    bug that only shows up as an unexplained early stop months later.
+    bug that only shows up as an unexplained early stop months later. ``NaN`` and
+    ``Infinity`` are legal ``Decimal``s but are refused too, for the same reason
+    ``_coerce_money`` refuses them there.
     """
     if value is None:
         return None
@@ -216,10 +218,19 @@ def _as_money(value, label: str) -> Decimal | None:
             "a float cannot represent an exact amount (ADR-0001)"
         )
     if isinstance(value, Decimal):
-        return value
-    if isinstance(value, int):
-        return Decimal(value)
-    return Decimal(str(value))
+        amount = value
+    elif isinstance(value, int):
+        amount = Decimal(value)
+    else:
+        amount = Decimal(str(value))
+
+    if not amount.is_finite():
+        raise ValueError(
+            f"{label} must be a finite amount, not {value!r}; a NaN cost makes "
+            "`spent` NaN, and `NaN >= ceiling` is always False -- the ceiling "
+            "would silently never fire"
+        )
+    return amount
 
 
 # --------------------------------------------------------------------------- #

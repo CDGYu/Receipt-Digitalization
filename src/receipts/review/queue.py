@@ -31,6 +31,7 @@ from datetime import UTC, datetime
 
 from sqlalchemy import Select, func, select
 from sqlalchemy.engine import Connection, Engine
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..persist.models import Receipt, ReviewState, ReviewTask
@@ -143,16 +144,31 @@ def enqueue_review(
     ).one_or_none()
 
     if existing is None:
-        task = ReviewTask(
-            receipt_id=receipt_id,
-            reason=reason,
-            priority=priority,
-            state=ReviewState.OPEN,
-        )
-        session.add(task)
-        session.flush()
-        return task
+        # SAVEPOINT, not check-then-insert: receipt_id is UNIQUE, so a
+        # genuinely concurrent enqueue for one receipt could otherwise raise
+        # IntegrityError and lose the review task (ADR-0008's recorded gap).
+        # Nesting means the failed INSERT rolls back to the savepoint without
+        # poisoning the caller's transaction.
+        try:
+            with session.begin_nested():
+                task = ReviewTask(
+                    receipt_id=receipt_id,
+                    reason=reason,
+                    priority=priority,
+                    state=ReviewState.OPEN,
+                )
+                session.add(task)
+                session.flush()
+            return task
+        except IntegrityError:
+            existing = session.scalars(
+                select(ReviewTask).where(ReviewTask.receipt_id == receipt_id)
+            ).one()
 
+    # Reached either because the initial lookup above found the row first
+    # time, or because the insert above lost the race and the row was
+    # re-fetched after the IntegrityError: either way, the same
+    # more-urgent-wins update applies.
     if priority <= existing.priority:
         existing.priority = priority
         existing.reason = reason

@@ -346,3 +346,10 @@ def test_ingest_bytes_rejects_invalid_upload(tmp_path):
     storage = LocalStorage(tmp_path)
     with pytest.raises(ValueError):
         ingest_bytes(b"not an image", "note.txt", storage)
+
+
+def test_ingest_bytes_honours_an_explicit_max_mb(tmp_path):
+    storage = LocalStorage(tmp_path)
+    data = b"\xff\xd8" + b"\x00" * (2 * 1024 * 1024)  # a 2 MB "JPEG"
+    with pytest.raises(ValueError, match="too large"):
+        ingest_bytes(data, "r.jpg", storage, max_mb=1)
