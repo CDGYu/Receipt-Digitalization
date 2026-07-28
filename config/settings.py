@@ -101,6 +101,25 @@ class Settings(BaseSettings):
     # with nothing injected); every other caller passes a backend in.
     storage_root: str = "var/blobs"
 
+    # --- Service (§17: Service) ------------------------------------------ #
+    # Maps SESSION_SECRET. Signs the review session cookie and the expiring
+    # image URLs. No default: create_app refuses to start without it. A random
+    # per-process fallback would log every reviewer out on each restart and hide
+    # the misconfiguration instead of surfacing it.
+    session_secret: str | None = None
+    # Maps RECEIPTS_API_KEY. The machine-upload key, authorizing POST /upload
+    # and nothing else. Unset means the header path is rejected outright --
+    # never "unset key equals unset header", which is how this becomes an open
+    # door.
+    receipts_api_key: str | None = None
+    session_cookie_secure: bool = True
+    # Maps IMAGE_URL_TTL_S / EXPORT_IMAGE_URL_TTL_S. How long a signed image
+    # link stays valid: minutes for the review screen, a day for links embedded
+    # in an exported workbook (anyone holding that file can open them until it
+    # expires).
+    image_url_ttl_s: int = 300
+    export_image_url_ttl_s: int = 86400
+
 
 def get_settings() -> Settings:
     """Construct settings from the current environment.

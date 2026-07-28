@@ -20,6 +20,7 @@ dev = [
     "pytest>=8",
     "ruff>=0.6",
     "mypy>=1.8",
+    "httpx>=0.27",
 ]
 pipeline = [
     "pillow>=10",
@@ -34,6 +35,9 @@ postgres = ["psycopg[binary]>=3"]
 # The RQ queue worker. Optional and imported lazily (receipts/worker.py), so the
 # offline test suite and a base install need neither package.
 worker = ["rq>=1.16", "redis>=5"]
+# The FastAPI review service. Optional so a base install and the worker stay
+# light; the API tests importorskip on it exactly as the pipeline tests do.
+api = ["fastapi>=0.110", "python-multipart>=0.0.9", "itsdangerous>=2", "uvicorn>=0.27"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -67,6 +71,10 @@ ignore = [
 "tests/test_eval_metrics.py" = ["I001", "B905"]
 # Imports kept for readability / import-smoke checks in this test module.
 "tests/test_extractor.py" = ["F401"]
+# FastAPI's dependency-injection idiom is `param = Depends(...)` in the
+# signature default -- exactly what flake8-bugbear's B008 flags. It is
+# correct here, not a mistake: Depends() is never called eagerly.
+"tests/test_auth.py" = ["B008"]
 
 [tool.mypy]
 python_version = "3.11"
