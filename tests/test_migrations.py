@@ -19,6 +19,7 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+import uuid
 from pathlib import Path
 
 import pytest
@@ -88,6 +89,71 @@ def test_downgrade_base_drops_all_seven_tables(alembic_cfg: Config) -> None:
 
     command.downgrade(alembic_cfg, "base")
     assert _table_names(alembic_cfg) & EXPECTED_TABLES == set()
+
+
+def test_upgrade_head_succeeds_against_a_populated_validation_findings_table(
+    alembic_cfg: Config,
+) -> None:
+    """Regression: a1c4d2f80b31 must apply to a table that already has rows.
+
+    ``validation_findings`` gets a row on every processed receipt, so a
+    from-scratch database is not the only case that matters -- unlike every
+    other migration test here, which upgrades a brand-new empty file and would
+    never have caught this. ``ALTER TABLE ... ADD COLUMN ... NOT NULL`` with no
+    default fails on both SQLite and Postgres the moment the table holds a row
+    (there is nothing to backfill it with); a1c4d2f80b31 originally added
+    ``created_at`` with no ``server_default`` and crashed exactly this way.
+    """
+    command.upgrade(alembic_cfg, "b9342906a5a6")
+
+    # A minimal Core table matching the *pre-migration* schema -- Base.metadata
+    # already carries the new created_at column, so it cannot be reused here
+    # without describing a column the database does not have yet.
+    legacy_validation_findings = sa.Table(
+        "validation_findings",
+        sa.MetaData(),
+        sa.Column("id", sa.Uuid()),
+        sa.Column("receipt_id", sa.Uuid()),
+        sa.Column("rule_id", sa.Text()),
+        sa.Column("severity", sa.Text()),
+        sa.Column("message", sa.Text()),
+        sa.Column("context", sa.JSON()),
+        sa.Column("resolved_by_repair", sa.Boolean()),
+    )
+
+    engine = create_engine(alembic_cfg.get_main_option("sqlalchemy.url") or "")
+    try:
+        with engine.begin() as connection:
+            connection.execute(
+                legacy_validation_findings.insert().values(
+                    id=uuid.uuid4(),
+                    receipt_id=uuid.uuid4(),
+                    rule_id="R001",
+                    severity="info",
+                    message="a pre-existing row from before this migration",
+                    context={},
+                    resolved_by_repair=False,
+                )
+            )
+    finally:
+        engine.dispose()
+
+    # This is the line that used to raise:
+    #   sqlite3.OperationalError: Cannot add a NOT NULL column with default
+    #   value NULL
+    command.upgrade(alembic_cfg, "head")
+
+    engine = create_engine(alembic_cfg.get_main_option("sqlalchemy.url") or "")
+    try:
+        with engine.connect() as connection:
+            created_at = connection.execute(
+                sa.text("SELECT created_at FROM validation_findings")
+            ).scalar_one()
+    finally:
+        engine.dispose()
+
+    # The backfilled row got a real timestamp, not NULL.
+    assert created_at is not None
 
 
 def test_migration_schema_matches_orm_metadata(alembic_cfg: Config) -> None:

@@ -297,16 +297,26 @@ class ValidationFinding(Base):
     context: Mapped[Any] = mapped_column(_jsonb(), nullable=False, default=dict)
     resolved_by_repair: Mapped[bool] = mapped_column(sa.Boolean, nullable=False, default=False)
     #: Not part of the original spec §6.5 table -- added so :func:`get_findings`
-    #: (P4.T3) can return findings in the order they were written. A pure
-    #: server-side default (``sa.func.now()``) would tie for every finding
-    #: written in the same ``save_findings`` transaction (Postgres freezes
-    #: ``now()`` for the whole transaction; SQLite's ``CURRENT_TIMESTAMP`` has
-    #: only whole-second resolution), which would leave the tiebreak to a
-    #: random UUID. A Python-side default is evaluated once per row as the
-    #: unit of work processes them -- in insertion order -- so it is a genuine,
-    #: portable "write order" signal on both backends.
+    #: (P4.T3) can return findings in the order they were written. Carries
+    #: *both* a Python-side ``default`` and a ``server_default``, deliberately:
+    #:
+    #:   * ``default`` wins for every ORM-issued INSERT -- SQLAlchemy computes it
+    #:     once per row as the unit of work processes them, in insertion order,
+    #:     which is what makes two findings from the same ``save_findings`` call
+    #:     sort in write order. A pure server-side default would tie them:
+    #:     Postgres freezes ``now()`` for the whole transaction, and SQLite's
+    #:     ``CURRENT_TIMESTAMP`` has only whole-second resolution.
+    #:   * ``server_default`` is what lets ``ALTER TABLE ... ADD COLUMN ...
+    #:     NOT NULL`` backfill existing rows when this column is added to a
+    #:     table that already has data (see migration a1c4d2f80b31) -- both
+    #:     SQLite and Postgres refuse a NOT NULL column addition with no
+    #:     default when the table is non-empty. It is otherwise inert: it never
+    #:     fires for a row the ORM writes, only for rows written directly in SQL.
     created_at: Mapped[datetime] = mapped_column(
-        sa.DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+        sa.DateTime(timezone=True),
+        nullable=False,
+        server_default=sa.func.now(),
+        default=lambda: datetime.now(UTC),
     )
 
 
