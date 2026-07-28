@@ -49,8 +49,9 @@ _P = 1
 _SALT_BYTES = 16
 _KEY_LEN = 32
 
-#: Hashed once at import and compared against when the username is unknown, so a
-#: failed login takes the same work whether or not the account exists.
+#: The username in a failed login for an account that does not exist.
+#: verify_credentials() runs one derivation against _DUMMY_HASH (below) for
+#: it, matching the one derivation a known username costs.
 _DUMMY_PASSWORD = "the-account-that-does-not-exist"
 
 
@@ -73,6 +74,18 @@ def hash_password(password: str) -> str:
         base64.b64encode(salt).decode("ascii"),
         base64.b64encode(derived).decode("ascii"),
     ])
+
+
+#: Hashed once here, at import, and never again: verify_credentials() compares
+#: an unknown username's password against this fixed hash instead of calling
+#: hash_password(_DUMMY_PASSWORD) fresh on every attempt. A fresh call would
+#: itself run a full scrypt derivation (to build the dummy hash) *before*
+#: verify_password() runs its own -- two derivations for an unknown username
+#: against one for a known one, a ~2x wall-clock gap that is trivially
+#: measurable over a LAN and enumerates accounts despite the identical status
+#: code and body. Computing it once here is what makes the two paths cost the
+#: same single derivation; see tests/test_users.py for the pinned property.
+_DUMMY_HASH = hash_password(_DUMMY_PASSWORD)
 
 
 def verify_password(password: str, encoded: str) -> bool:
@@ -129,7 +142,7 @@ def verify_credentials(session: Session, username: str, password: str) -> User |
     """
     user = get_user(session, username)
     if user is None:
-        verify_password(password, hash_password(_DUMMY_PASSWORD))
+        verify_password(password, _DUMMY_HASH)
         return None
     if not verify_password(password, user.password_hash):
         return None

@@ -7,7 +7,9 @@ on ``PIL``.
 A *minimal* probe app is built inside this module -- it mounts the real
 ``build_auth_router()`` plus three routes wired to the real dependencies
 (``require_user``, ``require_role``, ``require_upload``) -- so the guards are
-proven end to end without waiting on Task 4's actual review app.
+proven end to end without waiting on Task 4's actual review app. The probe
+routes use ``Annotated[T, Depends(...)]`` (not a ``Depends(...)`` default
+argument), which is B008-clean, so this file needs no ruff per-file-ignore.
 
 The load-bearing behaviours pinned down below:
 
@@ -15,14 +17,18 @@ The load-bearing behaviours pinned down below:
   * a login sets the session cookie (username only) and logout clears it.
   * an unknown username and a wrong password produce byte-identical 401
     responses -- ``verify_credentials`` already guarantees this; this module
-    proves the web layer does not leak the distinction back in.
-  * deactivating a user invalidates their *live* session immediately, because
-    the role and ``is_active`` are re-read from the database on every request
-    rather than trusted from the cookie.
-  * the machine API key authorizes ``require_upload`` but is never accepted by
-    ``require_user`` -- a key is not a person and must not show up as one.
-  * an unset ``RECEIPTS_API_KEY`` rejects every ``X-API-Key`` header,
-    including an empty one.
+    proves the web layer does not leak the distinction back in. A
+    deactivated account's login failure is proven identical too.
+  * deactivating a user, or demoting one, invalidates their *live* session
+    immediately, because the role and ``is_active`` are re-read from the
+    database on every request rather than trusted from the cookie.
+  * the machine API key authorizes ``require_upload`` but is never accepted
+    by ``require_user`` -- a key is not a person and must not show up as one
+    -- and it is rejected by ``require_role`` too, not just ``require_user``.
+  * a configured-but-wrong key, and every ``X-API-Key`` header when no key is
+    configured (including an empty one), are rejected.
+  * neither ``require_upload`` nor ``verify_signature`` crash on a non-ASCII
+    key/signature -- both must fail closed as 401 / ``False``, not 500.
   * ``sign_url``/``verify_signature`` expire on schedule, reject a payload
     swap, and reject a signature made with a different secret -- all without
     sleeping, via the injectable ``now``.
@@ -31,11 +37,13 @@ The load-bearing behaviours pinned down below:
 
 from __future__ import annotations
 
+from typing import Annotated
+
 import pytest
 
 pytest.importorskip("fastapi")
 
-from fastapi import Depends, FastAPI  # noqa: E402
+from fastapi import Depends, FastAPI, HTTPException, Request  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
 from config.settings import Settings  # noqa: E402
@@ -46,6 +54,7 @@ from receipts.persist.users import (  # noqa: E402
     ROLE_REVIEWER,
     create_user,
     deactivate,
+    set_role,
 )
 from receipts.review.auth import (  # noqa: E402
     SessionUser,
@@ -89,15 +98,15 @@ def _probe_app(session_factory, settings):
     app.include_router(build_auth_router())
 
     @app.get("/probe/any")
-    def any_role(user: SessionUser = Depends(require_user)):
+    def any_role(user: Annotated[SessionUser, Depends(require_user)]):
         return {"username": user.username, "role": user.role}
 
     @app.get("/probe/admin")
-    def admin_only(user: SessionUser = Depends(require_role(ROLE_ADMIN))):
+    def admin_only(user: Annotated[SessionUser, Depends(require_role(ROLE_ADMIN))]):
         return {"ok": True}
 
     @app.post("/probe/upload")
-    def upload(user=Depends(require_upload)):
+    def upload(user: Annotated[SessionUser | None, Depends(require_upload)]):
         return {"ok": True}
 
     return app
@@ -145,6 +154,20 @@ def test_wrong_password_and_unknown_user_are_indistinguishable(client):
     assert wrong.json() == missing.json()
 
 
+def test_a_deactivated_accounts_login_failure_matches_the_others(client, session_factory):
+    """The correct password for a deactivated account must fail exactly like
+    an unknown username -- same status, same body -- not a distinguishable
+    third outcome.
+    """
+    with session_factory() as session:
+        deactivate(session, "alice")
+        session.commit()
+    deactivated = client.post("/auth/login", json={"username": "alice", "password": "pw-alice"})
+    missing = client.post("/auth/login", json={"username": "nobody", "password": "nope"})
+    assert deactivated.status_code == missing.status_code == 401
+    assert deactivated.json() == missing.json()
+
+
 def test_deactivating_a_user_invalidates_their_live_session(client, session_factory):
     client.post("/auth/login", json={"username": "alice", "password": "pw-alice"})
     with session_factory() as session:
@@ -154,15 +177,73 @@ def test_deactivating_a_user_invalidates_their_live_session(client, session_fact
     assert client.get("/probe/any").status_code == 401
 
 
+def test_a_demotion_takes_effect_on_the_next_request(client, session_factory):
+    """Not just deactivation: a role change is also re-read per request."""
+    client.post("/auth/login", json={"username": "bob", "password": "pw-bob"})
+    assert client.get("/probe/admin").status_code == 200
+    with session_factory() as session:
+        set_role(session, "bob", ROLE_REVIEWER)
+        session.commit()
+    assert client.get("/probe/admin").status_code == 403
+
+
 def test_api_key_uploads_but_cannot_read(client_with_key):
     headers = {"X-API-Key": "s3cret-machine-key"}
     assert client_with_key.post("/probe/upload", headers=headers).status_code == 200
     assert client_with_key.get("/probe/any", headers=headers).status_code == 401
 
 
+def test_the_api_key_is_rejected_by_require_role_too(client_with_key):
+    """require_role() calls require_user(), never require_upload() -- a valid
+    key must not satisfy a role-gated route either, not just the plain
+    require_user() probe.
+    """
+    headers = {"X-API-Key": "s3cret-machine-key"}
+    assert client_with_key.get("/probe/admin", headers=headers).status_code == 401
+
+
+def test_a_configured_but_wrong_api_key_is_rejected(client_with_key):
+    resp = client_with_key.post("/probe/upload", headers={"X-API-Key": "not-the-right-key"})
+    assert resp.status_code == 401
+
+
 def test_an_unset_api_key_rejects_every_key_header(client):  # settings.receipts_api_key is None
     assert client.post("/probe/upload", headers={"X-API-Key": ""}).status_code == 401
     assert client.post("/probe/upload", headers={"X-API-Key": "anything"}).status_code == 401
+
+
+def test_a_non_ascii_x_api_key_is_401_not_a_500(session_factory):
+    """Starlette decodes header bytes as latin-1, so any header byte >= 0x80
+    produces a non-ASCII ``str``. ``hmac.compare_digest()`` used to raise
+    ``TypeError`` on that inside ``require_upload()``, turning one malformed
+    request into an unhandled 500 with a traceback instead of a 401.
+
+    Built directly against the ASGI scope -- reproducing exactly the bytes
+    h11 hands the app, ``[(b"x-api-key", b"k\\xe9y")]`` -- rather than through
+    ``TestClient``/``httpx``, whose own header encoding may not transmit a
+    raw byte >= 0x80 on the wire the same way.
+    """
+    settings = Settings(
+        _env_file=None,
+        session_secret="test-secret",
+        session_cookie_secure=False,
+        receipts_api_key="s3cret-machine-key",
+    )
+    app = _probe_app(session_factory, settings)
+    request = Request(
+        {
+            "type": "http",
+            "method": "POST",
+            "path": "/probe/upload",
+            "headers": [(b"x-api-key", b"k\xe9y")],
+            "app": app,
+            "session": {},  # what SessionMiddleware sets for "no cookie presented"
+        }
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        require_upload(request)
+    assert exc_info.value.status_code == 401
 
 
 def test_signed_urls_expire_and_detect_tampering():
@@ -183,10 +264,20 @@ def test_signed_urls_expire_and_detect_tampering():
     )
 
 
+def test_verify_signature_rejects_a_non_ascii_signature_instead_of_crashing():
+    """The same ``hmac.compare_digest()`` hazard as the API key, reached from
+    a query-string ``signature`` instead of a header -- Task 5's blob route
+    parses ``?sig=`` straight off the URL.
+    """
+    secret, payload = "test-secret", "receipt-a|original"
+    _, exp = sign_url(payload, secret=secret, ttl_s=300, now=1_000)
+    assert not verify_signature(payload, secret=secret, signature="\xe9", exp=exp, now=1_000)
+
+
 def test_create_app_refuses_to_start_without_a_session_secret(session_factory, tmp_path):
     """A random per-process default would sign users out on every restart."""
     from receipts.review.auth import install_session_middleware
 
     app = FastAPI()
     with pytest.raises(ValueError, match="SESSION_SECRET"):
-        install_session_middleware(app, Settings(session_secret=None))
+        install_session_middleware(app, Settings(_env_file=None, session_secret=None))

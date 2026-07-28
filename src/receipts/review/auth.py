@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import logging
 import time
 from dataclasses import dataclass
 from typing import Callable
@@ -44,6 +45,8 @@ __all__ = [
     "verify_signature",
 ]
 
+logger = logging.getLogger(__name__)
+
 #: The one thing the signed cookie stores. Everything else about the user is
 #: re-read from the database per request; see the module docstring.
 _SESSION_KEY = "username"
@@ -61,6 +64,17 @@ def install_session_middleware(app: FastAPI, settings: Settings) -> None:
     A random per-process fallback would sign every reviewer out on each
     restart and hide the misconfiguration instead of surfacing it -- so this
     is a hard failure, not a generated default.
+
+    The cookie is honoured for ``settings.session_ttl_s`` seconds, enforced
+    server-side by ``itsdangerous``'s ``TimestampSigner`` -- not just a
+    browser-side expiry a client could ignore. Sessions are stateless signed
+    cookies, so ``POST /auth/logout`` only tells the *presenting* client to
+    drop its copy; it cannot revoke a cookie that has already been
+    exfiltrated, which stays valid (and any request replaying it keeps
+    succeeding) until ``session_ttl_s`` elapses. The actual revocation path
+    for a compromised or reassigned account is
+    :func:`receipts.persist.users.deactivate`, checked on every request by
+    :func:`_current_user` -- see the module docstring.
     """
     if not settings.session_secret:
         raise ValueError(
@@ -68,11 +82,19 @@ def install_session_middleware(app: FastAPI, settings: Settings) -> None:
             "per-process default would sign users out on every restart and "
             "hide the misconfiguration"
         )
+    if not settings.session_cookie_secure:
+        logger.warning(
+            "SESSION_COOKIE_SECURE is false: the session cookie is sent "
+            "without the Secure flag and can travel in cleartext over plain "
+            "HTTP. Fine for local development; never for anything reachable "
+            "over the network."
+        )
     app.add_middleware(
         SessionMiddleware,
         secret_key=settings.session_secret,
         https_only=settings.session_cookie_secure,
         same_site="lax",
+        max_age=settings.session_ttl_s,
     )
 
 
@@ -122,7 +144,12 @@ def require_upload(request: Request) -> SessionUser | None:
     """
     configured = request.app.state.settings.receipts_api_key
     presented = request.headers.get("X-API-Key")
-    if configured and presented and hmac.compare_digest(configured, presented):
+    # Compared as bytes, not str: hmac.compare_digest() raises TypeError on a
+    # non-ASCII str, and Starlette decodes header bytes as latin-1, so any
+    # header byte >= 0x80 produces a non-ASCII str. A malformed key must be a
+    # 401, not a 500 with a traceback, on an authentication boundary -- bytes
+    # comparison never raises regardless of what was on the wire.
+    if configured and presented and hmac.compare_digest(configured.encode(), presented.encode()):
         return None  # a machine, not a person
     return require_user(request)
 
@@ -163,6 +190,14 @@ def sign_url(payload: str, *, secret: str, ttl_s: int, now: int | None = None) -
 
     ``now`` is injectable so a test can prove expiry without sleeping; a
     ``None`` default reads the wall clock.
+
+    The signed message is ``f"{payload}|{exp}"`` -- a plain ``|`` join, not an
+    escaped encoding. That is safe only if no component of ``payload`` can
+    itself contain ``|``: a caller assembling ``payload`` from several parts
+    (Task 5 joins a receipt id and an image variant) must validate each part
+    against a closed set or a known-safe format -- a UUID for the id, an enum
+    member for the variant -- rather than pass free text through, or two
+    different logical URLs could sign identically.
     """
     exp = (now if now is not None else int(time.time())) + ttl_s
     message = f"{payload}|{exp}".encode()
@@ -179,4 +214,8 @@ def verify_signature(
         return False
     message = f"{payload}|{exp}".encode()
     expected = hmac.new(secret.encode(), message, hashlib.sha256).hexdigest()
-    return hmac.compare_digest(expected, signature)
+    # Compared as bytes: signature commonly arrives from a query string, and
+    # hmac.compare_digest() raises TypeError on a non-ASCII str rather than
+    # returning False. A malformed signature must fail closed as "invalid",
+    # not crash the caller with a 500 (see require_upload for the same fix).
+    return hmac.compare_digest(expected.encode(), signature.encode())

@@ -15,9 +15,14 @@ The load-bearing behaviours pinned down below:
     case it was -- for an unknown user, a wrong password, and a deactivated
     account;
   * ``set_role``/``deactivate`` raise ``ValueError`` for an unknown username.
+  * an unknown username costs the *same number of scrypt derivations* as a
+    known one -- not two -- so login timing cannot be used to enumerate
+    accounts (counted, not timed: wall-clock assertions are flaky in CI).
 """
 
 from __future__ import annotations
+
+import hashlib
 
 import pytest
 import sqlalchemy as sa
@@ -170,6 +175,42 @@ def test_deactivated_user_cannot_authenticate(engine: sa.Engine) -> None:
         deactivate(session, "alice")
         session.commit()
         assert verify_credentials(session, "alice", "correct-horse") is None
+
+
+def test_verify_credentials_costs_the_same_scrypt_calls_known_or_unknown_username(
+    engine: sa.Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Regression: an unknown username must not cost *two* derivations.
+
+    Calling ``hash_password(_DUMMY_PASSWORD)`` fresh on every failed login (as
+    opposed to comparing against a hash computed once at import) would run one
+    derivation to build the dummy hash and a second inside
+    ``verify_password`` -- double the one derivation a known username costs,
+    a gap easily measurable over a LAN. Counted via a wrapped
+    ``hashlib.scrypt``, not timed: wall-clock assertions are flaky in CI.
+    """
+    with Session(engine) as session:
+        create_user(session, "alice", "correct-horse", ROLE_REVIEWER)
+        session.commit()
+
+        calls: list[None] = []
+        real_scrypt = hashlib.scrypt
+
+        def counting_scrypt(*args, **kwargs):
+            calls.append(None)
+            return real_scrypt(*args, **kwargs)
+
+        monkeypatch.setattr(hashlib, "scrypt", counting_scrypt)
+
+        calls.clear()
+        verify_credentials(session, "alice", "wrong-password")
+        known_username_calls = len(calls)
+
+        calls.clear()
+        verify_credentials(session, "nobody", "wrong-password")
+        unknown_username_calls = len(calls)
+
+        assert known_username_calls == unknown_username_calls == 1
 
 
 # --------------------------------------------------------------------------- #

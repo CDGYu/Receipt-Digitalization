@@ -113,6 +113,17 @@ class Settings(BaseSettings):
     # door.
     receipts_api_key: str | None = None
     session_cookie_secure: bool = True
+    # Maps SESSION_TTL_S. How long a signed session cookie is honoured,
+    # enforced server-side via SessionMiddleware(max_age=...) and
+    # itsdangerous's TimestampSigner -- not a browser-side expiry a client
+    # could ignore. Starlette's own default is 14 days, sized for a generic
+    # web app rather than a bearer credential in front of financial records;
+    # 43200 (12h, one working day) is deliberately tighter. Logout only tells
+    # the presenting client to drop its cookie -- it cannot revoke one already
+    # exfiltrated -- so this ceiling, plus
+    # :func:`receipts.persist.users.deactivate` for an immediate cutoff, is
+    # the actual exposure window.
+    session_ttl_s: int = 43200
     # Maps IMAGE_URL_TTL_S / EXPORT_IMAGE_URL_TTL_S. How long a signed image
     # link stays valid: minutes for the review screen, a day for links embedded
     # in an exported workbook (anyone holding that file can open them until it
