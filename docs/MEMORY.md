@@ -8,11 +8,12 @@ files in "Key references" below. Last updated: **2026-07-28**.
 - **`master` @ `8cbef5a`** — Phase 0 foundations + Phase 1 offline modules + the
   online wiring (config, client factory, M1 pipeline, confidence scoring,
   one-command baseline runner). 285 tests.
-- **Active branch `feat/db-layer`** — **7 commits ahead**: sqlalchemy/alembic
-  deps, the 7-table ORM + `docker-compose.yml`, Alembic migrations, the
-  repository layer, the handoff docs, and a `.gitignore` chore.
-  **334 tests passing, ruff clean.** Not yet merged — Phase 3 is partly done
-  (P3.T1/T2/T3 complete; P3.T5, P3.T7 remain, P3.T6 is blocked on the golden set).
+- **`master` @ `df528cb`** — Phase 3 (persistence) merged: the 7-table ORM +
+  `docker-compose.yml`, Alembic migrations, the repository layer, DB-backed
+  dedupe, the review queue, and the 4-sheet XLSX export.
+  **410 tests passing, ruff clean.** No feature branch is open.
+- Phase 3 is complete except **P3.T6 calibration** (blocked on the golden set).
+  Next milestone is **Phase 4 (service)**, which starts with the auth decision.
 - Dev interpreter **Python 3.14.4**; CI matrix 3.11/3.12.
 - Plan of record: `IMPLEMENTATION_PLAN.md`. Running log: `.superpowers/sdd/progress.md`.
 
@@ -48,19 +49,28 @@ dropped. Excel is output only; the DB is the source of truth.
 - `pipeline.py`: prepare_image, run_receipt, build_eval_pipeline
 - `config/settings.py`; `eval/`: metrics, harness, golden_set, run_baseline
 - Foundations: eval harness, golden-set on-ramp, CI, ruff/mypy, float-guard test
-- **On `feat/db-layer` only:** `persist/models.py` (7-table ORM) +
+- **Phase 3 (persistence):** `persist/models.py` (7-table ORM) +
   `docker-compose.yml`; `alembic/` + `alembic.ini` (migration `b9342906a5a6`
-  creates all 7 tables; a `compare_metadata` test guards ORM/migration drift);
+  creates all 7 tables; a `compare_metadata` test guards ORM/migration drift —
+  but it is SQLite-only, so it cannot see a new ENUM member);
   `persist/session.py` (`make_engine` / `make_session_factory`);
-  `persist/repository.py` (§14.8: `save_extraction`, `save_extraction_run` with
-  `redact_pan`, `save_findings`, `get_receipt`, `query_receipts`, transactional
-  `apply_corrections`). Alembic's console script is not on PATH — use
-  `python -m alembic`.
+  `persist/repository.py` (§14.8 + DB-backed dedupe: `find_duplicate_by_phash`,
+  `find_duplicate_by_content`, `mark_duplicate`); `review/queue.py` (§14.9:
+  `enqueue_review`, `next_task`, `close_task`, `queue_stats`);
+  `export/xlsx.py` now writes all four sheets with §13.5 formatting via the
+  `ReceiptExportRow` metadata dataclass.
+  - Alembic's console script is not on PATH — use `python -m alembic`.
+  - `persist/__init__` is **lazy** (PEP 562 `__getattr__`): the models import
+    eagerly, the repository/session names resolve on first access, so a base
+    install (no `pipeline` extra) can still run migrations. Public API unchanged.
+  - `next_task` applies `FOR UPDATE SKIP LOCKED` only on dialects that support
+    it — **SQLite silently drops the clause instead of erroring**, which is why
+    the guard lives in Python.
+  - `redact_pan` is the §18 defence for `raw_response`; a review found it
+    leaking on `CARD NO.<PAN>`, mixed separators, and dict keys — all fixed and
+    regression-tested. Keep its silent-case tests intact when touching it.
 
 ## NOT built yet (remaining work)
-
-- dedupe wired to DB + review-queue claim (`FOR UPDATE SKIP LOCKED`) (P3.T5)
-- XLSX `Needs Review` + `Summary` sheets (P3.T7)
 - `review/{queue,api}.py` (FastAPI) + **auth** ; `pipeline.process_receipt`
   (full orchestrator) + worker ; `cli.py` (Phase 4)
 - **Frontend** review UI — framework undecided (Phase 5)
@@ -118,6 +128,13 @@ dropped. Excel is output only; the DB is the source of truth.
   distinct, so `unique(receipt_id, position)` can't sink a whole receipt.
 - ruff sorts `from alembic import command` as **first-party** in tests (the
   repo-root `alembic/` dir shadows the package) — don't "fix" that import order.
+- `enqueue_review` is check-then-insert against a UNIQUE column: concurrent
+  enqueues can still raise `IntegrityError`. Wrap it or use an upsert when the
+  API lands (P4.T3).
+- The migration drift guard runs on SQLite only, so a new ENUM member would pass
+  locally and fail on Postgres.
+- XLSX `write_only` streaming above 5000 rows is deferred (incompatible with the
+  random-access §13.5 formatting pass).
 
 ## Workflow & conventions
 

@@ -72,6 +72,12 @@ review.">
 
 ## Quick status line (update each session)
 
-- Branch: `feat/db-layer` (2 ahead of `master@8cbef5a`) · 292 passing · ruff clean
-- Next task: **P3.T2 (Alembic migrations)**
-- Blocked-on-user: golden set, provider choice, auth/frontend/grounding decisions
+- Branch: `master @ df528cb` (no feature branch open) · **410 passing** · ruff clean
+- Phase 3 (persistence) is **complete and merged**: ORM, Alembic, repository,
+  DB-backed dedupe, review queue, 4-sheet XLSX. Only **P3.T6 calibration**
+  remains, and it is blocked on the golden set.
+- Next task: **Phase 4 (service)** — starts with the **auth decision (P4.T2)**,
+  then `review/api.py` + queue wiring (P4.T3), `pipeline.process_receipt` +
+  worker (P4.T4), `cli.py` (P4.T5/T6).
+- Blocked-on-user: golden set (user is sending sample receipts), a tool-capable
+  provider, and the auth / frontend-framework / R060-R061 grounding decisions.
