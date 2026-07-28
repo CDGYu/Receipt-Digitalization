@@ -27,7 +27,10 @@ tests stay receipt-free.
 
 from __future__ import annotations
 
+import glob
 import io
+import os
+import tempfile
 import uuid
 from datetime import date
 from decimal import Decimal
@@ -39,7 +42,7 @@ pytest.importorskip("openpyxl")
 
 from fastapi.testclient import TestClient  # noqa: E402
 from openpyxl import load_workbook  # noqa: E402
-from sqlalchemy import select  # noqa: E402
+from sqlalchemy import event, select  # noqa: E402
 
 import receipts.review.api as api_module  # noqa: E402
 from config.settings import Settings  # noqa: E402
@@ -334,13 +337,61 @@ def test_image_url_is_signed_and_the_blob_streams(reviewer_client, receipt_id):
     assert reviewer_client.get(url).content == JPEG_BYTES
 
 
-def test_a_tampered_or_expired_signature_is_rejected(
-    reviewer_client, receipt_id, other_receipt_id
-):
+def test_a_valid_signature_for_a_missing_blob_is_404_not_500(reviewer_client, other_receipt_id):
+    """``other_receipt_id`` has a real ``receipts`` row and a real
+    ``image_key``, but its fixture never writes bytes to storage -- the
+    same shape a receipt whose blob was evicted or never uploaded would
+    have. The signature is genuinely valid (right receipt, right variant,
+    right secret); only the file is absent. Before fix round 1 (F5) this
+    reached ``storage.get`` unguarded and ``LocalStorage.get`` raised
+    ``FileNotFoundError`` straight through the route as an unhandled 500 --
+    on the one route in the service that requires no authentication at
+    all.
+    """
+    url = reviewer_client.get(f"/receipts/{other_receipt_id}/image").json()["url"]
+    assert reviewer_client.get(url).status_code == 404
+
+
+def test_a_tampered_signature_is_rejected(reviewer_client, receipt_id, other_receipt_id):
+    """Two tampering shapes, not expiry: re-pointing the URL at a different
+    receipt (the signature covers ``receipt_id``, so it cannot be replayed
+    against one it was not minted for), and corrupting ``exp`` itself (the
+    replacement prefixes a digit onto the existing value, producing a
+    *larger*, still-unexpired ``exp`` -- but paired with a signature that no
+    longer matches it). Neither case waits for real expiry; see
+    `test_a_correctly_signed_link_is_refused_once_it_expires` (fix round 1,
+    F7) for that -- this test used to be misnamed as covering it.
+    """
     url = reviewer_client.get(f"/receipts/{receipt_id}/image").json()["url"]
     swapped_id = url.replace(str(receipt_id), str(other_receipt_id))
     assert reviewer_client.get(swapped_id).status_code == 403
     assert reviewer_client.get(url.replace("exp=", "exp=1")).status_code == 403
+
+
+def test_a_correctly_signed_link_is_refused_once_it_expires(session_factory, storage, receipt_id):
+    """A signature that is valid in every other respect -- right receipt,
+    right variant, right secret -- is still refused once ``exp`` has
+    passed. This is the genuine expiry case
+    `test_a_tampered_signature_is_rejected` was misnamed for (fix round 1,
+    F7): a separate app, sharing the same database and storage, whose
+    ``IMAGE_URL_TTL_S`` is negative -- so the link is already expired at
+    the instant ``sign_url`` mints it, with no need to sleep in the test.
+    """
+    expiring_settings = Settings(
+        _env_file=None,
+        session_secret="test-secret",
+        session_cookie_secure=False,
+        image_url_ttl_s=-5,
+    )
+    expiring_app = create_app(
+        session_factory=session_factory,
+        storage=storage,
+        submit=lambda job: None,
+        settings=expiring_settings,
+    )
+    client = _logged_in(expiring_app, "alice", "pw-alice")
+    url = client.get(f"/receipts/{receipt_id}/image").json()["url"]
+    assert client.get(url).status_code == 403
 
 
 def test_review_next_claims_one_task_per_caller(reviewer_client, admin_client):
@@ -384,6 +435,25 @@ def test_double_complete_does_not_move_closed_at(reviewer_client, session_factor
         assert session.get(ReviewTask, task_id).closed_at == first_closed
 
 
+def test_review_complete_requires_authentication(app, task_id):
+    """The one non-``/health``, non-blob route that had no pin for "no
+    credentials at all" (fix round 1, F4). Its real permission rule --
+    assignee or admin -- cannot be expressed as a row in
+    ``tests/test_api_read.py``'s role/actor matrix (a reviewer holding an
+    allowed role can still get 403 there), which is why it was never added
+    as one; that is not a reason for the baseline "every non-``/health``
+    route needs 401 without credentials" property to go unpinned. Neither
+    an anonymous caller nor the machine upload key -- which authorizes
+    ``POST /upload`` and nothing else -- may complete a task.
+    """
+    anonymous = TestClient(app)
+    assert anonymous.post(f"/review/{task_id}/complete").status_code == 401
+
+    keyed = TestClient(app)
+    keyed.headers.update({"X-API-Key": "s3cret-machine-key"})
+    assert keyed.post(f"/review/{task_id}/complete").status_code == 401
+
+
 def test_export_is_admin_only(reviewer_client, admin_client):
     assert reviewer_client.get("/export/xlsx").status_code == 403
     assert admin_client.get("/export/xlsx").status_code == 200
@@ -415,3 +485,115 @@ def test_export_refuses_rather_than_truncating(admin_client, monkeypatch):
     response = admin_client.get("/export/xlsx")
     assert response.status_code == 400
     assert "narrow" in response.text.lower()
+
+
+# --------------------------------------------------------------------------- #
+# Fix round 1 (F1, F2, F3): a leaked temp file, an unbounded read, and an
+# N+1 a docstring claimed did not exist.
+# --------------------------------------------------------------------------- #
+
+
+def test_export_with_a_malformed_range_header_leaves_no_temp_file(admin_client):
+    """The original implementation wrote the workbook under
+    ``tempfile.mkdtemp()`` and returned a ``FileResponse`` whose cleanup was
+    a ``BackgroundTask``. In starlette 1.3.1, ``FileResponse.__call__``
+    returns early for a malformed or unsatisfiable ``Range`` header --
+    skipping ``await self.background()`` -- so a ``Range: bytes=abc`` left
+    a complete financial workbook behind in the shared OS temp directory,
+    permanently, once per request. The fix builds the response body fully
+    in memory and deletes its own working temp directory synchronously
+    (``finally``, before ``return``), so there is no deferred cleanup step
+    left for any response path -- malformed ``Range``, an out-of-bounds
+    one, or a client that disconnects mid-stream -- to skip.
+    """
+    before = set(glob.glob(os.path.join(tempfile.gettempdir(), "receipts-export-*")))
+    response = admin_client.get("/export/xlsx", headers={"Range": "bytes=abc"})
+    after = set(glob.glob(os.path.join(tempfile.gettempdir(), "receipts-export-*")))
+
+    assert after - before == set()
+    # A plain Response has no partial-content support: Range is ignored and
+    # the whole (valid) workbook comes back, which is the accepted
+    # trade-off for never leaking one -- see the route's docstring.
+    assert response.status_code == 200
+    load_workbook(io.BytesIO(response.content))  # does not raise
+
+
+def test_upload_bounds_the_read_by_the_configured_limit(client_max_1mb, monkeypatch):
+    """``await file.read()`` with no argument buffers the *entire* body
+    into one ``bytes`` object before ``ingest_bytes`` ever gets a chance to
+    reject it on size -- an allocation bounded only by whatever the client
+    chooses to send, from any reviewer session or the machine key. The fix
+    reads ``max_bytes + 1`` instead, so ``ingest_bytes`` -- spied on here --
+    never sees more than one byte past the configured cap, regardless of
+    how much larger the uploaded body actually is.
+    """
+    captured_sizes: list[int] = []
+    original_ingest_bytes = api_module.ingest_bytes
+
+    def _spy(data, *args, **kwargs):
+        captured_sizes.append(len(data))
+        return original_ingest_bytes(data, *args, **kwargs)
+
+    monkeypatch.setattr(api_module, "ingest_bytes", _spy)
+
+    max_bytes = 1 * 1024 * 1024  # client_max_1mb's configured cap
+    big = b"\xff\xd8" + b"\x00" * (32 * 1024 * 1024)
+    response = client_max_1mb.post("/upload", files={"file": ("r.jpg", big, "image/jpeg")})
+
+    assert response.status_code == 400
+    assert captured_sizes == [max_bytes + 1]
+
+
+def test_export_does_not_issue_one_query_per_receipt_for_line_items_or_merchant(
+    admin_client, session_factory
+):
+    """``build_export_rows`` touches ``receipt.line_items`` (to rebuild the
+    extraction) and ``receipt.merchant`` (for the canonical name) for every
+    row. Both are default-lazy relationships
+    (:mod:`receipts.persist.models`); left lazy, each access is its own
+    SELECT -- an N+1 a two-receipt test run does not surface but that
+    becomes 5,000-10,000 round trips at the route's own
+    ``_EXPORT_MAX_ROWS`` design point. ``_query_export_receipts`` now
+    eager-loads both with ``selectinload``, so the statement count must not
+    grow with the number of matching receipts: five receipts here should
+    still cost at most one batched query per relationship, not five.
+    """
+    # admin_client's own fixture already seeded two receipts (receipt_id,
+    # other_receipt_id); add three more so a per-receipt query pattern is
+    # unmistakable against a batched one.
+    with session_factory() as session:
+        for _ in range(3):
+            extra_id = uuid.uuid4()
+            session.add(
+                Receipt(
+                    id=extra_id,
+                    status=ReceiptStatus.AUTO_APPROVED,
+                    confidence=Decimal("0.900"),
+                    merchant_name_raw="EXTRA CO",
+                    txn_date=date(2026, 7, 3),
+                    currency="USD",
+                    total=Decimal("5.00"),
+                    image_key=make_image_key(extra_id, "original"),
+                    image_phash="",
+                )
+            )
+        session.commit()
+        engine = session.get_bind()
+
+    statements: list[str] = []
+
+    def _record(conn, cursor, statement, parameters, context, executemany):
+        statements.append(statement)
+
+    event.listen(engine, "before_cursor_execute", _record)
+    try:
+        response = admin_client.get("/export/xlsx")
+    finally:
+        event.remove(engine, "before_cursor_execute", _record)
+
+    assert response.status_code == 200
+    line_item_queries = [s for s in statements if "line_items" in s.lower()]
+    merchant_queries = [s for s in statements if "merchants" in s.lower()]
+    # Five qualifying receipts, at most one batched SELECT each -- not five.
+    assert len(line_item_queries) <= 1
+    assert len(merchant_queries) <= 1

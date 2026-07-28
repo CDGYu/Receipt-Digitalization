@@ -38,11 +38,10 @@ from pathlib import Path
 from typing import Annotated, Any, Literal
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response, UploadFile
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import JSONResponse
 from sqlalchemy import func, select, text
 from sqlalchemy.exc import DBAPIError
-from sqlalchemy.orm import Session
-from starlette.background import BackgroundTask
+from sqlalchemy.orm import Session, selectinload
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from config.settings import Settings, get_settings
@@ -311,8 +310,23 @@ def _query_export_receipts(
     needs exactly that. Ordered ``created_at`` then ``id``, matching
     ``query_receipts``, so the two entry points never disagree about paging
     order.
+
+    ``line_items`` and ``merchant`` are eager-loaded with ``selectinload``
+    (fix round 1, F3): both are default-lazy relationships
+    (:mod:`receipts.persist.models`), and
+    :func:`receipts.review.serializers.build_export_rows` touches both for
+    every row it builds (line items to reconstruct the extraction, merchant
+    for the canonical name). Left lazy, each access is its own SELECT --
+    an N+1 that a two- or three-receipt test run never surfaces but that
+    turns into 5,000-10,000 round trips at the route's own
+    ``_EXPORT_MAX_ROWS`` design point. One batched ``IN`` query per
+    relationship, issued here, is what keeps the query count independent of
+    how many receipts match.
     """
-    query = select(Receipt)
+    query = (
+        select(Receipt)
+        .options(selectinload(Receipt.line_items), selectinload(Receipt.merchant))
+    )
     if status is not None:
         query = query.where(Receipt.status == status)
     else:
@@ -348,10 +362,24 @@ def _install_write_routes(app: FastAPI) -> None:
         receipt id (a caller can retry the same id via ``receipts
         reprocess``, P4.T5) and logs the failure -- it does not undo the
         commit.
+
+        The read is bounded at ``max_bytes + 1``, not unbounded (fix round
+        1, F2): ``UploadFile.read()`` with no argument buffers the *entire*
+        body into one ``bytes`` object regardless of ``settings.
+        max_upload_mb``, so a caller -- any reviewer session, or the machine
+        API key -- could force an allocation of arbitrary size per
+        concurrent request before ``ingest_bytes`` ever got a chance to
+        reject it. Reading one byte past the cap is enough for
+        ``ingest_bytes``'s own size check (which runs before the extension
+        or content-type checks) to still see and reject an oversized upload
+        with the same message it always has; the allocation this route
+        itself performs is now bounded by config, not by whatever the
+        client chooses to send.
         """
         settings = request.app.state.settings
         storage = request.app.state.storage
-        data = await file.read()
+        max_bytes = settings.max_upload_mb * 1024 * 1024
+        data = await file.read(max_bytes + 1)
 
         try:
             job = ingest_bytes(
@@ -459,6 +487,13 @@ def _install_write_routes(app: FastAPI) -> None:
         the signed message is rebuilt -- both are what keep the ``|``-joined
         construction in ``sign_url``/``verify_signature`` unambiguous (see
         their docstrings).
+
+        A valid signature for a receipt whose blob is missing from storage
+        (fix round 1, F5) is a 404, the same as an unknown receipt -- not an
+        unhandled ``FileNotFoundError`` surfacing as a 500. This is the one
+        unauthenticated route in the service; it must never leak a
+        traceback to a caller who only had to forge nothing but guess an
+        id.
         """
         settings = request.app.state.settings
         if not verify_signature(
@@ -475,7 +510,12 @@ def _install_write_routes(app: FastAPI) -> None:
                 raise HTTPException(status_code=404, detail=f"no receipt with id {receipt_id}")
             key = _image_key_for(receipt, variant)
 
-        data = request.app.state.storage.get(key)
+        try:
+            data = request.app.state.storage.get(key)
+        except FileNotFoundError:
+            raise HTTPException(
+                status_code=404, detail=f"no image stored for receipt {receipt_id}"
+            ) from None
         media_type = mimetypes.guess_type(key)[0] or "application/octet-stream"
         return Response(content=data, media_type=media_type)
 
@@ -545,8 +585,8 @@ def _install_write_routes(app: FastAPI) -> None:
         date_from: date | None = None,
         date_to: date | None = None,
         min_confidence: Decimal | None = None,
-    ) -> FileResponse:
-        """Stream the §13 workbook. Admin only (D3).
+    ) -> Response:
+        """Build the §13 workbook and return it whole, in memory. Admin only (D3).
 
         Fetches ``_EXPORT_MAX_ROWS + 1`` rows -- the same "fetch one past
         the limit" trick ``GET /receipts`` uses for ``has_more`` -- and
@@ -555,14 +595,29 @@ def _install_write_routes(app: FastAPI) -> None:
         which is worse than making the caller narrow the filter and ask
         again.
 
-        The workbook is written under ``tempfile.mkdtemp()``, not a
-        ``tempfile.TemporaryDirectory()`` context manager entered around the
-        ``return``: a ``FileResponse`` streams the file lazily, after this
-        function has already returned, and a ``with`` block's ``__exit__``
-        (which deletes the directory) runs as part of that same ``return``
-        -- before Starlette ever gets to open the path. Cleanup is instead a
-        ``BackgroundTask`` that runs after the response has been fully
-        sent, which is the documented pattern for exactly this case.
+        **Returns a plain ``Response`` holding the whole file's bytes, not
+        a ``FileResponse`` streaming a path (fix round 1, F1).** The
+        original version wrote the workbook under ``tempfile.mkdtemp()``
+        and returned a ``FileResponse`` with a ``BackgroundTask`` to clean
+        it up after the response was sent -- correct on the happy path, but
+        in starlette 1.3.1 ``FileResponse.__call__`` returns early for a
+        malformed or unsatisfiable ``Range`` header (and for a client that
+        disconnects mid-stream), and that early return **skips
+        ``await self.background()`` entirely**. A caller sending
+        ``Range: bytes=abc`` (or an out-of-bounds range, or just dropping
+        the connection) left a complete financial workbook -- image links
+        signed for 24 hours included -- behind in the shared OS temp
+        directory forever, once per request. Building the response body
+        fully in memory before it is ever handed to Starlette removes the
+        deferred cleanup step altogether: the temp directory this route
+        still uses to call ``export_workbook`` (which takes a path, not a
+        stream) is read and deleted synchronously, in a ``finally``, before
+        ``return`` -- there is no cleanup path left to miss, and no
+        partial-content support to lose it through. The trade-off is that
+        this route no longer honours ``Range`` requests (a plain
+        ``Response`` always sends the whole body); for a bounded, at most
+        ``_EXPORT_MAX_ROWS``-row workbook, that is a fair price for never
+        leaking one.
         """
         settings = request.app.state.settings
         with request.app.state.session_factory() as session:
@@ -591,18 +646,17 @@ def _install_write_routes(app: FastAPI) -> None:
             )
 
         tmpdir = tempfile.mkdtemp(prefix="receipts-export-")
-        out_path = Path(tmpdir) / "receipts-export.xlsx"
         try:
+            out_path = Path(tmpdir) / "receipts-export.xlsx"
             export_workbook(extractions, out_path, rows=export_rows)
-        except Exception:
+            content = out_path.read_bytes()
+        finally:
             shutil.rmtree(tmpdir, ignore_errors=True)
-            raise
 
-        return FileResponse(
-            out_path,
+        return Response(
+            content=content,
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            filename="receipts-export.xlsx",
-            background=BackgroundTask(shutil.rmtree, tmpdir, ignore_errors=True),
+            headers={"Content-Disposition": 'attachment; filename="receipts-export.xlsx"'},
         )
 
 

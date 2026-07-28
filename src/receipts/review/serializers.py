@@ -249,7 +249,7 @@ def build_export_rows(
     describe the same row -- callers must not reorder one list without the
     other.
 
-    Two batched joins, not one query per receipt:
+    Two batched joins run *in this function*, not one query per receipt:
 
       * ``review_tasks`` -- the ``reason``/``priority`` a receipt was routed
         to review with, keyed by ``receipt_id`` (unique per §6.7, so at most
@@ -263,6 +263,19 @@ def build_export_rows(
         :class:`~receipts.export.xlsx.ReceiptExportRow`'s own docstring
         describes, adapted because export has ORM rows, not a
         ``ValidationReport``).
+
+    **This function is not, on its own, the whole batching story (fix
+    round 1, F3).** :func:`_export_extraction` also touches
+    ``receipt.line_items`` for every receipt, and this function touches
+    ``receipt.merchant`` for the canonical name -- both default-lazy
+    relationships (:mod:`receipts.persist.models`). Left lazy, those are a
+    second and third N+1 that a docstring claiming "two batched joins" was
+    papering over. Avoiding them is the *caller's* responsibility: pass in
+    ``receipts`` that were already loaded with ``selectinload(Receipt.
+    line_items)`` and ``selectinload(Receipt.merchant)``, which is exactly
+    what ``review/api.py``'s ``_query_export_receipts`` does. This function
+    cannot enforce that itself -- it only ever sees the list it is handed,
+    after the query already ran.
 
     Every image link is signed with ``secret``/``image_url_ttl_s`` -- the
     caller passes ``settings.session_secret`` and
