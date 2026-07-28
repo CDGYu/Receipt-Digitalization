@@ -2,6 +2,6 @@
 
 from __future__ import annotations
 
-from receipts.export.xlsx import export_workbook
+from receipts.export.xlsx import ReceiptExportRow, export_workbook
 
-__all__ = ["export_workbook"]
+__all__ = ["ReceiptExportRow", "export_workbook"]

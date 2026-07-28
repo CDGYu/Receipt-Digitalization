@@ -90,7 +90,9 @@ def test_export_workbook_builds_two_sheets(tmp_path):
     assert out.exists()
 
     wb = openpyxl.load_workbook(out)
-    assert wb.sheetnames == ["Receipts", "LineItems"]
+    # The two data sheets come first; the review/summary sheets that follow are
+    # covered by test_all_four_sheets_present_by_default.
+    assert wb.sheetnames[:2] == ["Receipts", "LineItems"]
 
 
 def test_receipts_sheet_rows_and_values(tmp_path):
@@ -172,3 +174,280 @@ def test_receipt_id_falls_back_to_index_when_ids_absent(tmp_path):
     # 1-based index fallback.
     assert ws["A2"].value == 1
     assert ws["A3"].value == 2
+
+
+# --------------------------------------------------------------------------- #
+# Needs Review + Summary sheets and the §13.5 formatting.
+#
+# Per-receipt metadata that does not live on ReceiptExtraction (id, status,
+# confidence, review reason/priority, image URL) is supplied through the
+# optional parallel ``rows`` argument, so the exporter stays decoupled from the
+# ORM and every existing call form keeps working.
+# --------------------------------------------------------------------------- #
+
+from receipts.export import ReceiptExportRow  # noqa: E402
+from receipts.score.confidence import ReceiptStatus  # noqa: E402
+
+
+def _simple_receipt(
+    merchant: str,
+    date: str,
+    total: Decimal,
+    *,
+    number: str | None = None,
+    card_last4: str | None = None,
+) -> ReceiptExtraction:
+    return ReceiptExtraction(
+        merchant=Merchant(name=merchant),
+        receipt=ReceiptMeta(date=date, currency="USD", number=number),
+        line_items=[
+            LineItem(
+                position=1,
+                description_raw="THING",
+                qty=Decimal("1"),
+                unit_price=total,
+                line_total=total,
+            )
+        ],
+        totals=Totals(subtotal=total, tax=Decimal("0.00"), total=total),
+        payment=Payment(method="card", card_last4=card_last4),
+    )
+
+
+def _fixture() -> tuple[list[ReceiptExtraction], list[ReceiptExportRow]]:
+    """Four receipts: one auto-approved, three needing review.
+
+    Review order must come out priority-then-date: r3 (priority 0), then r4 and
+    r2 (both priority 2, ordered by date 2024-01-05 before 2024-02-20).
+    """
+    receipts = [
+        _simple_receipt(
+            "Total Wine Co", "2024-01-15", Decimal("21.76"), number="0042", card_last4="0007"
+        ),
+        _simple_receipt("Corner Store", "2024-02-20", Decimal("4.86")),
+        _simple_receipt("Bodega", "2024-03-01", Decimal("99.00")),
+        _simple_receipt("Kiosk", "2024-01-05", Decimal("7.50")),
+    ]
+    rows = [
+        ReceiptExportRow(
+            receipt_id="r1",
+            status=ReceiptStatus.AUTO_APPROVED,
+            confidence=Decimal("0.920"),
+        ),
+        ReceiptExportRow(
+            receipt_id="r2",
+            status=ReceiptStatus.NEEDS_REVIEW,
+            confidence=Decimal("0.700"),
+            review_reason="quick verify",
+            review_priority=2,
+        ),
+        ReceiptExportRow(
+            receipt_id="r3",
+            status=ReceiptStatus.NEEDS_REVIEW,
+            confidence=Decimal("0.300"),
+            review_reason="urgent: validation errors and total is missing",
+            review_priority=0,
+            has_unresolved_error=True,
+            image_url="https://example.test/img/r3.jpg",
+        ),
+        ReceiptExportRow(
+            receipt_id="r4",
+            status=ReceiptStatus.NEEDS_REVIEW,
+            confidence=Decimal("0.650"),
+            review_reason="quick verify",
+            review_priority=2,
+        ),
+    ]
+    return receipts, rows
+
+
+def _header_col(ws, name: str) -> int:
+    """1-based index of the column whose header cell equals ``name``."""
+    for col in range(1, ws.max_column + 1):
+        if ws.cell(row=1, column=col).value == name:
+            return col
+    raise AssertionError(f"{ws.title!r} has no {name!r} column")
+
+
+def _label_row(ws, label: str) -> int:
+    for row in range(1, ws.max_row + 1):
+        if ws.cell(row=row, column=1).value == label:
+            return row
+    raise AssertionError(f"{ws.title!r} has no row labelled {label!r}")
+
+
+def _summary_value(ws, label: str):
+    return ws.cell(row=_label_row(ws, label), column=2).value
+
+
+def _section_pairs(ws, section_label: str) -> dict:
+    """The label/value pairs under a section header, up to the next blank row."""
+    pairs = {}
+    row = _label_row(ws, section_label) + 1
+    while row <= ws.max_row and ws.cell(row=row, column=1).value is not None:
+        pairs[ws.cell(row=row, column=1).value] = ws.cell(row=row, column=2).value
+        row += 1
+    return pairs
+
+
+def _export(tmp_path, *, with_rows: bool = True, **kwargs):
+    receipts, rows = _fixture()
+    out = tmp_path / "full.xlsx"
+    export_workbook(receipts, out_path=out, rows=rows if with_rows else None, **kwargs)
+    return openpyxl.load_workbook(out)
+
+
+def test_all_four_sheets_present_by_default(tmp_path):
+    wb = _export(tmp_path)
+    assert wb.sheetnames == ["Receipts", "LineItems", "Needs Review", "Summary"]
+
+
+def test_flags_omit_their_sheets(tmp_path):
+    wb = _export(tmp_path, include_review_sheet=False, include_summary=False)
+    assert wb.sheetnames == ["Receipts", "LineItems"]
+
+    wb = _export(tmp_path, include_summary=False)
+    assert wb.sheetnames == ["Receipts", "LineItems", "Needs Review"]
+
+    wb = _export(tmp_path, include_review_sheet=False)
+    assert wb.sheetnames == ["Receipts", "LineItems", "Summary"]
+
+
+def test_review_sheet_holds_only_needs_review_in_priority_then_date_order(tmp_path):
+    ws = _export(tmp_path)["Needs Review"]
+
+    id_col = _header_col(ws, "receipt_id")
+    ids = [ws.cell(row=r, column=id_col).value for r in range(2, ws.max_row + 1)]
+
+    # r1 is auto_approved and must not appear at all.
+    assert ids == ["r3", "r4", "r2"]
+
+
+def test_review_sheet_shows_reason_and_image_hyperlink(tmp_path):
+    ws = _export(tmp_path)["Needs Review"]
+
+    reason_col = _header_col(ws, "reason")
+    assert ws.cell(row=2, column=reason_col).value == (
+        "urgent: validation errors and total is missing"
+    )
+    assert ws.cell(row=3, column=reason_col).value == "quick verify"
+
+    image_col = _header_col(ws, "image")
+    linked = ws.cell(row=2, column=image_col)
+    assert linked.hyperlink is not None
+    assert linked.hyperlink.target == "https://example.test/img/r3.jpg"
+    # No URL supplied for r4 -> empty cell, no hyperlink, nothing invented.
+    assert ws.cell(row=3, column=image_col).hyperlink is None
+
+
+def test_review_sheet_is_header_only_without_metadata(tmp_path):
+    wb = _export(tmp_path, with_rows=False)
+    ws = wb["Needs Review"]
+    # Status is unknown without metadata: the sheet still exists, with just the
+    # header row, rather than crashing or guessing.
+    assert ws.max_row == 1
+    assert ws.cell(row=1, column=1).value is not None
+
+
+def test_summary_reports_counts_dates_rate_and_average(tmp_path):
+    ws = _export(tmp_path)["Summary"]
+
+    assert _summary_value(ws, "receipts") == 4
+    assert _summary_value(ws, "date_from") == "2024-01-05"
+    assert _summary_value(ws, "date_to") == "2024-03-01"
+    # 1 of 4 auto-approved.
+    assert _summary_value(ws, "auto_approval_rate") == pytest.approx(0.25)
+    # (0.920 + 0.700 + 0.300 + 0.650) / 4 = 0.6425 -> 0.643 at 3dp.
+    assert _summary_value(ws, "average_confidence") == pytest.approx(0.643)
+
+    by_status = _section_pairs(ws, "status")
+    assert by_status == {"auto_approved": 1, "needs_review": 3}
+
+    by_merchant = _section_pairs(ws, "merchant")
+    assert by_merchant["Bodega"] == pytest.approx(99.00)
+    assert set(by_merchant) == {"Bodega", "Corner Store", "Kiosk", "Total Wine Co"}
+
+
+def test_summary_survives_an_empty_receipt_list(tmp_path):
+    out = tmp_path / "empty.xlsx"
+    export_workbook([], out_path=out)
+
+    ws = openpyxl.load_workbook(out)["Summary"]
+    assert _summary_value(ws, "receipts") == 0
+    # An undefined rate/average is empty, never a fabricated 0% and never a
+    # ZeroDivisionError.
+    assert _summary_value(ws, "auto_approval_rate") is None
+    assert _summary_value(ws, "average_confidence") is None
+    assert _summary_value(ws, "date_from") is None
+
+
+def test_unresolved_error_row_gets_a_light_red_fill(tmp_path):
+    ws = _export(tmp_path)["Receipts"]
+
+    # r3 (has_unresolved_error) is the third data row; r1 is clean.
+    flagged = ws.cell(row=4, column=1)
+    clean = ws.cell(row=2, column=1)
+    assert flagged.fill.fill_type == "solid"
+    assert flagged.fill.start_color.rgb != clean.fill.start_color.rgb
+
+
+def test_receipt_no_and_card_last4_are_text_formatted(tmp_path):
+    ws = _export(tmp_path)["Receipts"]
+
+    no_col = _header_col(ws, "receipt_no")
+    card_col = _header_col(ws, "card_last4")
+
+    assert ws.cell(row=2, column=no_col).value == "0042"
+    assert ws.cell(row=2, column=card_col).value == "0007"
+    for row in range(2, ws.max_row + 1):
+        assert ws.cell(row=row, column=no_col).number_format == "@"
+        assert ws.cell(row=row, column=card_col).number_format == "@"
+
+
+def test_confidence_columns_carry_a_colour_scale_rule(tmp_path):
+    from openpyxl.utils import get_column_letter
+
+    wb = _export(tmp_path)
+    for name in ("Receipts", "Needs Review"):
+        ws = wb[name]
+        letter = get_column_letter(_header_col(ws, "confidence"))
+        rules = [
+            rule
+            for fmt in ws.conditional_formatting
+            if letter in str(fmt.sqref)
+            for rule in fmt.rules
+        ]
+        assert any(rule.type == "colorScale" for rule in rules), name
+
+
+def test_autofilter_and_capped_column_widths_on_every_sheet(tmp_path):
+    wb = _export(tmp_path)
+    for ws in wb.worksheets:
+        assert ws.freeze_panes == "A2"
+        assert ws.auto_filter.ref is not None
+        assert ws.protection.sheet is False
+        widths = [dim.width for dim in ws.column_dimensions.values() if dim.width]
+        assert widths, ws.title
+        assert max(widths) <= 50, ws.title
+
+
+def test_rows_length_mismatch_is_rejected(tmp_path):
+    receipts, rows = _fixture()
+    out = tmp_path / "book.xlsx"
+    with pytest.raises(ValueError):
+        export_workbook(receipts, out_path=out, rows=rows[:2])
+    assert not out.exists()
+
+
+def test_ids_take_precedence_over_row_metadata_ids(tmp_path):
+    receipts, rows = _fixture()
+    out = tmp_path / "book.xlsx"
+    export_workbook(receipts, out_path=out, ids=["a", "b", "c", "d"], rows=rows)
+
+    wb = openpyxl.load_workbook(out)
+    assert wb["Receipts"]["A2"].value == "a"
+
+    review = wb["Needs Review"]
+    id_col = _header_col(review, "receipt_id")
+    # r3's explicit id wins over the metadata's own receipt_id.
+    assert review.cell(row=2, column=id_col).value == "c"
