@@ -38,10 +38,31 @@ printed a traceback, and the harness fix in `1f9f122` would have recorded a
 per-receipt failure and still written a report. Most likely the background process
 was torn down when a long foreground wait was interrupted.
 
+### Measured end-to-end run (2026-07-29, r002 via `scripts/try_one_receipt.py`)
+
+The pipeline **does work end to end** — but the local model cannot read the
+receipt. Timings on this hardware (CPU-only):
+
+| image `max_edge` | base64 | triage | extract | total |
+|---|---|---|---|---|
+| 2048 (default) | 745 KB | **887 s** | timed out at 900 s, then retried | never finished |
+| 768 | 129 KB | **314 s** | **1057 s** | ~23 min |
+
+At 2048px, triage alone (887s) sits *just under* the 900s timeout — which is why
+the earlier baseline attempts died. At 768px it completes, but
+`resize_for_model` correctly warns `estimated text height 7.7px is below 12px`,
+and the extraction comes back effectively empty: every field null, two blank line
+items.
+
+**The safety machinery behaved exactly as designed on that bad extraction** —
+R010 ERROR (total is null) plus R011/R012/R053 warnings, confidence `0.000`,
+routed `needs_review` at priority 0 (urgent). It did not auto-approve garbage.
+Scored against the golden label: critical fields correct = False, line-item
+F1 = 0.00. So the infrastructure is validated; the *model* is the problem.
+
 ### Root cause still open
 
-**`granite3.2-vision:2b` on CPU is too slow to iterate against.** One triage call
-measured ~262s (4.4 min). A 3-receipt baseline is 6+ calls (triage + extract per
+**`granite3.2-vision:2b` on CPU is too slow, and too weak, to iterate against.** A 3-receipt baseline is 6+ calls (triage + extract per
 receipt, more if a repair fires), so ~30–60 minutes per run — and the eval harness
 is meant to be re-run on *every* prompt, model, or rule change (§16). Two
 consequences:
@@ -118,6 +139,24 @@ the provider abstraction (ADR-0002) means switching is one env var.
 - Confidence/auto-approval numbers are meaningful now (real scoring is wired in),
   but the ≥99% precision target **cannot be validated on three receipts** — treat
   the first run as a smoke test plus a directional read, not a calibration.
+
+### Two side-findings from the smoke run
+
+**`is_receipt` came back `false` for a valid invoice on both receipts tried**
+(r001 and r002). Nothing reads that field yet — grep finds no consumers in
+`src/` — so it is harmless today, but the §3 "reject garbage before you pay for
+extraction" gate does not exist. When it is built it must **not** hard-reject on a
+small model's `is_receipt`; route to review instead (nothing is ever silently
+dropped).
+
+**`field_accuracy` counts fields the model cannot possibly match.** The flattened
+comparison includes `meta.*`, so the annotator prose in a golden label's
+`meta.notes` is scored against whatever the model wrote, and `meta.legibility` /
+`meta.is_handwritten` are model self-reports rather than facts about the receipt.
+On the smoke run these were among the 27 mismatches. Consider excluding `meta.*`
+(or at least `meta.notes`) from the field-accuracy denominator so the number
+reflects transcription, not annotation. Until then, read per-field accuracy as
+slightly pessimistic.
 
 ### Related
 
