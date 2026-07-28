@@ -1,0 +1,54 @@
+{
+  "merchant": {
+    "name": "SUMMIT FUEL OPC",
+    "branch": null,
+    "address": "Sta Rosa Bypass Road Soledad 3101, Sta Rosa Nueva Ecija",
+    "tax_id": "774-423-646-00011",
+    "phone": null
+  },
+  "receipt": {
+    "number": "18241",
+    "date": "2026-03-28",
+    "date_raw": "03-28-26",
+    "time": null,
+    "currency": "PHP",
+    "decimal_convention": "point",
+    "cashier": null,
+    "terminal": null
+  },
+  "line_items": [
+    {
+      "position": 0,
+      "description_raw": "DieselPlus",
+      "sku": null,
+      "qty": "17.39",
+      "unit": null,
+      "unit_price": "115.00",
+      "line_total": "2000.00",
+      "modifiers": [],
+      "bbox": null
+    }
+  ],
+  "totals": {
+    "subtotal": "1785.71",
+    "tax": "214.29",
+    "tax_breakdown": [],
+    "discount": null,
+    "total": "2000.00",
+    "tender": "2000.00",
+    "change": null
+  },
+  "payment": {
+    "method": "CASH",
+    "card_last4": null
+  },
+  "meta": {
+    "is_handwritten": true,
+    "is_refund": false,
+    "legibility": "fair",
+    "ambiguous_fields": [],
+    "unreadable_regions": [],
+    "receipt_is_inconsistent": false,
+    "notes": "BIR sales invoice: pre-printed form, handwritten values. 'CASH' checkbox ticked. Pre-printed product rows MaxiPower and MaxiGreen are blank template rows and must NOT be emitted as line items. qty x unit_price = 1999.85 vs the written 2,000.00 amount (within tolerance). 'Ideal source' is the BUYER (Sold To), not the merchant. The footer TIN 103-969-951-00000 belongs to the PRINTER (RJ Printing Press), not the merchant."
+  }
+}

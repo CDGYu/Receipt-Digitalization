@@ -1,0 +1,5 @@
+{
+  "r001": { "category": "handwritten", "holdout": false },
+  "r002": { "category": "handwritten", "holdout": false },
+  "r003": { "category": "handwritten", "holdout": true }
+}

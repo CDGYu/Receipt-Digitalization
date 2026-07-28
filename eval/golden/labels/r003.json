@@ -1,0 +1,58 @@
+{
+  "merchant": {
+    "name": "SERV CENTRAL, INC.",
+    "branch": null,
+    "address": "Lots 10, 11, 12 Blk. 3 Congressional Ave., Pasong Tamo, Quezon City",
+    "tax_id": "205-741-640-162",
+    "phone": null
+  },
+  "receipt": {
+    "number": "31217",
+    "date": "2026-03-25",
+    "date_raw": "3-25-26",
+    "time": null,
+    "currency": "PHP",
+    "decimal_convention": "point",
+    "cashier": null,
+    "terminal": null
+  },
+  "line_items": [
+    {
+      "position": 0,
+      "description_raw": "DSL-2",
+      "sku": null,
+      "qty": "17.046",
+      "unit": null,
+      "unit_price": "117.33",
+      "line_total": "2000.00",
+      "modifiers": [],
+      "bbox": null
+    }
+  ],
+  "totals": {
+    "subtotal": "1785.71",
+    "tax": "214.29",
+    "tax_breakdown": [],
+    "discount": null,
+    "total": "2000.00",
+    "tender": null,
+    "change": null
+  },
+  "payment": {
+    "method": "CASH",
+    "card_last4": null
+  },
+  "meta": {
+    "is_handwritten": true,
+    "is_refund": false,
+    "legibility": "poor",
+    "ambiguous_fields": [
+      "receipt.date"
+    ],
+    "unreadable_regions": [
+      "cashier signature"
+    ],
+    "receipt_is_inconsistent": false,
+    "notes": "BIR sales invoice: pre-printed form, handwritten values. VERIFY THE MONTH: the date digit reads as 3 or 7 (2026-03-25 vs 2026-07-25); 25 > 12 so the day/month order is unambiguous, only the month glyph is. VATable Sales 1785.71 + VAT 214.29 = 2000.00 reconciles. qty x unit_price = 2000.01 vs the written 2000.00 (within tolerance). 'IDEAL SOURCE' is the BUYER (Sold to), not the merchant. The footer TIN 223-885-849-002 belongs to the PRINTER (A & C Printers), not the merchant."
+  }
+}

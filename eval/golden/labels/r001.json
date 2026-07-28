@@ -1,0 +1,60 @@
+{
+  "merchant": {
+    "name": "METRO OIL SUBIC, INC.",
+    "branch": null,
+    "address": "102 Katipunan St. Concepcion Dos 1811, City of Marikina NCR, Second District Philippines",
+    "tax_id": "221 193 789 09013",
+    "phone": null
+  },
+  "receipt": {
+    "number": "1811158",
+    "date": "2026-03-23",
+    "date_raw": "3/23/26",
+    "time": null,
+    "currency": "PHP",
+    "decimal_convention": "point",
+    "cashier": null,
+    "terminal": null
+  },
+  "line_items": [
+    {
+      "position": 0,
+      "description_raw": "CLEAN DIESEL",
+      "sku": null,
+      "qty": "9.8",
+      "unit": "Lt.",
+      "unit_price": "102.00",
+      "line_total": "1000.00",
+      "modifiers": [],
+      "bbox": null
+    }
+  ],
+  "totals": {
+    "subtotal": "892.86",
+    "tax": "107.14",
+    "tax_breakdown": [],
+    "discount": null,
+    "total": "1000.00",
+    "tender": null,
+    "change": null
+  },
+  "payment": {
+    "method": null,
+    "card_last4": null
+  },
+  "meta": {
+    "is_handwritten": true,
+    "is_refund": false,
+    "legibility": "poor",
+    "ambiguous_fields": [
+      "line_items[0].qty",
+      "line_items[0].unit_price"
+    ],
+    "unreadable_regions": [
+      "quantity column",
+      "unit cost column"
+    ],
+    "receipt_is_inconsistent": false,
+    "notes": "BIR sales invoice: pre-printed form, handwritten values, WORST legibility of the three. VERIFY qty AND unit_price: the qty glyph reads as 9.8 / 98 / 78 and the unit cost is circled with a strike-through mark; 1000.00 / 102.00 = 9.80 is why 9.8 was chosen. The form pre-prints SIX product rows (PREMIUM 97, PREMIUM 95, REGULAR 91, CLEAN DIESEL, POWER DIESEL, MOTOR OIL) and only CLEAN DIESEL is filled in - the other five are blank template rows and must NOT be emitted as line items. 892.86 was written on the 'VAT-Exempt Sales' line, yet VAT of 107.14 was added and 892.86 + 107.14 = 1000.00, so it behaves as VATable Sales; the arithmetic reconciles even though the label placement is wrong. 'IDEAL SOURCE' is the BUYER (Sold To), not the merchant. The footer TIN 000-296-795-000 belongs to the PRINTER (Midland Press), not the merchant."
+  }
+}

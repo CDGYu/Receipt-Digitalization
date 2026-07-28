@@ -105,6 +105,62 @@ dropped. Excel is output only; the DB is the source of truth.
 - **Security:** a commented-out Gemini key was once echoed in output → user
   advised to rotate it. Never echo `.env` secret values; `.env` is gitignored.
 
+## The real receipt corpus (learned from the user's first 3 samples, 2026-07-28)
+
+The user's actual documents are **Philippine BIR "SALES INVOICE" forms: a
+machine-printed template with every value filled in by hand.** Three samples are
+labelled in `eval/golden/labels/r001-r003.json` (Metro Oil Subic, Summit Fuel
+OPC, Serv Central). Implications, all confirmed against the code:
+
+- **They are `document_type=INVOICE` + `print_type=MIXED`, not `handwritten_receipt`.**
+  `TriageResult.is_handwritten` already returns True for `MIXED`, so **gate
+  self-consistency on `triage.is_handwritten`, never on `document_type`** (Phase 7).
+- **The handwriting penalty must read triage too.** `score_confidence` currently
+  reads only `receipt.meta.is_handwritten`; on these forms a model may report
+  `False` (the template is printed) while triage says `MIXED`, so the −0.15 would
+  be missed on exactly the receipts that need it. This promotes that deferred item
+  to a real fix.
+- **R020 FALSE-ERRORS ON 100% OF THESE RECEIPTS — see below.** Highest-priority
+  open issue.
+- **Blank pre-printed product rows.** Metro Oil's form pre-prints six fuel rows
+  and only one is filled in; a VLM will likely emit all six. Needs a prompt
+  instruction and/or a rule (sibling of R052) so empty template rows are dropped.
+- **Buyer-vs-merchant trap.** Every form has `SOLD TO: Ideal Source` (the user's
+  own company). `merchant.name` must be the ISSUER, never the buyer.
+- **Printer-TIN trap.** The footer carries the *printing press's* TIN and
+  accreditation (e.g. Midland Press `000-296-795-000`). `merchant.tax_id` must be
+  the `VAT Reg. TIN` in the header.
+- **Currency is never printed.** `normalize_currency` correctly refuses to guess,
+  so **set `DEFAULT_CURRENCY=PHP`** or currency stays null.
+- **Composition:** if this hybrid form is the whole corpus, the spec's §15 target
+  mix (60% printed-clean / 20% handwritten) does not describe reality — the golden
+  set should be dominated by this one type. Raise before scaling M0.
+- Useful details: VAT is 12% and totals read `net + VAT = TOTAL AMOUNT DUE`;
+  `Less: Withholding Tax` and the VATable / VAT-Exempt / Zero-Rated buckets appear
+  on the forms but have no dedicated schema fields (withholding was blank on all
+  three); merchant `VAT Reg. TIN` is printed, which is the strongest fingerprint
+  for merchant matching (Phase 6).
+
+### OPEN ISSUE — R020 vs VAT-inclusive line pricing
+
+On these invoices the line-item **Amount column is VAT-INCLUSIVE**, so
+`Σ line_total == total`, while `subtotal` is the net-of-VAT tax base. R020
+(`Σ line_total ≈ subtotal`) therefore fails by exactly the VAT on all three
+samples (verified: 1000 vs 892.86; 2000 vs 1785.71 ×2). R022 passes, so the
+receipts are internally consistent — **the labels are right and the rule's
+assumption is wrong.**
+
+Consequences if unfixed: a false ERROR blocks auto-approval, burns a repair call,
+costs −0.35 confidence, and hands the repair prompt a demand to reconcile numbers
+that are already correct — pressuring the model to alter good values, which the
+steering rules forbid.
+
+Recommended fix (needs a decision; touches a stable rule ID): make R020/R024
+**convention-aware** — add an explicit `prices_include_tax` flag the model reads
+off the form (these say "Total Sales (VAT Inclusive)"), and when it is true (or
+unknown) accept `Σ lines ≈ total` as well as `Σ lines ≈ subtotal`. Do **not**
+widen the tolerance to paper over it. Never renumber R020.
+
 ## Blockers that need the user
 
 1. Label the golden set (M0) — required for a baseline and calibration.
