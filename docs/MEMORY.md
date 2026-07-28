@@ -5,18 +5,19 @@ files in "Key references" below. Last updated: **2026-07-28**.
 
 ## Snapshot
 
-- **Branch `feat/service` @ `aad8bba`** (19 commits ahead of `master` @ `9b823ea`)
-  — **644 tests passing, ruff clean.** Phase 4 service work is **complete except
-  `cli.py`** (P4.T5/T6); the whole-branch review is done and its fix wave merged.
+- **`master` @ `a5bf75d`** — **644 tests passing, ruff clean.** `feat/service`
+  fast-forward merged on 2026-07-29 (the branch still exists at the merge point,
+  matching the convention of the three earlier milestone branches). Phase 4 is
+  **complete except `cli.py`** (P4.T5/T6).
 - Merged on `master`: Phase 0 foundations, Phase 1 offline modules, the online
   wiring (config, client factory, M1 pipeline, confidence scoring, one-command
   baseline runner), **Phase 3 persistence** (7-table ORM + `docker-compose.yml`,
   Alembic migrations, repository layer, DB-backed dedupe, review queue, 4-sheet
   XLSX export), plus the R020/R024 VAT-inclusive fix and the currency default
   chain.
-- **On `feat/service`, not yet merged:** **P4.T4** (`process_receipt`, the RQ
-  worker, the two VLM guards — ADR-0011) and **P4.T3** (the review API: `users`
-  table, session auth + roles, machine upload key, eleven routes — ADR-0012).
+- Merged with that branch: **P4.T4** (`process_receipt`, the RQ worker, the two
+  VLM guards — ADR-0011) and **P4.T3** (the review API: `users` table, session
+  auth + roles, machine upload key, eleven routes — ADR-0012).
 - Phase 3 is complete except **P3.T6 calibration** (blocked on ISSUE-001).
 - Dev interpreter **Python 3.14.4**; CI matrix 3.11/3.12.
 - Plan of record: `IMPLEMENTATION_PLAN.md`. Running log: `.superpowers/sdd/progress.md`.
