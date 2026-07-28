@@ -309,3 +309,59 @@ def test_normalize_resolves_currency_and_drops_ambiguous_symbol():
 
     with_symbol = normalize(ReceiptExtraction(receipt=ReceiptMeta(currency="$")))
     assert with_symbol.receipt.currency is None
+
+
+# --------------------------------------------------------------------------- #
+# normalize: the full §9 currency chain
+#   explicit ISO code -> merchant default -> system default -> null
+# --------------------------------------------------------------------------- #
+
+
+def test_normalize_uses_system_default_when_receipt_prints_no_currency():
+    # PH BIR invoices never print a currency; the configured system default is
+    # the only thing that can legitimately supply it.
+    raw = ReceiptExtraction(receipt=ReceiptMeta(currency=None))
+    assert normalize(raw, system_default_currency="PHP").receipt.currency == "PHP"
+
+
+def test_normalize_explicit_code_beats_both_defaults():
+    raw = ReceiptExtraction(receipt=ReceiptMeta(currency="usd"))
+    result = normalize(
+        raw, merchant_default_currency="EUR", system_default_currency="PHP"
+    )
+    assert result.receipt.currency == "USD"
+
+
+def test_normalize_merchant_default_beats_system_default():
+    raw = ReceiptExtraction(receipt=ReceiptMeta(currency=None))
+    result = normalize(
+        raw, merchant_default_currency="EUR", system_default_currency="PHP"
+    )
+    assert result.receipt.currency == "EUR"
+
+
+def test_normalize_ambiguous_symbol_is_discarded_then_chain_continues():
+    # "$" is not a recognised ISO code, so it is dropped rather than guessed at;
+    # resolution then falls through to the defaults, exactly as documented.
+    raw = ReceiptExtraction(receipt=ReceiptMeta(currency="$"))
+    assert normalize(raw, system_default_currency="PHP").receipt.currency == "PHP"
+    # With no defaults offered, the symbol stays unresolved -- never a guess.
+    assert normalize(raw).receipt.currency is None
+
+
+def test_normalize_unrecognised_code_still_resolves_to_none():
+    # Neither the receipt value nor the merchant default is a real ISO code, and
+    # no system default is offered: null, not a guess.
+    raw = ReceiptExtraction(receipt=ReceiptMeta(currency="XYZ"))
+    assert normalize(raw, merchant_default_currency="ABC").receipt.currency is None
+
+
+def test_normalize_with_defaults_does_not_mutate_input():
+    raw = ReceiptExtraction(receipt=ReceiptMeta(currency=None))
+    before = raw.model_dump()
+
+    result = normalize(raw, system_default_currency="PHP")
+
+    assert raw.model_dump() == before  # raw untouched (deep copy)
+    assert raw.receipt.currency is None
+    assert result.receipt.currency == "PHP"

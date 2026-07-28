@@ -58,6 +58,17 @@ def _good() -> ReceiptExtraction:
     )
 
 
+def _no_currency() -> ReceiptExtraction:
+    """The clean extraction with no currency printed on the receipt.
+
+    Mirrors the real corpus: PH BIR invoices never print an ISO code, so the
+    configured system default is the only thing that can supply one.
+    """
+    extraction = _good()
+    extraction.receipt.currency = None
+    return extraction
+
+
 def _triage() -> TriageResult:
     # GOOD legibility keeps the clean receipt at a perfect confidence so it
     # stays auto-approved under real scoring.
@@ -119,6 +130,29 @@ def test_run_receipt_returns_normalized_extraction_and_report(tmp_path):
     assert not report.has_errors
 
 
+def test_run_receipt_applies_configured_default_currency(tmp_path):
+    png = tmp_path / "receipt.png"
+    _write_png(png)
+    client = FakeVLMClient([_triage(), _no_currency()])
+
+    extraction, _report, _triage_result = run_receipt(
+        png, client, CTX, default_currency="PHP"
+    )
+
+    assert extraction.receipt.currency == "PHP"
+
+
+def test_run_receipt_without_default_currency_leaves_it_null(tmp_path):
+    # No default configured means no currency: null beats a guess.
+    png = tmp_path / "receipt.png"
+    _write_png(png)
+    client = FakeVLMClient([_triage(), _no_currency()])
+
+    extraction, _report, _triage_result = run_receipt(png, client, CTX)
+
+    assert extraction.receipt.currency is None
+
+
 # --------------------------------------------------------------------------- #
 # build_eval_pipeline + eval.harness.run_eval
 # --------------------------------------------------------------------------- #
@@ -147,6 +181,17 @@ def test_build_eval_pipeline_runs_end_to_end_via_run_eval(tmp_path):
     # clearing the auto-approve threshold.
     assert report.n_auto_approved == 1
     assert report.auto_approval_precision == 1.0
+
+
+def test_build_eval_pipeline_threads_default_currency(tmp_path):
+    images = tmp_path / "images"
+    _write_png(images / "r1.png")
+    client = FakeVLMClient([_triage(), _no_currency()])
+
+    pipeline_fn = build_eval_pipeline(client, CTX, images, default_currency="PHP")
+    extraction, _confidence = pipeline_fn(tmp_path / "labels" / "r1.json")
+
+    assert extraction.receipt.currency == "PHP"
 
 
 def test_build_eval_pipeline_missing_image_raises(tmp_path):

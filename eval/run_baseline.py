@@ -56,6 +56,7 @@ def run_baseline(
     client: VLMClient | None = None,
     ctx: ValidationContext | None = None,
     results_dir: Path | None = None,
+    default_currency: str | None = None,
 ) -> EvalReport:
     """Run the M1 pipeline over the golden set and return the eval report.
 
@@ -66,13 +67,21 @@ def run_baseline(
     is refused with a clear :class:`RuntimeError` because it carries no scripted
     responses. ``ctx`` defaults to a stock :class:`ValidationContext`.
 
+    ``default_currency`` overrides the configured ``DEFAULT_CURRENCY``; left
+    ``None`` it is read from :class:`~config.settings.Settings`. Settings are
+    read on both paths, including when a ``client`` is injected -- they carry
+    defaults for every field, so this needs no provider and the offline path
+    stays offline. Passing the configured default through is what stops a corpus
+    that never prints an ISO code (PH BIR invoices) from scoring a currency miss
+    on every receipt.
+
     The report is written under ``results_dir`` (the harness default
     ``eval/results/`` when ``None``) and returned.
     """
     golden_dir = Path(golden_dir) if golden_dir is not None else GOLDEN_DIR
+    settings = get_settings()
 
     if client is None:
-        settings = get_settings()
         if settings.vlm_provider.strip().lower() == "fake":
             raise RuntimeError(_FAKE_PROVIDER_HINT)
         client = make_client(settings)
@@ -80,7 +89,15 @@ def run_baseline(
     if ctx is None:
         ctx = ValidationContext()
 
-    pipeline_fn = build_eval_pipeline(client, ctx, golden_dir / "images")
+    if default_currency is None:
+        default_currency = settings.default_currency
+
+    pipeline_fn = build_eval_pipeline(
+        client,
+        ctx,
+        golden_dir / "images",
+        default_currency=default_currency,
+    )
     return run_eval(golden_dir, pipeline_fn, results_dir=results_dir)
 
 

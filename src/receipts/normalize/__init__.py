@@ -6,7 +6,10 @@ re-quantize, or round money values -- :func:`quantize_money` is display-only.
 
 Guarantees (spec §9), enforced here and in tests:
 
-  * Reformats values but never invents one. Null in -> null out.
+  * Reformats values but never invents one. Null in -> null out. The one value
+    that may be *supplied* rather than read is the currency, and only from the
+    explicit §9 chain (merchant default, then system default) -- never guessed
+    from a symbol or from language.
   * Never applies character-confusion fixes to numeric fields.
   * Never resolves an ambiguous date by guessing.
   * Pure: returns a deep copy and never mutates ``raw``.
@@ -33,13 +36,26 @@ __all__ = [
 ]
 
 
-def normalize(raw: ReceiptExtraction) -> ReceiptExtraction:
+def normalize(
+    raw: ReceiptExtraction,
+    *,
+    merchant_default_currency: str | None = None,
+    system_default_currency: str | None = None,
+) -> ReceiptExtraction:
     """Return a deep copy of ``raw`` with only safe canonicalization applied.
 
     In order: (1) ``clean_text`` on text fields; (2) resolve the currency;
     (3) canonicalize a raw/ambiguous date without guessing; (4) fill missing
     line-item positions by printed order and sort by position. Money ``Decimal``
     values are never touched. ``raw`` is never mutated.
+
+    Currency resolves by the full §9 precedence: an explicit ISO 4217 code on
+    the receipt -> ``merchant_default_currency`` (the merchant's stored
+    ``default_currency``) -> ``system_default_currency`` (``DEFAULT_CURRENCY``)
+    -> ``None``. Both defaults are optional, so a caller with no context still
+    gets code-or-null behaviour. A bare symbol like ``"$"`` is not a recognised
+    code and is discarded rather than guessed at; an unrecognised code is
+    treated the same way. Nothing here ever invents a currency.
     """
     result = raw.model_copy(deep=True)
 
@@ -51,9 +67,14 @@ def normalize(raw: ReceiptExtraction) -> ReceiptExtraction:
     for item in result.line_items:
         item.description_raw = clean_text(item.description_raw)
 
-    # (2) resolve currency. normalize() has no merchant/system defaults to
-    # offer, so this keeps an explicit ISO code and drops an ambiguous symbol.
-    result.receipt.currency = normalize_currency(result.receipt.currency, None, None)
+    # (2) resolve currency by the §9 precedence: explicit ISO code on the
+    # receipt -> merchant default -> system default -> null. An ambiguous symbol
+    # is dropped, never guessed from.
+    result.receipt.currency = normalize_currency(
+        result.receipt.currency,
+        merchant_default_currency,
+        system_default_currency,
+    )
 
     # (3) canonicalize the date only when unambiguous; otherwise leave it null
     # and preserve the verbatim string. Never guess a DD/MM vs MM/DD order.

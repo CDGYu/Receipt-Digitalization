@@ -57,6 +57,13 @@ def _good() -> ReceiptExtraction:
     )
 
 
+def _no_currency() -> ReceiptExtraction:
+    """The clean extraction with no currency printed (mirrors PH BIR invoices)."""
+    extraction = _good()
+    extraction.receipt.currency = None
+    return extraction
+
+
 def _triage() -> TriageResult:
     # GOOD legibility keeps the clean receipt at a perfect confidence so it
     # stays auto-approved under real scoring.
@@ -106,6 +113,28 @@ def test_run_baseline_with_injected_client_scores_golden_set(tmp_path):
     assert report.n_auto_approved == 1
     # A results file was written under the injected results_dir.
     assert list((tmp_path / "results").glob("*.json"))
+
+
+def test_run_baseline_applies_configured_default_currency(monkeypatch, tmp_path):
+    # The label says PHP; the model returns no currency at all (PH BIR invoices
+    # never print one). DEFAULT_CURRENCY has to close that gap or every receipt
+    # in the corpus scores a currency miss. VLM_PROVIDER is pinned to the
+    # response-less "fake" default to prove the injected-client path still needs
+    # no real provider even though settings are now read for the currency.
+    monkeypatch.setenv("DEFAULT_CURRENCY", "PHP")
+    monkeypatch.setenv("VLM_PROVIDER", "fake")
+    golden = tmp_path / "golden"
+    _write_golden(golden)
+    client = FakeVLMClient([_triage(), _no_currency()])
+
+    report = run_baseline(
+        golden_dir=golden,
+        client=client,
+        ctx=CTX,
+        results_dir=tmp_path / "results",
+    )
+
+    assert report.results[0].field_acc["receipt.currency"] is True
 
 
 # --------------------------------------------------------------------------- #

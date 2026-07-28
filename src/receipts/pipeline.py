@@ -64,18 +64,28 @@ def run_receipt(
     ctx: ValidationContext,
     *,
     max_attempts: int = 1,
+    default_currency: str | None = None,
 ) -> tuple[ReceiptExtraction, ValidationReport, TriageResult]:
     """Run one receipt end to end: preprocess -> triage -> extract(+repair) ->
     normalize.
 
     ``max_attempts`` is the total number of extraction attempts the model is
     given: the initial extract plus up to ``max_attempts - 1`` repair rounds, so
-    the default of 1 is a single extract with no repair. Returns a triple of the
-    normalized winning extraction, the validation report for that attempt, and
-    the triage result. The report reflects what the model produced and the
-    repair loop reasoned about (normalization is safe canonicalization applied
-    on top); the triage result is returned so callers can fold its legibility
-    and issue signals into confidence scoring without re-running triage.
+    the default of 1 is a single extract with no repair.
+
+    ``default_currency`` is the configured system default (``DEFAULT_CURRENCY``)
+    handed to :func:`~receipts.normalize.normalize` as the last link of the §9
+    chain: it fills the currency only when the receipt printed no ISO code, which
+    is the norm for PH BIR invoices. Left ``None`` the currency stays ``None``
+    rather than becoming a guess. The merchant's own ``default_currency`` outranks
+    it and plugs in here once the merchant registry lands (M5).
+
+    Returns a triple of the normalized winning extraction, the validation report
+    for that attempt, and the triage result. The report reflects what the model
+    produced and the repair loop reasoned about (normalization is safe
+    canonicalization applied on top); the triage result is returned so callers
+    can fold its legibility and issue signals into confidence scoring without
+    re-running triage.
 
     Works with any :class:`VLMClient` -- a real client from the factory or the
     offline ``FakeVLMClient``.
@@ -89,7 +99,12 @@ def run_receipt(
         ctx=ctx,
         max_repairs=max(0, max_attempts - 1),
     )
-    return normalize(outcome.extraction), outcome.report, triage_result
+    # merchant_default_currency stays unset until the merchant registry exists
+    # (M5); it outranks the system default and plugs in right here.
+    normalized = normalize(
+        outcome.extraction, system_default_currency=default_currency
+    )
+    return normalized, outcome.report, triage_result
 
 
 def _find_image(images_dir: Path, stem: str, suffixes: tuple[str, ...]) -> Path | None:
@@ -107,6 +122,7 @@ def build_eval_pipeline(
     images_dir: Path,
     *,
     image_suffixes: tuple[str, ...] = DEFAULT_IMAGE_SUFFIXES,
+    default_currency: str | None = None,
 ) -> Callable[[Path], tuple[ReceiptExtraction, Decimal]]:
     """Adapt the runner to :func:`eval.harness.run_eval`'s ``PipelineFn``.
 
@@ -116,6 +132,11 @@ def build_eval_pipeline(
     confidence via :func:`receipts.score.confidence.score_confidence`, and
     returns ``(extraction, confidence)``. A missing image raises a clear
     :class:`FileNotFoundError`.
+
+    ``default_currency`` is forwarded to :func:`run_receipt`, so an eval run
+    resolves the currency the same way a production run does -- otherwise a
+    corpus whose receipts print no ISO code scores a currency miss on every
+    single one.
 
     Self-consistency is not run in the straight-line M1 path, so ``consistency``
     is ``None`` here; when self-consistency lands (M6) its result should be
@@ -131,7 +152,9 @@ def build_eval_pipeline(
                 f"No image for label {stem!r} under {images_dir} "
                 f"(tried suffixes: {', '.join(image_suffixes)})"
             )
-        extraction, report, triage_result = run_receipt(image_path, client, ctx)
+        extraction, report, triage_result = run_receipt(
+            image_path, client, ctx, default_currency=default_currency
+        )
         confidence = score_confidence(extraction, report, triage_result, consistency=None)
         return extraction, confidence
 
