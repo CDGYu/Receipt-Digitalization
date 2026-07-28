@@ -41,6 +41,11 @@ from sqlalchemy.orm import Session
 from ..extract.clients.base import VLMResponse
 from ..extract.paths import flatten
 from ..extract.schema import Legibility, ReceiptExtraction
+from ..ingest.dedupe import (
+    find_near_duplicate_image,
+    find_semantic_duplicate,
+    link_duplicate,
+)
 from ..ingest.ingest import ReceiptJob
 from ..score.confidence import ReceiptStatus
 from ..validate.report import ValidationReport
@@ -55,7 +60,10 @@ from .models import (
 
 __all__ = [
     "apply_corrections",
+    "find_duplicate_by_content",
+    "find_duplicate_by_phash",
     "get_receipt",
+    "mark_duplicate",
     "query_receipts",
     "redact_pan",
     "save_extraction",
@@ -431,6 +439,123 @@ def query_receipts(
 
     query = query.order_by(Receipt.created_at, Receipt.id).limit(limit).offset(offset)
     return list(session.scalars(query))
+
+
+# --------------------------------------------------------------------------- #
+# Duplicate detection (§14.1)
+#
+# The *decisions* -- how close two hashes must be, what makes two receipts the
+# same purchase -- stay in the pure helpers in ``receipts.ingest.dedupe``, which
+# take injected candidates and are unit tested without a database. What lives
+# here is only the part that needs a session: loading the candidate set and
+# turning a matched id back into a row. SQL narrows on the cheap indexed columns;
+# the pure helper makes the call.
+# --------------------------------------------------------------------------- #
+
+
+def find_duplicate_by_phash(
+    session: Session,
+    phash: str,
+    *,
+    threshold: int = 5,
+    exclude_id: uuid.UUID | None = None,
+) -> Receipt | None:
+    """The first receipt whose stored hash is within ``threshold`` bits, or ``None``.
+
+    Feeds ``(id, image_phash)`` pairs to
+    :func:`~receipts.ingest.dedupe.find_near_duplicate_image`. Rows with an empty
+    ``image_phash`` are skipped (an unhashed receipt is not comparable, and
+    ``int("", 16)`` would raise), as is ``exclude_id`` -- pass the receipt's own
+    id so it cannot be reported as its own duplicate.
+
+    An empty ``phash`` argument matches nothing rather than raising: a receipt we
+    could not hash must not be declared a duplicate of anything.
+
+    Candidates are ordered by ``created_at`` then ``id``, so "the first match"
+    is the oldest receipt and the same query always returns the same answer.
+    """
+    if not phash:
+        return None
+
+    query = select(Receipt.id, Receipt.image_phash).where(Receipt.image_phash != "")
+    if exclude_id is not None:
+        query = query.where(Receipt.id != exclude_id)
+    query = query.order_by(Receipt.created_at, Receipt.id)
+
+    candidates = session.execute(query).tuples().all()
+    match_id = find_near_duplicate_image(phash, candidates, threshold)
+    return session.get(Receipt, match_id) if match_id is not None else None
+
+
+def find_duplicate_by_content(
+    session: Session,
+    merchant_id: uuid.UUID | None,
+    txn_date: date_cls | None,
+    total: Decimal | None,
+    *,
+    exclude_id: uuid.UUID | None = None,
+) -> Receipt | None:
+    """A receipt with the same merchant *and* date *and* total, or ``None``.
+
+    Delegates the match to
+    :func:`~receipts.ingest.dedupe.find_semantic_duplicate`.
+
+    **Insufficient keys match nothing.** With no ``total`` or no ``txn_date``
+    there is no identifying key left, and matching on what remains would make
+    every undated or unpriced receipt a "duplicate" of every other -- silently
+    merging unrelated purchases, which is far worse than missing a re-upload. A
+    NULL ``merchant_id`` *is* allowed: an unresolved merchant then only matches
+    other receipts whose merchant is equally unresolved.
+
+    The ``merchant_id`` and ``txn_date`` equality is pushed into SQL (they are
+    indexed together, per §6.2). The ``total`` comparison deliberately is not:
+    it stays in Python where it is an exact ``Decimal`` comparison, because
+    SQLite would compare a ``Numeric`` bind parameter as a float (ADR-0001).
+    """
+    if total is None or txn_date is None:
+        return None
+
+    query = select(Receipt.id, Receipt.merchant_id, Receipt.txn_date, Receipt.total).where(
+        Receipt.txn_date == txn_date
+    )
+    # ``= NULL`` is never true in SQL, so an unresolved merchant needs IS NULL.
+    if merchant_id is None:
+        query = query.where(Receipt.merchant_id.is_(None))
+    else:
+        query = query.where(Receipt.merchant_id == merchant_id)
+    if exclude_id is not None:
+        query = query.where(Receipt.id != exclude_id)
+    query = query.order_by(Receipt.created_at, Receipt.id)
+
+    candidates = [dict(row) for row in session.execute(query).mappings()]
+    match_id = find_semantic_duplicate(merchant_id, txn_date, total, candidates)
+    return session.get(Receipt, match_id) if match_id is not None else None
+
+
+def mark_duplicate(session: Session, new_id: uuid.UUID, existing_id: uuid.UUID) -> Receipt:
+    """Record that ``new_id`` duplicates ``existing_id`` and return the new row.
+
+    The link is one-way and points at the receipt that was already there:
+    ``receipts.duplicate_of`` on the *new* row. Both ids must exist -- a
+    dangling self-FK would be accepted by SQLite with foreign keys off -- and a
+    receipt cannot duplicate itself, which would make the chain a cycle. Either
+    case raises ``ValueError`` before anything is written.
+
+    Flushes; does not commit.
+    """
+    if new_id == existing_id:
+        raise ValueError(f"receipt {new_id} cannot be a duplicate of itself")
+
+    new_receipt = session.get(Receipt, new_id)
+    if new_receipt is None:
+        raise ValueError(f"no receipt with id {new_id}")
+    if session.get(Receipt, existing_id) is None:
+        raise ValueError(f"no receipt with id {existing_id}")
+
+    _linked_new, linked_existing = link_duplicate(new_id, existing_id)
+    new_receipt.duplicate_of = linked_existing
+    session.flush()
+    return new_receipt
 
 
 # --------------------------------------------------------------------------- #

@@ -26,7 +26,10 @@ from .models import (
 )
 from .repository import (
     apply_corrections,
+    find_duplicate_by_content,
+    find_duplicate_by_phash,
     get_receipt,
+    mark_duplicate,
     query_receipts,
     redact_pan,
     save_extraction,
@@ -48,9 +51,12 @@ __all__ = [
     "ReviewTask",
     "ValidationFinding",
     "apply_corrections",
+    "find_duplicate_by_content",
+    "find_duplicate_by_phash",
     "get_receipt",
     "make_engine",
     "make_session_factory",
+    "mark_duplicate",
     "query_receipts",
     "redact_pan",
     "save_extraction",
