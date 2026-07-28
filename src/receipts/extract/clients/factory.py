@@ -8,6 +8,13 @@ the process. The client constructors themselves raise ``RuntimeError`` when the
 SDK is absent; we raise an equally clear ``RuntimeError`` when configuration is
 missing the key or model needed to build a working client, and ``ValueError``
 for a provider id we do not recognise.
+
+Every setting a client can honour has to be forwarded here explicitly. Both
+client constructors carry their own ``timeout_s`` default (180s and 120s), so a
+factory that omitted ``VLM_TIMEOUT_S`` would leave the configured value
+silently ignored — the same shape of gap ``VLM_BASE_URL`` once had. That is not
+cosmetic: CPU inference can spend minutes on a single call, and the fallback
+default aborts the very first one with a transient timeout.
 """
 
 from __future__ import annotations
@@ -56,7 +63,11 @@ def make_client(settings: Settings) -> VLMClient:
         model = _require(settings.vlm_model_extract, provider, "VLM_MODEL_EXTRACT")
         from .anthropic_client import AnthropicVLMClient  # lazy: optional SDK
 
-        return AnthropicVLMClient(model_id=model, api_key=key)
+        return AnthropicVLMClient(
+            model_id=model,
+            api_key=key,
+            timeout_s=float(settings.vlm_timeout_s),
+        )
 
     if provider in _OPENAI_BASE_URLS:
         key = _require(settings.vlm_api_key, provider, "VLM_API_KEY")
@@ -78,6 +89,7 @@ def make_client(settings: Settings) -> VLMClient:
             base_url=base_url,
             api_key=key,
             use_tools=use_tools,
+            timeout_s=float(settings.vlm_timeout_s),
         )
 
     raise ValueError(

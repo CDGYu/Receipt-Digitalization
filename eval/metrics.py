@@ -193,6 +193,11 @@ class EvalReport:
     set but are not observable through the injected ``pipeline_fn`` (which
     returns only an extraction and a confidence), so they stay ``None`` here and
     are filled in by callers that measure the real pipeline.
+
+    ``n_failed`` / ``failures`` carry the receipts whose pipeline call raised.
+    They are *included* in ``n_receipts`` — a receipt the system could not read
+    is processed but not correct, never a receipt that quietly left the batch
+    (§18: nothing is ever silently dropped).
     """
 
     n_receipts: int
@@ -211,6 +216,10 @@ class EvalReport:
     cost_per_receipt: Decimal | None = None    # 6
     p50_latency_s: float | None = None         # 6
     p95_latency_s: float | None = None         # 6
+
+    #: Receipts whose pipeline call raised, and ``(receipt_id, error)`` for each.
+    n_failed: int = 0
+    failures: list[tuple[str, str]] = field(default_factory=list)
 
     calibration: list[tuple[Decimal, float, float]] = field(default_factory=list)
     results: list[EvalResult] = field(default_factory=list)

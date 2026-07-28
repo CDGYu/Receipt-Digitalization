@@ -181,3 +181,28 @@ def test_format_report_contains_metric_labels():
         "Line-item F1",
     ):
         assert label in text
+
+
+def test_format_report_shows_failed_count():
+    # A run that partially failed must say so on screen, not just in the JSON.
+    report = EvalReport(
+        n_receipts=3,
+        n_auto_approved=1,
+        n_critical_correct=1,
+        auto_approve_threshold=D("0.85"),
+        auto_approval_precision=1.0,
+        auto_approval_rate=1 / 3,
+        critical_field_accuracy=1 / 3,
+        field_accuracy=0.95,
+        line_item_precision=1.0,
+        line_item_recall=1.0,
+        line_item_f1=1.0,
+        n_failed=2,
+        failures=[("r2", "RuntimeError: boom"), ("r3", "RuntimeError: boom")],
+    )
+
+    text = format_report(report)
+
+    assert "Failed" in text
+    failed_line = next(line for line in text.splitlines() if "Failed" in line)
+    assert "2" in failed_line

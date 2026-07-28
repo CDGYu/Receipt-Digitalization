@@ -99,3 +99,51 @@ def test_explicit_use_tools_overrides_provider_default():
     # VLM_PROVIDER=openai pointed at a local Ollama via VLM_BASE_URL.
     assert _client(vlm_provider="openai", vlm_use_tools=False).use_tools is False
     assert _client(vlm_provider="ollama", vlm_use_tools=True).use_tools is True
+
+
+# --------------------------------------------------------------------------- #
+# VLM_TIMEOUT_S propagation
+# --------------------------------------------------------------------------- #
+
+
+def test_openai_provider_honors_configured_timeout():
+    # A CPU-bound local vision model can take minutes for a single call. If the
+    # factory drops VLM_TIMEOUT_S the client silently falls back to its own
+    # 180s default and the very first call dies with a transient timeout.
+    client = _client(vlm_provider="ollama", vlm_timeout_s=900)
+    # timeout is propagated to the openai SDK client, same shape as base_url.
+    assert float(client._client.timeout) == 900.0
+
+
+def test_openai_provider_propagates_default_timeout():
+    # The configured value must reach the client even when it is the Settings
+    # default -- otherwise the SDK's own (longer) default masks the config.
+    client = _client(vlm_provider="openai")
+    assert float(client._client.timeout) == float(Settings(_env_file=None).vlm_timeout_s)
+
+
+def test_anthropic_provider_honors_configured_timeout(monkeypatch):
+    # The `anthropic` SDK is not installed, so a real client cannot be built.
+    # `make_client` resolves AnthropicVLMClient through a lazy
+    # `from .anthropic_client import ...` at call time, so patching the module
+    # attribute captures exactly the kwargs the factory passes.
+    from receipts.extract.clients import anthropic_client
+
+    captured: dict[str, object] = {}
+
+    class _Recorder:
+        def __init__(self, model_id: str, **kwargs: object) -> None:
+            captured["model_id"] = model_id
+            captured.update(kwargs)
+
+    monkeypatch.setattr(anthropic_client, "AnthropicVLMClient", _Recorder)
+    make_client(
+        Settings(
+            _env_file=None,
+            vlm_provider="anthropic",
+            vlm_api_key="k",
+            vlm_model_extract="m",
+            vlm_timeout_s=900,
+        )
+    )
+    assert captured["timeout_s"] == 900.0

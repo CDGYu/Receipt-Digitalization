@@ -108,6 +108,10 @@ def format_report(report: EvalReport) -> str:
     cost/latency line. Cost and latency are not observable through the injected
     ``pipeline_fn`` (the offline harness leaves them ``None``), so they render
     as ``n/a`` rather than a misleading zero.
+
+    The failed count always shows, and each failure is listed with its error
+    text when there is one — a partially failed run must be obvious on screen,
+    not something you find later by reading the JSON.
     """
 
     def pct(value: float) -> str:
@@ -128,6 +132,7 @@ def format_report(report: EvalReport) -> str:
         f"  Receipts:                 {report.n_receipts:>12d}",
         f"  Auto-approved:            {report.n_auto_approved:>12d}",
         f"  Critical-correct:         {report.n_critical_correct:>12d}",
+        f"  Failed:                   {report.n_failed:>12d}",
         f"  Auto-approve threshold:   {str(report.auto_approve_threshold):>12}",
         rule,
         f"  Auto-approval precision:  {pct(report.auto_approval_precision)}",
@@ -142,6 +147,17 @@ def format_report(report: EvalReport) -> str:
         f"  p50 latency:              {p50:>12}",
         f"  p95 latency:              {p95:>12}",
     ]
+
+    # Name the receipts that failed and why. The count alone is not actionable
+    # when a single call costs minutes; the error text is what tells you whether
+    # to raise VLM_TIMEOUT_S or fix a label.
+    if report.failures:
+        lines.append(rule)
+        lines.append("  Failures:")
+        lines.extend(
+            f"    {receipt_id}: {detail}" for receipt_id, detail in report.failures
+        )
+
     return "\n".join(lines)
 
 

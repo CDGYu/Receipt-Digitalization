@@ -3,6 +3,7 @@ no golden data, no network. The pipeline is a stub callable."""
 
 from __future__ import annotations
 
+import json
 from decimal import Decimal as D
 
 from eval.harness import run_eval
@@ -209,3 +210,79 @@ def test_run_eval_counts_and_writes_results_file(tmp_path):
 
     written = list(results_dir.glob("*.json"))
     assert len(written) == 1
+
+
+def test_run_eval_survives_a_failing_receipt(tmp_path):
+    # A single receipt that raises must not abort the batch. At minutes per call
+    # that would throw away the whole run and write no results file at all --
+    # the one artifact §16 treats as non-negotiable.
+    golden = tmp_path / "golden"
+    labels = golden / "labels"
+    labels.mkdir(parents=True)
+
+    (labels / "r1.json").write_text(
+        _extraction(total="224.00").model_dump_json(), encoding="utf-8"
+    )
+    (labels / "r2.json").write_text(
+        _extraction(total="500.00", name="OTHER STORE").model_dump_json(),
+        encoding="utf-8",
+    )
+
+    def pipeline_fn(path):
+        if path.stem == "r2":
+            raise RuntimeError("connection: Request timed out.")
+        return _extraction(total="224.00"), D("0.95")
+
+    results_dir = tmp_path / "results"
+    report = run_eval(golden, pipeline_fn, results_dir=results_dir)
+
+    # The run completes and the failure is counted, not dropped.
+    assert report.n_receipts == 2
+    assert report.n_failed == 1
+    assert report.failures == [("r2", "RuntimeError: connection: Request timed out.")]
+
+    # A receipt the system could not read is processed but never a success.
+    failed = next(r for r in report.results if r.receipt_id == "r2")
+    assert failed.critical_correct is False
+    assert failed.confidence == D("0")
+    assert failed.field_acc == {}
+    assert report.n_critical_correct == 1
+    assert report.n_auto_approved == 1  # only r1; confidence 0 can never approve
+
+    # The empty field map keeps the field-accuracy denominator honest: r1 read
+    # perfectly, so the aggregate stays 1.0 rather than being halved by a
+    # receipt that produced nothing.
+    assert report.field_accuracy == 1.0
+
+    # The error detail reaches the committed artifact.
+    written = list(results_dir.glob("*.json"))
+    assert len(written) == 1
+    payload = json.loads(written[0].read_text(encoding="utf-8"))
+    assert payload["counts"]["receipts"] == 2
+    assert payload["counts"]["failed"] == 1
+    assert payload["failures"] == [
+        ["r2", "RuntimeError: connection: Request timed out."]
+    ]
+
+
+def test_run_eval_records_an_unreadable_label_as_a_failure(tmp_path):
+    # Resilience covers the label load too: corrupt golden data is recorded and
+    # the remaining receipts still get scored.
+    golden = tmp_path / "golden"
+    labels = golden / "labels"
+    labels.mkdir(parents=True)
+
+    (labels / "r1.json").write_text(
+        _extraction(total="224.00").model_dump_json(), encoding="utf-8"
+    )
+    (labels / "r2.json").write_text("{not json", encoding="utf-8")
+
+    def pipeline_fn(path):
+        return _extraction(total="224.00"), D("0.95")
+
+    report = run_eval(golden, pipeline_fn, results_dir=tmp_path / "results")
+
+    assert report.n_receipts == 2
+    assert report.n_failed == 1
+    assert [rid for rid, _detail in report.failures] == ["r2"]
+    assert report.n_auto_approved == 1

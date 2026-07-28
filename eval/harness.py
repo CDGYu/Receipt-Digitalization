@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from dataclasses import field as dc_field
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
@@ -59,6 +60,7 @@ class _Accumulator:
     li_precision: float = 0.0
     li_recall: float = 0.0
     li_f1: float = 0.0
+    failures: list[tuple[str, str]] = dc_field(default_factory=list)
 
     def add(self, crit: bool, facc: dict[str, bool], prf: tuple[float, float, float]) -> None:
         self.n_receipts += 1
@@ -69,6 +71,18 @@ class _Accumulator:
         self.li_precision += p
         self.li_recall += r
         self.li_f1 += f
+
+    def add_failure(self, receipt_id: str, detail: str) -> None:
+        """Fold in a receipt the pipeline could not process.
+
+        Counted as processed but not correct: it lands in ``n_receipts`` so the
+        batch size stays honest, contributes nothing to ``n_critical_correct``,
+        and scores zero on line items. The field map is empty on purpose — a
+        receipt that produced nothing must not inflate *or* deflate the
+        field-accuracy denominator, only the metrics it genuinely bears on.
+        """
+        self.failures.append((receipt_id, detail))
+        self.add(False, {}, (0.0, 0.0, 0.0))
 
 
 def _coerce_confidence(value: Any) -> Decimal:
@@ -94,6 +108,8 @@ def _build_report(results: list[EvalResult], acc: _Accumulator) -> EvalReport:
         line_item_precision=(acc.li_precision / n) if n else 0.0,
         line_item_recall=(acc.li_recall / n) if n else 0.0,
         line_item_f1=(acc.li_f1 / n) if n else 0.0,
+        n_failed=len(acc.failures),
+        failures=list(acc.failures),
         calibration=calibration_curve(results),
         results=results,
     )
@@ -110,6 +126,7 @@ def _report_to_dict(report: EvalReport) -> dict[str, Any]:
             "receipts": report.n_receipts,
             "auto_approved": report.n_auto_approved,
             "critical_correct": report.n_critical_correct,
+            "failed": report.n_failed,
         },
         "metrics": {
             "auto_approval_precision": report.auto_approval_precision,
@@ -127,6 +144,9 @@ def _report_to_dict(report: EvalReport) -> dict[str, Any]:
             "p50_latency_s": report.p50_latency_s,
             "p95_latency_s": report.p95_latency_s,
         },
+        # Verbatim error text, not just a count: a run that silently reports
+        # "2 failed" is not debuggable four minutes per receipt later.
+        "failures": [[receipt_id, detail] for receipt_id, detail in report.failures],
         "calibration": [
             [str(threshold), rate, precision]
             for threshold, rate, precision in report.calibration
@@ -169,6 +189,14 @@ def run_eval(
     ``{date}-{prompt_version}.json`` and returned.
 
     ``pipeline_fn`` is injected, so no images or network are required.
+
+    One receipt never takes the batch down with it. Any exception raised while
+    loading a label, running the pipeline, or scoring the result is caught,
+    recorded in ``failures``, and the run moves on — a real call can cost
+    minutes, so aborting would discard every receipt already paid for and leave
+    no results file at all. The failed receipt is still counted in
+    ``n_receipts`` with ``critical_correct=False`` and confidence ``0``: it
+    reaches a terminal state and can never be scored as auto-approved.
     """
     golden_dir = Path(golden_dir)
     labels_dir = golden_dir / "labels"
@@ -177,20 +205,35 @@ def run_eval(
     acc = _Accumulator()
 
     for label_path in sorted(labels_dir.glob("*.json")):
-        truth = ReceiptExtraction.model_validate_json(
-            label_path.read_text(encoding="utf-8")
-        )
-        predicted, confidence = pipeline_fn(label_path)
+        try:
+            truth = ReceiptExtraction.model_validate_json(
+                label_path.read_text(encoding="utf-8")
+            )
+            predicted, confidence = pipeline_fn(label_path)
 
-        facc = field_accuracy(predicted, truth)
-        crit = critical_field_accuracy(predicted, truth)
-        prf = line_item_f1(predicted.line_items, truth.line_items)
+            facc = field_accuracy(predicted, truth)
+            crit = critical_field_accuracy(predicted, truth)
+            prf = line_item_f1(predicted.line_items, truth.line_items)
+            conf = _coerce_confidence(confidence)
+        except Exception as exc:  # noqa: BLE001 - one bad receipt must not abort the run
+            acc.add_failure(label_path.stem, f"{type(exc).__name__}: {exc}")
+            results.append(
+                EvalResult(
+                    receipt_id=label_path.stem,
+                    # Decimal, not float, and below every threshold: a receipt
+                    # the system could not read is not a success.
+                    confidence=Decimal("0"),
+                    critical_correct=False,
+                    field_acc={},
+                )
+            )
+            continue
 
         acc.add(crit, facc, prf)
         results.append(
             EvalResult(
                 receipt_id=label_path.stem,
-                confidence=_coerce_confidence(confidence),
+                confidence=conf,
                 critical_correct=crit,
                 field_acc=facc,
             )
