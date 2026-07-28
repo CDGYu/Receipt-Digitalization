@@ -31,6 +31,9 @@ pipeline = [
 anthropic = ["anthropic>=0.40"]
 openai = ["openai>=1.50"]
 postgres = ["psycopg[binary]>=3"]
+# The RQ queue worker. Optional and imported lazily (receipts/worker.py), so the
+# offline test suite and a base install need neither package.
+worker = ["rq>=1.16", "redis>=5"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
