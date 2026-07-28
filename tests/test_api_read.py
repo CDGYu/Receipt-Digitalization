@@ -1,0 +1,303 @@
+"""Tests for the review API's read routes and app factory (P4.T4, spec §14.9).
+
+``pytest.importorskip("fastapi")`` keeps the base test suite offline, matching
+``tests/test_auth.py``.
+
+Everything runs against a file-backed SQLite database (shared across threads,
+unlike ``:memory:`` -- same fixture pattern as ``test_auth.py``), a
+``LocalStorage`` rooted at ``tmp_path``, and a fake ``submit`` that appends to
+a list instead of touching Redis/RQ. ``create_app``'s real
+``_default_submit`` (which imports ``receipts.worker`` lazily) is never
+exercised by this module -- it needs the optional ``worker`` extra, which the
+offline suite does not install.
+
+The database is seeded once per test with three receipts:
+
+  * ``RECEIPT_A`` -- ``auto_approved``, ``confidence_reasons=[]`` (a
+    genuinely clean receipt: nothing lowered the score).
+  * ``RECEIPT_B`` -- ``needs_review``, two findings (``R020`` then ``R011``,
+    oldest first) and two ``confidence_reasons`` whose penalties reconstruct
+    the stored confidence exactly; also the one open review-queue task. This
+    is the ``receipt_id`` fixture.
+  * ``RECEIPT_C`` -- ``pending``, ``confidence_reasons`` left at its column
+    default (``None``): the score was never recorded, which must reach the
+    API as ``null``, not ``[]``. This is the ``pending_receipt_id`` fixture.
+"""
+
+from __future__ import annotations
+
+import uuid
+from datetime import UTC, date, datetime
+from decimal import Decimal
+
+import pytest
+
+pytest.importorskip("fastapi")
+
+from fastapi.testclient import TestClient  # noqa: E402
+
+from config.settings import Settings  # noqa: E402
+from receipts.ingest.storage import LocalStorage  # noqa: E402
+from receipts.persist.models import Base, Receipt, ValidationFinding  # noqa: E402
+from receipts.persist.session import make_engine, make_session_factory  # noqa: E402
+from receipts.persist.users import ROLE_ADMIN, ROLE_REVIEWER, create_user  # noqa: E402
+from receipts.review.api import create_app  # noqa: E402
+from receipts.review.queue import enqueue_review  # noqa: E402
+from receipts.score.confidence import ReceiptStatus  # noqa: E402
+from receipts.validate.report import Severity  # noqa: E402
+
+RECEIPT_A = uuid.uuid4()  # auto_approved, confidence_reasons=[]
+RECEIPT_B = uuid.uuid4()  # needs_review; two findings, two reasons
+RECEIPT_C = uuid.uuid4()  # pending; confidence_reasons never recorded
+
+
+def _seed(session_factory) -> None:
+    """Two reviewer/admin accounts and the three receipts described above."""
+    with session_factory() as session:
+        create_user(session, "alice", "pw-alice", ROLE_REVIEWER)
+        create_user(session, "bob", "pw-bob", ROLE_ADMIN)
+
+        session.add(
+            Receipt(
+                id=RECEIPT_A,
+                status=ReceiptStatus.AUTO_APPROVED,
+                confidence=Decimal("0.930"),
+                confidence_reasons=[],
+                merchant_name_raw="COFFEE CO",
+                txn_date=date(2026, 7, 1),
+                currency="USD",
+                total=Decimal("12.50"),
+                image_key="receipts/2026/07/a/original.jpg",
+                image_phash="",
+            )
+        )
+        session.add(
+            Receipt(
+                id=RECEIPT_B,
+                status=ReceiptStatus.NEEDS_REVIEW,
+                confidence=Decimal("0.570"),
+                confidence_reasons=[
+                    {"reason": "an ERROR finding", "penalty": "-0.350"},
+                    {"reason": "a WARN finding", "penalty": "-0.080"},
+                ],
+                merchant_name_raw="TOTAL WINE",
+                txn_date=date(2026, 7, 2),
+                currency="USD",
+                total=Decimal("1000"),
+                image_key="receipts/2026/07/b/original.jpg",
+                image_phash="",
+            )
+        )
+        session.add(
+            Receipt(
+                id=RECEIPT_C,
+                status=ReceiptStatus.PENDING,
+                confidence=Decimal("0"),
+                image_key="receipts/2026/07/c/original.jpg",
+                image_phash="",
+            )
+        )
+        session.flush()
+
+        # Oldest first: R020 must come back before R011 (get_findings orders
+        # by created_at then id).
+        session.add_all(
+            [
+                ValidationFinding(
+                    receipt_id=RECEIPT_B,
+                    rule_id="R020",
+                    severity=Severity.ERROR,
+                    message="totals do not reconcile",
+                    context={},
+                    resolved_by_repair=False,
+                    created_at=datetime(2026, 7, 2, 12, 0, 0, tzinfo=UTC),
+                ),
+                ValidationFinding(
+                    receipt_id=RECEIPT_B,
+                    rule_id="R011",
+                    severity=Severity.WARN,
+                    message="date looks implausible",
+                    context={},
+                    resolved_by_repair=False,
+                    created_at=datetime(2026, 7, 2, 12, 0, 1, tzinfo=UTC),
+                ),
+            ]
+        )
+        enqueue_review(session, RECEIPT_B, reason="needs_review", priority=1)
+        session.commit()
+
+
+@pytest.fixture()
+def session_factory(tmp_path):
+    engine = make_engine(f"sqlite:///{(tmp_path / 'receipts.db').as_posix()}")
+    Base.metadata.create_all(engine)
+    factory = make_session_factory(engine)
+    _seed(factory)
+    return factory
+
+
+@pytest.fixture()
+def settings() -> Settings:
+    """Hermetic settings: a developer's ``.env`` must not steer these tests."""
+    return Settings(_env_file=None, session_secret="test-secret", session_cookie_secure=False)
+
+
+@pytest.fixture()
+def submitted() -> list:
+    """What a fake ``submit`` records instead of touching Redis/RQ."""
+    return []
+
+
+@pytest.fixture()
+def app(session_factory, settings, tmp_path, submitted):
+    return create_app(
+        session_factory=session_factory,
+        storage=LocalStorage(tmp_path / "blobs"),
+        submit=submitted.append,
+        settings=settings,
+    )
+
+
+@pytest.fixture()
+def client(app) -> TestClient:
+    """Unauthenticated -- only ``GET /health`` is expected to work through it."""
+    return TestClient(app)
+
+
+def _logged_in(app, username: str, password: str) -> TestClient:
+    client = TestClient(app)
+    response = client.post("/auth/login", json={"username": username, "password": password})
+    assert response.status_code == 200
+    return client
+
+
+@pytest.fixture()
+def reviewer_client(app) -> TestClient:
+    return _logged_in(app, "alice", "pw-alice")
+
+
+@pytest.fixture()
+def admin_client(app) -> TestClient:
+    return _logged_in(app, "bob", "pw-bob")
+
+
+@pytest.fixture()
+def receipt_id() -> uuid.UUID:
+    return RECEIPT_B
+
+
+@pytest.fixture()
+def pending_receipt_id() -> uuid.UUID:
+    return RECEIPT_C
+
+
+@pytest.fixture()
+def clients(app, reviewer_client, admin_client) -> dict[str, TestClient]:
+    anonymous = TestClient(app)
+    api_key = TestClient(app)
+    api_key.headers.update({"X-API-Key": "not-configured-but-irrelevant-here"})
+    return {
+        "anonymous": anonymous,
+        "api_key": api_key,
+        "reviewer": reviewer_client,
+        "admin": admin_client,
+    }
+
+
+@pytest.fixture()
+def empty_session_factory(tmp_path):
+    """A second, genuinely empty database -- no receipts, no queue tasks."""
+    engine = make_engine(f"sqlite:///{(tmp_path / 'empty.db').as_posix()}")
+    Base.metadata.create_all(engine)
+    factory = make_session_factory(engine)
+    with factory() as session:
+        create_user(session, "alice", "pw-alice", ROLE_REVIEWER)
+        session.commit()
+    return factory
+
+
+@pytest.fixture()
+def empty_client(empty_session_factory, settings, tmp_path) -> TestClient:
+    empty_app = create_app(
+        session_factory=empty_session_factory,
+        storage=LocalStorage(tmp_path / "empty-blobs"),
+        submit=lambda job: None,
+        settings=settings,
+    )
+    return _logged_in(empty_app, "alice", "pw-alice")
+
+
+# --------------------------------------------------------------------------- #
+# Brief step 1, verbatim
+# --------------------------------------------------------------------------- #
+
+
+def test_health_needs_no_auth(client):
+    response = client.get("/health")
+    assert response.status_code == 200
+    assert response.json()["status"] == "ok"
+
+
+def test_money_is_serialized_as_a_string(reviewer_client, receipt_id):
+    body = reviewer_client.get(f"/receipts/{receipt_id}").json()
+    assert body["totals"]["total"] == "1000.0000"  # never a JSON float
+    assert isinstance(body["confidence"], str)
+
+
+def test_detail_returns_findings_and_the_reasons_that_made_the_score(reviewer_client, receipt_id):
+    body = reviewer_client.get(f"/receipts/{receipt_id}").json()
+    assert [f["rule_id"] for f in body["findings"]] == ["R020", "R011"]
+    penalties = [Decimal(r["penalty"]) for r in body["confidence_reasons"]]
+    assert (Decimal("1") + sum(penalties)).quantize(Decimal("0.001")) == Decimal(body["confidence"])
+
+
+def test_reasons_never_recorded_is_null_not_empty(reviewer_client, pending_receipt_id):
+    body = reviewer_client.get(f"/receipts/{pending_receipt_id}").json()
+    assert body["confidence_reasons"] is None
+
+
+def test_list_filters_and_pages(reviewer_client):
+    body = reviewer_client.get("/receipts", params={"status": "needs_review", "limit": 1}).json()
+    assert len(body["items"]) == 1
+    assert body["has_more"] is False
+
+
+def test_list_caps_the_page_size(reviewer_client):
+    assert reviewer_client.get("/receipts", params={"limit": 10_000}).status_code == 422
+
+
+def test_unknown_receipt_is_404(reviewer_client):
+    assert reviewer_client.get(f"/receipts/{uuid.uuid4()}").status_code == 404
+
+
+def test_metrics_on_an_empty_database_reports_null_not_a_rate(empty_client):
+    body = empty_client.get("/metrics").json()
+    # An undefined rate is null. Reporting 1.0 on zero receipts is exactly the
+    # vacuous artifact this project already produced once.
+    assert body["auto_approval_rate"] is None
+    assert body["counts_by_status"] == {}
+
+
+def test_metrics_reports_the_queue_and_the_thresholds(reviewer_client):
+    body = reviewer_client.get("/metrics").json()
+    assert body["queue"]["open"] >= 1
+    assert body["thresholds"] == {"auto_approve": "0.85", "review": "0.60"}
+
+
+READ_ROUTES = [
+    ("GET", "/receipts", {"reviewer", "admin"}),
+    ("GET", "/receipts/{id}", {"reviewer", "admin"}),
+    ("GET", "/metrics", {"reviewer", "admin"}),
+]
+
+
+@pytest.mark.parametrize("method,path,allowed", READ_ROUTES)
+@pytest.mark.parametrize("actor", ["anonymous", "api_key", "reviewer", "admin"])
+def test_auth_matrix(clients, method, path, allowed, actor, receipt_id):
+    response = clients[actor].request(method, path.format(id=receipt_id))
+    if actor in allowed:
+        assert response.status_code == 200
+    elif actor in {"anonymous", "api_key"}:
+        assert response.status_code == 401
+    else:
+        assert response.status_code == 403
