@@ -5,18 +5,17 @@ files in "Key references" below. Last updated: **2026-07-28**.
 
 ## Snapshot
 
-- **`master` @ `8cbef5a`** — Phase 0 foundations + Phase 1 offline modules + the
-  online wiring (config, client factory, M1 pipeline, confidence scoring,
-  one-command baseline runner). 285 tests.
-- **`master` @ `df528cb`** — Phase 3 (persistence) merged: the 7-table ORM +
-  `docker-compose.yml`, Alembic migrations, the repository layer, DB-backed
-  dedupe, the review queue, and the 4-sheet XLSX export.
-  **410 tests passing, ruff clean.** No feature branch is open.
+- **`master` @ `9bd4cd0`** — **410 tests passing, ruff clean. No feature branch
+  is open** (`feat/db-layer` is merged and can be deleted).
+- Merged so far: Phase 0 foundations, Phase 1 offline modules, the online wiring
+  (config, client factory, M1 pipeline, confidence scoring, one-command baseline
+  runner), and **Phase 3 persistence** (7-table ORM + `docker-compose.yml`,
+  Alembic migrations, repository layer, DB-backed dedupe, review queue, 4-sheet
+  XLSX export).
 - Phase 3 is complete except **P3.T6 calibration** (blocked on the golden set).
   Next milestone is **Phase 4 (service)**, which starts with the auth decision.
 - Dev interpreter **Python 3.14.4**; CI matrix 3.11/3.12.
 - Plan of record: `IMPLEMENTATION_PLAN.md`. Running log: `.superpowers/sdd/progress.md`.
-
 ## What this project is
 
 A VLM pipeline turning receipt photos into accounting-grade structured data.
@@ -44,7 +43,7 @@ dropped. Excel is output only; the DB is the source of truth.
   anthropic_client, openai_compat, **factory**}
 - `validate/`: rules (28), report, context, validator
 - `normalize/`: numbers, dates, text  ·  `preprocess/`: image_ops, bounds, quality
-- `ingest/`: storage, dedupe, ingest  ·  `export/`: xlsx (Receipts + LineItems only)
+- `ingest/`: storage, dedupe, ingest  ·  `export/`: xlsx (all four §13 sheets)
 - `score/`: confidence (score_confidence / explain_confidence / route / ReceiptStatus)
 - `pipeline.py`: prepare_image, run_receipt, build_eval_pipeline
 - `config/settings.py`; `eval/`: metrics, harness, golden_set, run_baseline
@@ -71,8 +70,12 @@ dropped. Excel is output only; the DB is the source of truth.
     regression-tested. Keep its silent-case tests intact when touching it.
 
 ## NOT built yet (remaining work)
-- `review/{queue,api}.py` (FastAPI) + **auth** ; `pipeline.process_receipt`
-  (full orchestrator) + worker ; `cli.py` (Phase 4)
+
+- **Phase 4 (service):** `review/api.py` (FastAPI) + **auth** (decision needed);
+  `pipeline.process_receipt` (the full orchestrator that wraps every stage so a
+  failure marks `needs_review` instead of losing the job) + the RQ worker, incl.
+  a global VLM concurrency cap / cost guard; `cli.py`.
+  (`review/queue.py` is already built.)
 - **Frontend** review UI — framework undecided (Phase 5)
 - `merchants/{fingerprint,registry}.py` + few-shot injection (Phase 6)
 - Self-consistency wired into `run_receipt` (extractor supports it; the M1
@@ -113,9 +116,10 @@ dropped. Excel is output only; the DB is the source of truth.
 
 - Move confidence penalty weights into `config/rules.yaml` (calibration, P3.T6).
 - Consolidate the `0.85`/`0.60` thresholds (duplicated in `route()`, `Settings`,
-  `eval.metrics`) onto `Settings` at M3.
+  `eval.metrics`) onto `Settings` — do this while wiring Phase 4.
 - `run_receipt` returns the raw-validated report but the normalized extraction
-  (an ambiguous date is nulled) — reconcile when persistence lands (M3).
+  (an ambiguous date is nulled), so a persisted score can carry a date-null
+  penalty the stored report does not show — reconcile in `process_receipt`.
 - Handwriting penalty reads only `receipt.meta.is_handwritten`; consider OR-ing
   `triage.is_handwritten`.
 - `vllm`/`ollama` still require `VLM_API_KEY`; `VLM_BASE_URL` ignored for `anthropic`.
@@ -158,6 +162,13 @@ dropped. Excel is output only; the DB is the source of truth.
   inventory, §15 milestones, §16 eval, §17 config, §18 traps, §19 DoD.
 - `README.md` (overview, §5 design decisions), `VLM_AND_DATA.md` (model/data).
 - `IMPLEMENTATION_PLAN.md` — the phased task list (authoritative).
-- `docs/adr/` — implementation decisions (0001–0005).
+- `docs/adr/` — implementation decisions (**0001–0010**; see `docs/adr/README.md`).
+  0001 `Decimal` money path · 0002 provider abstraction/config · 0003 confidence
+  penalties · 0004 portable persistence + Docker · 0005 tooling/offline tests ·
+  0006 repository conventions · **0007 PAN redaction + money integrity (read
+  before touching card/money writes)** · 0008 review-queue concurrency ·
+  0009 lazy `persist` surface · 0010 export decoupling.
+- `semantic-review/` — the whole-branch review write-ups (untracked). The
+  `2026-07-28-…-feat-db-layer` one documents the PAN/NaN findings in detail.
 - `.kiro/steering/receipt-system.md` — always-on load-bearing rules.
 - `.superpowers/sdd/progress.md` — the running task ledger.

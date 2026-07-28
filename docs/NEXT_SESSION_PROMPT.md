@@ -1,7 +1,7 @@
 # Next-Session Kickoff Prompt
 
-Paste the block below as the first message of the next session (adjust the
-"Today's goal" line to what you want done).
+Paste the block between the `---` markers as the first message of the next
+session, and fill in the "Today's goal" line.
 
 ---
 
@@ -9,75 +9,116 @@ You are continuing work on the **Receipt Digitization System**, a VLM pipeline
 that turns receipt photos into accounting-grade structured data. Pick up exactly
 where the last session left off.
 
-**Read these first (in order), then confirm you understand the state:**
+**Read these first (in order), then confirm the state back to me:**
 1. `docs/MEMORY.md` — current state, what's built/not built, env, blockers,
    deferred items, and the workflow to follow.
-2. `.superpowers/sdd/progress.md` — the running task ledger (most recent entries
-   are the live status).
-3. `docs/adr/` (0001–0005) — the implementation decisions to stay consistent with.
+2. `.superpowers/sdd/progress.md` — the running task ledger (newest entries at
+   the bottom are the live status).
+3. `docs/adr/README.md` then the ADRs it indexes (**0001–0010**). Read **0001**
+   (`Decimal` money path) and **0007** (PAN redaction + money integrity) before
+   touching anything that writes money or card data.
 4. `.kiro/steering/receipt-system.md` — the load-bearing rules (also auto-loaded).
 5. `IMPLEMENTATION_PLAN.md` — the authoritative phased task list.
-6. `RECEIPT_SYSTEM_SPEC.md` as needed — §6 (data model), §12 (confidence), §14
-   (function inventory), §15 (milestones), §16 (eval), §17 (config).
+6. `RECEIPT_SYSTEM_SPEC.md` as needed — §6 data model, §12 confidence/routing,
+   §13 Excel, §14 function inventory (§14.9 review API, §14.10 pipeline/CLI),
+   §15 milestones, §16 eval, §17 config, §18 traps, §19 definition of done.
 
-**Where we are:** `master` @ `8cbef5a`; active branch **`feat/db-layer`** (2
-commits ahead, **292 tests passing, ruff clean**) with the 7-table SQLAlchemy
-ORM + `docker-compose.yml`. The online pipeline (config → factory → preprocess →
-triage → extract+repair → normalize → score → route → eval) is built and merged
-to `master`.
+**Where we are:** `master @ 9bd4cd0`, **410 tests passing, ruff clean, no feature
+branch open.** Merged: Phase 0 foundations, Phase 1 offline modules (normalize,
+preprocess, ingest, export), the online wiring (config → client factory →
+preprocess → triage → extract+repair → normalize → score → route → eval, plus
+`python -m eval.run_baseline`), and **Phase 3 persistence** (7-table ORM,
+`docker-compose.yml`, Alembic migrations, repository layer, DB-backed dedupe,
+review queue, 4-sheet XLSX export).
 
 **Non-negotiables:** `Decimal` on the money path (never `float`); deterministic,
-pure validation; prefer `null` over a confident wrong value; keep the full suite
-green and `ruff check .` clean; `python -m pytest` runs offline via the fake
-client. Do **not** stage `.kiro/settings/mcp.json`.
+pure validation; prefer `null` over a confident wrong value; a full PAN never
+persisted (last 4 only); nothing silently dropped; keep the full suite green and
+`ruff check .` clean; `python -m pytest` must stay offline (fake client, SQLite).
+Do **not** stage `.kiro/settings/mcp.json`.
 
-**Workflow:** subagent-driven — one fresh `general-task-execution` implementer
-per task (brief it to read real signatures first, work TDD, stage only its own
-files). After each task: review the diff, run `pytest` + `ruff`, commit
-(`feat(scope): …`), and update `.superpowers/sdd/progress.md`. When the branch's
-milestone is complete, run a `semantic_reviewer` whole-branch review, then
-fast-forward merge to `master`.
+**Workflow:** subagent-driven — one fresh `general-task-execution` implementer per
+task, briefed to read the real signatures first, work TDD, keep the suite green,
+and stage only its own files. After each task: review the diff, run `pytest` +
+`ruff`, commit (`feat(scope): …`), update `.superpowers/sdd/progress.md`. Work on
+a feature branch per milestone; at the end run a `semantic_reviewer` whole-branch
+review, fix what it blocks on, re-verify, then fast-forward merge to `master`.
+(Last session that review caught two real bugs — take it seriously.)
 
-**Remaining tasks (continue in this order — full detail in `IMPLEMENTATION_PLAN.md`):**
+**Remaining tasks, in order (full detail in `IMPLEMENTATION_PLAN.md`):**
 
-Finish the DB layer (current branch `feat/db-layer`):
-- **P3.T2 — Alembic migrations** generated against `persist/models.py`; test
-  upgrade/downgrade on SQLite; wire `DATABASE_URL`.
-- **P3.T3 — `persist/repository.py`**: `save_extraction`, `save_extraction_run`
-  (**redact any full PAN before writing `raw_response`**), `save_findings`,
-  `get_receipt`, `query_receipts`, and transactional `apply_corrections` (one
-  `corrections` row per changed field path, sets `status='reviewed'`).
-- **P3.T5 — dedupe wired to the repository** + review-queue claim with
-  `SELECT … FOR UPDATE SKIP LOCKED`.
-- **P3.T7 — XLSX `Needs Review` + `Summary` sheets** (§13.3–13.5).
-- **P3.T6 — calibration** (`receipts calibrate` / sweep thresholds) — *blocked
-  on the golden set*.
+*Phase 4 — the service (next milestone; suggested branch `feat/service`)*
+- **P4.T2 — auth (DECISION NEEDED, do first):** the review API handles financial
+  PII, so no route may be reachable unauthenticated. Options: session auth +
+  role checks (`reviewer`/`admin`) with an API key for machine upload
+  (recommended) / plain API key / OIDC. Ask me before implementing.
+- **P4.T3 — `review/api.py` (FastAPI)** wiring the existing `review/queue.py` and
+  repository: `POST /upload`, `GET /receipts`, `GET /receipts/{id}`,
+  `PATCH /receipts/{id}`, `GET /receipts/{id}/image` (signed URL),
+  `GET /review/next`, `POST /review/{id}/complete`, `GET /export/xlsx`,
+  `GET /health`, `GET /metrics` (§14.9). Every non-`/health` route enforces auth.
+  While here: make `enqueue_review` insert-safe (it is check-then-insert today)
+  and consolidate the `0.85`/`0.60` thresholds onto `Settings`.
+- **P4.T4 — `pipeline.process_receipt` + the RQ worker:** the only function the
+  worker calls; wraps every stage so any exception marks the receipt
+  `needs_review` with the failing stage as the reason (never loses a job). Add a
+  global VLM concurrency cap and a per-run cost guard. Persist via the repository
+  (`save_extraction` then `save_findings` — see the note in MEMORY) and reconcile
+  the raw-report / normalized-extraction mismatch noted there.
+- **P4.T5 / P4.T6 — `cli.py`:** `receipts ingest|process|export|eval|calibrate|
+  merchants|reprocess` (§14.10), wiring `eval`/`calibrate` to the harness.
 
-Then: Phase 4 (auth decision → `review/queue.py` + `review/api.py` FastAPI →
-`pipeline.process_receipt` + worker → `cli.py`), Phase 5 (frontend review UI —
-needs framework decision), Phase 6 (merchants + few-shot), Phase 7 (wire
-self-consistency into `run_receipt`), Phase 8 (calibrate confidence weights; move
-them to `config/rules.yaml`).
+*Phase 5 — frontend review UI (needs a decision)*
+- **P5.T0 — framework (DECISION NEEDED):** React+Vite (recommended) / Next.js /
+  Jinja+HTMX.
+- **P5.T1 — review screen:** image + bounding-box highlighting on the left,
+  editable fields right, keyboard-first, shows `explain_confidence` reasons,
+  every edit writes a `corrections` row. Target: a full correction in under 60s.
+- **P5.T2 —** upload, receipts list, queue, export pages.
 
-**Blocked on the user (surface these, don't guess):** label the golden set +
-pick a tool-capable provider (for a real baseline/calibration); decide the auth
-model (P4.T2), the frontend framework (P5.T0), and the R060/R061 grounding
-approach (P2.T2). Note: `moondream` (their current local model) likely can't do
-tool-use, so extraction may fail against it.
+*Phase 6 — merchants & few-shot*
+- **P6.T1 —** `merchants/{fingerprint,registry}.py`; inject verified few-shot
+  examples with **images first, target receipt last**; hints always end with
+  "trust the image". Measure top-10-merchant accuracy before/after.
 
-**Today's goal:** <e.g. "Do P3.T2 and P3.T3 (Alembic + repository), then stop for
-review.">
+*Phase 7 — self-consistency*
+- **P7.T1 —** wire `run_consistency` into `run_receipt` for handwritten /
+  low-legibility receipts and feed disputed fields into scoring. The extractor
+  already supports it; the M1 runner does not call it yet. Consistency runs must
+  never be cached.
+
+*Phase 8 — calibration & algorithm polish*
+- **P3.T6 / P8.T1 —** sweep the confidence threshold to hold auto-approval
+  precision ≥99%, then fit the penalty weights from data and move them into
+  `config/rules.yaml`. **Blocked on the golden set.**
+- **P8.T2 —** grow the held-out set until a ≥99% claim has a credible confidence
+  interval (it cannot be validated on a handful of receipts).
+
+*Still open from earlier phases*
+- **P2.T2 — R060/R061 OCR grounding (DECISION NEEDED):** the two grounding rules
+  need a raw text layer nothing currently produces. Options: have the model
+  return the text it read / add a cheap OCR pass / drop the rules.
+
+**Blocked on me (the user) — surface these, don't guess:**
+1. **Golden set** — I said I'd send sample receipts; until then no real baseline
+   or calibration is possible (`eval/golden/labels|images` are empty).
+2. **A tool-capable provider** — my `.env` points at a local `moondream`, which
+   likely cannot do the tool-use the extractor needs for schema-constrained
+   output.
+3. **Decisions:** auth model (P4.T2), frontend framework (P5.T0), R060/R061
+   grounding (P2.T2).
+
+**Today's goal:** <e.g. "Start Phase 4: ask me about auth, then do P4.T4
+(process_receipt + worker) which needs no decision." or "Wire up the golden set I
+just sent and run a real baseline.">
 
 ---
 
 ## Quick status line (update each session)
 
-- Branch: `master @ df528cb` (no feature branch open) · **410 passing** · ruff clean
-- Phase 3 (persistence) is **complete and merged**: ORM, Alembic, repository,
-  DB-backed dedupe, review queue, 4-sheet XLSX. Only **P3.T6 calibration**
-  remains, and it is blocked on the golden set.
-- Next task: **Phase 4 (service)** — starts with the **auth decision (P4.T2)**,
-  then `review/api.py` + queue wiring (P4.T3), `pipeline.process_receipt` +
-  worker (P4.T4), `cli.py` (P4.T5/T6).
-- Blocked-on-user: golden set (user is sending sample receipts), a tool-capable
-  provider, and the auth / frontend-framework / R060-R061 grounding decisions.
+- Branch: `master @ 9bd4cd0` (no feature branch open) · **410 passing** · ruff clean
+- Phase 3 (persistence) complete and merged; only **P3.T6 calibration** remains
+  from it, blocked on the golden set.
+- Next task: **Phase 4** — auth decision (P4.T2), then P4.T3 API / P4.T4 worker.
+- Blocked-on-user: golden set, tool-capable provider, auth / frontend / grounding
+  decisions.
