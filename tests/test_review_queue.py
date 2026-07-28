@@ -221,13 +221,24 @@ def test_concurrent_enqueue_for_one_receipt_does_not_raise(
 ) -> None:
     """Two sessions enqueue the same receipt with no coordination.
 
-    The row is UNIQUE on receipt_id, so the check-then-insert this replaces
-    could raise IntegrityError under a real race (ADR-0008's recorded gap).
+    **What this does NOT establish**: that the insert race is handled. This
+    fixture's engine is in-memory SQLite (``sqlite+pysqlite:///:memory:``),
+    and SQLAlchemy backs an in-memory SQLite engine with a
+    ``SingletonThreadPool`` by default -- every ``Session`` opened from this
+    thread shares the *same* underlying DBAPI connection. Session ``b``'s
+    existence check therefore sees session ``a``'s uncommitted insert
+    directly (there is no connection boundary between them), so ``b`` takes
+    the update branch instead of ever attempting a colliding insert -- no
+    race window opens. This test passes identically against the pre-fix
+    check-then-insert code and the SAVEPOINT-based fix; it does not
+    distinguish between them. See
+    ``test_enqueue_review_recovers_when_the_insert_loses_the_race`` below for
+    a test that actually forces the ``except IntegrityError:`` branch.
 
-    This is the honest limit of an offline test: SQLite serializes writers, so
-    it exercises the SAVEPOINT-and-retry code path rather than proving true
-    OS-level concurrency. The retry is what makes the path correct under a
-    genuine race on Postgres.
+    **What this DOES establish**: the more-urgent-wins outcome (§12) still
+    holds when two enqueues for one receipt interleave -- the lower ("full
+    re-key") priority wins and its reason is what survives, regardless of
+    which of the two calls happened to run its update logic.
     """
     with Session(engine) as a, Session(engine) as b:
         enqueue_review(a, receipt_id, "quick verify", 2)
@@ -241,6 +252,93 @@ def test_concurrent_enqueue_for_one_receipt_does_not_raise(
         ).all()
         assert len(tasks) == 1
         assert tasks[0].priority == 1  # more urgent wins, as before
+        assert tasks[0].reason == "full re-key"
+
+
+def test_enqueue_review_recovers_when_the_insert_loses_the_race(
+    engine: sa.Engine, receipt_id: uuid.UUID
+) -> None:
+    """Forces the ``except IntegrityError:`` recovery branch, deterministically.
+
+    Two real ``Session`` objects cannot open a genuine race window on this
+    in-memory SQLite engine (see the docstring above), so this test
+    manufactures the window explicitly instead of hoping thread scheduling
+    produces it:
+
+      1. A competing task is inserted and committed for this ``receipt_id``
+         in an ordinary, fully sequential session -- *before*
+         ``enqueue_review`` is even called.
+      2. The session ``enqueue_review`` then runs on has its **first**
+         ``.scalars()`` call -- the existence check that decides whether to
+         take the insert branch -- shadowed to report "nothing found",
+         exactly what it would have seen had it run a moment earlier than
+         the commit in (1): the real race window ADR-0008 records.
+
+    Nothing past that point is mocked: the SAVEPOINT-wrapped INSERT that
+    follows genuinely collides with the row from (1), and SQLite genuinely
+    raises ``IntegrityError`` -- the recovery re-select (the *second*
+    ``.scalars()`` call) is left unpatched and runs for real against the
+    real database. The assertions are about the resulting row, not about the
+    patch.
+
+    Verified locally that this test pins the recovery branch and not just its
+    own scaffolding: with the ``except IntegrityError:`` block in
+    ``enqueue_review`` temporarily deleted, this test failed with an
+    unhandled ``sqlalchemy.exc.IntegrityError`` (the SAVEPOINT-wrapped
+    INSERT's UNIQUE violation propagating out uncaught); restoring the block
+    made it pass again.
+    """
+    with Session(engine) as setup:
+        setup.add(
+            ReviewTask(
+                receipt_id=receipt_id, reason="quick verify", priority=2,
+                state=ReviewState.OPEN,
+            )
+        )
+        setup.commit()
+
+    with Session(engine) as session:
+        real_scalars = session.scalars
+        calls = 0
+
+        def _lie_on_the_first_call(statement, *args, **kwargs):
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                # The existence check enqueue_review is about to make: report
+                # "nothing found", even though the row from `setup` above
+                # already exists -- the caller checked a moment "before" it
+                # was committed.
+                class _EmptyResult:
+                    def one_or_none(self) -> None:
+                        return None
+
+                return _EmptyResult()
+            # The recovery re-select after the IntegrityError: unpatched, runs
+            # for real against the real (colliding) row.
+            return real_scalars(statement, *args, **kwargs)
+
+        session.scalars = _lie_on_the_first_call
+
+        task = enqueue_review(session, receipt_id, "full re-key", 1)
+        session.commit()
+        task_id = task.id
+
+        # The lie fired once and the real recovery query ran once: confirms
+        # this test actually exercised both halves of the branch, not just
+        # the happy path.
+        assert calls == 2
+
+    with Session(engine) as check:
+        tasks = check.scalars(
+            select(ReviewTask).where(ReviewTask.receipt_id == receipt_id)
+        ).all()
+        assert len(tasks) == 1
+        assert tasks[0].id == task_id
+        # More-urgent-wins applied to the row that survived the collision:
+        # the pre-existing task (priority 2) was updated in place to the
+        # caller's more urgent priority 1, not duplicated or dropped.
+        assert tasks[0].priority == 1
         assert tasks[0].reason == "full re-key"
 
 
