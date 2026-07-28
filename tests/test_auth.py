@@ -147,6 +147,40 @@ def test_login_sets_a_session_and_logout_clears_it(client):
     assert client.get("/probe/any").status_code == 401
 
 
+def test_login_sets_a_cookie_with_the_configured_ttl_and_flags(client, settings):
+    """The raw ``Set-Cookie`` header on the wire, not just the
+    ``install_session_middleware`` call site: if a future refactor drops the
+    ``max_age`` argument, every session cookie silently reverts to
+    Starlette's 14-day default and nothing but this assertion would notice.
+    ``settings.session_ttl_s`` is read from the fixture, not hardcoded, so
+    the test tracks the setting instead of duplicating its value.
+    """
+    resp = client.post("/auth/login", json={"username": "alice", "password": "pw-alice"})
+    assert resp.status_code == 200
+    set_cookie = resp.headers["set-cookie"].lower()
+    assert f"max-age={settings.session_ttl_s}" in set_cookie
+    assert "httponly" in set_cookie
+    assert "samesite=lax" in set_cookie
+
+
+def test_login_cookie_is_secure_when_session_cookie_secure_is_true(session_factory):
+    """Every other fixture in this file sets ``session_cookie_secure=False``
+    (the ``client``/``settings`` fixtures need that for a plain-http
+    ``TestClient`` request), so without this test the one flag a deployment
+    can actually get wrong -- forgetting ``SESSION_COOKIE_SECURE=true`` in
+    production -- is never exercised by the suite at all.
+    """
+    settings = Settings(
+        _env_file=None,
+        session_secret="test-secret",
+        session_cookie_secure=True,
+    )
+    secure_client = TestClient(_probe_app(session_factory, settings))
+    resp = secure_client.post("/auth/login", json={"username": "alice", "password": "pw-alice"})
+    assert resp.status_code == 200
+    assert "secure" in resp.headers["set-cookie"].lower()
+
+
 def test_wrong_password_and_unknown_user_are_indistinguishable(client):
     wrong = client.post("/auth/login", json={"username": "alice", "password": "nope"})
     missing = client.post("/auth/login", json={"username": "nobody", "password": "nope"})
