@@ -62,8 +62,10 @@ from .models import (
 
 __all__ = [
     "apply_corrections",
+    "create_pending_receipt",
     "find_duplicate_by_content",
     "find_duplicate_by_phash",
+    "get_findings",
     "get_receipt",
     "mark_duplicate",
     "query_receipts",
@@ -260,6 +262,17 @@ def _as_text(value: Any) -> str | None:
 # --------------------------------------------------------------------------- #
 
 
+def _reasons_json(pairs: list[tuple[str, Decimal]] | None) -> list[dict[str, str]] | None:
+    """Encode explain_confidence pairs for the JSON column.
+
+    Penalties are stored as strings: a JSON number is a float, and this column
+    sits next to a Decimal score that a reviewer reads as an explanation of it.
+    """
+    if pairs is None:
+        return None
+    return [{"reason": reason, "penalty": str(penalty)} for reason, penalty in pairs]
+
+
 def save_extraction(
     session: Session,
     job: ReceiptJob,
@@ -270,6 +283,7 @@ def save_extraction(
     *,
     image_phash: str = "",
     merchant_id: uuid.UUID | None = None,
+    confidence_reasons: list[tuple[str, Decimal]] | None = None,
 ) -> Receipt:
     """Map one extraction onto a ``receipts`` row plus its ``line_items`` rows.
 
@@ -284,6 +298,14 @@ def save_extraction(
     a repair pass can append its own and flag which of the originals it resolved.
     Call :func:`save_findings` next.
 
+    **Update-or-insert on ``job.id``.** An upload writes a ``pending`` row via
+    :func:`create_pending_receipt` before the worker ever runs, and a retried job
+    may already have persisted a previous attempt; either way a row with this id
+    can already exist, and re-inserting would collide on the primary key and lose
+    the receipt on the way to recording it. The column values are built once and
+    applied to whichever branch runs, so the insert and update paths cannot drift
+    apart.
+
     Flushes (so ``id`` and the child rows exist) and returns the ORM object
     without committing -- the caller owns the transaction.
     """
@@ -294,8 +316,7 @@ def save_extraction(
         # Nothing is silently dropped: an unparseable date is kept verbatim.
         date_raw = receipt_meta.date
 
-    receipt = Receipt(
-        id=job.id,
+    fields: dict[str, Any] = dict(
         merchant_id=merchant_id,
         merchant_name_raw=extraction.merchant.name,
         receipt_number=receipt_meta.number,
@@ -319,8 +340,58 @@ def save_extraction(
         image_phash=image_phash,
         receipt_is_inconsistent=extraction.meta.receipt_is_inconsistent,
     )
+
+    existing = session.get(Receipt, job.id)
+    if existing is None:
+        receipt = Receipt(id=job.id, **fields)
+    else:
+        # A PENDING row written at upload, or a retry of a job that already
+        # persisted. Update in place: re-inserting would collide on the primary
+        # key and lose the receipt on the way to recording it.
+        receipt = existing
+        for column, value in fields.items():
+            setattr(receipt, column, value)
+        # The previous line items must actually be gone before the new ones are
+        # inserted: cascade="all, delete-orphan" queues them for deletion, but a
+        # single flush does not guarantee the DELETEs precede the new INSERTs,
+        # and a new item can legitimately reuse a position an old item still
+        # occupies -- which would collide against
+        # ``uq_line_items_receipt_position`` if both landed in one flush.
+        receipt.line_items = []
+        session.flush()
+
+    receipt.confidence_reasons = _reasons_json(confidence_reasons)
     receipt.line_items = _build_line_items(extraction)
 
+    session.add(receipt)
+    session.flush()
+    return receipt
+
+
+def create_pending_receipt(session: Session, job: ReceiptJob) -> Receipt:
+    """Write the ``pending`` row an upload creates before the worker runs.
+
+    The receipt is visible and queryable the moment it is accepted, so a job the
+    queue loses (an evicted Redis entry, a worker killed before it persisted)
+    shows up as a stuck ``pending`` row instead of leaving a blob on disk and
+    nothing in the database -- the vanished job §18 forbids.
+
+    ``image_phash`` is empty: the perceptual hash is computed in the worker's
+    preprocess stage, and inventing one here would be a value nothing read off
+    the image. :func:`find_duplicate_by_phash` skips empty hashes, so a pending
+    row can never become the original a later upload is marked a duplicate of.
+
+    Flushes; does not commit. ``ValueError`` if the id is already taken.
+    """
+    if session.get(Receipt, job.id) is not None:
+        raise ValueError(f"a receipt with id {job.id} already exists")
+    receipt = Receipt(
+        id=job.id,
+        image_key=job.image_key,
+        image_phash="",
+        status=ReceiptStatus.PENDING,
+        confidence=Decimal("0"),
+    )
     session.add(receipt)
     session.flush()
     return receipt
@@ -435,6 +506,21 @@ def save_findings(
 def get_receipt(session: Session, receipt_id: uuid.UUID) -> Receipt | None:
     """One receipt by id, or ``None``. Line items load on access."""
     return session.get(Receipt, receipt_id)
+
+
+def get_findings(session: Session, receipt_id: uuid.UUID) -> list[ValidationFinding]:
+    """Every finding written for a receipt, oldest first.
+
+    Ordered by ``created_at`` then ``id`` -- a total order, so two findings
+    written in the same transaction still come back in a stable sequence.
+    """
+    return list(
+        session.scalars(
+            select(ValidationFinding)
+            .where(ValidationFinding.receipt_id == receipt_id)
+            .order_by(ValidationFinding.created_at, ValidationFinding.id)
+        )
+    )
 
 
 def query_receipts(

@@ -45,6 +45,8 @@ EXPECTED_TABLES = {
     "validation_findings",
     "corrections",
     "review_tasks",
+    # Added with the review API (P4.T3); not part of the original seven.
+    "users",
 }
 
 

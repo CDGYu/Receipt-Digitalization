@@ -33,14 +33,17 @@ from .models import (
     Receipt,
     ReviewState,
     ReviewTask,
+    User,
     ValidationFinding,
 )
 
 if TYPE_CHECKING:  # pragma: no cover - import-time typing only
     from .repository import (
         apply_corrections,
+        create_pending_receipt,
         find_duplicate_by_content,
         find_duplicate_by_phash,
+        get_findings,
         get_receipt,
         mark_duplicate,
         query_receipts,
@@ -54,8 +57,10 @@ if TYPE_CHECKING:  # pragma: no cover - import-time typing only
 #: Lazily re-exported name -> the submodule that defines it.
 _LAZY: dict[str, str] = {
     "apply_corrections": "repository",
+    "create_pending_receipt": "repository",
     "find_duplicate_by_content": "repository",
     "find_duplicate_by_phash": "repository",
+    "get_findings": "repository",
     "get_receipt": "repository",
     "mark_duplicate": "repository",
     "query_receipts": "repository",
@@ -79,10 +84,13 @@ __all__ = [
     "Receipt",
     "ReviewState",
     "ReviewTask",
+    "User",
     "ValidationFinding",
     "apply_corrections",
+    "create_pending_receipt",
     "find_duplicate_by_content",
     "find_duplicate_by_phash",
+    "get_findings",
     "get_receipt",
     "make_engine",
     "make_session_factory",

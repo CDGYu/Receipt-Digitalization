@@ -52,6 +52,8 @@ from receipts.persist import (
     Receipt,
     ValidationFinding,
     apply_corrections,
+    create_pending_receipt,
+    get_findings,
     get_receipt,
     query_receipts,
     redact_pan,
@@ -338,6 +340,110 @@ def test_get_receipt_returns_none_for_an_unknown_id(engine: sa.Engine) -> None:
 
 
 # --------------------------------------------------------------------------- #
+# create_pending_receipt + save_extraction as update-or-insert
+# --------------------------------------------------------------------------- #
+
+
+def test_create_pending_receipt_writes_a_visible_row(engine: sa.Engine) -> None:
+    job = ReceiptJob(
+        id=uuid.uuid4(), image_key="receipts/2026/07/x/original.jpg",
+        source="upload", original_filename="r.jpg", content_type="image/jpeg",
+    )
+    with Session(engine) as session:
+        receipt = create_pending_receipt(session, job)
+        session.commit()
+
+        assert receipt.status is ReceiptStatus.PENDING
+        assert receipt.confidence == Decimal("0")
+        # The perceptual hash is computed by the worker's preprocess stage. An empty
+        # hash is what find_duplicate_by_phash skips, so a pending row can never
+        # become the "original" a later upload is marked a duplicate of.
+        assert receipt.image_phash == ""
+        assert receipt.confidence_reasons is None
+
+
+def test_create_pending_receipt_rejects_a_reused_id(engine: sa.Engine) -> None:
+    job = ReceiptJob(
+        id=uuid.uuid4(), image_key="k", source="upload",
+        original_filename="r.jpg", content_type="image/jpeg",
+    )
+    with Session(engine) as session:
+        create_pending_receipt(session, job)
+        session.commit()
+        with pytest.raises(ValueError, match="already exists"):
+            create_pending_receipt(session, job)
+
+
+def test_save_extraction_updates_the_pending_row_instead_of_colliding(engine: sa.Engine) -> None:
+    job = ReceiptJob(
+        id=uuid.uuid4(), image_key="k", source="upload",
+        original_filename="r.jpg", content_type="image/jpeg",
+    )
+    with Session(engine) as session:
+        create_pending_receipt(session, job)
+        session.commit()
+
+        extraction = ReceiptExtraction(
+            merchant=ExtractedMerchant(name="METRO OIL SUBIC, INC."),
+            totals=Totals(total=Decimal("1000.00")),
+            line_items=[ExtractedLineItem(position=1, description_raw="CLEAN DIESEL")],
+        )
+        receipt = save_extraction(
+            session, job, extraction, ValidationReport(), Decimal("0.900"),
+            ReceiptStatus.AUTO_APPROVED, image_phash="ffff0000ffff0000",
+            confidence_reasons=[("poor legibility", Decimal("-0.20"))],
+        )
+        session.commit()
+
+        assert session.query(Receipt).count() == 1
+        assert receipt.id == job.id
+        assert receipt.status is ReceiptStatus.AUTO_APPROVED
+        assert receipt.total == Decimal("1000.00")
+        assert len(receipt.line_items) == 1
+        assert receipt.confidence_reasons == [
+            {"reason": "poor legibility", "penalty": "-0.20"}
+        ]
+
+
+def test_save_extraction_replaces_line_items_on_a_second_run(engine: sa.Engine) -> None:
+    job = ReceiptJob(
+        id=uuid.uuid4(), image_key="k", source="upload",
+        original_filename="r.jpg", content_type="image/jpeg",
+    )
+    with Session(engine) as session:
+        first = ReceiptExtraction(
+            line_items=[ExtractedLineItem(position=1, description_raw="A"),
+                        ExtractedLineItem(position=2, description_raw="B")]
+        )
+        save_extraction(session, job, first, ValidationReport(), Decimal("0.5"),
+                        ReceiptStatus.NEEDS_REVIEW)
+        session.commit()
+
+        second = ReceiptExtraction(
+            line_items=[ExtractedLineItem(position=1, description_raw="A only")]
+        )
+        receipt = save_extraction(session, job, second, ValidationReport(), Decimal("0.5"),
+                                  ReceiptStatus.NEEDS_REVIEW)
+        session.commit()
+
+        assert [item.description_raw for item in receipt.line_items] == ["A only"]
+        assert session.query(LineItem).count() == 1
+
+
+def test_empty_reasons_and_missing_reasons_are_different(engine: sa.Engine) -> None:
+    job = ReceiptJob(id=uuid.uuid4(), image_key="k", source="upload",
+                     original_filename="r.jpg", content_type="image/jpeg")
+    with Session(engine) as session:
+        receipt = save_extraction(
+            session, job, ReceiptExtraction(), ValidationReport(), Decimal("1.0"),
+            ReceiptStatus.AUTO_APPROVED, confidence_reasons=[],
+        )
+        session.commit()
+        # [] means "nothing lowered the score"; NULL means "never recorded".
+        assert receipt.confidence_reasons == []
+
+
+# --------------------------------------------------------------------------- #
 # save_findings
 # --------------------------------------------------------------------------- #
 
@@ -378,6 +484,21 @@ def test_save_findings_on_a_clean_report_writes_nothing(engine: sa.Engine) -> No
 
     with Session(engine) as session:
         assert session.scalar(select(sa.func.count()).select_from(ValidationFinding)) == 0
+
+
+def test_get_findings_returns_them_in_write_order(engine: sa.Engine) -> None:
+    job = _job()
+    with Session(engine) as session:
+        receipt = save_extraction(session, job, ReceiptExtraction(), ValidationReport(),
+                                  Decimal("0.5"), ReceiptStatus.NEEDS_REVIEW)
+        report = ValidationReport(findings=[
+            Finding(rule_id="R020", severity=Severity.ERROR, message="lines do not sum"),
+            Finding(rule_id="R011", severity=Severity.INFO, message="date normalized"),
+        ])
+        save_findings(session, receipt.id, report)
+        session.commit()
+
+        assert [f.rule_id for f in get_findings(session, receipt.id)] == ["R020", "R011"]
 
 
 # --------------------------------------------------------------------------- #

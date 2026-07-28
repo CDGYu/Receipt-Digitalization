@@ -353,23 +353,26 @@ def test_repair_resolved_findings_are_kept_as_history(session_factory, storage, 
         assert runs[1].prompt_hash != runs[2].prompt_hash
 
 
-def test_reprocessing_a_persisted_job_still_ends_in_a_terminal_state(
+def test_reprocessing_a_persisted_job_updates_the_row_in_place(
     session_factory, storage, settings
 ):
-    """A re-run of an id that already has a row must not vanish.
+    """A re-run of an id that already has a row must not vanish -- or duplicate.
 
-    ``save_extraction`` inserts, so the second run trips the primary key. The
-    terminal-state write handles that by updating the row it found instead of
-    inserting a second one -- otherwise the very act of recording the failure
-    would fail. (Proper re-extraction with history is ``receipts reprocess``,
-    P4.T5.)
+    ``save_extraction`` is update-or-insert (P4.T3): a pending row written at
+    upload, or a previous run's row, is updated rather than re-inserted, so a
+    retry writes fresh data over the old row instead of colliding on the
+    primary key. That collision used to route a retry to ``needs_review``
+    purely because it had already been processed once -- an update in place is
+    strictly better, since the second run's own result (here, a clean
+    auto-approval) is what ends up stored. (Proper re-extraction with history
+    is ``receipts reprocess``, P4.T5.)
     """
     job = _job(storage)
     _run(job, _Client([_triage(), _good()]), session_factory, storage, settings)
 
     again = _run(job, _Client([_triage(), _good()]), session_factory, storage, settings)
 
-    _assert_terminal_needs_review(again, session_factory, "persist")
+    assert again.status is ReceiptStatus.AUTO_APPROVED
     with session_factory() as session:
         rows = session.scalars(select(Receipt).where(Receipt.id == job.id)).all()
         assert len(rows) == 1
@@ -650,3 +653,50 @@ def test_process_batch_processes_every_path_and_reports_rejects(
     assert batch.rejected[0][0].endswith("notes.txt")
     assert batch.total_cost_usd == D("0.06")
     assert batch.counts[ReceiptStatus.AUTO_APPROVED] == 3
+
+
+# --------------------------------------------------------------------------- #
+# confidence_reasons (P4.T3)
+# --------------------------------------------------------------------------- #
+
+
+def test_persisted_reasons_sum_to_the_persisted_confidence(session_factory, storage, settings):
+    """The breakdown a reviewer is shown must add up to the score it explains."""
+    job = _job(storage)
+    penalised = _good()
+    penalised.meta.legibility = Legibility.POOR
+    penalised.meta.is_handwritten = True
+    client = _Client([_triage(), penalised])
+
+    _run(job, client, session_factory, storage, settings)
+
+    with session_factory() as session:
+        receipt = session.get(Receipt, job.id)
+        assert receipt.confidence_reasons  # non-empty: this receipt lost points
+        penalties = [D(entry["penalty"]) for entry in receipt.confidence_reasons]
+        expected = min(D("1"), max(D("0"), D("1") + sum(penalties)))
+        assert expected.quantize(D("0.001")) == receipt.confidence
+
+
+def test_a_clean_receipt_records_an_empty_reason_list(session_factory, storage, settings):
+    job = _job(storage)
+    _run(job, _Client([_triage(), _good()]), session_factory, storage, settings)
+
+    with session_factory() as session:
+        # [] means "nothing lowered the score", which is not the same claim as
+        # NULL ("never recorded").
+        assert session.get(Receipt, job.id).confidence_reasons == []
+
+
+def test_a_failed_stage_records_no_reasons(session_factory, storage, settings):
+    job = _job(storage)
+    client = _Client([RuntimeError("triage exploded")])
+
+    result = _run(job, client, session_factory, storage, settings)
+
+    assert result.failed_stage == "triage"
+    with session_factory() as session:
+        receipt = session.get(Receipt, job.id)
+        assert receipt.status is ReceiptStatus.NEEDS_REVIEW
+        # Nothing was ever scored, so NULL is the truthful value.
+        assert receipt.confidence_reasons is None

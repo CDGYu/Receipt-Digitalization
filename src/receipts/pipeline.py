@@ -76,7 +76,7 @@ from .preprocess.image_ops import (
     to_rgb,
 )
 from .review.queue import enqueue_review
-from .score.confidence import ReceiptStatus, route, score_confidence
+from .score.confidence import ReceiptStatus, explain_confidence, route, score_confidence
 from .validate.context import ValidationContext
 from .validate.report import ValidationReport
 
@@ -474,6 +474,11 @@ def process_receipt(
             confidence = score_confidence(
                 outcome.extraction, outcome.report, triage_result, consistency=None
             )
+            # Same inputs, same order: the stored breakdown provably sums to the
+            # stored score, which is what the review UI shows a human.
+            reasons = explain_confidence(
+                outcome.extraction, outcome.report, triage_result, consistency=None
+            )
             status, priority, reason = route(
                 confidence,
                 outcome.report,
@@ -491,6 +496,7 @@ def process_receipt(
                 triage_result=triage_result,
                 triage_response=triage_response,
                 confidence=confidence,
+                reasons=reasons,
                 status=status,
                 priority=priority,
                 reason=reason,
@@ -589,6 +595,7 @@ def _persist_outcome(
     triage_result: TriageResult,
     triage_response: VLMResponse,
     confidence: Decimal,
+    reasons: list[tuple[str, Decimal]],
     status: ReceiptStatus,
     priority: int,
     reason: str,
@@ -621,7 +628,7 @@ def _persist_outcome(
     try:
         receipt = save_extraction(
             session, job, outcome.extraction, outcome.report, confidence, status,
-            image_phash=phash,
+            image_phash=phash, confidence_reasons=reasons,
         )
         save_findings(session, receipt.id, outcome.report)
 

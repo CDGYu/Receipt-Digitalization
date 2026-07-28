@@ -31,7 +31,7 @@ name -- see :func:`_token_enum`.
 from __future__ import annotations
 
 import uuid
-from datetime import date, datetime, time
+from datetime import UTC, date, datetime, time
 from decimal import Decimal
 from enum import Enum
 from typing import Any
@@ -168,6 +168,16 @@ class Receipt(Base):
         _token_enum(Legibility, name="legibility"), nullable=False, default=Legibility.GOOD
     )
     confidence: Mapped[Decimal] = mapped_column(_RATIO, nullable=False, default=Decimal("0"))
+    #: The (reason, penalty) pairs that produced ``confidence``, as JSON:
+    #: ``[{"reason": "poor legibility", "penalty": "-0.20"}]``. Penalties are
+    #: strings so Decimal survives the round trip (ADR-0001).
+    #:
+    #: Nullable on purpose: NULL means "not recorded" (a row written before this
+    #: column existed, or a run that failed before scoring), while ``[]`` means
+    #: "nothing lowered the score" -- a genuinely clean receipt. Collapsing the
+    #: two would let the review UI tell a reviewer "no reasons" about a row that
+    #: never captured them.
+    confidence_reasons: Mapped[Any | None] = mapped_column(_jsonb(), nullable=True, default=None)
     status: Mapped[ReceiptStatus] = mapped_column(
         _token_enum(ReceiptStatus, name="receipt_status"),
         nullable=False,
@@ -286,6 +296,18 @@ class ValidationFinding(Base):
     message: Mapped[str] = mapped_column(sa.Text, nullable=False)
     context: Mapped[Any] = mapped_column(_jsonb(), nullable=False, default=dict)
     resolved_by_repair: Mapped[bool] = mapped_column(sa.Boolean, nullable=False, default=False)
+    #: Not part of the original spec §6.5 table -- added so :func:`get_findings`
+    #: (P4.T3) can return findings in the order they were written. A pure
+    #: server-side default (``sa.func.now()``) would tie for every finding
+    #: written in the same ``save_findings`` transaction (Postgres freezes
+    #: ``now()`` for the whole transaction; SQLite's ``CURRENT_TIMESTAMP`` has
+    #: only whole-second resolution), which would leave the tiebreak to a
+    #: random UUID. A Python-side default is evaluated once per row as the
+    #: unit of work processes them -- in insertion order -- so it is a genuine,
+    #: portable "write order" signal on both backends.
+    created_at: Mapped[datetime] = mapped_column(
+        sa.DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -331,3 +353,39 @@ class ReviewTask(Base):
         sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()
     )
     closed_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True), nullable=True)
+
+
+# --------------------------------------------------------------------------- #
+# 6.8 users (added with the review API, P4.T3)
+# --------------------------------------------------------------------------- #
+
+
+class User(Base):
+    """A person who can sign in to the review service.
+
+    Exists so ``corrections.corrected_by`` names a real account: a shared key
+    cannot attribute a correction to a reviewer, which would hollow out the one
+    audit trail the review UI depends on.
+
+    ``role`` is deliberately a ``String`` and **not** a database ENUM. The
+    migration drift guard runs on SQLite only and cannot see a new ENUM member,
+    so an ENUM here would pass locally and fail on Postgres. Validation lives in
+    :mod:`receipts.persist.users`, next to the role constants the API guards use.
+    """
+
+    __tablename__ = "users"
+
+    id: Mapped[uuid.UUID] = mapped_column(sa.Uuid, primary_key=True, default=uuid.uuid4)
+    username: Mapped[str] = mapped_column(sa.Text, nullable=False, unique=True)
+    password_hash: Mapped[str] = mapped_column(sa.Text, nullable=False)
+    role: Mapped[str] = mapped_column(sa.String(16), nullable=False)
+    is_active: Mapped[bool] = mapped_column(sa.Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        sa.DateTime(timezone=True),
+        nullable=False,
+        server_default=sa.func.now(),
+        onupdate=sa.func.now(),
+    )
