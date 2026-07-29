@@ -1,13 +1,20 @@
 # Agent Memory — Receipt Digitization System
 
 Durable working memory for cross-session continuity. Read this first, then the
-files in "Key references" below. Last updated: **2026-07-28**.
+files in "Key references" below. Last updated: **2026-07-29**.
 
 ## Snapshot
 
-- **`master` @ `8cf72c1`** — **717 tests passing, ruff clean.** **PHASE 4 IS
-  COMPLETE.** `feat/service` (P4.T3) and `feat/cli` (P4.T5/T6) both fast-forward
-  merged on 2026-07-29; every milestone branch is kept at its merge point.
+- **Branch `feat/review-ui` @ `dae3e41`** (2 commits off `main` @ `5e4d708`) —
+  **722 tests passing, ruff clean.** **PHASE 5 IS IN PROGRESS:** Task 1 of 5
+  (the guarded SPA static mount) is implemented and verified; Tasks 2–5 are not
+  started. See `.superpowers/sdd/2026-07-29-review-ui/progress.md`.
+- **The default branch is now `main`, not `master`** (renamed 2026-07-29), and a
+  GitHub remote exists: `origin` → `CDGYu/Receipt-Digitalization` (**private** —
+  verified: an unauthenticated API read returns 404).
+- **PHASE 4 IS COMPLETE.** `feat/service` (P4.T3) and `feat/cli` (P4.T5/T6) both
+  fast-forward merged on 2026-07-29; every milestone branch is kept at its merge
+  point.
 - Merged on `master`: Phase 0 foundations, Phase 1 offline modules, the online
   wiring (config, client factory, M1 pipeline, confidence scoring, one-command
   baseline runner), **Phase 3 persistence** (7-table ORM + `docker-compose.yml`,
@@ -36,12 +43,24 @@ files in "Key references" below. Last updated: **2026-07-28**.
   the queue loses is a visible stuck row rather than a vanished upload.
 - **ISSUE-001 (the real baseline) is deferred until the system is built** — the
   user's explicit call. Do not start it unprompted.
+- **P5.T0 frontend framework — DECIDED 2026-07-29: React 19 + Vite +
+  TypeScript.** Taken *after* the bbox rationale was removed (see below), so the
+  plan's own "richest bbox/image UX" reasoning did not drive it. ADR-0015.
+- **bbox highlighting is OUT of P5.T1's scope (2026-07-29).** `line_items[].bbox`
+  is structurally `None` — `extract/prompts.py` never asks the model for it and
+  nothing computes it. Adding it would cost a `PROMPT_VERSION` bump plus an eval
+  re-run that ISSUE-001 blocks. Revisit only if P2.T2 is resolved with an OCR
+  pass, which would supply both the grounding text layer and the coordinates.
+- **Review-screen findings are labelled historical (2026-07-29).**
+  `apply_corrections` never re-runs validation, so findings go stale the moment a
+  reviewer edits. A dry-run `POST /validate` endpoint was considered and deferred.
+- **Git: local commits are fine, pushes are NOT (2026-07-29).** The user pushes
+  to GitHub manually. Never run `git push`.
 
 ## Still needing a user decision
 
-- **Frontend framework (P5.T0)** — React+Vite recommended.
 - **R060/R061 OCR grounding (P2.T2)** — model returns the text it read / a cheap
-  OCR pass / drop the rules.
+  OCR pass / drop the rules. (Now also gates bbox highlighting — see above.)
 ## What this project is
 
 A VLM pipeline turning receipt photos into accounting-grade structured data.
@@ -129,11 +148,22 @@ dropped. Excel is output only; the DB is the source of truth.
     directory on `PATH`, which it is **not** on this machine.
     `python -m receipts.cli <command>` always works and is what the tests use.
 
+- **P5.T1 Task 1 of 5 (on `feat/review-ui`) — see ADR-0015:** `Settings.
+  frontend_dist`; `_SpaFiles` + `_install_spa` in `review/api.py`, called last in
+  `create_app`; `tests/test_api_static.py` (5 tests). Serves the built SPA under
+  `/app`, **skipped entirely when `frontend/dist` is absent**. No API path moved.
+  - **What actually protects API paths is the `/app` prefix, not the
+    registration order.** A Starlette mount only intercepts under its own prefix,
+    so it cannot compete with `/health` at any order — proven by moving the mount
+    ahead of the read routes and watching all 5 tests stay green. The first draft
+    of the design claimed the opposite and shipped a vacuous test on it; both are
+    corrected. Registering last is kept as a cheap habit only.
+
 ## NOT built yet (remaining work)
 
-- **Phase 4 is done.** Next milestone is Phase 5 (frontend), which needs the
-  P5.T0 framework decision.
-- **Frontend** review UI — framework undecided (Phase 5)
+- **Phase 5 Tasks 2–5:** the frontend scaffold + API client + login, the review
+  screen display, editing + the submit chain, and e2e/seed/CI. Plan:
+  `docs/superpowers/plans/2026-07-29-review-ui.md`.
 - `merchants/{fingerprint,registry}.py` + few-shot injection (Phase 6)
 - Self-consistency wired into `run_receipt` (extractor supports it; the M1
   runner does not call it yet) (Phase 7)
@@ -170,6 +200,19 @@ dropped. Excel is output only; the DB is the source of truth.
   (ADR-0002). Keep it for offline spot checks only — see ISSUE-001.
 - **Security:** a commented-out Gemini key was once echoed in output → **rotate it
   before use.** Never echo `.env` secret values; `.env` is gitignored.
+- **Git / repository (changed 2026-07-29):** default branch renamed `master` →
+  **`main`**; remote `origin` → `CDGYu/Receipt-Digitalization`, **private**
+  (unauthenticated API read returns 404). **Never `git push`** — the user pushes
+  manually. Local commits are fine.
+  - **`.kiro/` and `.github/workflows/` are now gitignored and untracked** (commit
+    `5e4d708`). The files are still on disk and `.kiro/steering/receipt-system.md`
+    still auto-loads, but a fresh clone does not carry them and **GitHub Actions
+    no longer runs for this repository.** The old "never stage
+    `.kiro/settings/mcp.json`" rule is therefore obsolete — it is ignored now.
+  - Audited what the first push actually contained: **no `.env`, no receipt
+    images** (`eval/golden/images/` stayed ignored), no `.db`/`.log` files, and
+    `mcp.json` held only a `${GITHUB_PERSONAL_ACCESS_TOKEN}` placeholder, not a
+    literal secret.
 - **Harness note:** the `developer-kit` plugin's `prevent-destructive-commands.py`
   hook used to block `git add` and `git commit` outright, which stopped the
   commit-per-task workflow. Those two checks were removed on 2026-07-28; every
@@ -323,7 +366,8 @@ race; the §17 spec drift (§17 now also carries the service settings); the vacu
 ## Workflow & conventions
 
 - **subagent-driven-development**: one fresh implementer subagent
-  (`general-task-execution`) per task. Its brief must tell it to read the real
+  (**`general-purpose`** — that is the type that exists; older notes said
+  `general-task-execution`, which does not) per task. Its brief must tell it to read the real
   signatures first, work TDD, keep the full suite green + ruff clean, stage only
   its own files, and **never stage `.kiro/settings/mcp.json`** (a persistent
   local working-tree edit). The controller then reviews (read the diff + run
@@ -344,7 +388,7 @@ race; the §17 spec drift (§17 now also carries the service settings); the vacu
 - `IMPLEMENTATION_PLAN.md` — the phased task list (authoritative).
 - **`docs/KNOWN_ISSUES.md`** — parked problems with their diagnosis and resume
   steps. ISSUE-001 (the baseline run) is the deferred final task.
-- `docs/adr/` — implementation decisions (**0001–0011**; see `docs/adr/README.md`).
+- `docs/adr/` — implementation decisions (**0001–0015**; see `docs/adr/README.md`).
   0001 `Decimal` money path · 0002 provider abstraction/config · 0003 confidence
   penalties · 0004 portable persistence + Docker · 0005 tooling/offline tests ·
   0006 repository conventions · **0007 PAN redaction + money integrity (read
@@ -355,8 +399,11 @@ race; the §17 spec drift (§17 now also carries the service settings); the vacu
   row, and "a machine run never overwrites a `reviewed` row"** · **0013 CLI
   contract, including `calibrate`'s three gates** · **0014 optional-dependency
   import discipline — read before adding any import to a module reachable from an
-  entry point**.
-- `semantic-review/` — the whole-branch review write-ups (untracked). The
+  entry point** · **0015 the review UI is served same-origin under `/app`; the
+  prefix (not the registration order) is what protects API paths; money stays a
+  string in the browser and `<input type="number">` is banned on money fields**.
+- `semantic-review/` — the whole-branch review write-ups (now tracked, since the
+  2026-07-29 "Inital Commit" swept them in). The
   `2026-07-28-…-feat-db-layer` one documents the PAN/NaN findings in detail.
 - `.kiro/steering/receipt-system.md` — always-on load-bearing rules.
 - `.superpowers/sdd/progress.md` — the running task ledger.

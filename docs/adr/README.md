@@ -20,6 +20,7 @@ Accepted; supersede it with a new ADR rather than editing history.
 | [0012](0012-review-api-auth-and-identity.md) | Review API: identity, the pending row, and the persisted confidence breakdown | Accepted |
 | [0013](0013-cli-contract.md) | CLI contract: one work list, no overrides, no prompts | Accepted |
 | [0014](0014-optional-dependency-import-discipline.md) | Optional dependencies stay out of every import path | Accepted |
+| [0015](0015-review-ui-same-origin-and-app-prefix.md) | The review UI is served same-origin under `/app` | Accepted |
 
 Read **0001** first: it is the invariant everything else defers to. **0007** is
 the one to read before touching anything that writes card data or money.
