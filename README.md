@@ -1,0 +1,2 @@
+# Receipt-Digitalization
+initial commit
