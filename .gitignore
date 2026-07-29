@@ -46,3 +46,7 @@ baseline_run.log
 smoke_*.log
 smoke_*.err
 smoke_pid.txt
+
+# Local-only tooling config (Kiro steering/hooks/MCP, GitHub Actions)
+.kiro/
+.github/workflows/
