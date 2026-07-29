@@ -71,7 +71,7 @@ from .persist.models import Receipt
 from .persist.repository import create_pending_receipt, get_receipt, query_receipts
 from .persist.session import make_engine, make_session_factory
 from .persist.users import ROLE_REVIEWER, ROLES, create_user, deactivate, list_users, set_role
-from .pipeline import BatchResult, process_receipt
+from .pipeline import BatchResult, ProcessResult, process_receipt
 from .score.confidence import ReceiptStatus
 from .worker import enqueue_receipt, make_queue
 
@@ -92,6 +92,15 @@ EXIT_OK = 0
 #: duplicate account, an unreachable database. Argparse's own usage error (an
 #: unknown command, a missing argument) is exit 2 and never reaches this.
 EXIT_FAILED = 1
+
+#: Passed to :func:`~receipts.persist.repository.query_receipts` when
+#: ``process --limit`` is omitted. ``query_receipts`` has no "unlimited"
+#: option of its own -- its ``limit`` keyword defaults to 1000 -- so omitting
+#: the keyword here would silently inherit that cap while ``--help`` keeps
+#: promising "no cap": a backlog past 1000 used to be drained a page at a
+#: time with nothing telling the operator some pending rows were left
+#: behind. An explicit, effectively unbounded value makes "no cap" true.
+_NO_LIMIT = sys.maxsize
 
 
 def _add_ingest(sub: argparse._SubParsersAction) -> None:
@@ -147,6 +156,28 @@ def _add_users(sub: argparse._SubParsersAction) -> None:
     set_role_parser.add_argument("role", choices=sorted(ROLES))
 
 
+def _positive_int(value: str) -> int:
+    """An ``argparse`` ``type=`` that only accepts an integer ``>= 1``.
+
+    ``--limit 0``, ``--limit -1`` and ``--workers 0`` all parse fine as plain
+    integers but mean something silently wrong here: ``--limit 0`` reads as
+    "take none" and prints ``nothing pending`` even with a full backlog, a
+    negative ``--limit`` means "no limit" on SQLite but errors on Postgres,
+    and ``--workers 0`` (or negative) is accepted by ``ThreadPoolExecutor``
+    as "just run it sequentially" with nothing telling the operator that is
+    what happened. Rejecting anything below 1 here is an ordinary argparse
+    usage error (exit 2) instead of a confusing runtime surprise. Raising
+    ``ValueError`` (from the bare ``int(value)``) or
+    :class:`argparse.ArgumentTypeError` are both caught by argparse itself
+    and turned into that same clean error, the same way ``type=uuid.UUID``
+    already works for ``reprocess <id>``.
+    """
+    parsed = int(value)
+    if parsed < 1:
+        raise argparse.ArgumentTypeError(f"must be a positive integer, got {value!r}")
+    return parsed
+
+
 def _add_process(sub: argparse._SubParsersAction) -> None:
     parser = sub.add_parser(
         "process",
@@ -159,7 +190,7 @@ def _add_process(sub: argparse._SubParsersAction) -> None:
         ),
     )
     parser.add_argument(
-        "--limit", type=int, default=None,
+        "--limit", type=_positive_int, default=None,
         help="take at most this many pending receipts this run (default: no cap)",
     )
     parser.add_argument(
@@ -167,7 +198,7 @@ def _add_process(sub: argparse._SubParsersAction) -> None:
         help="run the pipeline in this process instead of enqueueing to RQ",
     )
     parser.add_argument(
-        "--workers", type=int, default=4,
+        "--workers", type=_positive_int, default=4,
         help="thread pool size for --inline (default: %(default)s)",
     )
 
@@ -353,7 +384,14 @@ def _job_from_receipt(receipt: Receipt) -> ReceiptJob:
     ``content_type`` are not §6 columns, so they cannot be recovered from the
     row. ``process_receipt`` uses ``id`` and ``image_key``; the other three are
     placeholders, and anyone who later needs faithful provenance has to add
-    columns rather than infer them (ADR-0013).
+    columns rather than infer them (ADR-0013). ``source`` is the one of the
+    three that is not purely inert, though: a worker that later picks this
+    job up off the queue logs it (``worker.py``'s ``"Processing receipt %s
+    from %s"``), so a receipt that reaches the worker via ``receipts
+    process`` is logged as arriving from ``"cli"`` even when it was
+    originally uploaded through ``POST /upload``. Nothing is stored from it
+    (``source`` is not a ``receipts`` column), so this is a worker-log
+    inaccuracy, not a data-integrity one.
     """
     return ReceiptJob(
         id=receipt.id,
@@ -377,9 +415,12 @@ def cmd_process(
 
     The ``pending`` row is the single work list -- the same query picks up a
     receipt whether it arrived through ``receipts ingest`` or ``POST
-    /upload`` -- taken oldest first and capped by ``--limit``. With nothing
-    pending this prints a message and returns :data:`EXIT_OK`: an empty work
-    list is not a failure.
+    /upload`` -- taken oldest first. Omitting ``--limit`` always passes an
+    explicit limit (:data:`_NO_LIMIT` in that case) rather than skipping the
+    keyword, so ``--help``'s "no cap" is what actually happens instead of
+    silently inheriting ``query_receipts``'s own default of 1000. With
+    nothing pending this prints a message and returns :data:`EXIT_OK`: an
+    empty work list is not a failure.
 
     **Enqueue path (the default).** This is production's own path, so it is
     the one that must run here too, or a worker-only bug stays invisible
@@ -393,16 +434,28 @@ def cmd_process(
     synchronously in this process, ``--workers`` at a time, building each
     call's client from ``client_factory`` (defaulting to
     ``lambda: make_client(settings)``) exactly the way
-    :func:`~receipts.pipeline.process_batch` builds one client per job. A
-    receipt that lands in review is the system working as designed: this
-    returns :data:`EXIT_OK` regardless of where any individual receipt ended
-    up, and fails only if the command itself could not run.
+    :func:`~receipts.pipeline.process_batch` builds one client per job.
+
+    Every job's call is wrapped in its own ``try/except`` rather than left to
+    raise. ``process_receipt`` only ever raises for the one case it cannot
+    itself turn into a terminal row -- nothing at all could be written -- and
+    ``client_factory()`` can raise too (a provider outage building the
+    client); either way, letting that escape the callable handed to
+    ``ThreadPoolExecutor.map`` does not just lose *that* receipt's result --
+    CPython's ``Executor.map`` cancels every future still queued behind it,
+    so one bad receipt used to silently abandon the rest of the batch,
+    including receipts that had not even started, and the exception then
+    escaped ``cmd_process`` entirely instead of becoming the documented
+    :data:`EXIT_FAILED`. Catching it here means every job is always
+    attempted and always reported -- as a normal per-receipt line, or as a
+    ``failed`` one -- and a receipt landing in review still never flips the
+    exit code (ADR-0013): this returns :data:`EXIT_FAILED` only when at
+    least one receipt could not be run at all, never because of where a
+    receipt that *did* run ended up.
     """
+    limit = _NO_LIMIT if args.limit is None else args.limit
     with session_factory() as session:
-        if args.limit is None:
-            pending = query_receipts(session, status=ReceiptStatus.PENDING)
-        else:
-            pending = query_receipts(session, status=ReceiptStatus.PENDING, limit=args.limit)
+        pending = query_receipts(session, status=ReceiptStatus.PENDING, limit=limit)
         jobs = [_job_from_receipt(receipt) for receipt in pending]
 
     if not jobs:
@@ -431,26 +484,39 @@ def cmd_process(
         client_factory if client_factory is not None else (lambda: make_client(settings))
     )
 
-    def run(job: ReceiptJob):
-        return process_receipt(
-            job, client=client_factory(), storage=storage,
-            session_factory=session_factory, settings=settings,
-        )
+    def run(job: ReceiptJob) -> tuple[ReceiptJob, ProcessResult | None, Exception | None]:
+        try:
+            result = process_receipt(
+                job, client=client_factory(), storage=storage,
+                session_factory=session_factory, settings=settings,
+            )
+        except Exception as exc:  # the one thing process_receipt/client_factory can raise
+            return job, None, exc
+        return job, result, None
 
     if args.workers <= 1 or len(jobs) <= 1:
-        results = [run(job) for job in jobs]
+        outcomes = [run(job) for job in jobs]
     else:
         with ThreadPoolExecutor(max_workers=args.workers) as pool:
-            results = list(pool.map(run, jobs))
+            outcomes = list(pool.map(run, jobs))
 
-    for result in results:
-        print(f"{result.receipt_id}  {result.status.value}  {result.reason}")
+    results: list[ProcessResult] = []
+    failed = 0
+    for job, result, exc in outcomes:
+        if result is not None:
+            print(f"{result.receipt_id}  {result.status.value}  {result.reason}")
+            results.append(result)
+        else:
+            print(f"{job.id}  failed  {exc}")
+            failed += 1
 
     batch = BatchResult(processed=results)
     for status, count in batch.counts.items():
         print(f"{status.value}: {count}")
+    if failed:
+        print(f"failed: {failed}")
     print(f"total cost: {batch.total_cost_usd}")
-    return EXIT_OK
+    return EXIT_FAILED if failed else EXIT_OK
 
 
 def cmd_reprocess(
@@ -474,13 +540,22 @@ def cmd_reprocess(
     it extends reprocessing to ``auto_approved`` and no flag extends it to
     ``reviewed``. That is not enforced in this function: it is left to
     :func:`~receipts.pipeline.process_receipt`, which runs to completion
-    rather than raising and reports the refusal through its return value --
-    ``result.status is ReceiptStatus.REVIEWED`` with ``result.failed_stage ==
-    "persist"`` (:func:`~receipts.persist.repository.save_extraction`,
-    ADR-0012). This function only reports that outcome; duplicating the
-    refusal here would let the two drift, and calling
-    :func:`~receipts.review.queue.enqueue_review` again would overwrite the
-    reason the pipeline already wrote with a vaguer one.
+    rather than raising and reports the refusal through its return value.
+    The reporting below keys on ``result.failed_stage is not None`` --
+    *any* stage, not only ``"persist"``: a reviewed receipt whose blob has
+    gone missing fails at ``"load"`` and never reaches the persist refusal
+    at all, but the row is left just as untouched (nothing in
+    ``_persist_failure`` mutates a row already ``reviewed``, regardless of
+    which stage failed), and reporting a bare ``reviewed  confidence=1.000``
+    for that case would read exactly like a clean re-verification when
+    nothing was actually re-extracted. Every failure -- reviewed or not --
+    also prints ``result.reason``, matching what ``cmd_process --inline``
+    already prints for the identical outcome; the previous version silently
+    dropped it here. This function does not duplicate
+    :func:`~receipts.persist.repository.save_extraction`'s refusal
+    (ADR-0012) and does not call
+    :func:`~receipts.review.queue.enqueue_review` again -- that would
+    overwrite the reason the pipeline already wrote with a vaguer one.
 
     ``queue_factory`` is accepted only for signature parity with
     :func:`cmd_process`; a reprocess always runs synchronously in this
@@ -511,13 +586,17 @@ def cmd_reprocess(
         session_factory=session_factory, settings=settings,
     )
 
-    if result.status is ReceiptStatus.REVIEWED and result.failed_stage == "persist":
-        print(
-            f"{result.receipt_id}  reviewed (unchanged): a human has already "
-            "reviewed this receipt, so the run was not applied to the stored "
-            f"row; a review task is open with what this run produced -- "
-            f"{result.reason}"
-        )
+    if result.failed_stage is not None:
+        if result.status is ReceiptStatus.REVIEWED:
+            print(
+                f"{result.receipt_id}  reviewed (unchanged): a human has "
+                "already reviewed this receipt, so the run was not applied "
+                f"to the stored row; it failed at {result.failed_stage!r} "
+                f"and a review task is open with what happened -- "
+                f"{result.reason}"
+            )
+        else:
+            print(f"{result.receipt_id}  {result.status.value}  {result.reason}")
         return EXIT_OK
 
     print(f"{result.receipt_id}  {result.status.value}  confidence={result.confidence}")

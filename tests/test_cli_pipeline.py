@@ -11,21 +11,27 @@ The load-bearing behaviours pinned down below (ADR-0013):
 
   * ``process`` drains the ``pending`` work list -- the same rows ``receipts
     ingest`` and ``POST /upload`` both write -- oldest first, ``--limit``
-    capping it.
+    capping it. Omitting ``--limit`` really does mean everything pending, not
+    a silent inherited cap of 1000.
   * The enqueue path is production's path; a missing ``REDIS_URL`` is a hard
     failure naming ``--inline``, never a silent fallback.
   * ``--inline`` runs the pipeline synchronously in this process and never
-    turns a receipt routed to review into a non-zero exit code.
+    turns a receipt routed to review into a non-zero exit code -- but a
+    receipt whose own run could not even complete (a build failure from
+    ``client_factory``, or the one case ``process_receipt`` itself can raise)
+    is reported and does not silently cancel receipts that had not started.
   * ``reprocess`` never overwrites a ``reviewed`` receipt, with or without
     ``--force``: the run still happens, but ``save_extraction``'s own refusal
-    (ADR-0012) is what protects the row -- the CLI only reports it.
-    ``--force`` is a status gate (it extends reprocessing to
-    ``auto_approved``) and never a permission override.
+    (ADR-0012) is what protects the row -- the CLI only reports it, for
+    *any* failing stage, not only ``persist``. ``--force`` is a status gate
+    (it extends reprocessing to ``auto_approved``) and never a permission
+    override.
 """
 
 from __future__ import annotations
 
 import io
+import threading
 import uuid
 from decimal import Decimal as D
 from typing import Any
@@ -39,6 +45,7 @@ from PIL import Image  # noqa: E402
 from sqlalchemy import select  # noqa: E402
 
 from config.settings import Settings  # noqa: E402
+from receipts import cli as cli_module  # noqa: E402
 from receipts.cli import (  # noqa: E402
     EXIT_FAILED,
     EXIT_OK,
@@ -197,6 +204,20 @@ def _broken_totals() -> ReceiptExtraction:
     return extraction
 
 
+class _BrokenStorage(LocalStorage):
+    """A storage backend whose ``get`` always fails.
+
+    Mirrors ``tests/test_process_receipt.py``'s ``_BrokenStorage``: forces a
+    deterministic ``load`` stage failure, which is what a receipt whose blob
+    has gone missing looks like to ``process_receipt`` -- as opposed to
+    ``persist``, which is the only stage the old reprocess reporting knew
+    about.
+    """
+
+    def get(self, key: str) -> bytes:
+        raise OSError("blob store unreachable")
+
+
 class _FakeQueue:
     """Stands in for an ``rq.Queue``.
 
@@ -319,6 +340,100 @@ def test_a_receipt_routed_to_review_still_exits_zero(session_factory, storage, s
     assert code == EXIT_OK
 
 
+def test_inline_one_failing_receipt_does_not_abandon_the_others(
+    session_factory, storage, settings, capsys
+):
+    """One receipt's client build blows up; the rest of the batch must not
+    be silently abandoned.
+
+    ``ThreadPoolExecutor.map`` cancels every still-queued future the moment
+    one submitted callable raises, so letting that exception escape ``run()``
+    used to mean whichever receipts had not yet started when the first one
+    failed were left completely untouched -- no line printed, no row
+    changed, no indication anything was wrong, and the exception escaped
+    ``cmd_process`` entirely instead of becoming ``EXIT_FAILED``. Three
+    receipts through a pool of 2 workers is enough to guarantee at least one
+    future is still queued when the first result comes back.
+    """
+    ids = [_pending_receipt(session_factory, storage) for _ in range(3)]
+    args = build_parser().parse_args(["process", "--inline", "--workers", "2"])
+
+    lock = threading.Lock()
+    calls = {"n": 0}
+
+    def client_factory():
+        with lock:
+            calls["n"] += 1
+            is_first_caller = calls["n"] == 1
+        if is_first_caller:
+            raise RuntimeError("simulated provider outage")
+        return _Client([_triage(), _good()])
+
+    code = cmd_process(args, session_factory=session_factory, storage=storage,
+                       settings=settings, client_factory=client_factory)
+
+    # The command could not complete for one receipt, so the run is
+    # EXIT_FAILED -- but only for that reason, never because a receipt that
+    # did run landed in review.
+    assert code == EXIT_FAILED
+    out = capsys.readouterr().out
+    assert "failed" in out
+    assert "total cost" in out
+    with session_factory() as session:
+        statuses = [session.get(Receipt, receipt_id).status for receipt_id in ids]
+    # Nothing was silently dropped: every receipt is accounted for. The two
+    # that were not the simulated failure were actually processed -- not
+    # abandoned as unstarted futures used to be -- and the failed one is
+    # still `pending`, untouched and ready to be retried.
+    assert statuses.count(ReceiptStatus.AUTO_APPROVED) == 2
+    assert statuses.count(ReceiptStatus.PENDING) == 1
+
+
+def test_process_without_limit_does_not_silently_cap_at_the_repository_default(
+    session_factory, storage, settings, monkeypatch
+):
+    """``--help`` promises "no cap" when ``--limit`` is omitted; pin that
+    ``cmd_process`` actually asks the repository for everything rather than
+    silently inheriting ``query_receipts``'s own default of 1000 -- a real
+    backlog past that size used to be drained a thousand at a time with
+    nothing telling the operator some pending rows were left behind.
+    """
+    _pending_receipt(session_factory, storage)
+    seen_limits: list[int] = []
+    real_query_receipts = cli_module.query_receipts
+
+    def spy(session, **kwargs):
+        seen_limits.append(kwargs.get("limit"))
+        return real_query_receipts(session, **kwargs)
+
+    monkeypatch.setattr(cli_module, "query_receipts", spy)
+    recorder = _FakeQueue()
+    args = build_parser().parse_args(["process"])
+
+    cmd_process(args, session_factory=session_factory, storage=storage,
+               settings=settings, queue_factory=lambda: recorder)
+
+    # The behaviour that actually matters: whatever was asked for is nowhere
+    # near the repository's own default of 1000, so a five-figure backlog
+    # would never be silently truncated.
+    assert len(seen_limits) == 1
+    assert seen_limits[0] > 1_000_000
+    # Also pins this implementation's specific choice of constant.
+    assert seen_limits[0] == cli_module._NO_LIMIT
+
+
+def test_process_rejects_a_non_positive_limit():
+    with pytest.raises(SystemExit) as exc:
+        build_parser().parse_args(["process", "--limit", "0"])
+    assert exc.value.code == 2
+
+
+def test_process_rejects_a_non_positive_workers():
+    with pytest.raises(SystemExit) as exc:
+        build_parser().parse_args(["process", "--workers", "-1"])
+    assert exc.value.code == 2
+
+
 # --------------------------------------------------------------------------- #
 # reprocess
 # --------------------------------------------------------------------------- #
@@ -359,20 +474,94 @@ def test_reprocess_refuses_an_auto_approved_receipt_without_force(
 
 
 def test_force_extends_to_auto_approved_but_never_to_reviewed(session_factory, storage, settings):
+    """The money must actually change under ``--force``, not just the status.
+
+    ``_auto_approved_receipt`` already seeds the row as ``AUTO_APPROVED``, so
+    asserting only that it is *still* ``AUTO_APPROVED`` afterwards does not
+    discriminate a real ``--force`` re-run from one that silently refused to
+    do anything: both look identical on that assertion alone. Asserting the
+    total actually moved to the new run's number is what proves ``--force``
+    did what it says.
+    """
     approved = _auto_approved_receipt(session_factory, storage)
     reviewed = _reviewed_receipt(session_factory, storage, total=D("999.99"))
 
-    cmd_reprocess(build_parser().parse_args(["reprocess", str(approved), "--force"]),
-                  session_factory=session_factory, storage=storage, settings=settings,
-                  client_factory=lambda: _Client([_triage(), _good()]))
-    cmd_reprocess(build_parser().parse_args(["reprocess", str(reviewed), "--force"]),
-                  session_factory=session_factory, storage=storage, settings=settings,
-                  client_factory=lambda: _Client([_triage(), _good()]))
+    code_approved = cmd_reprocess(
+        build_parser().parse_args(["reprocess", str(approved), "--force"]),
+        session_factory=session_factory, storage=storage, settings=settings,
+        client_factory=lambda: _Client([_triage(), _good()]),
+    )
+    code_reviewed = cmd_reprocess(
+        build_parser().parse_args(["reprocess", str(reviewed), "--force"]),
+        session_factory=session_factory, storage=storage, settings=settings,
+        client_factory=lambda: _Client([_triage(), _good()]),
+    )
 
     with session_factory() as session:
-        # --force is a status gate, not a permission override.
-        assert session.get(Receipt, approved).status is ReceiptStatus.AUTO_APPROVED
-        assert session.get(Receipt, reviewed).total == D("999.99")
+        approved_row = session.get(Receipt, approved)
+        reviewed_row = session.get(Receipt, reviewed)
+    assert code_approved == EXIT_OK
+    # --force is a status gate, not a permission override: it actually ran
+    # and overwrote the auto_approved receipt with this run's own number --
+    assert approved_row.status is ReceiptStatus.AUTO_APPROVED
+    assert approved_row.total == D("224.00")  # _good()'s total, not the seeded 50.00
+    # -- and it never touches a reviewed one, force or not.
+    assert code_reviewed == EXIT_OK
+    assert reviewed_row.total == D("999.99")
+
+
+def test_reprocess_of_a_reviewed_receipt_that_fails_before_persist_still_reports_unchanged(
+    session_factory, storage, settings, capsys
+):
+    """A reviewed receipt whose blob has vanished fails at ``load``, not
+    ``persist`` -- the row is left just as untouched either way (nothing in
+    ``_persist_failure`` mutates a row already ``reviewed``, regardless of
+    which stage failed), but a report that special-cased only
+    ``failed_stage == "persist"`` used to fall through to a bare
+    ``reviewed  confidence=1.000`` here, which reads exactly like the re-run
+    confirmed the human's numbers when nothing was extracted at all.
+    """
+    receipt_id = _reviewed_receipt(session_factory, storage, total=D("999.99"))
+    broken = _BrokenStorage(storage.root)
+    args = build_parser().parse_args(["reprocess", str(receipt_id)])
+
+    code = cmd_reprocess(args, session_factory=session_factory, storage=broken,
+                         settings=settings, client_factory=lambda: _Client([]))
+
+    assert code == EXIT_OK
+    out = capsys.readouterr().out
+    assert "confidence=1.000" not in out
+    assert "reviewed" in out.lower()
+    with session_factory() as session:
+        row = session.get(Receipt, receipt_id)
+        task = session.scalars(
+            select(ReviewTask).where(ReviewTask.receipt_id == receipt_id)
+        ).one()
+    assert row.status is ReceiptStatus.REVIEWED
+    assert row.total == D("999.99")
+    assert task.state is ReviewState.OPEN
+    assert "load" in task.reason
+
+
+def test_reprocess_prints_the_reason_when_a_non_reviewed_receipt_fails(
+    session_factory, storage, settings, capsys
+):
+    """``reprocess`` used to drop ``result.reason`` on any non-reviewed
+    failure, unlike ``process --inline``'s identically shaped line for the
+    identical outcome.
+    """
+    receipt_id = _pending_receipt(session_factory, storage)
+    broken = _BrokenStorage(storage.root)
+    args = build_parser().parse_args(["reprocess", str(receipt_id)])
+
+    code = cmd_reprocess(args, session_factory=session_factory, storage=broken,
+                         settings=settings, client_factory=lambda: _Client([]))
+
+    assert code == EXIT_OK
+    out = capsys.readouterr().out
+    assert "load" in out
+    with session_factory() as session:
+        assert session.get(Receipt, receipt_id).status is ReceiptStatus.NEEDS_REVIEW
 
 
 def test_reprocess_of_an_unknown_id_is_exit_one(session_factory, storage, settings, capsys):
