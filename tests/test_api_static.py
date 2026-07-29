@@ -15,6 +15,7 @@ import pytest
 pytest.importorskip("fastapi")
 
 from fastapi.testclient import TestClient  # noqa: E402
+from starlette.staticfiles import StaticFiles  # noqa: E402
 
 from config.settings import Settings  # noqa: E402
 from receipts.ingest.storage import LocalStorage  # noqa: E402
@@ -23,6 +24,9 @@ from receipts.persist.session import make_engine, make_session_factory  # noqa: 
 from receipts.review.api import create_app  # noqa: E402
 
 INDEX_HTML = "<!doctype html><title>Review</title><div id=root></div>"
+# No trailing newline: ``write_text`` translates "\n" to the platform line
+# ending, which would not match the bytes the client reads back on Windows.
+ASSET_JS = "console.log('the real bundle');"
 
 
 @pytest.fixture()
@@ -49,9 +53,11 @@ def _build(session_factory, tmp_path, dist_dir):
 
 
 def _built_dist(tmp_path):
+    """A stand-in for ``npm run build``: a shell plus one hashed asset."""
     dist = tmp_path / "dist"
-    dist.mkdir()
+    (dist / "assets").mkdir(parents=True)
     (dist / "index.html").write_text(INDEX_HTML, encoding="utf-8")
+    (dist / "assets" / "index-abc123.js").write_text(ASSET_JS, encoding="utf-8")
     return dist
 
 
@@ -88,14 +94,24 @@ def test_spa_deep_link_falls_back_to_the_shell(session_factory, tmp_path):
 def test_the_spa_never_shadows_an_api_path(session_factory, tmp_path):
     """``/health`` stays the API's JSON even with a built frontend mounted.
 
-    This is a **structural** property of the ``/app`` prefix, not an
-    ordering dependency: a Starlette mount only ever intercepts paths under
-    its own prefix, so a mount at ``/app`` cannot compete with ``/health``
-    at any registration order -- reproduced by hand: moving ``_install_spa``
-    to run *before* the read routes still leaves this test (and the whole
-    file) green. It stays in the suite as a guard against a real, narrower
-    risk: a future change that moves the mount to ``/`` instead of ``/app``,
-    where registration order would start to matter.
+    What this test actually catches was established by mutating each
+    guarantee separately and observing which mutation trips it:
+
+    * mount at ``/app``, registered last (as shipped) -- ``/health`` is
+      ``200 application/json``: **passes**
+    * mount moved to ``/``, still registered last -- ``/health`` is still
+      ``200 application/json``: **still passes**
+    * mount moved to ``/`` *and* registered before the read routes --
+      ``/health`` becomes ``200 text/html`` carrying the shell: **fails**
+
+    So this test does not catch a move to ``/`` on its own, and it does not
+    catch a reordering on its own; only the conjunction of the two trips it.
+    Two independent things keep the SPA off ``/health``, and either alone is
+    sufficient: the ``/app`` prefix (a Starlette mount only ever intercepts
+    paths under its own prefix) and registration order (Starlette matches
+    routes in registration order, so a mount installed after ``/health``
+    loses to it even at ``/``). This test goes red only once **both** are
+    gone.
     """
     app = _build(session_factory, tmp_path, _built_dist(tmp_path))
     client = TestClient(app)
@@ -103,3 +119,104 @@ def test_the_spa_never_shadows_an_api_path(session_factory, tmp_path):
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("application/json")
     assert "<div id=root></div>" not in response.text
+
+
+def test_a_built_asset_is_served_from_the_mount(session_factory, tmp_path):
+    """The companion to the narrowing below: real files must still be served.
+
+    Cannot be proven by a RED run -- it asserts the absence of breakage, and
+    it passes both before and after the fallback was narrowed. It was proven
+    instead by mutation: gating ``_SpaFiles.get_response`` on the
+    navigation check (rather than only the 404 fallback) turns this into a
+    404 and fails it.
+    """
+    app = _build(session_factory, tmp_path, _built_dist(tmp_path))
+    client = TestClient(app)
+    response = client.get("/app/assets/index-abc123.js")
+    assert response.status_code == 200
+    assert response.text == ASSET_JS
+
+
+@pytest.mark.parametrize(
+    "path",
+    ["/app/assets/index-deadbeef.js", "/app/assets/index-deadbeef.css", "/app/favicon.ico"],
+)
+def test_a_missing_file_under_app_is_a_404_not_the_shell(session_factory, tmp_path, path):
+    """A request that names a file can never be a client-side route.
+
+    Task 2 puts a content-hashed Vite build behind this mount. A browser
+    holding a cached ``index.html`` asks for an asset hash that has since
+    been purged; answering *that* with ``200`` and the HTML shell turns a
+    missing file into ``Unexpected token '<'`` in the console, with no 404
+    anywhere for the reviewer to point at. The history fallback is therefore
+    restricted to navigations -- paths with no file extension.
+    """
+    app = _build(session_factory, tmp_path, _built_dist(tmp_path))
+    client = TestClient(app)
+    response = client.get(path)
+    assert response.status_code == 404
+    assert "<div id=root></div>" not in response.text
+
+
+def test_a_half_built_dist_is_treated_as_not_built(session_factory, tmp_path):
+    """An interrupted ``npm run build`` must not mount at all.
+
+    A directory that exists but holds no ``index.html`` -- an interrupted
+    build, or ``FRONTEND_DIST`` pointed at some other real directory -- would
+    otherwise mount and serve whatever happens to be in it while answering
+    every SPA page with a 404.
+    """
+    dist = tmp_path / "dist"
+    (dist / "assets").mkdir(parents=True)
+    (dist / "assets" / "index-abc123.js").write_text(ASSET_JS, encoding="utf-8")
+
+    app = _build(session_factory, tmp_path, dist)
+    client = TestClient(app)
+
+    assert client.get("/health").status_code == 200
+    assert client.get("/app/").status_code == 404
+    stray = client.get("/app/assets/index-abc123.js")
+    assert stray.status_code == 404
+    assert stray.headers["content-type"].startswith("application/json")
+
+
+def test_a_non_404_from_the_mount_still_propagates(session_factory, tmp_path, monkeypatch):
+    """``_SpaFiles`` swallows a 404 and nothing else.
+
+    Cannot be proven by a RED run -- the behaviour already worked before this
+    test existed. It was proven by mutation: collapsing ``if exc.status_code
+    != 404: raise`` into a bare swallow must make it fail.
+
+    ``POST /app/`` does **not** prove that, though it looks like it should.
+    ``StaticFiles`` rejects a non-GET/HEAD before it looks at the path, so
+    the fallback's own ``get_response("index.html", scope)`` raises the very
+    same 405 -- under a bare swallow ``POST /app/`` still answers 405
+    (reproduced). It is asserted here anyway, because landing in the API's
+    JSON envelope is a real contract, but it is not what pins the guard.
+
+    A ``PermissionError`` is. ``StaticFiles`` turns it into a 401 and the
+    fallback would then happily serve a perfectly readable ``index.html``
+    instead, so a bare swallow turns "unreadable on disk" into ``200`` plus
+    the shell. That is the assertion the mutation trips.
+    """
+    real_lookup = StaticFiles.lookup_path
+
+    def deny_one(self, path):
+        if "denied" in path:
+            raise PermissionError(path)
+        return real_lookup(self, path)
+
+    monkeypatch.setattr(StaticFiles, "lookup_path", deny_one)
+
+    app = _build(session_factory, tmp_path, _built_dist(tmp_path))
+    client = TestClient(app)
+
+    denied = client.get("/app/denied")
+    assert denied.status_code == 401
+    assert "<div id=root></div>" not in denied.text
+
+    posted = client.post("/app/")
+    assert posted.status_code == 405
+    assert posted.headers["content-type"].startswith("application/json")
+    assert posted.json()["error"]["message"]
+    assert "<div id=root></div>" not in posted.text

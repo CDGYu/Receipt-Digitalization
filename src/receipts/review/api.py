@@ -14,7 +14,7 @@ routes (Task 5: ``POST /upload``, ``PATCH /receipts/{id}``, the signed image
 routes, the review queue routes, ``GET /export/xlsx``), and finally -- after
 every one of those -- the SPA static mount (P5.T0: ``_install_spa``), which
 serves the built review UI under ``/app`` when ``Settings.frontend_dist``
-actually exists and is otherwise a no-op.
+holds a built ``index.html`` and is otherwise a silent no-op.
 
 Error handling lives in one place (:func:`_install_error_handlers`) so every
 route gets it for free instead of repeating a ``try/except`` per handler:
@@ -624,12 +624,39 @@ def _install_write_routes(app: FastAPI) -> None:
 # --------------------------------------------------------------------------- #
 
 
+def _names_a_file(path: str) -> bool:
+    """True when the last segment of ``path`` carries a file extension.
+
+    ``StaticFiles`` hands ``get_response`` an OS-joined *relative* path --
+    ``assets\\index-abc123.js`` on Windows, ``assets/index-abc123.js``
+    elsewhere. ``Path(...).suffix`` reads the same last component either way:
+    on POSIX a backslash is an ordinary character inside a single segment, so
+    the dot it looks for is still the last one. Verified by executing both
+    forms rather than assumed.
+    """
+    return bool(Path(path).suffix)
+
+
 class _SpaFiles(StaticFiles):
-    """``StaticFiles`` that falls back to ``index.html`` for unknown paths.
+    """``StaticFiles`` with a history fallback for client-side routes.
 
     The SPA owns its own routing under ``/app``: a hard refresh on
     ``/app/review``, or a bookmarked link to it, must return the shell rather
-    than a 404. Only a 404 is swallowed -- a 405 or a permission error is a
+    than a 404 (ADR-0015).
+
+    **The fallback is restricted to navigations** -- requests whose final
+    path segment has no file extension, which is the only shape a
+    client-side route can take. A request that names a file
+    (``/app/assets/index-abc123.js``, ``/app/favicon.ico``) keeps its 404.
+    An unconditional fallback answers *every* miss under ``/app`` with
+    ``200 text/html``, and once a content-hashed build sits here that is a
+    trap: a browser holding a cached ``index.html`` asks for an asset hash
+    that has since been purged, gets HTML where JavaScript was expected, and
+    fails with ``Unexpected token '<'`` -- with no 404 anywhere for anyone
+    to point at.
+
+    Only a 404 is swallowed. A 405 (``StaticFiles`` rejects a non-GET/HEAD
+    before it ever looks at the path) or a 401 from a permission error is a
     real failure and still propagates to the app's error handlers.
     """
 
@@ -637,7 +664,7 @@ class _SpaFiles(StaticFiles):
         try:
             return await super().get_response(path, scope)
         except StarletteHTTPException as exc:
-            if exc.status_code != 404:
+            if exc.status_code != 404 or _names_a_file(path):
                 raise
             return await super().get_response("index.html", scope)
 
@@ -646,25 +673,38 @@ def _install_spa(app: FastAPI, settings: Settings) -> None:
     """Serve the built review UI under ``/app``, when it has been built.
 
     ``/health`` stays the API's JSON and ``/review/next`` stays an API route
-    rather than a page -- but that separation is **structural**, not a
-    consequence of registration order: a Starlette mount only ever
-    intercepts paths under its own prefix, so a mount at ``/app`` can never
-    compete with an API path regardless of when it is installed (verified by
-    hand: registering this mount *before* the read routes still leaves every
-    API test green). ``/app`` is a prefix the API does not use, which is why
-    the SPA lives there instead of at the root -- the alternative was moving
-    the API under ``/api``, which would break every existing test and the
-    contract ADR-0012 documents.
+    rather than a page. **Two independent things** keep it that way, and
+    either one on its own is enough:
 
-    Registered **last** anyway, after every API route: it costs nothing, and
-    it is the property that would actually start to matter if a future
-    change ever moved the mount to ``/`` instead of ``/app`` -- at the root,
-    order *would* decide which one wins.
+    * the ``/app`` prefix -- a Starlette mount only ever intercepts paths
+      under its own prefix, so a mount here cannot compete with an API path
+      at *any* registration order;
+    * registration order -- Starlette matches routes in the order they were
+      added, so a mount installed after ``/health`` loses to ``/health``
+      even from the root.
 
-    Absent directory -> no mount at all (see ``Settings.frontend_dist``).
+    Established by mutating each one separately and watching what breaks:
+    moving this mount to ``/`` while it stays registered last leaves
+    ``/health`` at ``200 application/json``; only moving it to ``/`` **and**
+    registering it before the read routes turns ``/health`` into the HTML
+    shell. So ``test_the_spa_never_shadows_an_api_path`` goes red on the
+    conjunction alone -- it does not catch either change by itself, and
+    should not be described as if it did.
+
+    ``/app`` is a prefix the API does not use, which is why the SPA lives
+    there instead of at the root -- the alternative was moving the API under
+    ``/api``, which would break every existing test and the contract
+    ADR-0012 documents.
+
+    Not built -> no mount at all, silently: CI and a base install take that
+    path normally. **"Built" means the directory exists and holds an
+    ``index.html``.** An interrupted ``npm run build``, or a
+    ``FRONTEND_DIST`` aimed at some other real directory, otherwise mounts
+    and serves whatever happens to be in it while every SPA page 404s. See
+    ``Settings.frontend_dist``.
     """
     dist = Path(settings.frontend_dist)
-    if not dist.is_dir():
+    if not dist.is_dir() or not (dist / "index.html").is_file():
         return
     app.mount("/app", _SpaFiles(directory=dist, html=True), name="spa")
 
@@ -687,9 +727,10 @@ def create_app(
     (``session_factory``, ``storage``, ``settings``, ``submit``), then wires
     session auth, the auth router, the error handlers, and the read and
     write routes, in that order -- and, last of all, the SPA static mount
-    (:func:`_install_spa`, P5.T0). Registered last as a matter of habit; what
-    actually keeps it from ever shadowing an API path is that ``/app`` is a
-    prefix the API itself never uses (see :func:`_install_spa`).
+    (:func:`_install_spa`, P5.T0). Registering it last is one of the two
+    independent reasons it can never shadow an API path; the other is that
+    ``/app`` is a prefix the API itself never uses. Either alone suffices --
+    see :func:`_install_spa` for the mutation that establishes that.
 
     ``install_session_middleware`` is called unconditionally: an app with no
     ``SESSION_SECRET`` must fail at construction, not serve unauthenticated

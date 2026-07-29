@@ -135,25 +135,57 @@ client-side route also called `/review/...` would collide.
 Therefore:
 
 - SPA pages are served under **`/app/*`**; built assets under `/assets/*`.
-- **This is what keeps API paths safe, structurally.** A Starlette mount only
-  ever intercepts paths under its own prefix, so a mount at `/app` cannot
-  compete with `/health` or `/review/next` at *any* registration order. The
-  mount is still registered **after** every API route as a matter of habit —
-  cheap, and it is the property that would actually matter if the mount ever
-  moved to `/` instead of `/app`, where order would start to decide the
-  winner.
-- The SPA history fallback applies **only under `/app`**.
+- **Two independent things keep API paths safe, and either one alone is
+  enough.** The `/app` **prefix**: a Starlette mount only ever intercepts paths
+  under its own prefix, so a mount at `/app` cannot compete with `/health` or
+  `/review/next` at *any* registration order. And **registration order**:
+  Starlette matches routes in the order they were added, so a mount installed
+  after `/health` loses to `/health` even from the root. Established by mutating
+  each separately — moving the mount to `/` while it stays registered last
+  leaves `/health` at `200 application/json`; only moving it to `/` **and**
+  registering it before the read routes turns `/health` into the shell. The
+  regression test therefore goes red on the conjunction alone, not on either
+  change by itself (§6.1).
+- The SPA history fallback applies **only under `/app`**, and only to
+  navigations — see the dated note below.
 - **API paths are unchanged.** No existing test or documented contract moves.
 
 Two guards, both ADR-0014-shaped:
 
-1. The mount is **skipped entirely when `frontend/dist` is absent.**
-   `StaticFiles(directory=...)` raises at construction, so an unguarded mount
-   would break `create_app` for a base install, for CI, and for every test run
-   on a machine that has never run `npm`.
+1. The mount is **skipped entirely unless `frontend/dist` exists and holds an
+   `index.html`.** `StaticFiles(directory=...)` raises at construction, so an
+   unguarded mount would break `create_app` for a base install, for CI, and for
+   every test run on a machine that has never run `npm`. The `index.html` check
+   is the same guard applied to a *half*-build: an interrupted `npm run build`,
+   or `FRONTEND_DIST` aimed at some other real directory, would otherwise mount
+   and serve whatever happens to be in it while every SPA page 404s. The skip is
+   silent either way — CI and base installs take it normally.
 2. `create_app` gains **no import that a base install lacks.** `StaticFiles` is
    Starlette, already present via the `api` extra — no new dependency, runtime
    or otherwise.
+
+**2026-07-29 — the history fallback is navigation-only.** The `index.html`
+fallback originally applied to every 404 under `/app`, so *every* missing file
+there answered `200 text/html`. With the content-hashed Vite build behind this
+mount (Task 2) that is a trap: a browser holding a cached `index.html` requests
+an asset hash that has since been purged, receives HTML where JavaScript was
+expected, and fails with `Unexpected token '<'` — with no 404 anywhere for
+anyone to point at. That is a failure path terminating in something the reviewer
+cannot see, which §5 forbids. The fallback is now restricted to requests whose
+final path segment carries **no file extension** — the only shape a client-side
+route takes. Anything that names a file (`/app/assets/index-abc123.js`,
+`/app/favicon.ico`) keeps its 404.
+
+This implements ADR-0015's stated intent more precisely; it does not reverse it.
+ADR-0015 asks that "a hard refresh on `/app/review` returns the shell instead of
+a 404" — a navigation. `/app/review` names no file, so that sentence stays
+literally true, for every client rather than only for browsers (which is why the
+discriminator is the path shape and not the `Accept` header: an `Accept`-based
+rule would 404 a `curl` of `/app/review` and so would narrow the ADR's own
+example). What changed is only the set of requests that were never navigations
+in the first place. **ADR-0015 itself is unchanged.** The price of the rule is
+that a client-side route must not carry a dot in its final segment; `/app/login`
+and `/app/review` (§3.1) do not, and Task 2's router must keep it that way.
 
 ### 3.4 Auth flow
 
@@ -306,22 +338,40 @@ is not is the exact failure this system exists to prevent.
 dependency and no build step, and must still pass on a machine with no `npm`
 installed. The frontend adds zero Python test dependencies.
 
-### 6.1 Python — three tests for the one backend change
+### 6.1 Python — the guards on the one backend change
 
 1. **`create_app` succeeds when `frontend/dist` is absent.** This is the guard
    against the defect class this project shipped twice: an unbuilt frontend must
    not break app creation for a base install or CI.
-2. With a `dist` fixture (a tmp dir holding an `index.html`, not a real build),
-   `GET /app/` serves it.
-3. **`GET /health` still returns the API's JSON, not `index.html`** — proves
-   the SPA mount never shadows an API path. With the mount at the `/app`
-   prefix this is **structural, not an ordering dependency**: a Starlette
-   mount only intercepts paths under its own prefix, so `/health` cannot be
-   shadowed at any registration order (reproduced by hand: registering the
-   mount before the read routes still leaves this test green). It stays in
-   the suite as a guard against a real, narrower risk — a future change that
-   moves the mount to `/` instead of `/app`, where order would start to
-   matter.
+2. With a `dist` fixture (a tmp dir holding an `index.html` and one hashed
+   asset, not a real build), `GET /app/` serves the shell, `GET
+   /app/assets/index-abc123.js` serves the asset, and `GET /app/review` — a
+   deep link — falls back to the shell.
+3. **`GET /health` still returns the API's JSON, not `index.html`.** What this
+   test actually catches was established by mutating each guarantee separately:
+   moving the mount to `/` while it stays registered last leaves `/health` at
+   `200 application/json` and the test green; only moving it to `/` **and**
+   registering it before the read routes turns `/health` into the shell and
+   fails it. So it catches the *conjunction* and neither change alone — two
+   independent things keep the SPA off `/health` (the `/app` prefix and
+   registration order, §3.3) and this test goes red only when both are gone.
+   It must not be described as an ordering guard or as a `/`-move guard.
+4. **A missing file under `/app` is a 404, not the shell** —
+   `/app/assets/index-deadbeef.js`, `.css` and `/app/favicon.ico`. The
+   navigation-only narrowing recorded in §3.3.
+5. **A `dist` directory with no `index.html` does not mount at all**: `/health`
+   still answers, `/app/` 404s, and a file that *is* present in that directory
+   is not served.
+6. **A non-404 from the mount still propagates.** A `PermissionError` (→ 401)
+   is the probe that pins this; `POST /app/` → 405 does not, because
+   `StaticFiles` re-raises the same 405 from inside the fallback call, so a
+   bare swallow leaves it unchanged. Both are asserted; only the first is
+   load-bearing.
+
+Tests 4 and 5 were proven by a RED run. Tests 1, 3, 6 and the asset case in 2
+assert the *absence* of breakage and so cannot be (ADR-0015); each was proven
+instead by reverting its own guarantee separately and observing the right test —
+and only that test — go red.
 
 ### 6.2 Vitest — component and unit
 
