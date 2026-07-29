@@ -135,8 +135,13 @@ client-side route also called `/review/...` would collide.
 Therefore:
 
 - SPA pages are served under **`/app/*`**; built assets under `/assets/*`.
-- The static mount is registered **after** every API route, so route ordering
-  cannot shadow the API.
+- **This is what keeps API paths safe, structurally.** A Starlette mount only
+  ever intercepts paths under its own prefix, so a mount at `/app` cannot
+  compete with `/health` or `/review/next` at *any* registration order. The
+  mount is still registered **after** every API route as a matter of habit —
+  cheap, and it is the property that would actually matter if the mount ever
+  moved to `/` instead of `/app`, where order would start to decide the
+  winner.
 - The SPA history fallback applies **only under `/app`**.
 - **API paths are unchanged.** No existing test or documented contract moves.
 
@@ -308,9 +313,15 @@ installed. The frontend adds zero Python test dependencies.
    not break app creation for a base install or CI.
 2. With a `dist` fixture (a tmp dir holding an `index.html`, not a real build),
    `GET /app/` serves it.
-3. **`GET /health` still returns the API's JSON, not `index.html`** — the
-   mount-ordering regression test, which fails if the static mount is ever
-   registered before the routes.
+3. **`GET /health` still returns the API's JSON, not `index.html`** — proves
+   the SPA mount never shadows an API path. With the mount at the `/app`
+   prefix this is **structural, not an ordering dependency**: a Starlette
+   mount only intercepts paths under its own prefix, so `/health` cannot be
+   shadowed at any registration order (reproduced by hand: registering the
+   mount before the read routes still leaves this test green). It stays in
+   the suite as a guard against a real, narrower risk — a future change that
+   moves the mount to `/` instead of `/app`, where order would start to
+   matter.
 
 ### 6.2 Vitest — component and unit
 

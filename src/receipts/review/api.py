@@ -645,12 +645,21 @@ class _SpaFiles(StaticFiles):
 def _install_spa(app: FastAPI, settings: Settings) -> None:
     """Serve the built review UI under ``/app``, when it has been built.
 
-    Registered **last**, after every API route, so route ordering cannot
-    shadow the API: ``/health`` stays the API's JSON and ``/review/next``
-    stays an API route rather than a page. ``/app`` is a prefix the API does
-    not use, which is why the SPA lives there instead of at the root -- the
-    alternative was moving the API under ``/api``, which would break every
-    existing test and the contract ADR-0012 documents.
+    ``/health`` stays the API's JSON and ``/review/next`` stays an API route
+    rather than a page -- but that separation is **structural**, not a
+    consequence of registration order: a Starlette mount only ever
+    intercepts paths under its own prefix, so a mount at ``/app`` can never
+    compete with an API path regardless of when it is installed (verified by
+    hand: registering this mount *before* the read routes still leaves every
+    API test green). ``/app`` is a prefix the API does not use, which is why
+    the SPA lives there instead of at the root -- the alternative was moving
+    the API under ``/api``, which would break every existing test and the
+    contract ADR-0012 documents.
+
+    Registered **last** anyway, after every API route: it costs nothing, and
+    it is the property that would actually start to matter if a future
+    change ever moved the mount to ``/`` instead of ``/app`` -- at the root,
+    order *would* decide which one wins.
 
     Absent directory -> no mount at all (see ``Settings.frontend_dist``).
     """
@@ -678,8 +687,9 @@ def create_app(
     (``session_factory``, ``storage``, ``settings``, ``submit``), then wires
     session auth, the auth router, the error handlers, and the read and
     write routes, in that order -- and, last of all, the SPA static mount
-    (:func:`_install_spa`, P5.T0), so route ordering can never let a page
-    shadow an API path.
+    (:func:`_install_spa`, P5.T0). Registered last as a matter of habit; what
+    actually keeps it from ever shadowing an API path is that ``/app`` is a
+    prefix the API itself never uses (see :func:`_install_spa`).
 
     ``install_session_middleware`` is called unconditionally: an app with no
     ``SESSION_SECRET`` must fail at construction, not serve unauthenticated

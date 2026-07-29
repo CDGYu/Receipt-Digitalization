@@ -85,8 +85,18 @@ def test_spa_deep_link_falls_back_to_the_shell(session_factory, tmp_path):
     assert "<div id=root></div>" in response.text
 
 
-def test_api_routes_win_over_the_mount(session_factory, tmp_path):
-    """The ordering regression test: /health is the API's JSON, not the shell."""
+def test_the_spa_never_shadows_an_api_path(session_factory, tmp_path):
+    """``/health`` stays the API's JSON even with a built frontend mounted.
+
+    This is a **structural** property of the ``/app`` prefix, not an
+    ordering dependency: a Starlette mount only ever intercepts paths under
+    its own prefix, so a mount at ``/app`` cannot compete with ``/health``
+    at any registration order -- reproduced by hand: moving ``_install_spa``
+    to run *before* the read routes still leaves this test (and the whole
+    file) green. It stays in the suite as a guard against a real, narrower
+    risk: a future change that moves the mount to ``/`` instead of ``/app``,
+    where registration order would start to matter.
+    """
     app = _build(session_factory, tmp_path, _built_dist(tmp_path))
     client = TestClient(app)
     response = client.get("/health")
