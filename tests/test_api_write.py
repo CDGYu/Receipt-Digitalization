@@ -620,3 +620,22 @@ def test_export_does_not_issue_one_query_per_receipt_for_line_items_or_merchant(
     # one batched SELECT each -- not five, and not two for merchant either.
     assert len(line_item_queries) <= 1
     assert len(merchant_queries) <= 1
+
+
+def test_build_export_rows_without_a_secret_leaves_the_image_column_empty(
+    session_factory, receipt_id
+):
+    from receipts.review.serializers import build_export_rows, query_export_receipts
+
+    with session_factory() as session:
+        receipts = query_export_receipts(
+            session, status=None, merchant_id=None, date_from=None,
+            date_to=None, min_confidence=None, limit=100,
+        )
+        _extractions, rows = build_export_rows(
+            session, receipts, secret=None, image_url_ttl_s=86400
+        )
+
+    assert rows, "fixture should produce at least one exportable receipt"
+    # An unverifiable link is worse than no link.
+    assert all(row.image_url is None for row in rows)

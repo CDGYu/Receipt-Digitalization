@@ -41,7 +41,6 @@ from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response, U
 from fastapi.responses import JSONResponse
 from sqlalchemy import func, select, text
 from sqlalchemy.exc import DBAPIError
-from sqlalchemy.orm import Session, selectinload
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from config.settings import Settings, get_settings
@@ -77,7 +76,7 @@ from .schemas import (
     MetricsResponse,
     ReceiptListResponse,
 )
-from .serializers import build_export_rows, receipt_detail, receipt_summary
+from .serializers import build_export_rows, query_export_receipts, receipt_detail, receipt_summary
 
 __all__ = ["create_app"]
 
@@ -97,12 +96,6 @@ ImageVariant = Literal["original", "processed"]
 #: ``monkeypatch.setattr(api_module, "_EXPORT_MAX_ROWS", ...)`` without a
 #: database of five thousand receipts.
 _EXPORT_MAX_ROWS = 5000
-
-#: Receipt statuses ``GET /export/xlsx`` leaves out unless ``status=`` names
-#: one of them explicitly (ambiguity resolution #4): a pending row is an
-#: upload in flight rather than a transaction, and a rejected one is a
-#: duplicate the pipeline deliberately keeps out of exports.
-_EXPORT_EXCLUDED_BY_DEFAULT = frozenset({ReceiptStatus.PENDING, ReceiptStatus.REJECTED})
 
 
 def _default_submit(job: ReceiptJob) -> Any:
@@ -298,61 +291,6 @@ def _image_key_for(receipt: Receipt, variant: ImageVariant) -> str:
     if variant == "processed" and receipt.processed_image_key:
         return receipt.processed_image_key
     return receipt.image_key
-
-
-def _query_export_receipts(
-    session: Session,
-    *,
-    status: ReceiptStatus | None,
-    merchant_id: uuid.UUID | None,
-    date_from: date | None,
-    date_to: date | None,
-    min_confidence: Decimal | None,
-    limit: int,
-) -> list[Receipt]:
-    """Receipts for ``GET /export/xlsx``: the same filters as
-    :func:`~receipts.persist.repository.query_receipts`, plus the
-    export-only exclusion of ``PENDING``/``REJECTED`` unless ``status``
-    names one of them explicitly.
-
-    A dedicated query rather than a call to ``query_receipts`` because that
-    function's ``status`` filter is a single equality -- it has no way to
-    express "every status except these two" -- and the export exclusion
-    needs exactly that. Ordered ``created_at`` then ``id``, matching
-    ``query_receipts``, so the two entry points never disagree about paging
-    order.
-
-    ``line_items`` and ``merchant`` are eager-loaded with ``selectinload``
-    (fix round 1, F3): both are default-lazy relationships
-    (:mod:`receipts.persist.models`), and
-    :func:`receipts.review.serializers.build_export_rows` touches both for
-    every row it builds (line items to reconstruct the extraction, merchant
-    for the canonical name). Left lazy, each access is its own SELECT --
-    an N+1 that a two- or three-receipt test run never surfaces but that
-    turns into 5,000-10,000 round trips at the route's own
-    ``_EXPORT_MAX_ROWS`` design point. One batched ``IN`` query per
-    relationship, issued here, is what keeps the query count independent of
-    how many receipts match.
-    """
-    query = (
-        select(Receipt)
-        .options(selectinload(Receipt.line_items), selectinload(Receipt.merchant))
-    )
-    if status is not None:
-        query = query.where(Receipt.status == status)
-    else:
-        query = query.where(Receipt.status.not_in(_EXPORT_EXCLUDED_BY_DEFAULT))
-    if merchant_id is not None:
-        query = query.where(Receipt.merchant_id == merchant_id)
-    if date_from is not None:
-        query = query.where(Receipt.txn_date >= date_from)
-    if date_to is not None:
-        query = query.where(Receipt.txn_date <= date_to)
-    if min_confidence is not None:
-        query = query.where(Receipt.confidence >= min_confidence)
-
-    query = query.order_by(Receipt.created_at, Receipt.id).limit(limit)
-    return list(session.scalars(query))
 
 
 def _install_write_routes(app: FastAPI) -> None:
@@ -635,7 +573,7 @@ def _install_write_routes(app: FastAPI) -> None:
         """
         settings = request.app.state.settings
         with request.app.state.session_factory() as session:
-            rows = _query_export_receipts(
+            rows = query_export_receipts(
                 session,
                 status=status,
                 merchant_id=merchant_id,

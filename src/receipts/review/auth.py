@@ -20,10 +20,8 @@ sleeping in a test.
 
 from __future__ import annotations
 
-import hashlib
 import hmac
 import logging
-import time
 from dataclasses import dataclass
 from typing import Callable
 
@@ -33,6 +31,8 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from config.settings import Settings
 from receipts.persist.users import get_user, verify_credentials
+
+from .signing import sign_url, verify_signature
 
 __all__ = [
     "SessionUser",
@@ -183,39 +183,3 @@ def build_auth_router() -> APIRouter:
         return Response(status_code=204)
 
     return router
-
-
-def sign_url(payload: str, *, secret: str, ttl_s: int, now: int | None = None) -> tuple[str, int]:
-    """Return ``(signature, exp)`` for ``payload``, valid for ``ttl_s`` seconds.
-
-    ``now`` is injectable so a test can prove expiry without sleeping; a
-    ``None`` default reads the wall clock.
-
-    The signed message is ``f"{payload}|{exp}"`` -- a plain ``|`` join, not an
-    escaped encoding. That is safe only if no component of ``payload`` can
-    itself contain ``|``: a caller assembling ``payload`` from several parts
-    (Task 5 joins a receipt id and an image variant) must validate each part
-    against a closed set or a known-safe format -- a UUID for the id, an enum
-    member for the variant -- rather than pass free text through, or two
-    different logical URLs could sign identically.
-    """
-    exp = (now if now is not None else int(time.time())) + ttl_s
-    message = f"{payload}|{exp}".encode()
-    signature = hmac.new(secret.encode(), message, hashlib.sha256).hexdigest()
-    return signature, exp
-
-
-def verify_signature(
-    payload: str, *, secret: str, signature: str, exp: int, now: int | None = None
-) -> bool:
-    """Whether ``signature`` is valid for ``payload``/``exp`` and not expired."""
-    current = now if now is not None else int(time.time())
-    if exp < current:
-        return False
-    message = f"{payload}|{exp}".encode()
-    expected = hmac.new(secret.encode(), message, hashlib.sha256).hexdigest()
-    # Compared as bytes: signature commonly arrives from a query string, and
-    # hmac.compare_digest() raises TypeError on a non-ASCII str rather than
-    # returning False. A malformed signature must fail closed as "invalid",
-    # not crash the caller with a 500 (see require_upload for the same fix).
-    return hmac.compare_digest(expected.encode(), signature.encode())

@@ -34,7 +34,7 @@ from decimal import Decimal
 from typing import Any
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from ..export.xlsx import ReceiptExportRow
 from ..extract.schema import ExtractionMeta, ReceiptExtraction, ReceiptMeta, Totals
@@ -43,10 +43,23 @@ from ..extract.schema import Merchant as ExtractMerchant
 from ..extract.schema import Modifier as ExtractModifier
 from ..extract.schema import Payment as ExtractPayment
 from ..persist.models import LineItem, Receipt, ReviewTask, ValidationFinding
+from ..score.confidence import ReceiptStatus
 from ..validate.report import Severity
-from .auth import sign_url
+from .signing import sign_url
 
-__all__ = ["build_export_rows", "money", "receipt_detail", "receipt_summary"]
+__all__ = [
+    "build_export_rows",
+    "money",
+    "query_export_receipts",
+    "receipt_detail",
+    "receipt_summary",
+]
+
+#: Receipt statuses ``query_export_receipts`` leaves out unless ``status=``
+#: names one of them explicitly (ambiguity resolution #4): a pending row is
+#: an upload in flight rather than a transaction, and a rejected one is a
+#: duplicate the pipeline deliberately keeps out of exports.
+_EXPORT_EXCLUDED_BY_DEFAULT = frozenset({ReceiptStatus.PENDING, ReceiptStatus.REJECTED})
 
 
 def money(value: Decimal | None) -> str | None:
@@ -157,6 +170,61 @@ def receipt_detail(receipt: Receipt, findings: list[ValidationFinding]) -> dict[
 # --------------------------------------------------------------------------- #
 
 
+def query_export_receipts(
+    session: Session,
+    *,
+    status: ReceiptStatus | None,
+    merchant_id: uuid.UUID | None,
+    date_from: date_cls | None,
+    date_to: date_cls | None,
+    min_confidence: Decimal | None,
+    limit: int,
+) -> list[Receipt]:
+    """Receipts for ``GET /export/xlsx``: the same filters as
+    :func:`~receipts.persist.repository.query_receipts`, plus the
+    export-only exclusion of ``PENDING``/``REJECTED`` unless ``status``
+    names one of them explicitly.
+
+    A dedicated query rather than a call to ``query_receipts`` because that
+    function's ``status`` filter is a single equality -- it has no way to
+    express "every status except these two" -- and the export exclusion
+    needs exactly that. Ordered ``created_at`` then ``id``, matching
+    ``query_receipts``, so the two entry points never disagree about paging
+    order.
+
+    ``line_items`` and ``merchant`` are eager-loaded with ``selectinload``
+    (fix round 1, F3): both are default-lazy relationships
+    (:mod:`receipts.persist.models`), and
+    :func:`receipts.review.serializers.build_export_rows` touches both for
+    every row it builds (line items to reconstruct the extraction, merchant
+    for the canonical name). Left lazy, each access is its own SELECT --
+    an N+1 that a two- or three-receipt test run never surfaces but that
+    turns into 5,000-10,000 round trips at the route's own
+    ``_EXPORT_MAX_ROWS`` design point. One batched ``IN`` query per
+    relationship, issued here, is what keeps the query count independent of
+    how many receipts match.
+    """
+    query = (
+        select(Receipt)
+        .options(selectinload(Receipt.line_items), selectinload(Receipt.merchant))
+    )
+    if status is not None:
+        query = query.where(Receipt.status == status)
+    else:
+        query = query.where(Receipt.status.not_in(_EXPORT_EXCLUDED_BY_DEFAULT))
+    if merchant_id is not None:
+        query = query.where(Receipt.merchant_id == merchant_id)
+    if date_from is not None:
+        query = query.where(Receipt.txn_date >= date_from)
+    if date_to is not None:
+        query = query.where(Receipt.txn_date <= date_to)
+    if min_confidence is not None:
+        query = query.where(Receipt.confidence >= min_confidence)
+
+    query = query.order_by(Receipt.created_at, Receipt.id).limit(limit)
+    return list(session.scalars(query))
+
+
 def _export_extraction(receipt: Receipt) -> ReceiptExtraction:
     """Rebuild a :class:`~receipts.extract.schema.ReceiptExtraction` from one
     persisted ``Receipt`` (plus its ``line_items``), for
@@ -231,6 +299,13 @@ def _export_image_url(receipt_id: uuid.UUID, *, secret: str, ttl_s: int) -> str:
     than the few minutes the review screen's own links get, because anyone
     holding the file can open the links until they expire -- see the
     export route's docstring.
+
+    ``secret`` may be ``None`` on :func:`build_export_rows` -- this function
+    is simply not called in that case. The CLI can be run on a box with no
+    ``SESSION_SECRET`` -- it needs no session -- and an unsigned or
+    fabricated link would be worse than an empty cell: ``ReceiptExportRow``'s
+    contract is that whatever the caller does not know stays empty rather
+    than being invented.
     """
     signature, exp = sign_url(f"{receipt_id}|original", secret=secret, ttl_s=ttl_s)
     return f"/receipts/{receipt_id}/image/blob?variant=original&exp={exp}&sig={signature}"
@@ -240,7 +315,7 @@ def build_export_rows(
     session: Session,
     receipts: list[Receipt],
     *,
-    secret: str,
+    secret: str | None,
     image_url_ttl_s: int,
 ) -> tuple[list[ReceiptExtraction], list[ReceiptExportRow]]:
     """The ``(ReceiptExtraction, ReceiptExportRow)`` pairs ``export_workbook`` wants.
@@ -273,15 +348,22 @@ def build_export_rows(
     papering over. Avoiding them is the *caller's* responsibility: pass in
     ``receipts`` that were already loaded with ``selectinload(Receipt.
     line_items)`` and ``selectinload(Receipt.merchant)``, which is exactly
-    what ``review/api.py``'s ``_query_export_receipts`` does. This function
-    cannot enforce that itself -- it only ever sees the list it is handed,
-    after the query already ran.
+    what :func:`query_export_receipts` does. This function cannot enforce
+    that itself -- it only ever sees the list it is handed, after the query
+    already ran.
 
     Every image link is signed with ``secret``/``image_url_ttl_s`` -- the
     caller passes ``settings.session_secret`` and
     ``settings.export_image_url_ttl_s`` so the links this function mints
     verify against the same secret the blob route checks and expire on the
     export-specific (longer) TTL, not the review screen's.
+
+    ``secret`` may be ``None``. The CLI can be run on a box with no
+    ``SESSION_SECRET`` -- it needs no session -- and an unsigned or
+    fabricated link would be worse than an empty cell: ``ReceiptExportRow``'s
+    contract is that whatever the caller does not know stays empty rather
+    than being invented. When ``secret`` is ``None``, :func:`_export_image_url`
+    is not called and the row's ``image_url`` stays ``None``.
     """
     if not receipts:
         return [], []
@@ -319,7 +401,11 @@ def build_export_rows(
                 review_reason=task.reason if task is not None else None,
                 review_priority=task.priority if task is not None else None,
                 has_unresolved_error=has_unresolved_error,
-                image_url=_export_image_url(receipt.id, secret=secret, ttl_s=image_url_ttl_s),
+                image_url=(
+                    None
+                    if secret is None
+                    else _export_image_url(receipt.id, secret=secret, ttl_s=image_url_ttl_s)
+                ),
                 merchant_name=(
                     receipt.merchant.canonical_name if receipt.merchant is not None else None
                 ),
