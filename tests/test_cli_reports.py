@@ -4,9 +4,10 @@
 Everything here is offline: a file-backed SQLite database and no storage
 backend at all -- export reads only ORM rows, never a blob, through Task 1's
 ``query_export_receipts``/``build_export_rows``. No provider, no Redis, no
-network. ``eval``'s tests monkeypatch ``cli_module.run_baseline`` itself
-rather than touch the pipeline, and ``calibrate`` only ever reads a
-hand-written results JSON -- neither needs a database or a provider either.
+network. ``eval``'s tests inject a ``run_baseline_fn`` double rather than
+touch the pipeline or monkeypatch a module global, and ``calibrate`` only
+ever reads a hand-written results JSON -- neither needs a database or a
+provider either.
 
 The load-bearing behaviours pinned down below:
 
@@ -44,11 +45,24 @@ The load-bearing behaviours pinned down below:
     precision as a vacuous ``1.0`` (``eval/metrics.py:255-257``) -- the same
     trap one level deeper. A threshold that approves nothing is not a
     calibrated system, however perfect its precision reads.
+  * ``eval``/``calibrate`` import ``eval.*`` lazily, inside ``cmd_eval``/
+    ``cmd_calibrate``, never at module top -- a module-top import broke
+    every ``receipts`` command (not only these two) the instant the CLI was
+    actually installed somewhere ``eval/`` was not, since ``eval/`` is
+    deliberately excluded from the distribution (``pyproject.toml``).
+    ``pytest``'s own ``pythonpath = ["src", "."]`` masks this in-process --
+    an in-process assertion cannot pin it -- so
+    ``test_cli_imports_without_the_eval_package`` below runs in a
+    subprocess with a ``sys.meta_path`` finder that blocks ``eval``/
+    ``eval.*`` before ``import receipts.cli``, the same technique
+    ``tests/test_import_isolation.py`` uses for the FastAPI check.
 """
 
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 import uuid
 from decimal import Decimal as D
 from pathlib import Path
@@ -297,10 +311,13 @@ def _stub_report() -> EvalReport:
 # --------------------------------------------------------------------------- #
 
 
-def test_eval_prints_the_six_metric_table(tmp_path, capsys, monkeypatch):
+def test_eval_prints_the_six_metric_table(capsys):
     report = _stub_report()
-    monkeypatch.setattr(cli_module, "run_baseline", lambda **kw: report)
-    code = cmd_eval(build_parser().parse_args(["eval"]), settings=Settings(_env_file=None))
+    code = cmd_eval(
+        build_parser().parse_args(["eval"]),
+        settings=Settings(_env_file=None),
+        run_baseline_fn=lambda **kw: report,
+    )
 
     assert code == EXIT_OK
     out = capsys.readouterr().out
@@ -312,15 +329,56 @@ def test_eval_prints_the_six_metric_table(tmp_path, capsys, monkeypatch):
         assert label in out
 
 
-def test_eval_reports_a_refused_provider_as_exit_one(capsys, monkeypatch):
+def test_eval_reports_a_refused_provider_as_exit_one(capsys):
     def refuse(**kwargs):
         raise RuntimeError("the fake provider carries no scripted responses")
 
-    monkeypatch.setattr(cli_module, "run_baseline", refuse)
-    code = cmd_eval(build_parser().parse_args(["eval"]), settings=Settings(_env_file=None))
+    code = cmd_eval(
+        build_parser().parse_args(["eval"]),
+        settings=Settings(_env_file=None),
+        run_baseline_fn=refuse,
+    )
 
     assert code == EXIT_FAILED
     assert "scripted responses" in capsys.readouterr().err
+
+
+def test_cli_imports_without_the_eval_package():
+    """`receipts.cli` (and, transitively, every `receipts` command) must not
+    require the `eval` package to import. `eval/` is deliberately excluded
+    from the installed distribution (pyproject.toml: dev/research tooling,
+    not part of the installed CLI), and a module-top `from eval... import`
+    in cli.py breaks every command the instant that is actually true --
+    reproduced against the real installed `receipts` console script from
+    outside this repository before this test was written.
+
+    Run in a subprocess with a `sys.meta_path` finder that raises
+    `ModuleNotFoundError` for `eval`/`eval.*`, installed before
+    `import receipts.cli` -- deterministic and platform-independent, unlike
+    relying on cwd/pythonpath tricks. An in-process assertion cannot pin
+    this: pytest's own `pythonpath = ["src", "."]` puts the repo root on
+    `sys.path`, which is exactly what let the module-top import through
+    unnoticed the first time. Same technique as
+    `tests/test_import_isolation.py`'s FastAPI check, adapted to block an
+    import outright rather than inspect `sys.modules` after the fact.
+    """
+    code = (
+        "import sys\n"
+        "class _BlockEval:\n"
+        "    def find_spec(self, name, path=None, target=None):\n"
+        "        if name == 'eval' or name.startswith('eval.'):\n"
+        "            raise ModuleNotFoundError(f'No module named {name!r}', name=name)\n"
+        "        return None\n"
+        "sys.meta_path.insert(0, _BlockEval())\n"
+        "import receipts.cli\n"
+        "receipts.cli.build_parser()\n"
+        "print('OK')\n"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True, timeout=120
+    )
+    assert result.returncode == 0, result.stderr
+    assert "OK" in result.stdout
 
 
 # --------------------------------------------------------------------------- #

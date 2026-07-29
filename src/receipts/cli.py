@@ -73,6 +73,20 @@ adds) must honour:
     closes with a standing caveat that no accuracy number from this
     system has been measured on a full baseline yet (spec section 16,
     ``docs/KNOWN_ISSUES.md`` ISSUE-001).
+  * **``eval``/``calibrate`` import ``eval.*`` lazily, inside the function,
+    never at module top.** ``eval/`` is deliberately excluded from the
+    installed distribution (``pyproject.toml``: dev/research tooling, not
+    part of the installed CLI) -- the same reason ``receipts.worker`` is
+    imported lazily behind the ``worker`` extra rather than at module top.
+    A module-top ``eval`` import broke *every* ``receipts`` command, not
+    only these two, the moment the package was actually installed
+    somewhere ``eval/`` did not happen to sit next to (``pythonpath``
+    masks this for ``pytest``, which is exactly why it was caught by
+    running the installed console script, not by a green test suite).
+    When ``eval`` is genuinely unavailable, both commands print a clean
+    message and return :data:`EXIT_FAILED` rather than let
+    ``ModuleNotFoundError`` escape as a traceback; see
+    :func:`_is_missing_eval`.
 
 Every ``cmd_*`` function takes its collaborators (``session_factory``,
 ``storage``, ``settings``) as keyword-only arguments with no defaults; only
@@ -99,9 +113,6 @@ from sqlalchemy import select
 from sqlalchemy.exc import DBAPIError
 
 from config.settings import Settings, get_settings
-from eval.harness import DEFAULT_RESULTS_DIR
-from eval.metrics import EvalResult, calibration_curve
-from eval.run_baseline import format_report, latest_results_file, run_baseline
 
 from .export.xlsx import export_workbook
 from .extract.clients.base import VLMClient
@@ -934,8 +945,42 @@ def cmd_merchants(args: argparse.Namespace, *, session_factory) -> int:
     )
 
 
+#: Printed (to stderr) when ``eval``/``calibrate`` cannot import ``eval.*`` at
+#: all. ``eval/`` is dev/research tooling that deliberately does not ship
+#: with the installed distribution (see ``pyproject.toml``'s
+#: ``[tool.setuptools.packages.find]`` comment) -- unlike a missing optional
+#: extra (``worker``, ``api``, ``pipeline``), there is no ``pip install
+#: receipts[eval]`` that fixes this; the fix is running from a checkout.
+_EVAL_NOT_INSTALLED = (
+    "error: the evaluation tooling (the `eval` package) is not available in "
+    "this environment. `eval/` ships with the project's repository, not "
+    "with the installed `receipts` distribution -- run this from a "
+    "checkout of the repository to use `receipts eval`/`receipts calibrate`."
+)
+
+
+def _is_missing_eval(exc: ModuleNotFoundError) -> bool:
+    """Whether ``exc`` is ``eval``/``eval.*`` itself missing, not some other
+    package missing several frames deeper inside the same import.
+
+    ``eval.run_baseline`` pulls in ``receipts.pipeline``, which needs the
+    optional ``pipeline`` extra (Pillow, OpenCV, ...); an incomplete install
+    that has ``eval/`` but lacks that extra would also raise
+    ``ModuleNotFoundError``, just naming ``PIL`` or similar instead. Checking
+    ``.name`` rather than treating every ``ModuleNotFoundError`` as "eval is
+    not installed" is the same discipline :func:`_is_missing_schema` already
+    applies to ``DBAPIError`` below: match the actual condition, and let
+    anything this was not written for propagate rather than mislabel it.
+    """
+    return exc.name == "eval" or (exc.name is not None and exc.name.startswith("eval."))
+
+
 def cmd_eval(
-    args: argparse.Namespace, *, settings: Settings, client: VLMClient | None = None,
+    args: argparse.Namespace,
+    *,
+    settings: Settings,
+    client: VLMClient | None = None,
+    run_baseline_fn: Callable[..., Any] | None = None,
 ) -> int:
     """Run the golden-set baseline and print the spec section 16 report.
 
@@ -946,19 +991,48 @@ def cmd_eval(
     ``run_baseline`` build one from ``settings`` itself (refusing the
     response-less ``fake`` provider before any work happens).
 
+    **``eval.run_baseline`` is imported here, inside the function, never at
+    module top.** ``eval/`` does not ship with the installed distribution
+    (see :data:`_EVAL_NOT_INSTALLED`); a module-top import broke every
+    ``receipts`` command, not only this one, the moment the package was
+    actually installed anywhere ``eval/`` did not happen to sit next to --
+    caught by running the real installed console script, since ``pytest``'s
+    own ``pythonpath`` setting hides the problem in-process. A
+    :class:`ModuleNotFoundError` naming ``eval`` (checked via
+    :func:`_is_missing_eval`, not caught blindly) is printed to stderr and
+    turned into :data:`EXIT_FAILED`; anything else propagates.
+
+    ``run_baseline_fn`` is the injection seam a test uses in place of the old
+    ``monkeypatch.setattr(cli_module, "run_baseline", ...)`` pattern --
+    matching how :func:`cmd_process`/:func:`cmd_reprocess` already accept
+    ``client_factory``/``queue_factory`` rather than a test reaching into the
+    module's globals. Left ``None``, production resolves it to the real
+    ``run_baseline`` via the same lazy import.
+
     A refused provider (:class:`RuntimeError`) or a missing golden-set image
     (:class:`FileNotFoundError`) is printed to stderr and turned into
-    :data:`EXIT_FAILED` rather than a traceback. ``run_baseline`` is called
-    with every argument as a keyword, and referenced by its bare module-level
-    name (imported at module top, not through ``eval.run_baseline.``) so a
-    test can replace it with ``monkeypatch.setattr(cli_module, "run_baseline",
-    ...)`` and this function picks up the replacement without change.
+    :data:`EXIT_FAILED` rather than a traceback. ``run_baseline_fn`` is
+    called with every argument as a keyword: the given test injects
+    ``lambda **kw: report``, a callable that only accepts keyword arguments,
+    so a positional call would break it even if production behaviour were
+    otherwise identical.
     """
+    try:
+        from eval.run_baseline import format_report
+
+        if run_baseline_fn is None:
+            from eval.run_baseline import run_baseline as run_baseline_fn
+    except ModuleNotFoundError as exc:
+        if not _is_missing_eval(exc):
+            raise
+        print(_EVAL_NOT_INSTALLED, file=sys.stderr)
+        return EXIT_FAILED
+
     golden_dir = Path(args.golden_dir) if args.golden_dir is not None else None
     results_dir = Path(args.results_dir) if args.results_dir is not None else None
 
     try:
-        report = run_baseline(
+        report = run_baseline_fn(
             golden_dir=golden_dir,
             client=client,
             results_dir=results_dir,
@@ -974,6 +1048,18 @@ def cmd_eval(
 
 def cmd_calibrate(args: argparse.Namespace, *, results_dir: Path | None = None) -> int:
     """Recommend an auto-approve threshold from a `receipts eval` results file.
+
+    **Imports ``eval.harness``/``eval.metrics``/``eval.run_baseline`` here,
+    inside the function, never at module top** -- see :func:`cmd_eval`'s
+    docstring and :data:`_EVAL_NOT_INSTALLED` for why. A
+    :class:`ModuleNotFoundError` naming ``eval`` (:func:`_is_missing_eval`)
+    is printed to stderr and turned into :data:`EXIT_FAILED` before any of
+    this function's own argument handling runs; anything else propagates.
+    No test needs to swap out ``calibration_curve``/``EvalResult``/
+    ``latest_results_file`` for a double -- they are pure functions the
+    given tests already exercise for real through an on-disk results file --
+    so unlike ``cmd_eval`` there is no analogous ``*_fn`` injection seam
+    here, only the same lazy import.
 
     Resolves the file to read: ``--results`` if given, else the newest file
     under ``--results-dir`` (falling back to the ``results_dir`` collaborator,
@@ -1017,6 +1103,16 @@ def cmd_calibrate(args: argparse.Namespace, *, results_dir: Path | None = None) 
     numbers for this system (``docs/KNOWN_ISSUES.md`` ISSUE-001) -- a
     handful of golden receipts cannot support a confident >=99% claim.
     """
+    try:
+        from eval.harness import DEFAULT_RESULTS_DIR
+        from eval.metrics import EvalResult, calibration_curve
+        from eval.run_baseline import latest_results_file
+    except ModuleNotFoundError as exc:
+        if not _is_missing_eval(exc):
+            raise
+        print(_EVAL_NOT_INSTALLED, file=sys.stderr)
+        return EXIT_FAILED
+
     if args.results is not None:
         results_path = Path(args.results)
         if not results_path.exists():
