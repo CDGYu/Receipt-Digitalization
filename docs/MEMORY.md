@@ -351,7 +351,11 @@ race; the §17 spec drift (§17 now also carries the service settings); the vacu
   before touching card/money writes)** · 0008 review-queue concurrency ·
   0009 lazy `persist` surface · 0010 export decoupling · **0011 terminal-state
   contract + VLM concurrency/cost guards (read before touching
-  `process_receipt` or the worker)**.
+  `process_receipt` or the worker)** · **0012 review API: identity, the pending
+  row, and "a machine run never overwrites a `reviewed` row"** · **0013 CLI
+  contract, including `calibrate`'s three gates** · **0014 optional-dependency
+  import discipline — read before adding any import to a module reachable from an
+  entry point**.
 - `semantic-review/` — the whole-branch review write-ups (untracked). The
   `2026-07-28-…-feat-db-layer` one documents the PAN/NaN findings in detail.
 - `.kiro/steering/receipt-system.md` — always-on load-bearing rules.
