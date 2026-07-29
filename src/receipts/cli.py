@@ -23,9 +23,23 @@ adds) must honour:
     being read. See :func:`_read_password`.
   * **``ingest`` does not enqueue.** It validates a file, stores its bytes, and
     writes a ``pending`` receipt row -- the same row shape ``POST /upload``
-    writes. ``receipts process`` (a later task) is the one place that drains
-    pending rows, so an upload through either entry point is picked up by
-    exactly the same query. See ``docs/adr/0013-cli-contract.md``.
+    writes. ``receipts process`` is the one place that drains pending rows, so
+    an upload through either entry point is picked up by exactly the same
+    query. See ``docs/adr/0013-cli-contract.md``.
+  * **``process`` takes production's path by default.** It enqueues to RQ;
+    ``--inline`` runs in-process for a single machine or a box with no Redis.
+    A missing ``REDIS_URL`` while enqueueing is a hard failure naming
+    ``--inline``, never a silent fallback -- a fallback would mean the
+    operator believes work is queued when it is running in a terminal they
+    are about to close.
+  * **``reprocess`` never overwrites a human review.** A ``reviewed`` receipt
+    is left exactly as the human left it, with or without ``--force``: the
+    run still happens, but the refusal to write over it lives in
+    :func:`~receipts.persist.repository.save_extraction` (ADR-0012), not
+    here. This module reports what the pipeline decided; it does not
+    duplicate the invariant. ``--force`` gates by *status*, not by
+    permission: it extends reprocessing to an ``auto_approved`` receipt and
+    never to a ``reviewed`` one.
 
 Every ``cmd_*`` function takes its collaborators (``session_factory``,
 ``storage``, ``settings``) as keyword-only arguments with no defaults; only
@@ -40,23 +54,34 @@ from __future__ import annotations
 import argparse
 import getpass
 import sys
+import uuid
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from typing import Any, Callable
 
 from sqlalchemy.exc import DBAPIError
 
 from config.settings import Settings, get_settings
 
-from .ingest.ingest import ingest_file
+from .extract.clients.base import VLMClient
+from .extract.clients.factory import make_client
+from .ingest.ingest import ReceiptJob, ingest_file
 from .ingest.storage import LocalStorage, S3Storage, StorageBackend
-from .persist.repository import create_pending_receipt
+from .persist.models import Receipt
+from .persist.repository import create_pending_receipt, get_receipt, query_receipts
 from .persist.session import make_engine, make_session_factory
 from .persist.users import ROLE_REVIEWER, ROLES, create_user, deactivate, list_users, set_role
+from .pipeline import BatchResult, process_receipt
+from .score.confidence import ReceiptStatus
+from .worker import enqueue_receipt, make_queue
 
 __all__ = [
     "EXIT_FAILED",
     "EXIT_OK",
     "build_parser",
     "cmd_ingest",
+    "cmd_process",
+    "cmd_reprocess",
     "cmd_users",
     "main",
 ]
@@ -122,11 +147,59 @@ def _add_users(sub: argparse._SubParsersAction) -> None:
     set_role_parser.add_argument("role", choices=sorted(ROLES))
 
 
+def _add_process(sub: argparse._SubParsersAction) -> None:
+    parser = sub.add_parser(
+        "process",
+        help="drain pending receipts through the pipeline",
+        description=(
+            "Take every `pending` receipt -- oldest first -- and run it "
+            "through the pipeline. By default this enqueues to RQ, "
+            "production's own path; `--inline` runs in this process instead, "
+            "for a single machine or a box with no Redis (ADR-0013)."
+        ),
+    )
+    parser.add_argument(
+        "--limit", type=int, default=None,
+        help="take at most this many pending receipts this run (default: no cap)",
+    )
+    parser.add_argument(
+        "--inline", action="store_true",
+        help="run the pipeline in this process instead of enqueueing to RQ",
+    )
+    parser.add_argument(
+        "--workers", type=int, default=4,
+        help="thread pool size for --inline (default: %(default)s)",
+    )
+
+
+def _add_reprocess(sub: argparse._SubParsersAction) -> None:
+    parser = sub.add_parser(
+        "reprocess",
+        help="re-run the pipeline against one receipt",
+        description=(
+            "Re-run the pipeline against one receipt, synchronously. Allowed "
+            "without --force on `pending`, `needs_review` and `rejected`; "
+            "`auto_approved` needs --force, since overwriting a result the "
+            "system already stands behind should be deliberate. A `reviewed` "
+            "receipt is never overwritten, with or without --force -- the run "
+            "still happens and a review task records what it produced "
+            "(ADR-0013)."
+        ),
+    )
+    parser.add_argument("id", type=uuid.UUID, help="the receipt id to reprocess")
+    parser.add_argument(
+        "--force", action="store_true",
+        help="also reprocess an auto_approved receipt (never a reviewed one)",
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="receipts", description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
     _add_ingest(sub)
     _add_users(sub)
+    _add_process(sub)
+    _add_reprocess(sub)
     return parser
 
 
@@ -273,6 +346,184 @@ def cmd_users(args: argparse.Namespace, *, session_factory) -> int:
     )
 
 
+def _job_from_receipt(receipt: Receipt) -> ReceiptJob:
+    """Rebuild the job for a stored receipt.
+
+    **Lossy by construction.** ``source``, ``original_filename`` and
+    ``content_type`` are not §6 columns, so they cannot be recovered from the
+    row. ``process_receipt`` uses ``id`` and ``image_key``; the other three are
+    placeholders, and anyone who later needs faithful provenance has to add
+    columns rather than infer them (ADR-0013).
+    """
+    return ReceiptJob(
+        id=receipt.id,
+        image_key=receipt.image_key,
+        source="cli",
+        original_filename=Path(receipt.image_key).name,
+        content_type="image/jpeg",
+    )
+
+
+def cmd_process(
+    args: argparse.Namespace,
+    *,
+    session_factory,
+    storage: StorageBackend,
+    settings: Settings,
+    client_factory: Callable[[], VLMClient] | None = None,
+    queue_factory: Callable[[], Any] | None = None,
+) -> int:
+    """Drain ``pending`` receipts: enqueue to RQ, or run in-process (ADR-0013).
+
+    The ``pending`` row is the single work list -- the same query picks up a
+    receipt whether it arrived through ``receipts ingest`` or ``POST
+    /upload`` -- taken oldest first and capped by ``--limit``. With nothing
+    pending this prints a message and returns :data:`EXIT_OK`: an empty work
+    list is not a failure.
+
+    **Enqueue path (the default).** This is production's own path, so it is
+    the one that must run here too, or a worker-only bug stays invisible
+    until deployment. A missing ``REDIS_URL`` is a hard failure naming
+    ``--inline`` rather than a silent fallback -- a fallback would mean the
+    operator believes work is queued when it is actually running in a
+    terminal they are about to close. ``queue_factory`` defaults to
+    :func:`~receipts.worker.make_queue`.
+
+    **``--inline``** runs :func:`~receipts.pipeline.process_receipt`
+    synchronously in this process, ``--workers`` at a time, building each
+    call's client from ``client_factory`` (defaulting to
+    ``lambda: make_client(settings)``) exactly the way
+    :func:`~receipts.pipeline.process_batch` builds one client per job. A
+    receipt that lands in review is the system working as designed: this
+    returns :data:`EXIT_OK` regardless of where any individual receipt ended
+    up, and fails only if the command itself could not run.
+    """
+    with session_factory() as session:
+        if args.limit is None:
+            pending = query_receipts(session, status=ReceiptStatus.PENDING)
+        else:
+            pending = query_receipts(session, status=ReceiptStatus.PENDING, limit=args.limit)
+        jobs = [_job_from_receipt(receipt) for receipt in pending]
+
+    if not jobs:
+        print("nothing pending")
+        return EXIT_OK
+
+    if not args.inline:
+        if not settings.redis_url:
+            print(
+                "error: REDIS_URL is not set, so there is no queue to enqueue "
+                "to. Run with --inline to process these receipts in this "
+                "process instead.",
+                file=sys.stderr,
+            )
+            return EXIT_FAILED
+
+        queue_factory = queue_factory if queue_factory is not None else make_queue
+        queue = queue_factory()
+        for job in jobs:
+            enqueue_receipt(job, queue)
+            print(f"{job.id}  queued")
+        print(f"queued {len(jobs)}")
+        return EXIT_OK
+
+    client_factory = (
+        client_factory if client_factory is not None else (lambda: make_client(settings))
+    )
+
+    def run(job: ReceiptJob):
+        return process_receipt(
+            job, client=client_factory(), storage=storage,
+            session_factory=session_factory, settings=settings,
+        )
+
+    if args.workers <= 1 or len(jobs) <= 1:
+        results = [run(job) for job in jobs]
+    else:
+        with ThreadPoolExecutor(max_workers=args.workers) as pool:
+            results = list(pool.map(run, jobs))
+
+    for result in results:
+        print(f"{result.receipt_id}  {result.status.value}  {result.reason}")
+
+    batch = BatchResult(processed=results)
+    for status, count in batch.counts.items():
+        print(f"{status.value}: {count}")
+    print(f"total cost: {batch.total_cost_usd}")
+    return EXIT_OK
+
+
+def cmd_reprocess(
+    args: argparse.Namespace,
+    *,
+    session_factory,
+    storage: StorageBackend,
+    settings: Settings,
+    client_factory: Callable[[], VLMClient] | None = None,
+    queue_factory: Callable[[], Any] | None = None,
+) -> int:
+    """Re-run the pipeline against one receipt, synchronously (ADR-0013).
+
+    An unknown id is :data:`EXIT_FAILED`. Otherwise a status gate runs before
+    anything else: ``pending``, ``needs_review`` and ``rejected`` are always
+    allowed; ``auto_approved`` needs ``--force``, since overwriting a result
+    the system already stands behind should be deliberate.
+
+    **A ``reviewed`` receipt is never gated here, with or without
+    ``--force``.** ``--force`` is a status gate, not a permission override --
+    it extends reprocessing to ``auto_approved`` and no flag extends it to
+    ``reviewed``. That is not enforced in this function: it is left to
+    :func:`~receipts.pipeline.process_receipt`, which runs to completion
+    rather than raising and reports the refusal through its return value --
+    ``result.status is ReceiptStatus.REVIEWED`` with ``result.failed_stage ==
+    "persist"`` (:func:`~receipts.persist.repository.save_extraction`,
+    ADR-0012). This function only reports that outcome; duplicating the
+    refusal here would let the two drift, and calling
+    :func:`~receipts.review.queue.enqueue_review` again would overwrite the
+    reason the pipeline already wrote with a vaguer one.
+
+    ``queue_factory`` is accepted only for signature parity with
+    :func:`cmd_process`; a reprocess always runs synchronously in this
+    process and never touches a queue.
+    """
+    with session_factory() as session:
+        receipt = get_receipt(session, args.id)
+        if receipt is None:
+            print(f"error: no receipt with id {args.id}", file=sys.stderr)
+            return EXIT_FAILED
+        status = receipt.status
+        job = _job_from_receipt(receipt)
+
+    if status is ReceiptStatus.AUTO_APPROVED and not args.force:
+        print(
+            f"error: receipt {args.id} is auto_approved; pass --force to "
+            "reprocess it (a reviewed receipt is never reprocessed, with or "
+            "without --force)",
+            file=sys.stderr,
+        )
+        return EXIT_FAILED
+
+    client_factory = (
+        client_factory if client_factory is not None else (lambda: make_client(settings))
+    )
+    result = process_receipt(
+        job, client=client_factory(), storage=storage,
+        session_factory=session_factory, settings=settings,
+    )
+
+    if result.status is ReceiptStatus.REVIEWED and result.failed_stage == "persist":
+        print(
+            f"{result.receipt_id}  reviewed (unchanged): a human has already "
+            "reviewed this receipt, so the run was not applied to the stored "
+            f"row; a review task is open with what this run produced -- "
+            f"{result.reason}"
+        )
+        return EXIT_OK
+
+    print(f"{result.receipt_id}  {result.status.value}  confidence={result.confidence}")
+    return EXIT_OK
+
+
 def _is_missing_schema(exc: DBAPIError) -> bool:
     """Whether ``exc`` looks like a query against a table that does not exist.
 
@@ -321,6 +572,16 @@ def main(argv: list[str] | None = None) -> int:
             )
         if args.command == "users":
             return cmd_users(args, session_factory=session_factory)
+        if args.command == "process":
+            return cmd_process(
+                args, session_factory=session_factory, storage=_make_storage(settings),
+                settings=settings, queue_factory=make_queue,
+            )
+        if args.command == "reprocess":
+            return cmd_reprocess(
+                args, session_factory=session_factory, storage=_make_storage(settings),
+                settings=settings,
+            )
         # unreachable: subparsers are required
         raise AssertionError(f"unhandled command {args.command!r}")
     except DBAPIError as exc:
