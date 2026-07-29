@@ -396,10 +396,10 @@ def test_reprocessing_a_persisted_job_updates_the_row_in_place(
     primary key. That collision used to route a retry to ``needs_review``
     purely because it had already been processed once -- an update in place is
     strictly better, since the second run's own result (here, a clean
-    auto-approval) is what ends up stored. (There is no ``receipts reprocess``
-    command on this branch; re-running a job id through ``process_receipt``, as
-    here, is the whole of what exists today -- and it refuses to touch a row a
-    human has reviewed, see
+    auto-approval) is what ends up stored. (``receipts reprocess <id>`` is the
+    operator-facing form of this same re-run; it adds a status gate -- refusing
+    an ``auto_approved`` row without ``--force`` -- on top of the refusal
+    exercised here, which no flag can lift, see
     ``test_a_worker_run_never_overwrites_a_reviewed_receipt``.)
     """
     job = _job(storage)

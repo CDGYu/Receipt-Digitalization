@@ -310,10 +310,13 @@ def _install_write_routes(app: FastAPI) -> None:
         already exists and is visible, so this returns 503 naming the
         receipt id and logs the failure -- it does not undo the commit. What
         is left is a stuck ``pending`` row, which ``GET /receipts?status=
-        pending`` lists. Recovery today is re-queueing that same job id
-        through :func:`receipts.worker.enqueue_receipt`, or re-uploading the
-        file; there is no ``receipts reprocess`` command on this branch (the
-        CLI is a later task).
+        pending`` lists. Recovery is ``receipts process``, which drains
+        exactly those rows -- an upload that arrived here and a file passed
+        to ``receipts ingest`` share one work list, which is why ``ingest``
+        deliberately does not enqueue (ADR-0013). ``receipts reprocess
+        <id>`` re-runs a single receipt; note it refuses an
+        ``auto_approved`` row without ``--force`` and never overwrites a
+        ``reviewed`` one, so it is not a way to redo a human's work.
 
         The read is bounded at ``max_bytes + 1``, not unbounded (fix round
         1, F2): ``UploadFile.read()`` with no argument buffers the *entire*
