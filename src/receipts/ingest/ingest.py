@@ -17,8 +17,6 @@ import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
-import pypdfium2
-
 from .storage import StorageBackend, make_image_key
 
 #: Default upload ceiling. Phone photos and multi-page PDF receipts fit well
@@ -164,7 +162,18 @@ def expand_pdf(path: Path, out_dir: Path) -> list[Path]:
     Pages are written as ``page_{n:04d}.png`` (``n`` from 0) and returned in page
     order. This turns pages into pixels only -- it never reads the page text.
     ``out_dir`` is created if needed.
+
+    ``pypdfium2`` is imported here, not at module top, because it belongs to
+    the optional ``pipeline`` extra and this is the only function in the module
+    that touches it -- :func:`ingest_file`/:func:`ingest_bytes` store original
+    bytes and never rasterise. A module-top import made *every* importer of
+    this module (``receipts.cli``, and so ``receipts users list``) require the
+    extra; the same defect as ``openpyxl``/``PIL`` one module over, and the
+    pattern ``clients/factory.py`` and ``ingest/storage.py`` already use for
+    their own optional dependencies.
     """
+    import pypdfium2
+
     path = Path(path)
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)

@@ -46,11 +46,6 @@ from sqlalchemy.orm import Session
 from ..extract.clients.base import VLMResponse
 from ..extract.paths import flatten
 from ..extract.schema import Legibility, ReceiptExtraction
-from ..ingest.dedupe import (
-    find_near_duplicate_image,
-    find_semantic_duplicate,
-    link_duplicate,
-)
 from ..ingest.ingest import ReceiptJob
 from ..score.confidence import ReceiptStatus
 from ..validate.report import ValidationReport
@@ -605,6 +600,17 @@ def query_receipts(
 # here is only the part that needs a session: loading the candidate set and
 # turning a matched id back into a row. SQL narrows on the cheap indexed columns;
 # the pure helper makes the call.
+#
+# **Those helpers are imported inside the three functions that call them, never
+# at module top.** ``receipts.ingest.dedupe`` needs numpy and Pillow, which live
+# in the optional ``pipeline`` extra -- ADR-0009 named this exact chain
+# (``receipts.persist`` -> ``repository`` -> ``receipts.ingest.dedupe`` ->
+# numpy/Pillow) and made ``persist/__init__`` lazy so a base install could run
+# ``alembic upgrade head``. It stopped one module short: ``receipts.cli``
+# imports ``persist.repository`` *directly* for ``get_receipt``/
+# ``query_receipts``/``create_pending_receipt``, none of which have anything to
+# do with dedupe, so a module-top import here still made every ``receipts``
+# command require Pillow. Same decision, one level deeper.
 # --------------------------------------------------------------------------- #
 
 
@@ -636,6 +642,8 @@ def find_duplicate_by_phash(
     Candidates are ordered by ``created_at`` then ``id``, so "the first match"
     is the oldest receipt and the same query always returns the same answer.
     """
+    from ..ingest.dedupe import find_near_duplicate_image
+
     if not phash:
         return None
 
@@ -683,6 +691,8 @@ def find_duplicate_by_content(
     keeping one comparison with one documented semantics, not about correcting a
     lossy backend.)
     """
+    from ..ingest.dedupe import find_semantic_duplicate
+
     if total is None or txn_date is None:
         return None
 
@@ -745,6 +755,8 @@ def mark_duplicate(session: Session, new_id: uuid.UUID, existing_id: uuid.UUID) 
 
     Flushes; does not commit.
     """
+    from ..ingest.dedupe import link_duplicate
+
     if new_id == existing_id:
         raise ValueError(f"receipt {new_id} cannot be a duplicate of itself")
 
