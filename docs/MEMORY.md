@@ -5,10 +5,9 @@ files in "Key references" below. Last updated: **2026-07-28**.
 
 ## Snapshot
 
-- **`master` @ `a5bf75d`** — **644 tests passing, ruff clean.** `feat/service`
-  fast-forward merged on 2026-07-29 (the branch still exists at the merge point,
-  matching the convention of the three earlier milestone branches). Phase 4 is
-  **complete except `cli.py`** (P4.T5/T6).
+- **`master` @ `8cf72c1`** — **717 tests passing, ruff clean.** **PHASE 4 IS
+  COMPLETE.** `feat/service` (P4.T3) and `feat/cli` (P4.T5/T6) both fast-forward
+  merged on 2026-07-29; every milestone branch is kept at its merge point.
 - Merged on `master`: Phase 0 foundations, Phase 1 offline modules, the online
   wiring (config, client factory, M1 pipeline, confidence scoring, one-command
   baseline runner), **Phase 3 persistence** (7-table ORM + `docker-compose.yml`,
@@ -118,17 +117,22 @@ dropped. Excel is output only; the DB is the source of truth.
   `reviewed` row**; `POST /upload` writes a `pending` row before queueing.
   `score/thresholds.py` is the single source for `0.85`/`0.60` (was four copies).
 
+- **P4.T5/T6 (`cli.py`) — see ADR-0013:** `receipts ingest|process|export|eval|
+  calibrate|merchants|reprocess|users`, plus `review/signing.py` (the HMAC helpers
+  split out of `auth.py` so the export path needs no FastAPI). `ingest` writes a
+  `pending` row and does not enqueue — `process` drains those rows, so upload and
+  ingest share one work list. `reprocess` never overwrites a `reviewed` row;
+  `--force` is a status gate reaching only `auto_approved`. `calibrate` passes
+  three gates before recommending anything (§ ADR-0013). Every optional-extra
+  import is lazy, so a base install runs the CLI.
+  - **Invocation:** the console script needs the interpreter's `Scripts`/`bin`
+    directory on `PATH`, which it is **not** on this machine.
+    `python -m receipts.cli <command>` always works and is what the tests use.
+
 ## NOT built yet (remaining work)
 
-- **Phase 4 (service):** `cli.py` (P4.T5/T6) — the only piece left. **Design is
-  approved and committed** (`docs/superpowers/specs/2026-07-29-cli-design.md`,
-  contract in **ADR-0013**); the implementation plan is not written yet. Three
-  decided points that must not be re-litigated: `ingest` writes a `pending` row
-  and does not enqueue (`process` drains the `pending` rows, so both entry points
-  share one work list); `process` enqueues to RQ by default, `--inline` for a
-  no-Redis box, and a missing `REDIS_URL` is a hard failure, never a silent
-  fallback; `reprocess` records every attempt but never overwrites a `reviewed`
-  row, with `--force` extending only to `auto_approved`.
+- **Phase 4 is done.** Next milestone is Phase 5 (frontend), which needs the
+  P5.T0 framework decision.
 - **Frontend** review UI — framework undecided (Phase 5)
 - `merchants/{fingerprint,registry}.py` + few-shot injection (Phase 6)
 - Self-consistency wired into `run_receipt` (extractor supports it; the M1
@@ -279,6 +283,17 @@ race; the §17 spec drift (§17 now also carries the service settings); the vacu
 - **No login rate limiting**, and each attempt costs a full scrypt derivation
   (~16 MB, ~57 ms) — `POST /auth/login` is an unauthenticated CPU/memory amplifier
   as well as an enumeration surface. Address before this faces more than a LAN.
+- **Parked from the CLI branch review** (rulings in
+  `.superpowers/sdd/2026-07-29-cli/progress.md`): `receipts eval`/`calibrate`
+  still traceback without the `pipeline` extra while the other six commands
+  degrade cleanly — `eval.run_baseline` imports `receipts.pipeline` at module top,
+  and `calibrate` needs nothing from it; and an **all-failed** eval run still
+  persists `"auto_approval_precision": 1.0` to the results JSON even though the
+  terminal correctly prints `n/a`. **The artifact ban is not fully closed until
+  the file is honest too** — fix with the eval-harness work in P8.
+- With `_MIN_APPROVED_SAMPLE = 5` and only 3 committed golden labels, `receipts
+  calibrate` cannot produce a recommendation on today's data. That is the floor
+  working as designed, not a bug.
 - **`_attempt_prompt_hash` reconstructs each call's prompt** rather than threading
   prompts out of the repair loop. When merchant hints / few-shot land (M5), the
   same values must be passed there or the stored hash drifts from what was sent.
