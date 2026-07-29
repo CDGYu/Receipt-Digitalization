@@ -37,11 +37,11 @@ bugs stay invisible until deployment.
 
 ### No flag overwrites a human review
 
-`receipts reprocess <id>` always writes new `extraction_runs` and
-`validation_findings`, so the attempt is on record. It updates the receipt row
-only when the receipt is not `reviewed`. On a `reviewed` receipt the run still
-happens, the row is left untouched, and a review task is opened saying a re-run
-produced different values — a human decides.
+`receipts reprocess <id>` re-runs the pipeline and updates the receipt row only
+when the receipt is not `reviewed`. On a `reviewed` receipt the run still
+happens, the row is left untouched, and a review task is opened naming what the
+run produced — a human decides. **See the correction below for what "on record"
+actually means.**
 
 `--force` gates by status, not by permission: without it, `reprocess` re-runs
 `pending`, `needs_review` and `rejected` receipts and refuses `auto_approved`,
@@ -81,6 +81,50 @@ would train operators — and CI — to ignore its exit status.
 Anywhere. The CLI must be usable from a script and from CI. Confirmation is
 expressed as a flag (`--force`), never as a question. Passwords are read from
 stdin, never `argv`, because an argument lands in shell history and in `ps`.
+
+### Correction (2026-07-29, measured before implementation)
+
+The paragraph above originally claimed reprocess "always writes new
+`extraction_runs` and `validation_findings`, so the attempt is on record." **That
+was written from intent, not from the code, and it is false for exactly the case
+it was written about.** A probe against the real pipeline:
+
+```
+ProcessResult.status       = REVIEWED      ProcessResult.failed_stage = persist
+row.status = REVIEWED   row.total = 999.9900      (the human's number survives)
+extraction_runs rows     = 0
+validation_findings rows = 0
+review task = OPEN / priority 1
+review task reason = "persist: ValueError: receipt ... has already been reviewed
+   by a human ... this run produced status=auto_approved, total=224.00,
+   merchant='SUPERMART INC.'"
+```
+
+`save_extraction` refuses the write **first** in `_persist_outcome`, so the whole
+transaction — audit rows included — rolls back. What survives is the review
+task's reason, which names the run's status, total and merchant. That meets the
+operator-facing need (a human can see what the re-run would have produced) but it
+is **not** a structured audit trail.
+
+The invariant itself is sound and was verified in the same probe: the row is
+untouched, `process_receipt` returns rather than raising, and `ProcessResult`
+reports the row's real status.
+
+**Deferred, deliberately** (user decision, 2026-07-29): making the audit rows
+survive means writing `extraction_runs` in their own transaction so a refused row
+write cannot roll them back — a change to merged, safety-critical pipeline code
+(ADR-0011/0012) that deserves its own task and its own review rather than riding
+along with a new command. It is worth doing: `reviewed` receipts are the ones
+carrying human-verified values, so a recorded re-run is free model-versus-truth
+signal for prompt work (P6) and calibration (P8). Until then, §14.10's "keep
+history" is honest only about the row and the review task.
+
+Two consequences for the CLI, both verified in the same probe: `process_receipt`
+**returns normally** on this path (`status=REVIEWED`, `failed_stage="persist"`),
+so the CLI keys off the result rather than catching an exception; and
+`_persist_failure` has **already** opened the review task, so the CLI must not
+enqueue its own — `enqueue_review` would overwrite that specific reason with a
+vaguer one.
 
 ## Consequences
 
