@@ -11,6 +11,13 @@ The load-bearing behaviours pinned down below (ADR-0013):
     list, whether the row arrived from here or from ``POST /upload``.
   * A rejected file is reported by name and reason, never silently dropped, and
     it does not abort the files in the same batch that are fine (§18).
+  * **Errors and rejections go to stderr; only ids and the summary go to
+    stdout.** ``ingest``'s stdout is machine-readable by construction, so
+    ``receipts ingest ./batch > ids.txt 2> errors.log`` must put rejection prose
+    in ``errors.log`` -- it used to leave that file empty and feed
+    ``REJECTED  notes.txt: ...`` straight into the id stream, so a script
+    parsing ids picked it up as one and a CI job alerting on stderr saw nothing
+    at all when files were dropped. Same for ``users``.
   * A directory is not walked recursively unless ``--recursive`` is given.
   * ``users add`` reads the password from stdin -- never ``argv``, which lands
     in shell history and in ``ps`` -- and never echoes it. A piped/redirected
@@ -27,8 +34,10 @@ import sys
 
 import pytest
 from sqlalchemy import select
+from sqlalchemy.exc import DBAPIError
 
 from config.settings import Settings
+from receipts import cli as cli_module
 from receipts.cli import EXIT_FAILED, EXIT_OK, build_parser, cmd_ingest, cmd_users, main
 from receipts.ingest.storage import LocalStorage
 from receipts.persist.models import Base, Receipt
@@ -102,13 +111,46 @@ def test_ingest_reports_a_rejected_file_and_keeps_going(tmp_path, session_factor
     code = cmd_ingest(args, session_factory=session_factory, storage=storage,
                        settings=Settings(_env_file=None))
 
-    out = capsys.readouterr().out
+    captured = capsys.readouterr()
     # A rejected file is reported, never silently skipped -- and it does not
     # abort the receipts that are fine.
-    assert "notes.txt" in out
+    assert "notes.txt" in captured.err
     assert code == EXIT_FAILED          # something in the batch did not land
     with session_factory() as session:
         assert session.scalars(select(Receipt)).all().__len__() == 1
+
+
+def test_ingest_keeps_rejections_out_of_the_machine_readable_id_stream(
+    tmp_path, session_factory, storage, capsys
+):
+    """`receipts ingest ./batch > ids.txt 2> errors.log` must fill errors.log,
+    not ids.txt.
+
+    Every stdout line this command writes is `<uuid>  <filename>` or the closing
+    summary, which is what makes redirecting stdout a usable way to collect the
+    ids just ingested. A rejection printed there put `REJECTED  notes.txt:
+    unsupported file extension: '.txt'` into that stream -- a script reading ids
+    picked it up as one -- while errors.log came back completely empty, so a CI
+    job watching stderr for dropped files saw nothing.
+    """
+    # A dedicated root: session_factory's sqlite file lives directly under
+    # tmp_path and would otherwise be a third, incidental rejection.
+    batch = tmp_path / "batch"
+    batch.mkdir()
+    (batch / "ok.jpg").write_bytes(JPEG_BYTES)
+    (batch / "notes.txt").write_bytes(b"hello")
+    args = build_parser().parse_args(["ingest", str(batch)])
+
+    cmd_ingest(args, session_factory=session_factory, storage=storage,
+               settings=Settings(_env_file=None))
+
+    captured = capsys.readouterr()
+    assert "REJECTED" in captured.err
+    assert "unsupported file extension" in captured.err
+    # Nothing but ids and the summary on stdout.
+    assert "REJECTED" not in captured.out
+    assert "notes.txt" not in captured.out
+    assert "ingested 1, rejected 1" in captured.out
 
 
 def test_ingest_of_a_directory_is_not_recursive_by_default(tmp_path, session_factory, storage):
@@ -201,6 +243,30 @@ def test_users_add_rejects_a_duplicate_username(session_factory, monkeypatch, tt
     assert cmd_users(args, session_factory=session_factory) == EXIT_FAILED
 
 
+def test_users_reports_its_errors_on_stderr(session_factory, monkeypatch, capsys, tty_stdin):
+    """A duplicate account, and an unknown one, belong on stderr.
+
+    Six of the eight commands already reported failures there; `users` printed
+    them to stdout, so `receipts users add "$NAME" 2> errors.log` reported
+    success-shaped silence while refusing the account.
+    """
+    monkeypatch.setattr("getpass.getpass", lambda *a, **k: "pw")
+    add = build_parser().parse_args(["users", "add", "alice"])
+    cmd_users(add, session_factory=session_factory)
+    capsys.readouterr()
+
+    assert cmd_users(add, session_factory=session_factory) == EXIT_FAILED
+    duplicate = capsys.readouterr()
+    assert "error" in duplicate.err and "alice" in duplicate.err
+    assert "error" not in duplicate.out
+
+    unknown = build_parser().parse_args(["users", "deactivate", "ghost"])
+    assert cmd_users(unknown, session_factory=session_factory) == EXIT_FAILED
+    missing = capsys.readouterr()
+    assert "error" in missing.err
+    assert "error" not in missing.out
+
+
 def test_users_list_prints_every_account(session_factory, monkeypatch, capsys, tty_stdin):
     monkeypatch.setattr("getpass.getpass", lambda *a, **k: "pw")
     cmd_users(build_parser().parse_args(["users", "add", "alice"]), session_factory=session_factory)
@@ -270,3 +336,43 @@ def test_main_against_an_unmigrated_database_fails_cleanly_naming_the_fix(
 
     assert code == EXIT_FAILED
     assert "alembic upgrade head" in capsys.readouterr().err
+
+
+def _dbapi_error(orig: Exception) -> DBAPIError:
+    """A ``DBAPIError`` wrapping ``orig``, the way SQLAlchemy hands one to
+    ``main()``'s handler.
+    """
+    return DBAPIError("SELECT 1", {}, orig)
+
+
+def test_is_missing_schema_only_matches_a_missing_table():
+    """The negative case is the one that matters, and it had no test.
+
+    `main()` re-raises anything `_is_missing_schema` rejects. A regression to a
+    bare `except DBAPIError` would tell an operator whose database is simply
+    unreachable to "run `python -m alembic upgrade head`" -- a confident,
+    specific, and completely wrong diagnosis, on the one error path whose whole
+    purpose is diagnosing correctly.
+    """
+
+    class _Psycopg2Style(Exception):
+        pgcode = "42P01"
+
+    class _Psycopg3Style(Exception):
+        sqlstate = "42P01"
+
+    # Positive: SQLite's message, and the two SQLSTATE spellings.
+    assert cli_module._is_missing_schema(_dbapi_error(Exception("no such table: users")))
+    assert cli_module._is_missing_schema(_dbapi_error(_Psycopg2Style("undefined table")))
+    assert cli_module._is_missing_schema(_dbapi_error(_Psycopg3Style("undefined table")))
+
+    # Negative: a connection failure, an auth failure, a genuine SQL error.
+    assert not cli_module._is_missing_schema(
+        _dbapi_error(Exception("could not connect to server: Connection refused"))
+    )
+    assert not cli_module._is_missing_schema(
+        _dbapi_error(Exception('password authentication failed for user "receipts"'))
+    )
+    assert not cli_module._is_missing_schema(
+        _dbapi_error(Exception("no such column: receipts.image_phash"))
+    )

@@ -109,6 +109,18 @@ def format_report(report: EvalReport) -> str:
     ``pipeline_fn`` (the offline harness leaves them ``None``), so they render
     as ``n/a`` rather than a misleading zero.
 
+    **Auto-approval precision renders as ``n/a`` when nothing was
+    auto-approved.** ``_build_report`` defines it as ``1.0`` in that case —
+    "of the receipts we approved, all were correct" is vacuously true of an
+    empty set — and this is the line an operator reads off the terminal as the
+    system's headline metric. A run that approved nothing (including a run
+    that scored no receipts at all) printed ``Auto-approval precision:
+    100.00%``, which is the exact artifact this project has committed once and
+    banned; no caller of this function can print it now. The stored float in
+    ``EvalReport``/the results JSON is deliberately left alone — this is a
+    rendering guard, and the numerator/denominator are right above it in
+    ``Auto-approved:`` either way.
+
     The failed count always shows, and each failure is listed with its error
     text when there is one — a partially failed run must be obvious on screen,
     not something you find later by reading the JSON.
@@ -117,6 +129,9 @@ def format_report(report: EvalReport) -> str:
     def pct(value: float) -> str:
         return f"{value * 100:6.2f}%"
 
+    precision = (
+        pct(report.auto_approval_precision) if report.n_auto_approved else f"{'n/a':>7}"
+    )
     cost = (
         f"${report.cost_per_receipt}"
         if report.cost_per_receipt is not None
@@ -135,7 +150,7 @@ def format_report(report: EvalReport) -> str:
         f"  Failed:                   {report.n_failed:>12d}",
         f"  Auto-approve threshold:   {str(report.auto_approve_threshold):>12}",
         rule,
-        f"  Auto-approval precision:  {pct(report.auto_approval_precision)}",
+        f"  Auto-approval precision:  {precision}",
         f"  Auto-approval rate:       {pct(report.auto_approval_rate)}",
         f"  Critical-field accuracy:  {pct(report.critical_field_accuracy)}",
         f"  Field accuracy:           {pct(report.field_accuracy)}",

@@ -59,34 +59,52 @@ adds) must honour:
     owns no scoring logic of its own, only argument plumbing, so "what
     counts as correct" never has two definitions to keep in sync. It
     prints ``format_report``'s spec section 16 table and writes a results
-    file for ``calibrate`` to read.
+    file for ``calibrate`` to read. **It refuses a zero-receipt run**
+    before printing anything, and validates ``--golden-dir`` before the
+    baseline runs at all -- see :func:`cmd_eval`.
   * **``calibrate`` refuses rather than guess wherever the evidence does
     not support a number.** A zero-receipt result set is refused
     outright, printing no precision figure at all -- this project has
     already committed a results artifact reporting
     ``auto_approval_precision: 1.0`` on zero receipts once, and the
     command that picks the auto-approval threshold is the worst place to
-    repeat it. The recommendation itself ignores any threshold whose
-    auto-approve rate is zero, even though ``calibration_curve`` reports
-    that threshold's precision as a vacuous ``1.0`` -- the same trap one
-    level deeper, inside a result set that does have receipts. Every run
-    closes with a standing caveat that no accuracy number from this
-    system has been measured on a full baseline yet (spec section 16,
-    ``docs/KNOWN_ISSUES.md`` ISSUE-001).
-  * **``eval``/``calibrate`` import ``eval.*`` lazily, inside the function,
-    never at module top.** ``eval/`` is deliberately excluded from the
-    installed distribution (``pyproject.toml``: dev/research tooling, not
-    part of the installed CLI) -- the same reason ``receipts.worker`` is
-    imported lazily behind the ``worker`` extra rather than at module top.
-    A module-top ``eval`` import broke *every* ``receipts`` command, not
-    only these two, the moment the package was actually installed
-    somewhere ``eval/`` did not happen to sit next to (``pythonpath``
-    masks this for ``pytest``, which is exactly why it was caught by
-    running the installed console script, not by a green test suite).
-    When ``eval`` is genuinely unavailable, both commands print a clean
-    message and return :data:`EXIT_FAILED` rather than let
-    ``ModuleNotFoundError`` escape as a traceback; see
-    :func:`_is_missing_eval`.
+    repeat it. The recommendation is additionally floored at
+    :data:`~receipts.score.thresholds.REVIEW_THRESHOLD` and requires
+    :data:`_MIN_APPROVED_SAMPLE` auto-approved receipts behind whatever
+    precision it quotes, because ``calibration_curve`` reports a vacuous
+    ``1.0`` for a threshold nothing clears and a merely-nonzero rate can
+    be a sample of one. Every run closes with a standing caveat that no
+    accuracy number from this system has been measured on a full baseline
+    yet (spec section 16, ``docs/KNOWN_ISSUES.md`` ISSUE-001).
+  * **Anything behind an optional extra is imported inside the command
+    that needs it, never at module top.** Two families:
+
+    ``eval/`` is deliberately excluded from the installed distribution
+    (``pyproject.toml``: dev/research tooling, not part of the installed
+    CLI), and the ``pipeline`` extra (Pillow, OpenCV, openpyxl,
+    pypdfium2) is optional by design. A module-top import of either
+    breaks *every* ``receipts`` command, not only the ones that need it:
+    ``receipts users list`` has no business requiring a spreadsheet
+    writer or an image library. This has now happened twice -- once for
+    ``eval``, once for ``openpyxl``/``PIL``/``cv2`` -- because
+    ``pytest``'s own ``pythonpath = ["src", "."]`` and a dev environment
+    that has every extra installed both mask it in-process. Only a
+    subprocess with the module blocked can see it; see
+    ``tests/test_cli_reports.py::test_cli_imports_without_the_eval_package``.
+
+    ``receipts.worker`` is imported lazily here for the *same* reason,
+    not a different one: ``worker.py`` imports ``receipts.pipeline`` at
+    *its* module top, so importing it drags in the ``pipeline`` extra.
+    (``rq``/``redis`` are a separate matter and are handled inside
+    ``worker.py`` itself, which imports them lazily behind the ``worker``
+    extra -- that part needs nothing from this module.)
+
+    When a needed package is genuinely unavailable, the command prints a
+    clean message naming the extra and returns :data:`EXIT_FAILED` rather
+    than letting ``ModuleNotFoundError`` escape as a traceback; see
+    :func:`_is_missing_eval` and :func:`_is_missing_pipeline_extra`,
+    which match the actual condition rather than swallowing every
+    ``ModuleNotFoundError``.
 
 Every ``cmd_*`` function takes its collaborators (``session_factory``,
 ``storage``, ``settings``) as keyword-only arguments with no defaults; only
@@ -107,14 +125,13 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import date
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
-from typing import Any, Callable
+from typing import TYPE_CHECKING, Any, Callable
 
 from sqlalchemy import select
 from sqlalchemy.exc import DBAPIError
 
 from config.settings import Settings, get_settings
 
-from .export.xlsx import export_workbook
 from .extract.clients.base import VLMClient
 from .extract.clients.factory import make_client
 from .ingest.ingest import ReceiptJob, ingest_file
@@ -123,10 +140,11 @@ from .persist.models import Merchant, Receipt
 from .persist.repository import create_pending_receipt, get_receipt, query_receipts
 from .persist.session import make_engine, make_session_factory
 from .persist.users import ROLE_REVIEWER, ROLES, create_user, deactivate, list_users, set_role
-from .pipeline import BatchResult, ProcessResult, process_receipt
-from .review.serializers import build_export_rows, query_export_receipts
 from .score.confidence import ReceiptStatus
-from .worker import enqueue_receipt, make_queue
+from .score.thresholds import REVIEW_THRESHOLD
+
+if TYPE_CHECKING:  # pragma: no cover - annotations only; needs the `pipeline` extra
+    from .pipeline import ProcessResult
 
 __all__ = [
     "EXIT_FAILED",
@@ -179,6 +197,60 @@ _NO_LIMIT = sys.maxsize
 #: duplicate must either be consolidated or, as here, carry an explicit note
 #: saying why it is independent.
 _EXPORT_MAX_ROWS = 5000
+
+#: Import names of the packages the optional ``pipeline`` extra installs.
+#: Distribution names and import names differ (``pillow`` -> ``PIL``,
+#: ``opencv-python-headless`` -> ``cv2``, ``pillow-heif`` -> ``pillow_heif``),
+#: and it is the *import* name a :class:`ModuleNotFoundError` carries, so this
+#: lists the latter. Kept in step with ``pyproject.toml``'s ``[pipeline]``.
+_PIPELINE_EXTRA_MODULES = frozenset(
+    {"PIL", "cv2", "openpyxl", "pillow_heif", "pypdfium2"}
+)
+
+#: Printed (to stderr) when a command needs the optional ``pipeline`` extra and
+#: it is not installed. Unlike ``eval/`` (see :data:`_EVAL_NOT_INSTALLED`) there
+#: *is* an install that fixes this, so the message names it.
+_PIPELINE_NOT_INSTALLED = (
+    "error: this command needs the optional `pipeline` extra (Pillow, OpenCV, "
+    "openpyxl, pypdfium2), which is not installed in this environment. Install "
+    "it with `pip install 'receipts[pipeline]'` and try again."
+)
+
+
+#: The one containment policy both of :func:`cmd_process`'s per-job loops use.
+#:
+#: Each loop catches ``BaseException`` -- not ``Exception`` -- and re-raises
+#: only these two. The reasoning, recorded here rather than duplicated at both
+#: catch sites:
+#:
+#: * ``Exception`` alone is too narrow. A ``client_factory`` (or a queue
+#:   backend) that raises a ``BaseException`` subclass -- ``SystemExit`` from a
+#:   library calling ``sys.exit``, or a framework's own cancellation type --
+#:   escaped the batch with empty stdout and no summary, which is the exact
+#:   symptom this containment exists to prevent. "Nothing is silently dropped"
+#:   cannot depend on a third party's choice of base class.
+#: * ``KeyboardInterrupt`` and ``SystemExit`` are still re-raised, because they
+#:   are not a *receipt's* failure: they are the operator or the interpreter
+#:   asking the run to stop. Swallowing them would turn Ctrl-C into a stream of
+#:   ``failed`` lines and keep the batch going, which is worse than stopping.
+#:
+#: A contained job is reported on stdout as a ``failed`` line and counted, so
+#: the run still ends with a summary and :data:`EXIT_FAILED` rather than a
+#: traceback.
+_UNCONTAINED = (KeyboardInterrupt, SystemExit)
+
+
+def _is_missing_pipeline_extra(exc: ModuleNotFoundError) -> bool:
+    """Whether ``exc`` is a package from the ``pipeline`` extra missing, rather
+    than some unrelated import failing several frames deeper inside the same
+    import.
+
+    Same discipline as :func:`_is_missing_eval` and :func:`_is_missing_schema`:
+    match the actual condition on ``.name``, and let anything this was not
+    written for propagate rather than mislabel it as "install the extra".
+    """
+    root = (exc.name or "").split(".")[0]
+    return root in _PIPELINE_EXTRA_MODULES
 
 
 def _add_ingest(sub: argparse._SubParsersAction) -> None:
@@ -266,11 +338,25 @@ def _decimal(value: str) -> Decimal:
     traceback instead of the clean exit-2 usage error every other ``type=``
     in this module produces. Re-raising as ``ArgumentTypeError`` is what
     :func:`_positive_int` already does for ``--limit``/``--workers``.
+
+    ``InvalidOperation`` alone is not enough: ``"nan"``, ``"inf"`` and
+    ``"-Infinity"`` are all *legal* ``Decimal``s and parse without raising.
+    ``--min-confidence nan`` compared false against every stored confidence,
+    so a typo produced a valid, empty workbook and exit ``0`` -- a filter that
+    silently matched nothing looks exactly like "there were no such receipts".
+    The ``is_finite()`` check mirrors
+    :func:`~receipts.persist.repository._coerce_money`, which refuses the same
+    values on the write side for the same reason.
     """
     try:
-        return Decimal(value)
+        parsed = Decimal(value)
     except InvalidOperation:
         raise argparse.ArgumentTypeError(f"invalid decimal value: {value!r}") from None
+    if not parsed.is_finite():
+        raise argparse.ArgumentTypeError(
+            f"must be a finite decimal value, got {value!r}"
+        )
+    return parsed
 
 
 def _add_process(sub: argparse._SubParsersAction) -> None:
@@ -362,7 +448,15 @@ def _add_merchants(sub: argparse._SubParsersAction) -> None:
     merchants_sub = parser.add_subparsers(dest="merchants_command", required=True)
 
     merchants_sub.add_parser(
-        "list", help="list every merchant: id, canonical name, tax id, receipt count",
+        "list",
+        help="list every merchant: id, canonical name, tax id, receipt count",
+        description=(
+            "List every merchant: id, canonical name, tax id, receipt count. "
+            "The receipt count prints as `-`, not a number: nothing increments "
+            "`merchants.receipt_count` until the merchant registry lands "
+            "(Phase 6), so the stored value is 0 for every merchant and "
+            "printing it would state a wrong number confidently."
+        ),
     )
 
     hints_parser = merchants_sub.add_parser(
@@ -410,13 +504,16 @@ def _add_calibrate(sub: argparse._SubParsersAction) -> None:
         help="recommend an auto-approve threshold from a `receipts eval` results file",
         description=(
             "Read a `receipts eval` results file and print the calibration "
-            "curve (threshold, auto-approve rate, precision), then recommend "
-            "the lowest threshold whose precision reaches --target with a "
-            "nonzero auto-approve rate -- a threshold nothing is approved "
-            "at is never recommended, however perfect calibration_curve "
-            "reports its precision as being. Refuses outright, printing no "
-            "precision figure, on a zero-receipt result set. No accuracy "
-            "claim is implied -- see docs/KNOWN_ISSUES.md ISSUE-001."
+            "curve (threshold, auto-approve rate, precision, and the "
+            "approved/correct counts behind that precision), then recommend "
+            "the lowest threshold that reaches --target precision, sits at or "
+            f"above the {REVIEW_THRESHOLD} review boundary, and approves at "
+            f"least {_MIN_APPROVED_SAMPLE} receipts. Recommends nothing when "
+            "no threshold does all three -- never a threshold that approves "
+            "everything, and never one whose precision rests on a sample of "
+            "one. Refuses outright, printing no precision figure, on a "
+            "zero-receipt result set. No accuracy claim is implied -- see "
+            "docs/KNOWN_ISSUES.md ISSUE-001."
         ),
     )
     parser.add_argument(
@@ -490,6 +587,15 @@ def cmd_ingest(
     committed together. This does **not** enqueue processing (ADR-0013):
     ``receipts process`` drains pending rows from whichever entry point wrote
     them.
+
+    **Rejections go to stderr; only ids and the summary go to stdout.** This
+    command's stdout is machine-readable by construction -- one
+    ``<id>  <filename>`` line per ingested file -- so
+    ``receipts ingest ./batch > ids.txt 2> errors.log`` has to put the
+    rejection prose in ``errors.log``, not in the id stream. Printing it to
+    stdout left ``errors.log`` empty while a script parsing ids silently
+    picked up ``REJECTED  notes.txt: ...`` as though it were one, and a CI job
+    watching stderr saw nothing at all when files were dropped.
     """
     files = _collect_files(Path(args.path), recursive=args.recursive)
 
@@ -499,7 +605,7 @@ def cmd_ingest(
         try:
             job = ingest_file(file, storage, source=args.source, max_mb=settings.max_upload_mb)
         except ValueError as exc:
-            print(f"REJECTED  {file.name}: {exc}")
+            print(f"REJECTED  {file.name}: {exc}", file=sys.stderr)
             rejected += 1
             continue
         jobs.append(job)
@@ -540,8 +646,12 @@ def cmd_users(args: argparse.Namespace, *, session_factory) -> int:
     """Dispatch ``users add|list|deactivate|set-role``. The caller commits.
 
     Every ``ValueError`` the user store raises (a duplicate username, an
-    unknown one, an unknown role) becomes a printed message and
-    :data:`EXIT_FAILED` rather than a traceback.
+    unknown one, an unknown role) becomes a message **on stderr** and
+    :data:`EXIT_FAILED` rather than a traceback. Stderr, not stdout, for the
+    same reason :func:`cmd_ingest` routes its rejections there: every other
+    command in this module reports failures on stderr, and a CI step that
+    alerts on stderr must not stay silent while ``users add`` refuses a
+    duplicate account.
     """
     if args.users_command == "add":
         password = _read_password()
@@ -550,7 +660,7 @@ def cmd_users(args: argparse.Namespace, *, session_factory) -> int:
                 create_user(session, args.username, password, args.role)
                 session.commit()
             except ValueError as exc:
-                print(f"error: {exc}")
+                print(f"error: {exc}", file=sys.stderr)
                 return EXIT_FAILED
         print(f"created {args.username} ({args.role})")
         return EXIT_OK
@@ -569,7 +679,7 @@ def cmd_users(args: argparse.Namespace, *, session_factory) -> int:
                 deactivate(session, args.username)
                 session.commit()
             except ValueError as exc:
-                print(f"error: {exc}")
+                print(f"error: {exc}", file=sys.stderr)
                 return EXIT_FAILED
         print(f"deactivated {args.username}")
         return EXIT_OK
@@ -580,7 +690,7 @@ def cmd_users(args: argparse.Namespace, *, session_factory) -> int:
                 set_role(session, args.username, args.role)
                 session.commit()
             except ValueError as exc:
-                print(f"error: {exc}")
+                print(f"error: {exc}", file=sys.stderr)
                 return EXIT_FAILED
         print(f"{args.username} is now {args.role}")
         return EXIT_OK
@@ -649,23 +759,36 @@ def cmd_process(
     ``lambda: make_client(settings)``) exactly the way
     :func:`~receipts.pipeline.process_batch` builds one client per job.
 
-    Every job's call is wrapped in its own ``try/except`` rather than left to
-    raise. ``process_receipt`` only ever raises for the one case it cannot
-    itself turn into a terminal row -- nothing at all could be written -- and
-    ``client_factory()`` can raise too (a provider outage building the
-    client); either way, letting that escape the callable handed to
-    ``ThreadPoolExecutor.map`` does not just lose *that* receipt's result --
-    CPython's ``Executor.map`` cancels every future still queued behind it,
-    so one bad receipt used to silently abandon the rest of the batch,
-    including receipts that had not even started, and the exception then
-    escaped ``cmd_process`` entirely instead of becoming the documented
-    :data:`EXIT_FAILED`. Catching it here means every job is always
-    attempted and always reported -- as a normal per-receipt line, or as a
-    ``failed`` one -- and a receipt landing in review still never flips the
-    exit code (ADR-0013): this returns :data:`EXIT_FAILED` only when at
-    least one receipt could not be run at all, never because of where a
-    receipt that *did* run ended up.
+    **Both loops contain per-job failures identically**
+    (:data:`_UNCONTAINED`). On the inline path, ``process_receipt`` raises
+    for the one case it cannot itself turn into a terminal row -- nothing at
+    all could be written -- and ``client_factory()`` can raise too (a
+    provider outage building the client); letting either escape the callable
+    handed to ``ThreadPoolExecutor.map`` does not just lose *that* receipt's
+    result, because CPython's ``Executor.map`` cancels every future still
+    queued behind it. On the enqueue path a broker that drops mid-batch
+    (``redis.ConnectionError`` out of ``queue.enqueue``) used to escape
+    ``cmd_process`` entirely: a traceback, a couple of ``queued`` lines, no
+    summary, and exit ``0`` -- the exit-code contract violated on the very
+    path ADR-0013 calls production's own. Nothing was lost (the
+    un-enqueued rows stay ``pending`` and the next run picks them up), but
+    the operator was told nothing.
+
+    Either way every job is always attempted and always reported -- as a
+    normal per-receipt line, or as a ``failed`` one -- and a receipt landing
+    in review still never flips the exit code (ADR-0013): this returns
+    :data:`EXIT_FAILED` only when at least one receipt could not be run or
+    queued at all, never because of where a receipt that *did* run ended up.
     """
+    try:
+        from .pipeline import BatchResult, process_receipt
+        from .worker import enqueue_receipt, make_queue
+    except ModuleNotFoundError as exc:
+        if not _is_missing_pipeline_extra(exc):
+            raise
+        print(_PIPELINE_NOT_INSTALLED, file=sys.stderr)
+        return EXIT_FAILED
+
     limit = _NO_LIMIT if args.limit is None else args.limit
     with session_factory() as session:
         pending = query_receipts(session, status=ReceiptStatus.PENDING, limit=limit)
@@ -687,23 +810,37 @@ def cmd_process(
 
         queue_factory = queue_factory if queue_factory is not None else make_queue
         queue = queue_factory()
+        queued = 0
+        failed = 0
         for job in jobs:
-            enqueue_receipt(job, queue)
+            try:
+                enqueue_receipt(job, queue)
+            except _UNCONTAINED:
+                raise
+            except BaseException as exc:  # noqa: B036 - see _UNCONTAINED
+                print(f"{job.id}  failed  {exc}")
+                failed += 1
+                continue
             print(f"{job.id}  queued")
-        print(f"queued {len(jobs)}")
-        return EXIT_OK
+            queued += 1
+        print(f"queued {queued}")
+        if failed:
+            print(f"failed: {failed}")
+        return EXIT_FAILED if failed else EXIT_OK
 
     client_factory = (
         client_factory if client_factory is not None else (lambda: make_client(settings))
     )
 
-    def run(job: ReceiptJob) -> tuple[ReceiptJob, ProcessResult | None, Exception | None]:
+    def run(job: ReceiptJob) -> tuple[ReceiptJob, ProcessResult | None, BaseException | None]:
         try:
             result = process_receipt(
                 job, client=client_factory(), storage=storage,
                 session_factory=session_factory, settings=settings,
             )
-        except Exception as exc:  # the one thing process_receipt/client_factory can raise
+        except _UNCONTAINED:
+            raise
+        except BaseException as exc:  # noqa: B036 - see _UNCONTAINED
             return job, None, exc
         return job, result, None
 
@@ -773,7 +910,18 @@ def cmd_reprocess(
     ``queue_factory`` is accepted only for signature parity with
     :func:`cmd_process`; a reprocess always runs synchronously in this
     process and never touches a queue.
+
+    ``receipts.pipeline`` is imported here, inside the function, because it
+    needs the optional ``pipeline`` extra; see the module docstring.
     """
+    try:
+        from .pipeline import process_receipt
+    except ModuleNotFoundError as exc:
+        if not _is_missing_pipeline_extra(exc):
+            raise
+        print(_PIPELINE_NOT_INSTALLED, file=sys.stderr)
+        return EXIT_FAILED
+
     with session_factory() as session:
         receipt = get_receipt(session, args.id)
         if receipt is None:
@@ -844,7 +992,36 @@ def cmd_export(
     ``settings.session_secret`` may be ``None`` -- the CLI needs no session
     of its own -- in which case ``build_export_rows`` leaves every row's
     image column empty rather than minting an unverifiable link.
+
+    ``openpyxl`` is an optional ``pipeline``-extra dependency, so both
+    ``receipts.export.xlsx`` **and** ``receipts.review.serializers`` (which
+    imports ``ReceiptExportRow`` from it) are imported here rather than at
+    module top; see the module docstring.
+
+    ``--out`` is checked before any work happens: pointed at an existing
+    directory it used to reach ``export_workbook`` and surface as a raw
+    ``PermissionError`` (``IsADirectoryError`` off Windows). Every other way
+    this command declines is a message plus :data:`EXIT_FAILED`, and a
+    mistyped path is the most ordinary mistake there is.
     """
+    try:
+        from .export.xlsx import export_workbook
+        from .review.serializers import build_export_rows, query_export_receipts
+    except ModuleNotFoundError as exc:
+        if not _is_missing_pipeline_extra(exc):
+            raise
+        print(_PIPELINE_NOT_INSTALLED, file=sys.stderr)
+        return EXIT_FAILED
+
+    out_path = Path(args.out)
+    if out_path.is_dir():
+        print(
+            f"error: --out {out_path} is a directory; give the path of the "
+            "workbook file to write",
+            file=sys.stderr,
+        )
+        return EXIT_FAILED
+
     with session_factory() as session:
         receipts = query_export_receipts(
             session,
@@ -869,8 +1046,15 @@ def cmd_export(
             image_url_ttl_s=settings.export_image_url_ttl_s,
         )
 
-    out_path = Path(args.out)
-    export_workbook(extractions, out_path, rows=export_rows)
+    try:
+        export_workbook(extractions, out_path, rows=export_rows)
+    except OSError as exc:
+        # A path the filesystem will not accept (no such parent directory, no
+        # permission, a name the platform rejects) is the operator's typo, not
+        # a bug: the same clean message plus EXIT_FAILED as every other refusal
+        # here, rather than a traceback out of openpyxl's writer.
+        print(f"error: could not write {out_path}: {exc}", file=sys.stderr)
+        return EXIT_FAILED
     print(f"wrote {out_path} ({len(receipts)} receipts)")
     return EXIT_OK
 
@@ -882,6 +1066,11 @@ def cmd_export(
 #: the day a merchant changes its receipt format.
 _TRUST_THE_IMAGE = "trust the image"
 
+#: Printed in ``merchants list``'s receipt-count column in place of the stored
+#: ``merchants.receipt_count``. Nothing increments that column until Phase 6,
+#: so it is ``0`` on every row; see :func:`cmd_merchants`.
+_RECEIPT_COUNT_NOT_TRACKED = "-"
+
 
 def cmd_merchants(args: argparse.Namespace, *, session_factory) -> int:
     """Dispatch ``merchants list|hints``. The caller commits.
@@ -891,6 +1080,16 @@ def cmd_merchants(args: argparse.Namespace, *, session_factory) -> int:
     optionally mutating them first -- ``--add`` appends, ``--clear``
     empties -- and always re-prints the resulting list. An unknown id
     prints to stderr and is :data:`EXIT_FAILED`.
+
+    **The receipt count prints as** :data:`_RECEIPT_COUNT_NOT_TRACKED`,
+    never as the stored integer. Nothing anywhere writes
+    ``merchants.receipt_count`` -- it is declared with ``default=0`` and no
+    code increments it until the merchant registry lands (Phase 6) -- so
+    every merchant reads back ``0``. A column of confident zeros on an
+    operator's screen is a wrong number, which this system treats as worse
+    than a missing one; ``-`` says "not tracked yet" and cannot be misread
+    as "this merchant has no receipts". Restore the real value here on the
+    day something maintains it.
 
     **The JSON-mutation trap (verified against ``persist/models.py`` before
     this was written).** ``Merchant.hints`` is a plain ``sa.JSON()`` column
@@ -909,7 +1108,7 @@ def cmd_merchants(args: argparse.Namespace, *, session_factory) -> int:
         for merchant in merchants:
             print(
                 f"{merchant.id}\t{merchant.canonical_name}\t"
-                f"{merchant.tax_id or ''}\t{merchant.receipt_count}"
+                f"{merchant.tax_id or ''}\t{_RECEIPT_COUNT_NOT_TRACKED}"
             )
         return EXIT_OK
 
@@ -975,6 +1174,49 @@ def _is_missing_eval(exc: ModuleNotFoundError) -> bool:
     return exc.name == "eval" or (exc.name is not None and exc.name.startswith("eval."))
 
 
+#: The smallest auto-approved sample :func:`cmd_calibrate` will recommend a
+#: threshold from.
+#:
+#: **A floor against single-sample precision.** The guard this replaced only
+#: excluded a threshold whose approved set was *empty*; one receipt that
+#: happens to be critical-correct reads as ``100.00%`` precision and cleared
+#: it, so a fifty-receipt run in which a single receipt passed produced a
+#: confident recommendation resting on that one receipt -- under a caveat
+#: quoting the fifty.
+#:
+#: **The value is provisional.** Five is chosen to be obviously more than one,
+#: not because any analysis says five is enough; five approvals still cannot
+#: support a 99% precision claim (a 99% claim needs hundreds). The real answer
+#: is a power calculation against the larger held-out set that P8.T2 builds,
+#: which does not exist yet -- see ``docs/KNOWN_ISSUES.md`` ISSUE-001. Raise
+#: this when that set lands; do not lower it.
+_MIN_APPROVED_SAMPLE = 5
+
+
+def _approved_counts(results: list[Any], threshold: Decimal) -> tuple[int, int]:
+    """``(approved, critical-correct)`` at ``threshold`` -- the sample a curve
+    row's precision is computed over.
+
+    Mirrors :func:`~eval.metrics.calibration_curve`'s own
+    ``confidence >= threshold`` test on purpose: it is the definition of
+    "auto-approved" that produced the precision being displayed, and the two
+    must not drift. ``results`` is a list of
+    :class:`~eval.metrics.EvalResult`, typed loosely here only because that
+    class cannot be imported at module top (``eval/`` does not ship).
+    """
+    approved = [r for r in results if r.confidence >= threshold]
+    return len(approved), sum(1 for r in approved if r.critical_correct)
+
+
+def _unreadable_results(results_path: Path, detail: str) -> str:
+    """The stderr line for a results file :func:`cmd_calibrate` cannot read."""
+    return (
+        f"error: {results_path} is not a `receipts eval` results file this "
+        f"version can read ({detail}); re-run `receipts eval` to produce a "
+        "fresh one"
+    )
+
+
 def cmd_eval(
     args: argparse.Namespace,
     *,
@@ -1016,8 +1258,31 @@ def cmd_eval(
     ``lambda **kw: report``, a callable that only accepts keyword arguments,
     so a positional call would break it even if production behaviour were
     otherwise identical.
+
+    **This command refuses a zero-receipt run, twice over.** ``calibrate``,
+    the *reader* of a results file, has always refused an empty result set;
+    nothing guarded this command, the *producer* -- which also prints the
+    system's headline metric to an operator's terminal and exits ``0``. A
+    typo'd ``--golden-dir`` raised nothing at all (globbing a directory that
+    does not exist simply yields no labels), so the run scored zero receipts,
+    ``_build_report`` defined auto-approval precision as ``1.0`` because
+    nothing had been approved, and the operator read
+    ``Auto-approval precision: 100.00%`` off a run that had looked at no
+    receipts. This project has committed exactly that artifact once already
+    (ADR-0013), on exactly this path.
+
+    So: ``--golden-dir`` is validated **before** ``run_baseline_fn`` is
+    called, which is what stops a poisoned results file from ever being
+    written -- the file is persisted inside ``run_eval``, so by the time a
+    report comes back it is already on disk, and
+    :func:`~eval.run_baseline.latest_results_file` sorts by mtime, meaning
+    the newest (poisoned) file would shadow a genuine earlier baseline
+    sitting in the same directory until a human deleted it. The
+    ``n_receipts == 0`` check afterwards is the backstop for every other
+    route to an empty run, including an injected ``run_baseline_fn``.
     """
     try:
+        from eval.golden_set import GOLDEN_DIR
         from eval.run_baseline import format_report
 
         if run_baseline_fn is None:
@@ -1028,8 +1293,29 @@ def cmd_eval(
         print(_EVAL_NOT_INSTALLED, file=sys.stderr)
         return EXIT_FAILED
 
-    golden_dir = Path(args.golden_dir) if args.golden_dir is not None else None
+    golden_dir = Path(args.golden_dir) if args.golden_dir is not None else GOLDEN_DIR
     results_dir = Path(args.results_dir) if args.results_dir is not None else None
+
+    # `run_eval` reads `golden_dir/labels/*.json`; both failure modes below are
+    # silent there -- a missing directory and an empty one glob identically to
+    # nothing -- so they are named here instead, before any work or any write.
+    labels_dir = golden_dir / "labels"
+    if not golden_dir.is_dir():
+        print(
+            f"error: no golden set directory at {golden_dir}; pass an existing "
+            "--golden-dir (it must contain a `labels/` directory of "
+            "*.json labels)",
+            file=sys.stderr,
+        )
+        return EXIT_FAILED
+    if not sorted(labels_dir.glob("*.json")):
+        print(
+            f"error: the golden set at {golden_dir} has no labels to score "
+            f"({labels_dir}/*.json is empty or missing); label the golden set "
+            "first -- see eval/golden/README.md",
+            file=sys.stderr,
+        )
+        return EXIT_FAILED
 
     try:
         report = run_baseline_fn(
@@ -1040,6 +1326,18 @@ def cmd_eval(
         )
     except (RuntimeError, FileNotFoundError) as exc:
         print(f"error: {exc}", file=sys.stderr)
+        return EXIT_FAILED
+
+    if report.n_receipts == 0:
+        print(
+            f"error: this run scored zero receipts from {golden_dir}; there is "
+            "no metric to report from an empty run, and reporting one "
+            "(auto-approval precision reads as a vacuous 100% when nothing was "
+            "approved) is exactly the artifact this project has already "
+            "committed once. Check the golden set and run `receipts eval` "
+            "again.",
+            file=sys.stderr,
+        )
         return EXIT_FAILED
 
     print(format_report(report))
@@ -1076,26 +1374,54 @@ def cmd_calibrate(args: argparse.Namespace, *, results_dir: Path | None = None) 
     command that picks the auto-approval threshold is the worst place to
     repeat that mistake.
 
+    A results file this version cannot read -- malformed JSON, a ``results``
+    key that is not a list, a receipt entry missing ``critical_correct``, a
+    ``null`` confidence -- is a clean message plus :data:`EXIT_FAILED`, like
+    every other refusal here, rather than a ``KeyError``/``TypeError``
+    traceback out of the comprehension below.
+
     Otherwise rebuilds :class:`~eval.metrics.EvalResult` objects from the
     JSON's ``results`` list (``field_acc={}`` -- the dataclass has no default
     for it, and :func:`~eval.metrics.calibration_curve` reads only
-    ``confidence``/``critical_correct``, never ``field_acc``), prints the full
-    threshold/rate/precision curve, and recommends the lowest threshold whose
-    precision reaches ``--target`` **and whose auto-approve rate is greater
-    than zero**.
+    ``confidence``/``critical_correct``, never ``field_acc``) and prints the
+    full curve: threshold, auto-approve rate, precision, **and the approved
+    and correct counts that precision is computed from**, so the sample
+    behind each figure is visible on screen rather than implied.
 
-    The rate check is the entire reason this function exists rather than a
-    one-line scan. ``calibration_curve`` defines precision as ``1.0`` when
-    nothing is approved (``eval/metrics.py:255-257``), and its threshold
-    sweep always includes ``1.0``, above every observed confidence -- so a
-    result set that is critical-incorrect end to end still produces a curve
-    row ``(1.0, rate=0.0, precision=1.0)``. A scan that only checks precision
-    would recommend that: a threshold that auto-approves nothing, reported as
-    perfect. That is the same vacuous zero-receipt precision this project has
-    already committed once as an artifact, hiding one level deeper -- inside
-    a result set that does have receipts. If no threshold clears the target
-    with a nonzero rate, this says so plainly and returns
-    :data:`EXIT_FAILED` without recommending anything.
+    **Three conditions gate the recommendation, and every one of them exists
+    because a precision figure can be true and worthless at the same time.**
+    A threshold is recommended only when it is the lowest that:
+
+    1. is at or above :data:`~receipts.score.thresholds.REVIEW_THRESHOLD`.
+       ``calibration_curve``'s sweep starts at ``0``, where *everything* is
+       approved -- so a golden set on which every receipt is critical-correct
+       (the expected outcome of a first clean baseline on a small curated
+       set) scored precision ``1.0`` at threshold ``0`` and this command
+       recommended it. ``Settings.auto_approve_threshold`` has no lower bound
+       and ``route()`` approves on ``confidence >= auto_threshold``, so an
+       operator who followed that recommendation would auto-approve every
+       receipt at any confidence and no receipt would ever reach a human
+       again. The command whose whole job is protecting auto-approval
+       precision must not be able to recommend switching the gate off; §12's
+       review boundary is the floor below which a receipt is a full re-key,
+       and it is the same constant the router and the export sheet use.
+    2. approves at least :data:`_MIN_APPROVED_SAMPLE` receipts. The previous
+       guard only excluded a *zero*-sized approved set, not a **one**-sized
+       one: fifty receipts of which a single one cleared reported
+       ``100.00%`` precision on a sample of one, under a caveat that cited
+       the fifty.
+    3. reaches ``--target`` precision.
+
+    ``calibration_curve`` defines precision as ``1.0`` when nothing is
+    approved (``eval/metrics.py:255-257``) and its sweep always includes
+    ``1.0``, above every observed confidence, so a result set that is
+    critical-incorrect end to end still produces a curve row
+    ``(1.0, rate=0.0, precision=1.0)``; condition 2 subsumes the old
+    nonzero-rate check that existed to reject it.
+
+    When nothing satisfies all three, this says so plainly and returns
+    :data:`EXIT_FAILED` without recommending anything -- never the least-bad
+    number as though it had passed.
 
     Always closes with a standing caveat, regardless of whether a
     recommendation was found: a threshold is only as trustworthy as the
@@ -1135,8 +1461,21 @@ def cmd_calibrate(args: argparse.Namespace, *, results_dir: Path | None = None) 
             return EXIT_FAILED
         results_path = found
 
-    data = json.loads(results_path.read_text(encoding="utf-8"))
+    try:
+        data = json.loads(results_path.read_text(encoding="utf-8"))
+    except ValueError as exc:  # json.JSONDecodeError is a ValueError
+        print(f"error: {results_path} is not valid JSON: {exc}", file=sys.stderr)
+        return EXIT_FAILED
+
+    if not isinstance(data, dict):
+        print(_unreadable_results(results_path, "the top level is not an object"),
+              file=sys.stderr)
+        return EXIT_FAILED
+
     results_json = data.get("results", [])
+    if not isinstance(results_json, list):
+        print(_unreadable_results(results_path, '"results" is not a list'), file=sys.stderr)
+        return EXIT_FAILED
     if not results_json:
         print(
             "error: this results file has zero receipts; no auto-approval "
@@ -1145,32 +1484,60 @@ def cmd_calibrate(args: argparse.Namespace, *, results_dir: Path | None = None) 
         )
         return EXIT_FAILED
 
-    results = [
-        EvalResult(
-            receipt_id=r["receipt_id"],
-            confidence=Decimal(r["confidence"]),
-            critical_correct=r["critical_correct"],
-            field_acc={},
+    try:
+        results = [
+            EvalResult(
+                receipt_id=r["receipt_id"],
+                confidence=Decimal(r["confidence"]),
+                critical_correct=r["critical_correct"],
+                field_acc={},
+            )
+            for r in results_json
+        ]
+    except (InvalidOperation, KeyError, TypeError) as exc:
+        # A missing `critical_correct` (KeyError), a `"confidence": null`
+        # (TypeError out of Decimal), an entry that is not an object at all
+        # (TypeError) -- all of them used to escape as a bare traceback while
+        # every other way this command declines is a message plus EXIT_FAILED.
+        print(
+            _unreadable_results(results_path, f"{type(exc).__name__}: {exc}"),
+            file=sys.stderr,
         )
-        for r in results_json
-    ]
+        return EXIT_FAILED
+
     curve = calibration_curve(results)
     target = args.target
 
-    print(f"Calibration curve -- {len(results)} receipt(s), target precision {target}")
-    print(f"  {'threshold':>10}  {'auto-approve rate':>18}  {'precision':>10}")
-    for threshold, rate, precision in curve:
-        print(f"  {str(threshold):>10}  {rate * 100:>17.2f}%  {precision * 100:>9.2f}%")
+    # (threshold, rate, precision, approved, correct). The last two are
+    # recomputed here rather than plumbed out of `calibration_curve`, whose
+    # triple shape is the committed results-file format (`_report_to_dict`'s
+    # "calibration"); the `>=` test mirrors that function's own, deliberately.
+    rows = [
+        (threshold, rate, precision, *_approved_counts(results, threshold))
+        for threshold, rate, precision in curve
+    ]
 
-    # Ignore any threshold whose auto-approve rate is zero: calibration_curve
-    # reports precision 1.0 there (nothing approved reads as vacuously
-    # "perfect"), and its sweep always includes threshold 1.0. Recommending
-    # that would repeat the zero-receipt precision trap one level deeper --
-    # see the docstring.
+    print(f"Calibration curve -- {len(results)} receipt(s), target precision {target}")
+    print(
+        f"  {'threshold':>10}  {'auto-approve rate':>18}  {'precision':>10}"
+        f"  {'approved':>8}  {'correct':>8}"
+    )
+    for threshold, rate, precision, approved, correct in rows:
+        print(
+            f"  {str(threshold):>10}  {rate * 100:>17.2f}%  {precision * 100:>9.2f}%"
+            f"  {approved:>8d}  {correct:>8d}"
+        )
+
+    # Three gates, all in the fail-dangerous direction; see the docstring. The
+    # sample floor subsumes the old `rate > 0.0` check, which only excluded an
+    # approved set of size zero -- never one of size one.
     recommended = next(
         (
-            threshold for threshold, rate, precision in curve
-            if rate > 0.0 and precision >= float(target)
+            (threshold, approved, correct)
+            for threshold, _rate, precision, approved, correct in rows
+            if threshold >= REVIEW_THRESHOLD
+            and approved >= _MIN_APPROVED_SAMPLE
+            and precision >= float(target)
         ),
         None,
     )
@@ -1178,12 +1545,17 @@ def cmd_calibrate(args: argparse.Namespace, *, results_dir: Path | None = None) 
     print()
     if recommended is None:
         print(
-            f"no threshold reaches {float(target) * 100:.2f}% precision with a "
-            "nonzero auto-approve rate; recommending none"
+            f"no threshold at or above {REVIEW_THRESHOLD} reaches "
+            f"{float(target) * 100:.2f}% precision over at least "
+            f"{_MIN_APPROVED_SAMPLE} auto-approved receipt(s); recommending none"
         )
         code = EXIT_FAILED
     else:
-        print(f"recommended threshold: {recommended}")
+        threshold, approved, correct = recommended
+        print(
+            f"recommended threshold: {threshold} "
+            f"({correct} of {approved} auto-approved receipt(s) critical-correct)"
+        )
         code = EXIT_OK
 
     print(
@@ -1246,9 +1618,15 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "users":
             return cmd_users(args, session_factory=session_factory)
         if args.command == "process":
+            # queue_factory is left None so cmd_process resolves it to
+            # receipts.worker.make_queue behind its own lazy import: naming it
+            # here would need a module-top `from .worker import make_queue`,
+            # and worker.py imports receipts.pipeline at *its* module top, so
+            # that one line would drag the optional `pipeline` extra back into
+            # every command again (see the module docstring).
             return cmd_process(
                 args, session_factory=session_factory, storage=_make_storage(settings),
-                settings=settings, queue_factory=make_queue,
+                settings=settings,
             )
         if args.command == "reprocess":
             return cmd_reprocess(
