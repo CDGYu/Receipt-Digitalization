@@ -11,7 +11,10 @@ not a generated default), mounts the auth router
 handlers, and installs the read routes (Task 4: ``GET /health``,
 ``GET /receipts``, ``GET /receipts/{id}``, ``GET /metrics``) and the write
 routes (Task 5: ``POST /upload``, ``PATCH /receipts/{id}``, the signed image
-routes, the review queue routes, ``GET /export/xlsx``).
+routes, the review queue routes, ``GET /export/xlsx``), and finally -- after
+every one of those -- the SPA static mount (P5.T0: ``_install_spa``), which
+serves the built review UI under ``/app`` when ``Settings.frontend_dist``
+actually exists and is otherwise a no-op.
 
 Error handling lives in one place (:func:`_install_error_handlers`) so every
 route gets it for free instead of repeating a ``try/except`` per handler:
@@ -42,6 +45,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import func, select, text
 from sqlalchemy.exc import DBAPIError
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.staticfiles import StaticFiles
 
 from config.settings import Settings, get_settings
 
@@ -616,6 +620,47 @@ def _install_write_routes(app: FastAPI) -> None:
 
 
 # --------------------------------------------------------------------------- #
+# SPA static mount (P5.T0, design §3.3)
+# --------------------------------------------------------------------------- #
+
+
+class _SpaFiles(StaticFiles):
+    """``StaticFiles`` that falls back to ``index.html`` for unknown paths.
+
+    The SPA owns its own routing under ``/app``: a hard refresh on
+    ``/app/review``, or a bookmarked link to it, must return the shell rather
+    than a 404. Only a 404 is swallowed -- a 405 or a permission error is a
+    real failure and still propagates to the app's error handlers.
+    """
+
+    async def get_response(self, path: str, scope):
+        try:
+            return await super().get_response(path, scope)
+        except StarletteHTTPException as exc:
+            if exc.status_code != 404:
+                raise
+            return await super().get_response("index.html", scope)
+
+
+def _install_spa(app: FastAPI, settings: Settings) -> None:
+    """Serve the built review UI under ``/app``, when it has been built.
+
+    Registered **last**, after every API route, so route ordering cannot
+    shadow the API: ``/health`` stays the API's JSON and ``/review/next``
+    stays an API route rather than a page. ``/app`` is a prefix the API does
+    not use, which is why the SPA lives there instead of at the root -- the
+    alternative was moving the API under ``/api``, which would break every
+    existing test and the contract ADR-0012 documents.
+
+    Absent directory -> no mount at all (see ``Settings.frontend_dist``).
+    """
+    dist = Path(settings.frontend_dist)
+    if not dist.is_dir():
+        return
+    app.mount("/app", _SpaFiles(directory=dist, html=True), name="spa")
+
+
+# --------------------------------------------------------------------------- #
 # App factory
 # --------------------------------------------------------------------------- #
 
@@ -632,7 +677,9 @@ def create_app(
     Populates the four ``app.state`` attributes Task 3's guards already read
     (``session_factory``, ``storage``, ``settings``, ``submit``), then wires
     session auth, the auth router, the error handlers, and the read and
-    write routes, in that order.
+    write routes, in that order -- and, last of all, the SPA static mount
+    (:func:`_install_spa`, P5.T0), so route ordering can never let a page
+    shadow an API path.
 
     ``install_session_middleware`` is called unconditionally: an app with no
     ``SESSION_SECRET`` must fail at construction, not serve unauthenticated
@@ -665,4 +712,5 @@ def create_app(
     _install_error_handlers(app)
     _install_read_routes(app)
     _install_write_routes(app)
+    _install_spa(app, settings)
     return app

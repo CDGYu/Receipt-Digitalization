@@ -137,6 +137,12 @@ class Settings(BaseSettings):
     # in front of financial records, and a deployment that wants that browsable
     # should have to say so. Turning it on unregisters nothing else.
     docs_enabled: bool = False
+    # Maps FRONTEND_DIST. Where the built review UI lives, relative to the
+    # working directory. The mount is skipped entirely when this directory is
+    # absent -- StaticFiles checks its directory at construction, so an
+    # unguarded mount would break create_app for a base install, for CI, and
+    # for every developer who has never run npm.
+    frontend_dist: str = "frontend/dist"
 
 
 def get_settings() -> Settings:
