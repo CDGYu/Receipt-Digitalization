@@ -58,14 +58,38 @@ with the row.
 ### `calibrate` refuses an empty result set
 
 `receipts calibrate` prints the calibration curve and recommends the lowest
-threshold clearing `--target`. On a result set with **zero receipts it exits `1`
-with an explanation** rather than reporting precision `1.0`, and when no
-threshold clears the target it says so and recommends nothing rather than
-returning the least-bad number as though it passed.
+threshold clearing `--target`. This project has already produced a 0/0 precision
+of `1.0` once, on an empty golden directory, and the command whose entire job is
+choosing an auto-approval threshold is the worst possible place to repeat it — so
+the recommendation passes **three** gates, each closing a different way of
+returning a number that looks perfect and means nothing:
 
-This project has already produced a 0/0 precision of `1.0` once, on an empty
-golden directory. The command whose entire job is choosing an auto-approval
-threshold is the worst possible place to repeat it.
+1. **Zero receipts → exit `1`**, with no precision figure printed at all.
+2. **Never recommend a threshold that approves nothing.** `calibration_curve`
+   defines precision as `1.0` for an empty approved set and its sweep always
+   includes `1.0`, which sits above every observed confidence — so an
+   all-incorrect result set still yields a `(1.0, rate=0.0, precision=1.0)` row.
+3. **Never recommend below `REVIEW_THRESHOLD` (0.60), and never from fewer than
+   `_MIN_APPROVED_SAMPLE` approved receipts.** Gate 2 alone guards only the
+   fail-*safe* direction. The fail-*dangerous* one is worse and was found by the
+   whole-branch review: when every golden receipt is critical-correct — the
+   expected outcome of a first clean baseline — precision at threshold `0` is
+   `1.0`, so the scan recommended `0`. `Settings.auto_approve_threshold` has no
+   lower bound and `route()` approves on `confidence >= threshold`, so an
+   operator following that recommendation would auto-approve every receipt at any
+   confidence and no receipt would ever reach a human again.
+
+The curve prints `approved`/`correct` counts per row, so the sample behind each
+precision figure is visible rather than implied. When nothing qualifies it says so
+and recommends nothing, rather than returning the least-bad number as though it
+passed.
+
+**`receipts eval` carries the same zero-receipt refusal**, and a nonexistent or
+label-less `--golden-dir` is its own error. The first version guarded only
+`calibrate`, the *reader* — leaving `eval`, the *producer*, free to print a
+vacuous 100% with a green exit code and persist it, after which the poisoned file
+won the `latest_results_file` mtime sort and shadowed the genuine baseline beside
+it. Guard the producer, not just the reader.
 
 ### Exit codes, and what is not a failure
 
@@ -140,7 +164,13 @@ vaguer one.
   findings from the P4.T3 branch review: a receipt whose stage failed carries
   `image_phash = ""` and so can never be matched as a dedupe original, and the
   dedupe skip added for that review's Finding 2 is what stops a reprocess turning
-  a duplicate-linked original into an empty `rejected` row. Both need tests here.
+  a duplicate-linked original into an empty `rejected` row. **Both are now tested
+  from the CLI side.** Note that neither dedupe defence is load-bearing alone —
+  the ADR-faithful scenario fails only when both are reverted — so a third test
+  covers a state only the `_ALREADY_EXTRACTED` skip protects: two `auto_approved`
+  receipts holding the same image and linked to neither, which is reachable
+  because two workers on one image each read `image_phash = ""` at dedupe time
+  and neither sees the other.
 - `receipts calibrate` cannot produce a trustworthy threshold until ISSUE-001
   runs. It builds the curve and says so; it does not imply otherwise.
 
