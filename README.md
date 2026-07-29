@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Receipt Digitization System
 
 Turn photographs of receipts — from any merchant, printed or handwritten — into
@@ -500,3 +501,7 @@ to doubt — that is what turns a clever demo into something an accountant will
 actually rely on.
 
 Build the thing that flags its own uncertainty. The accuracy will follow.
+=======
+# Receipt-Digitalization
+initial commit
+>>>>>>> 655afcf19d46a239db6fa5a610bea195b2a736db
