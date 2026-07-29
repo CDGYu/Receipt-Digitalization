@@ -67,8 +67,10 @@ The load-bearing behaviours pinned down below:
     in-process assertion cannot pin either:
     ``test_cli_imports_without_the_eval_package_or_the_pipeline_extra``
     below runs in a subprocess with a ``sys.meta_path`` finder that blocks
-    ``eval``/``eval.*``, ``PIL``, ``openpyxl`` and ``cv2`` before
-    ``import receipts.cli``, the same technique
+    ``eval``/``eval.*`` and every name in ``cli._PIPELINE_EXTRA_MODULES``
+    (plus ``numpy``, which reaches the CLI's import graph transitively
+    through ``receipts.ingest.dedupe`` without being declared in the extra)
+    before ``import receipts.cli``, the same technique
     ``tests/test_import_isolation.py`` uses for the FastAPI check.
 """
 
@@ -582,10 +584,21 @@ def test_cli_imports_without_the_eval_package_or_the_pipeline_extra():
     installed (hiding this one). Same technique as
     `tests/test_import_isolation.py`'s FastAPI check, adapted to block an
     import outright rather than inspect `sys.modules` after the fact.
+
+    The blocked set is derived from `cli_module._PIPELINE_EXTRA_MODULES`
+    itself, unioned with `numpy` (which is not declared there -- it arrives
+    transitively through opencv/Pillow -- but is imported directly by
+    `receipts.ingest.dedupe`), rather than restating a hand-picked subset here.
+    A hand-picked `{'PIL', 'openpyxl', 'cv2'}` is what this test used to block:
+    `_PIPELINE_EXTRA_MODULES` also names `pillow_heif` and `pypdfium2`, so a
+    module-top import of either would have broken every installed `receipts`
+    command while this test stayed green. Deriving from the real constant
+    means the guard and the extra it mirrors cannot drift apart again.
     """
+    blocked = sorted(cli_module._PIPELINE_EXTRA_MODULES | {"numpy"})
     code = (
         "import sys\n"
-        "_BLOCKED = {'PIL', 'openpyxl', 'cv2'}\n"
+        f"_BLOCKED = set({blocked!r})\n"
         "class _BlockOptional:\n"
         "    def find_spec(self, name, path=None, target=None):\n"
         "        root = name.split('.')[0]\n"
