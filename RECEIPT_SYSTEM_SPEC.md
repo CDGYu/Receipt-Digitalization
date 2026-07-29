@@ -1476,15 +1476,40 @@ def process_receipt(job: ReceiptJob) -> ReceiptRecord
 
 def process_batch(paths: list[Path], workers: int = 4) -> BatchResult
 
-# cli.py
-receipts ingest <path>            # single file or directory
-receipts process [--limit N]      # drain the pending queue
+# cli.py  (as implemented; ADR-0013 is the contract)
+receipts ingest <path> [--source S] [--recursive]
+receipts process [--limit N] [--inline] [--workers N]
 receipts export --out book.xlsx [--from DATE] [--to DATE] [--status S]
-receipts eval [--golden-dir DIR]  # run the accuracy harness
-receipts calibrate                # sweep thresholds, print the precision curve
-receipts merchants list|hints
-receipts reprocess <id> [--force] # re-run with current prompts, keep history
+                [--merchant-id ID] [--min-confidence D]
+receipts eval [--golden-dir DIR] [--results-dir DIR]
+receipts calibrate [--results FILE] [--results-dir DIR] [--target D]
+receipts merchants list | hints <id> [--add TEXT] [--clear]
+receipts reprocess <id> [--force]
+receipts users add <name> [--role R] | list | deactivate <name> | set-role <name> <role>
 ```
+
+**Invocation.** The console script requires the interpreter's `Scripts`/`bin`
+directory on `PATH`; `python -m receipts.cli <command>` is the equivalent that
+always works and is what the tests use.
+
+**Behaviour worth knowing before reading the code** (all of it ADR-0013):
+
+- `ingest` writes a `pending` row and does **not** enqueue. `process` drains the
+  `pending` rows, so an upload over `POST /upload` and a file passed to `ingest`
+  share one work list.
+- `process` enqueues to RQ by default; `--inline` runs the work in this process.
+  A missing `REDIS_URL` while enqueueing is a hard failure naming `--inline`,
+  never a silent fallback.
+- `reprocess` never overwrites a `reviewed` receipt. `--force` is a status gate,
+  not a permission override: it extends the command to `auto_approved` receipts
+  and to nothing else.
+- `calibrate` refuses a result set with zero receipts, and ignores any threshold
+  that auto-approves nothing — `calibration_curve` reports precision `1.0` for an
+  empty approved set, so the highest threshold always looks perfect.
+- Exit codes: `0` the command completed, `1` it could not, `2` usage. **A receipt
+  routed to review does not change the exit code.**
+- No interactive prompts anywhere; `users add` reads the password from stdin so it
+  works unattended.
 
 ---
 
