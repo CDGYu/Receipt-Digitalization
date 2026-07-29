@@ -40,6 +40,21 @@ adds) must honour:
     duplicate the invariant. ``--force`` gates by *status*, not by
     permission: it extends reprocessing to an ``auto_approved`` receipt and
     never to a ``reviewed`` one.
+  * **``export`` refuses rather than truncates.** Past ``_EXPORT_MAX_ROWS``
+    matching receipts it prints an error and writes nothing, rather than
+    silently shortening a file that is meant to read as a complete ledger.
+    The query and row assembly are Task 1's
+    :func:`~receipts.review.serializers.query_export_receipts` and
+    :func:`~receipts.review.serializers.build_export_rows` -- the same two
+    functions ``GET /export/xlsx`` calls -- so a CLI export and an API
+    export of identical filters can never disagree about which receipts
+    qualify.
+  * **``merchants`` ships thin.** ``list`` reads the ``merchants`` table as
+    it stands; ``hints`` shows, appends to, or clears the free-text
+    ``hints`` column the extraction prompt injects. Spec section 18's
+    "trust the image" sentence is appended to a supplied hint that does
+    not already end with it, so a hint can never itself become a source of
+    hallucination on the day a merchant changes its receipt format.
 
 Every ``cmd_*`` function takes its collaborators (``session_factory``,
 ``storage``, ``settings``) as keyword-only arguments with no defaults; only
@@ -56,22 +71,27 @@ import getpass
 import sys
 import uuid
 from concurrent.futures import ThreadPoolExecutor
+from datetime import date
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, Callable
 
+from sqlalchemy import select
 from sqlalchemy.exc import DBAPIError
 
 from config.settings import Settings, get_settings
 
+from .export.xlsx import export_workbook
 from .extract.clients.base import VLMClient
 from .extract.clients.factory import make_client
 from .ingest.ingest import ReceiptJob, ingest_file
 from .ingest.storage import LocalStorage, S3Storage, StorageBackend
-from .persist.models import Receipt
+from .persist.models import Merchant, Receipt
 from .persist.repository import create_pending_receipt, get_receipt, query_receipts
 from .persist.session import make_engine, make_session_factory
 from .persist.users import ROLE_REVIEWER, ROLES, create_user, deactivate, list_users, set_role
 from .pipeline import BatchResult, ProcessResult, process_receipt
+from .review.serializers import build_export_rows, query_export_receipts
 from .score.confidence import ReceiptStatus
 from .worker import enqueue_receipt, make_queue
 
@@ -79,7 +99,9 @@ __all__ = [
     "EXIT_FAILED",
     "EXIT_OK",
     "build_parser",
+    "cmd_export",
     "cmd_ingest",
+    "cmd_merchants",
     "cmd_process",
     "cmd_reprocess",
     "cmd_users",
@@ -101,6 +123,27 @@ EXIT_FAILED = 1
 #: time with nothing telling the operator some pending rows were left
 #: behind. An explicit, effectively unbounded value makes "no cap" true.
 _NO_LIMIT = sys.maxsize
+
+#: Past this many matching receipts, ``export`` refuses rather than
+#: truncating (see :func:`cmd_export`). A module global, not a local
+#: constant inside the function, specifically so a test can lower it with
+#: ``monkeypatch.setattr(cli_module, "_EXPORT_MAX_ROWS", ...)`` without a
+#: database of five thousand receipts.
+#:
+#: **Deliberately a separate constant from ``review.api``'s own
+#: ``_EXPORT_MAX_ROWS`` -- not imported from there, and not consolidated.**
+#: They happen to share a value today, but they bound two different things:
+#: the API's caps an in-memory workbook built inside one HTTP response,
+#: while this one caps a file written to disk, and a future operator could
+#: legitimately raise one without the other. Importing the API's would also
+#: drag FastAPI back into the CLI, which Task 1 split ``query_export_receipts``
+#: and ``build_export_rows`` out of ``review/api.py`` specifically to avoid
+#: (ADR-0010). This project has already paid once for a duplicated constant
+#: that drifted silently -- the 0.85/0.60 confidence thresholds ended up
+#: with four separate copies -- so the rule going forward is that a
+#: duplicate must either be consolidated or, as here, carry an explicit note
+#: saying why it is independent.
+_EXPORT_MAX_ROWS = 5000
 
 
 def _add_ingest(sub: argparse._SubParsersAction) -> None:
@@ -178,6 +221,23 @@ def _positive_int(value: str) -> int:
     return parsed
 
 
+def _decimal(value: str) -> Decimal:
+    """An ``argparse`` ``type=`` for ``--min-confidence`` (ADR-0001: money and
+    confidence are ``Decimal``, never ``float``, anywhere on this path).
+
+    ``Decimal(value)`` raises ``decimal.InvalidOperation`` for a malformed
+    string -- and unlike ``ValueError``, argparse does not catch that on its
+    own, so a bad ``--min-confidence`` would otherwise escape as an uncaught
+    traceback instead of the clean exit-2 usage error every other ``type=``
+    in this module produces. Re-raising as ``ArgumentTypeError`` is what
+    :func:`_positive_int` already does for ``--limit``/``--workers``.
+    """
+    try:
+        return Decimal(value)
+    except InvalidOperation:
+        raise argparse.ArgumentTypeError(f"invalid decimal value: {value!r}") from None
+
+
 def _add_process(sub: argparse._SubParsersAction) -> None:
     parser = sub.add_parser(
         "process",
@@ -224,6 +284,69 @@ def _add_reprocess(sub: argparse._SubParsersAction) -> None:
     )
 
 
+def _add_export(sub: argparse._SubParsersAction) -> None:
+    parser = sub.add_parser(
+        "export",
+        help="write the accounting workbook (spec section 13) for a set of receipts",
+        description=(
+            "Query receipts and write the spec section 13 workbook -- Receipts, "
+            "LineItems, Needs Review, and Summary sheets -- to --out. "
+            "`pending` and `rejected` receipts are excluded unless --status "
+            "names one of them explicitly: a pending row is an upload in "
+            "flight, not a transaction, and a rejected one is a duplicate "
+            "the pipeline deliberately keeps out of exports. Refuses -- "
+            "writing nothing -- rather than silently truncating past "
+            f"{_EXPORT_MAX_ROWS} matching receipts."
+        ),
+    )
+    parser.add_argument("--out", required=True, help="workbook path to write")
+    parser.add_argument(
+        "--from", dest="date_from", type=date.fromisoformat, default=None,
+        help="only receipts transacted on or after this date (YYYY-MM-DD)",
+    )
+    parser.add_argument(
+        "--to", dest="date_to", type=date.fromisoformat, default=None,
+        help="only receipts transacted on or before this date (YYYY-MM-DD)",
+    )
+    parser.add_argument(
+        "--status", type=ReceiptStatus, default=None,
+        help="only this status (default: every status except pending/rejected)",
+    )
+    parser.add_argument(
+        "--merchant-id", type=uuid.UUID, default=None,
+        help="only receipts for this merchant",
+    )
+    parser.add_argument(
+        "--min-confidence", type=_decimal, default=None,
+        help="only receipts scored at or above this confidence",
+    )
+
+
+def _add_merchants(sub: argparse._SubParsersAction) -> None:
+    parser = sub.add_parser("merchants", help="list merchants and manage their extraction hints")
+    merchants_sub = parser.add_subparsers(dest="merchants_command", required=True)
+
+    merchants_sub.add_parser(
+        "list", help="list every merchant: id, canonical name, tax id, receipt count",
+    )
+
+    hints_parser = merchants_sub.add_parser(
+        "hints",
+        help="show or edit a merchant's extraction hints",
+        description=(
+            "Print a merchant's current `merchants.hints` -- free text "
+            "injected into the extraction prompt when the merchant is "
+            "recognised (spec section 8.3). --add appends one hint; --clear empties "
+            "the list. With neither flag, this only prints what is already "
+            "stored."
+        ),
+    )
+    hints_parser.add_argument("id", type=uuid.UUID, help="the merchant id")
+    hints_group = hints_parser.add_mutually_exclusive_group()
+    hints_group.add_argument("--add", metavar="TEXT", default=None, help="append a hint")
+    hints_group.add_argument("--clear", action="store_true", help="remove every hint")
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="receipts", description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -231,6 +354,8 @@ def build_parser() -> argparse.ArgumentParser:
     _add_users(sub)
     _add_process(sub)
     _add_reprocess(sub)
+    _add_export(sub)
+    _add_merchants(sub)
     return parser
 
 
@@ -603,6 +728,135 @@ def cmd_reprocess(
     return EXIT_OK
 
 
+def cmd_export(
+    args: argparse.Namespace,
+    *,
+    session_factory,
+    settings: Settings,
+) -> int:
+    """Write the §13 workbook for every receipt matching ``args``'s filters.
+
+    The query and the read-side row assembly are entirely Task 1's
+    :func:`~receipts.review.serializers.query_export_receipts` and
+    :func:`~receipts.review.serializers.build_export_rows` -- the same two
+    functions ``GET /export/xlsx`` calls -- so a CLI export and an API
+    export of identical filters can never disagree about which receipts
+    qualify or what ends up in a row. ``pending``/``rejected`` receipts are
+    excluded unless ``--status`` names one of them explicitly; that
+    exclusion lives in ``query_export_receipts`` itself, not here.
+
+    Fetches ``_EXPORT_MAX_ROWS + 1`` rows -- one past the cap -- and, if
+    that many actually come back, prints to stderr and returns
+    :data:`EXIT_FAILED` **without calling**
+    :func:`~receipts.export.xlsx.export_workbook` at all, so nothing is
+    written to ``--out``: a silently shortened export reads as a complete
+    ledger, which is worse than making the operator narrow the filter and
+    ask again.
+
+    ``settings.session_secret`` may be ``None`` -- the CLI needs no session
+    of its own -- in which case ``build_export_rows`` leaves every row's
+    image column empty rather than minting an unverifiable link.
+    """
+    with session_factory() as session:
+        receipts = query_export_receipts(
+            session,
+            status=args.status,
+            merchant_id=args.merchant_id,
+            date_from=args.date_from,
+            date_to=args.date_to,
+            min_confidence=args.min_confidence,
+            limit=_EXPORT_MAX_ROWS + 1,
+        )
+        if len(receipts) > _EXPORT_MAX_ROWS:
+            print(
+                f"error: this export matches more than {_EXPORT_MAX_ROWS} "
+                "receipts; narrow the filter (status, merchant, or date "
+                "range) and try again",
+                file=sys.stderr,
+            )
+            return EXIT_FAILED
+
+        extractions, export_rows = build_export_rows(
+            session, receipts, secret=settings.session_secret,
+            image_url_ttl_s=settings.export_image_url_ttl_s,
+        )
+
+    out_path = Path(args.out)
+    export_workbook(extractions, out_path, rows=export_rows)
+    print(f"wrote {out_path} ({len(receipts)} receipts)")
+    return EXIT_OK
+
+
+#: The exact suffix (case-insensitive) every stored hint must end with --
+#: §18: hints are guidance only, and the prompt block they are injected into
+#: must always close by telling the model to defer to the image when a hint
+#: and the image disagree, or a hint becomes a source of hallucination on
+#: the day a merchant changes its receipt format.
+_TRUST_THE_IMAGE = "trust the image"
+
+
+def cmd_merchants(args: argparse.Namespace, *, session_factory) -> int:
+    """Dispatch ``merchants list|hints``. The caller commits.
+
+    ``list`` prints one line per merchant: id, canonical name, tax id,
+    receipt count. ``hints <id>`` prints the merchant's current hints,
+    optionally mutating them first -- ``--add`` appends, ``--clear``
+    empties -- and always re-prints the resulting list. An unknown id
+    prints to stderr and is :data:`EXIT_FAILED`.
+
+    **The JSON-mutation trap (verified against ``persist/models.py`` before
+    this was written).** ``Merchant.hints`` is a plain ``sa.JSON()`` column
+    with no ``MutableList`` registered, so SQLAlchemy does not track
+    in-place mutation: ``merchant.hints.append(text)`` would silently never
+    reach the database -- and the identity map hands the very same
+    (mutated, in-memory-only) list back to any read in the *same* session,
+    so the bug would not even surface in a same-session test. Rebinding the
+    attribute (``merchant.hints = [*merchant.hints, text]`` /
+    ``merchant.hints = []``) is what makes the ORM see a new value and mark
+    the column dirty.
+    """
+    if args.merchants_command == "list":
+        with session_factory() as session:
+            merchants = session.scalars(select(Merchant).order_by(Merchant.canonical_name)).all()
+        for merchant in merchants:
+            print(
+                f"{merchant.id}\t{merchant.canonical_name}\t"
+                f"{merchant.tax_id or ''}\t{merchant.receipt_count}"
+            )
+        return EXIT_OK
+
+    if args.merchants_command == "hints":
+        with session_factory() as session:
+            merchant = session.get(Merchant, args.id)
+            if merchant is None:
+                print(f"error: no merchant with id {args.id}", file=sys.stderr)
+                return EXIT_FAILED
+
+            if args.clear:
+                merchant.hints = []
+                session.commit()
+            elif args.add is not None:
+                text = args.add
+                if not text.lower().endswith(_TRUST_THE_IMAGE):
+                    text = f"{text}; {_TRUST_THE_IMAGE}"
+                    print(
+                        "note: hint did not end by deferring to the image; "
+                        f'appended "; {_TRUST_THE_IMAGE}" (spec section 18)'
+                    )
+                merchant.hints = [*merchant.hints, text]
+                session.commit()
+
+            hints = list(merchant.hints)
+
+        for hint in hints:
+            print(hint)
+        return EXIT_OK
+
+    raise AssertionError(  # unreachable: subparsers are required
+        f"unhandled merchants subcommand {args.merchants_command!r}"
+    )
+
+
 def _is_missing_schema(exc: DBAPIError) -> bool:
     """Whether ``exc`` looks like a query against a table that does not exist.
 
@@ -661,6 +915,10 @@ def main(argv: list[str] | None = None) -> int:
                 args, session_factory=session_factory, storage=_make_storage(settings),
                 settings=settings,
             )
+        if args.command == "export":
+            return cmd_export(args, session_factory=session_factory, settings=settings)
+        if args.command == "merchants":
+            return cmd_merchants(args, session_factory=session_factory)
         # unreachable: subparsers are required
         raise AssertionError(f"unhandled command {args.command!r}")
     except DBAPIError as exc:
