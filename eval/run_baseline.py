@@ -161,12 +161,17 @@ def format_report(report: EvalReport) -> str:
     return "\n".join(lines)
 
 
-def _latest_results_file(results_dir: Path) -> Path | None:
+def latest_results_file(results_dir: Path) -> Path | None:
     """Most recently written results JSON in ``results_dir`` (or ``None``).
 
     The harness names the file ``{date}-{prompt_version}.json`` and does not
     return its path; picking the newest file back out avoids duplicating (and
     drifting from) that private naming logic.
+
+    Not private: this module's own ``main`` uses it to report where a run's
+    results landed, and ``receipts calibrate`` (``receipts.cli.cmd_calibrate``)
+    uses it to find the newest file when the operator does not name one
+    explicitly with ``--results``.
     """
     files = sorted(
         results_dir.glob("*.json"),
@@ -190,7 +195,7 @@ def main() -> None:
 
     print(format_report(report))
 
-    written = _latest_results_file(DEFAULT_RESULTS_DIR)
+    written = latest_results_file(DEFAULT_RESULTS_DIR)
     print(f"\nResults written to: {written if written is not None else DEFAULT_RESULTS_DIR}")
 
 

@@ -1,9 +1,12 @@
-"""``receipts export`` and ``receipts merchants`` (P4.T4, spec 14.10 / §13 / §18).
+"""``receipts export``, ``receipts merchants``, ``receipts eval`` and
+``receipts calibrate`` (P4.T4/T5, spec 14.10 / §13 / §16 / §18).
 
 Everything here is offline: a file-backed SQLite database and no storage
 backend at all -- export reads only ORM rows, never a blob, through Task 1's
 ``query_export_receipts``/``build_export_rows``. No provider, no Redis, no
-network.
+network. ``eval``'s tests monkeypatch ``cli_module.run_baseline`` itself
+rather than touch the pipeline, and ``calibrate`` only ever reads a
+hand-written results JSON -- neither needs a database or a provider either.
 
 The load-bearing behaviours pinned down below:
 
@@ -31,10 +34,21 @@ The load-bearing behaviours pinned down below:
   * §18: a merchant hint always ends by deferring to the image -- ``--add``
     appends "; trust the image" when the supplied text does not already end
     with it (case-insensitively), and says on stdout that it did.
+  * ``calibrate`` refuses outright on a zero-receipt result set, printing no
+    precision figure at all -- this project has already committed a results
+    artifact reporting ``auto_approval_precision: 1.0`` on zero receipts
+    once, and the command whose job is choosing an auto-approval threshold
+    is the worst place to repeat it.
+  * ``calibrate``'s recommendation ignores any threshold whose auto-approve
+    rate is zero, even though ``calibration_curve`` reports that threshold's
+    precision as a vacuous ``1.0`` (``eval/metrics.py:255-257``) -- the same
+    trap one level deeper. A threshold that approves nothing is not a
+    calibrated system, however perfect its precision reads.
 """
 
 from __future__ import annotations
 
+import json
 import uuid
 from decimal import Decimal as D
 from pathlib import Path
@@ -43,8 +57,17 @@ import pytest
 from openpyxl import load_workbook
 
 from config.settings import Settings
+from eval.metrics import EvalReport
 from receipts import cli as cli_module
-from receipts.cli import EXIT_FAILED, EXIT_OK, build_parser, cmd_export, cmd_merchants
+from receipts.cli import (
+    EXIT_FAILED,
+    EXIT_OK,
+    build_parser,
+    cmd_calibrate,
+    cmd_eval,
+    cmd_export,
+    cmd_merchants,
+)
 from receipts.extract.schema import LineItem as ExtractLineItem
 from receipts.extract.schema import Merchant as ExtractMerchant
 from receipts.extract.schema import ReceiptExtraction, ReceiptMeta, Totals
@@ -230,3 +253,131 @@ def test_merchants_hints_does_not_double_append(session_factory):
 def test_merchants_hints_for_an_unknown_id_is_exit_one(session_factory):
     args = build_parser().parse_args(["merchants", "hints", str(uuid.uuid4())])
     assert cmd_merchants(args, session_factory=session_factory) == EXIT_FAILED
+
+
+# --------------------------------------------------------------------------- #
+# eval / calibrate test helpers
+# --------------------------------------------------------------------------- #
+
+
+def _write_results(results_dir: Path, *, receipts: int, results: list[dict]) -> Path:
+    """A results file in the exact shape `eval/harness.py::_report_to_dict` writes."""
+    results_dir.mkdir(parents=True, exist_ok=True)
+    path = results_dir / "2026-07-29-1.0.0.json"
+    path.write_text(json.dumps({
+        "prompt_version": "1.0.0",
+        "auto_approve_threshold": "0.85",
+        "counts": {"receipts": receipts, "auto_approved": 0,
+                   "critical_correct": 0, "failed": 0},
+        "metrics": {"auto_approval_precision": 0.0, "auto_approval_rate": 0.0,
+                    "critical_field_accuracy": 0.0, "field_accuracy": 0.0,
+                    "line_item_precision": 0.0, "line_item_recall": 0.0,
+                    "line_item_f1": 0.0, "cost_per_receipt": None,
+                    "p50_latency_s": None, "p95_latency_s": None},
+        "failures": [],
+        "calibration": [],
+        "results": results,
+    }, indent=2), encoding="utf-8")
+    return path
+
+
+def _stub_report() -> EvalReport:
+    """Just enough EvalReport for `format_report` to render the table."""
+    return EvalReport(
+        n_receipts=3, n_auto_approved=2, n_critical_correct=2,
+        auto_approve_threshold=D("0.85"),
+        auto_approval_precision=1.0, auto_approval_rate=0.667,
+        critical_field_accuracy=0.667, field_accuracy=0.85,
+        line_item_precision=0.9, line_item_recall=0.9, line_item_f1=0.9,
+    )
+
+
+# --------------------------------------------------------------------------- #
+# eval
+# --------------------------------------------------------------------------- #
+
+
+def test_eval_prints_the_six_metric_table(tmp_path, capsys, monkeypatch):
+    report = _stub_report()
+    monkeypatch.setattr(cli_module, "run_baseline", lambda **kw: report)
+    code = cmd_eval(build_parser().parse_args(["eval"]), settings=Settings(_env_file=None))
+
+    assert code == EXIT_OK
+    out = capsys.readouterr().out
+    # These are `format_report`'s real labels, verified against
+    # eval/run_baseline.py -- it prints prose headings, NOT the snake_case
+    # metric names. Assert on what the function actually emits.
+    for label in ("Auto-approval precision:", "Critical-field accuracy:",
+                  "Line-item F1:", "Cost per receipt:"):
+        assert label in out
+
+
+def test_eval_reports_a_refused_provider_as_exit_one(capsys, monkeypatch):
+    def refuse(**kwargs):
+        raise RuntimeError("the fake provider carries no scripted responses")
+
+    monkeypatch.setattr(cli_module, "run_baseline", refuse)
+    code = cmd_eval(build_parser().parse_args(["eval"]), settings=Settings(_env_file=None))
+
+    assert code == EXIT_FAILED
+    assert "scripted responses" in capsys.readouterr().err
+
+
+# --------------------------------------------------------------------------- #
+# calibrate
+# --------------------------------------------------------------------------- #
+
+
+def test_calibrate_refuses_a_zero_receipt_result_set(tmp_path, capsys):
+    _write_results(tmp_path, receipts=0, results=[])
+    code = cmd_calibrate(build_parser().parse_args(["calibrate"]), results_dir=tmp_path)
+
+    # This project has already produced a 0/0 precision of 1.0 once. The command
+    # whose job is choosing an auto-approval threshold is the worst place to
+    # repeat it.
+    assert code == EXIT_FAILED
+    err = capsys.readouterr().err
+    assert "zero receipts" in err.lower()
+    assert "1.0" not in err
+
+
+def test_calibrate_recommends_the_lowest_threshold_clearing_the_target(tmp_path, capsys):
+    _write_results(tmp_path, receipts=3, results=[
+        {"receipt_id": "r001", "confidence": "0.90", "critical_correct": True,
+         "fields_correct": 1, "fields_total": 1},
+        {"receipt_id": "r002", "confidence": "0.70", "critical_correct": False,
+         "fields_correct": 0, "fields_total": 1},
+        {"receipt_id": "r003", "confidence": "0.95", "critical_correct": True,
+         "fields_correct": 1, "fields_total": 1},
+    ])
+    code = cmd_calibrate(
+        build_parser().parse_args(["calibrate", "--target", "0.99"]), results_dir=tmp_path)
+
+    out = capsys.readouterr().out
+    assert code == EXIT_OK
+    # 0.70 admits the incorrect receipt; 0.90 does not.
+    assert "0.9" in out
+
+
+def test_calibrate_when_no_threshold_clears_the_target_recommends_nothing(tmp_path, capsys):
+    _write_results(tmp_path, receipts=2, results=[
+        {"receipt_id": "r001", "confidence": "0.90", "critical_correct": False,
+         "fields_correct": 0, "fields_total": 1},
+        {"receipt_id": "r002", "confidence": "0.95", "critical_correct": False,
+         "fields_correct": 0, "fields_total": 1},
+    ])
+    code = cmd_calibrate(
+        build_parser().parse_args(["calibrate", "--target", "0.99"]), results_dir=tmp_path)
+
+    out = capsys.readouterr().out.lower()
+    assert code == EXIT_FAILED
+    # Never return the least-bad number as though it passed.
+    assert "no threshold" in out or "none" in out
+
+
+def test_calibrate_with_no_results_file_is_exit_one(tmp_path, capsys):
+    # Wrapped to stay under the project's 100-column limit; identical call/assertion
+    # to the brief's verbatim single-line form.
+    code = cmd_calibrate(build_parser().parse_args(["calibrate"]), results_dir=tmp_path)
+    assert code == EXIT_FAILED
+    assert "receipts eval" in capsys.readouterr().err

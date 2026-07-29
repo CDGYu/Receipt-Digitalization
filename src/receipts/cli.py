@@ -55,6 +55,24 @@ adds) must honour:
     "trust the image" sentence is appended to a supplied hint that does
     not already end with it, so a hint can never itself become a source of
     hallucination on the day a merchant changes its receipt format.
+  * ``eval`` is a thin wrapper over ``eval.run_baseline.run_baseline``: it
+    owns no scoring logic of its own, only argument plumbing, so "what
+    counts as correct" never has two definitions to keep in sync. It
+    prints ``format_report``'s spec section 16 table and writes a results
+    file for ``calibrate`` to read.
+  * **``calibrate`` refuses rather than guess wherever the evidence does
+    not support a number.** A zero-receipt result set is refused
+    outright, printing no precision figure at all -- this project has
+    already committed a results artifact reporting
+    ``auto_approval_precision: 1.0`` on zero receipts once, and the
+    command that picks the auto-approval threshold is the worst place to
+    repeat it. The recommendation itself ignores any threshold whose
+    auto-approve rate is zero, even though ``calibration_curve`` reports
+    that threshold's precision as a vacuous ``1.0`` -- the same trap one
+    level deeper, inside a result set that does have receipts. Every run
+    closes with a standing caveat that no accuracy number from this
+    system has been measured on a full baseline yet (spec section 16,
+    ``docs/KNOWN_ISSUES.md`` ISSUE-001).
 
 Every ``cmd_*`` function takes its collaborators (``session_factory``,
 ``storage``, ``settings``) as keyword-only arguments with no defaults; only
@@ -68,6 +86,7 @@ from __future__ import annotations
 
 import argparse
 import getpass
+import json
 import sys
 import uuid
 from concurrent.futures import ThreadPoolExecutor
@@ -80,6 +99,9 @@ from sqlalchemy import select
 from sqlalchemy.exc import DBAPIError
 
 from config.settings import Settings, get_settings
+from eval.harness import DEFAULT_RESULTS_DIR
+from eval.metrics import EvalResult, calibration_curve
+from eval.run_baseline import format_report, latest_results_file, run_baseline
 
 from .export.xlsx import export_workbook
 from .extract.clients.base import VLMClient
@@ -99,6 +121,8 @@ __all__ = [
     "EXIT_FAILED",
     "EXIT_OK",
     "build_parser",
+    "cmd_calibrate",
+    "cmd_eval",
     "cmd_export",
     "cmd_ingest",
     "cmd_merchants",
@@ -347,6 +371,57 @@ def _add_merchants(sub: argparse._SubParsersAction) -> None:
     hints_group.add_argument("--clear", action="store_true", help="remove every hint")
 
 
+def _add_eval(sub: argparse._SubParsersAction) -> None:
+    parser = sub.add_parser(
+        "eval",
+        help="run the golden-set baseline and print the spec section 16 metrics",
+        description=(
+            "Run the M1 pipeline over the golden set and print the six spec "
+            "section 16 metrics (eval.run_baseline). Writes a timestamped, "
+            "prompt-versioned results file under --results-dir for "
+            "`receipts calibrate` to read. No accuracy claim is implied by "
+            "a single run -- see docs/KNOWN_ISSUES.md ISSUE-001."
+        ),
+    )
+    parser.add_argument(
+        "--golden-dir", default=None,
+        help="golden set directory (default: eval.golden_set.GOLDEN_DIR)",
+    )
+    parser.add_argument(
+        "--results-dir", default=None,
+        help="where to write the results JSON (default: eval/results/)",
+    )
+
+
+def _add_calibrate(sub: argparse._SubParsersAction) -> None:
+    parser = sub.add_parser(
+        "calibrate",
+        help="recommend an auto-approve threshold from a `receipts eval` results file",
+        description=(
+            "Read a `receipts eval` results file and print the calibration "
+            "curve (threshold, auto-approve rate, precision), then recommend "
+            "the lowest threshold whose precision reaches --target with a "
+            "nonzero auto-approve rate -- a threshold nothing is approved "
+            "at is never recommended, however perfect calibration_curve "
+            "reports its precision as being. Refuses outright, printing no "
+            "precision figure, on a zero-receipt result set. No accuracy "
+            "claim is implied -- see docs/KNOWN_ISSUES.md ISSUE-001."
+        ),
+    )
+    parser.add_argument(
+        "--results", default=None,
+        help="a specific results JSON to read (default: newest under --results-dir)",
+    )
+    parser.add_argument(
+        "--results-dir", default=None,
+        help="directory to search for the newest results file (default: eval/results/)",
+    )
+    parser.add_argument(
+        "--target", type=_decimal, default=Decimal("0.99"),
+        help="minimum acceptable auto-approval precision (default: %(default)s)",
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="receipts", description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -356,6 +431,8 @@ def build_parser() -> argparse.ArgumentParser:
     _add_reprocess(sub)
     _add_export(sub)
     _add_merchants(sub)
+    _add_eval(sub)
+    _add_calibrate(sub)
     return parser
 
 
@@ -857,6 +934,173 @@ def cmd_merchants(args: argparse.Namespace, *, session_factory) -> int:
     )
 
 
+def cmd_eval(
+    args: argparse.Namespace, *, settings: Settings, client: VLMClient | None = None,
+) -> int:
+    """Run the golden-set baseline and print the spec section 16 report.
+
+    A thin wrapper over :func:`eval.run_baseline.run_baseline`: this command
+    owns no scoring logic of its own, only argument plumbing, so "what counts
+    as correct" never has two definitions to keep in sync. ``client`` exists
+    for tests to inject; production always leaves it ``None`` and lets
+    ``run_baseline`` build one from ``settings`` itself (refusing the
+    response-less ``fake`` provider before any work happens).
+
+    A refused provider (:class:`RuntimeError`) or a missing golden-set image
+    (:class:`FileNotFoundError`) is printed to stderr and turned into
+    :data:`EXIT_FAILED` rather than a traceback. ``run_baseline`` is called
+    with every argument as a keyword, and referenced by its bare module-level
+    name (imported at module top, not through ``eval.run_baseline.``) so a
+    test can replace it with ``monkeypatch.setattr(cli_module, "run_baseline",
+    ...)`` and this function picks up the replacement without change.
+    """
+    golden_dir = Path(args.golden_dir) if args.golden_dir is not None else None
+    results_dir = Path(args.results_dir) if args.results_dir is not None else None
+
+    try:
+        report = run_baseline(
+            golden_dir=golden_dir,
+            client=client,
+            results_dir=results_dir,
+            default_currency=settings.default_currency,
+        )
+    except (RuntimeError, FileNotFoundError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return EXIT_FAILED
+
+    print(format_report(report))
+    return EXIT_OK
+
+
+def cmd_calibrate(args: argparse.Namespace, *, results_dir: Path | None = None) -> int:
+    """Recommend an auto-approve threshold from a `receipts eval` results file.
+
+    Resolves the file to read: ``--results`` if given, else the newest file
+    under ``--results-dir`` (falling back to the ``results_dir`` collaborator,
+    then to :data:`~eval.harness.DEFAULT_RESULTS_DIR`) via
+    :func:`~eval.run_baseline.latest_results_file` -- the function this task
+    renamed from a private helper with exactly one caller into a legitimate
+    second consumer, rather than importing the private name or reimplementing
+    the newest-file lookup here. Neither resolves to a file: stderr names
+    `receipts eval` as the fix, :data:`EXIT_FAILED`.
+
+    **Refuses a zero-receipt result set outright, printing no precision
+    figure at all.** This project has already committed a results artifact
+    reporting ``auto_approval_precision: 1.0`` on zero receipts once; the
+    command that picks the auto-approval threshold is the worst place to
+    repeat that mistake.
+
+    Otherwise rebuilds :class:`~eval.metrics.EvalResult` objects from the
+    JSON's ``results`` list (``field_acc={}`` -- the dataclass has no default
+    for it, and :func:`~eval.metrics.calibration_curve` reads only
+    ``confidence``/``critical_correct``, never ``field_acc``), prints the full
+    threshold/rate/precision curve, and recommends the lowest threshold whose
+    precision reaches ``--target`` **and whose auto-approve rate is greater
+    than zero**.
+
+    The rate check is the entire reason this function exists rather than a
+    one-line scan. ``calibration_curve`` defines precision as ``1.0`` when
+    nothing is approved (``eval/metrics.py:255-257``), and its threshold
+    sweep always includes ``1.0``, above every observed confidence -- so a
+    result set that is critical-incorrect end to end still produces a curve
+    row ``(1.0, rate=0.0, precision=1.0)``. A scan that only checks precision
+    would recommend that: a threshold that auto-approves nothing, reported as
+    perfect. That is the same vacuous zero-receipt precision this project has
+    already committed once as an artifact, hiding one level deeper -- inside
+    a result set that does have receipts. If no threshold clears the target
+    with a nonzero rate, this says so plainly and returns
+    :data:`EXIT_FAILED` without recommending anything.
+
+    Always closes with a standing caveat, regardless of whether a
+    recommendation was found: a threshold is only as trustworthy as the
+    golden set it was measured on, and there are still no measured accuracy
+    numbers for this system (``docs/KNOWN_ISSUES.md`` ISSUE-001) -- a
+    handful of golden receipts cannot support a confident >=99% claim.
+    """
+    if args.results is not None:
+        results_path = Path(args.results)
+        if not results_path.exists():
+            print(
+                f"error: no results file at {results_path}; run `receipts eval` first",
+                file=sys.stderr,
+            )
+            return EXIT_FAILED
+    else:
+        search_dir = (
+            Path(args.results_dir) if args.results_dir is not None
+            else (results_dir if results_dir is not None else DEFAULT_RESULTS_DIR)
+        )
+        found = latest_results_file(search_dir)
+        if found is None:
+            print(
+                f"error: no results file under {search_dir}; run `receipts eval` first",
+                file=sys.stderr,
+            )
+            return EXIT_FAILED
+        results_path = found
+
+    data = json.loads(results_path.read_text(encoding="utf-8"))
+    results_json = data.get("results", [])
+    if not results_json:
+        print(
+            "error: this results file has zero receipts; no auto-approval "
+            "threshold can be chosen from an empty result set",
+            file=sys.stderr,
+        )
+        return EXIT_FAILED
+
+    results = [
+        EvalResult(
+            receipt_id=r["receipt_id"],
+            confidence=Decimal(r["confidence"]),
+            critical_correct=r["critical_correct"],
+            field_acc={},
+        )
+        for r in results_json
+    ]
+    curve = calibration_curve(results)
+    target = args.target
+
+    print(f"Calibration curve -- {len(results)} receipt(s), target precision {target}")
+    print(f"  {'threshold':>10}  {'auto-approve rate':>18}  {'precision':>10}")
+    for threshold, rate, precision in curve:
+        print(f"  {str(threshold):>10}  {rate * 100:>17.2f}%  {precision * 100:>9.2f}%")
+
+    # Ignore any threshold whose auto-approve rate is zero: calibration_curve
+    # reports precision 1.0 there (nothing approved reads as vacuously
+    # "perfect"), and its sweep always includes threshold 1.0. Recommending
+    # that would repeat the zero-receipt precision trap one level deeper --
+    # see the docstring.
+    recommended = next(
+        (
+            threshold for threshold, rate, precision in curve
+            if rate > 0.0 and precision >= float(target)
+        ),
+        None,
+    )
+
+    print()
+    if recommended is None:
+        print(
+            f"no threshold reaches {float(target) * 100:.2f}% precision with a "
+            "nonzero auto-approve rate; recommending none"
+        )
+        code = EXIT_FAILED
+    else:
+        print(f"recommended threshold: {recommended}")
+        code = EXIT_OK
+
+    print(
+        "\ncaveat: a threshold is only as trustworthy as the golden set it "
+        f"was measured on. {len(results)} receipt(s) cannot support a "
+        f"{float(target) * 100:.2f}% precision claim -- no accuracy number "
+        "from this system has been validated on a full baseline yet "
+        "(docs/KNOWN_ISSUES.md, ISSUE-001). Treat this recommendation as "
+        "directional, not final."
+    )
+    return code
+
+
 def _is_missing_schema(exc: DBAPIError) -> bool:
     """Whether ``exc`` looks like a query against a table that does not exist.
 
@@ -919,6 +1163,10 @@ def main(argv: list[str] | None = None) -> int:
             return cmd_export(args, session_factory=session_factory, settings=settings)
         if args.command == "merchants":
             return cmd_merchants(args, session_factory=session_factory)
+        if args.command == "eval":
+            return cmd_eval(args, settings=settings)
+        if args.command == "calibrate":
+            return cmd_calibrate(args)
         # unreachable: subparsers are required
         raise AssertionError(f"unhandled command {args.command!r}")
     except DBAPIError as exc:
