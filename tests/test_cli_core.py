@@ -12,13 +12,18 @@ The load-bearing behaviours pinned down below (ADR-0013):
   * A rejected file is reported by name and reason, never silently dropped, and
     it does not abort the files in the same batch that are fine (§18).
   * A directory is not walked recursively unless ``--recursive`` is given.
-  * ``users add`` reads the password from stdin via ``getpass`` -- never
-    ``argv``, which lands in shell history and in ``ps`` -- and never echoes it.
+  * ``users add`` reads the password from stdin -- never ``argv``, which lands
+    in shell history and in ``ps`` -- and never echoes it. A piped/redirected
+    stdin is read directly; an interactive terminal falls back to ``getpass``.
   * Exit codes follow ADR-0013: ``0`` completed, ``1`` could not, ``2`` is
     argparse's own usage error.
+  * ``main()`` never creates the schema itself (Alembic owns that); a command
+    run against an un-migrated database fails cleanly, naming the fix.
 """
 
 from __future__ import annotations
+
+import sys
 
 import pytest
 from sqlalchemy import select
@@ -28,7 +33,7 @@ from receipts.cli import EXIT_FAILED, EXIT_OK, build_parser, cmd_ingest, cmd_use
 from receipts.ingest.storage import LocalStorage
 from receipts.persist.models import Base, Receipt
 from receipts.persist.session import make_engine, make_session_factory
-from receipts.persist.users import get_user
+from receipts.persist.users import get_user, verify_password
 from receipts.score.confidence import ReceiptStatus
 
 #: Minimal but genuinely JPEG-sniffable bytes (see
@@ -48,6 +53,21 @@ def session_factory(tmp_path):
 @pytest.fixture()
 def storage(tmp_path) -> LocalStorage:
     return LocalStorage(tmp_path / "blobs")
+
+
+@pytest.fixture()
+def tty_stdin(monkeypatch):
+    """Make ``sys.stdin`` report as a real terminal.
+
+    Pytest's own captured ``sys.stdin`` (``_pytest.capture.DontReadFromInput``)
+    always reports ``isatty() is False`` and raises ``OSError`` on
+    ``readline()`` -- which is exactly what a piped stdin looks like to
+    :func:`receipts.cli._read_password`. Tests below that mean to exercise the
+    *interactive* path (a password typed at a real prompt, via ``getpass``,
+    mocked so nothing actually blocks) request this fixture so that branch --
+    rather than the piped one -- is the one that runs.
+    """
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
 
 
 # --------------------------------------------------------------------------- #
@@ -126,7 +146,7 @@ def test_ingest_recursive_finds_files_in_subdirectories(tmp_path, session_factor
 
 
 def test_users_add_creates_an_account_with_the_password_from_stdin(
-    session_factory, monkeypatch, capsys
+    session_factory, monkeypatch, capsys, tty_stdin
 ):
     monkeypatch.setattr("getpass.getpass", lambda *a, **k: "pw-alice")
     args = build_parser().parse_args(["users", "add", "alice", "--role", "admin"])
@@ -141,7 +161,39 @@ def test_users_add_creates_an_account_with_the_password_from_stdin(
     assert "pw-alice" not in capsys.readouterr().out
 
 
-def test_users_add_rejects_a_duplicate_username(session_factory, monkeypatch):
+def test_users_add_reads_a_piped_password_without_touching_getpass(session_factory, monkeypatch):
+    """A non-interactive stdin (a pipe, or a CI secret fed in) supplies the
+    password directly -- this is the path that keeps `receipts users add`
+    usable unattended, including on Windows, where `getpass.getpass` itself
+    cannot be relied on to read a pipe (see `_read_password`'s docstring).
+    """
+
+    class _PipedStdin:
+        def isatty(self) -> bool:
+            return False
+
+        def readline(self) -> str:
+            return "pw-piped\n"
+
+    def _must_not_be_called(*args, **kwargs):
+        raise AssertionError("getpass.getpass must not be called for a piped stdin")
+
+    monkeypatch.setattr("getpass.getpass", _must_not_be_called)
+    monkeypatch.setattr(sys, "stdin", _PipedStdin())
+    args = build_parser().parse_args(["users", "add", "alice"])
+
+    code = cmd_users(args, session_factory=session_factory)
+
+    assert code == EXIT_OK
+    with session_factory() as session:
+        user = get_user(session, "alice")
+    assert user is not None
+    # The trailing newline `readline()` returns must not become part of the
+    # password, and the piped line must actually be what got stored.
+    assert verify_password("pw-piped", user.password_hash)
+
+
+def test_users_add_rejects_a_duplicate_username(session_factory, monkeypatch, tty_stdin):
     monkeypatch.setattr("getpass.getpass", lambda *a, **k: "pw")
     args = build_parser().parse_args(["users", "add", "alice"])
     cmd_users(args, session_factory=session_factory)
@@ -149,7 +201,7 @@ def test_users_add_rejects_a_duplicate_username(session_factory, monkeypatch):
     assert cmd_users(args, session_factory=session_factory) == EXIT_FAILED
 
 
-def test_users_list_prints_every_account(session_factory, monkeypatch, capsys):
+def test_users_list_prints_every_account(session_factory, monkeypatch, capsys, tty_stdin):
     monkeypatch.setattr("getpass.getpass", lambda *a, **k: "pw")
     cmd_users(build_parser().parse_args(["users", "add", "alice"]), session_factory=session_factory)
 
@@ -165,7 +217,7 @@ def test_users_deactivate_an_unknown_user_fails_cleanly(session_factory):
     assert cmd_users(args, session_factory=session_factory) == EXIT_FAILED
 
 
-def test_users_set_role_changes_an_existing_account(session_factory, monkeypatch):
+def test_users_set_role_changes_an_existing_account(session_factory, monkeypatch, tty_stdin):
     monkeypatch.setattr("getpass.getpass", lambda *a, **k: "pw")
     cmd_users(build_parser().parse_args(["users", "add", "alice"]), session_factory=session_factory)
 
@@ -190,5 +242,31 @@ def test_unknown_command_is_a_usage_error():
 
 def test_main_returns_an_exit_code_rather_than_exiting(tmp_path, monkeypatch):
     # main() must be callable from a test; the console-script wrapper owns SystemExit.
-    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{tmp_path / 'cli.db'}")
+    # main() itself never creates the schema (Alembic owns that -- see
+    # test_main_against_an_unmigrated_database_... below), so the fixture
+    # creates it here, exactly as every other test file's session_factory
+    # fixture does.
+    db_url = f"sqlite:///{tmp_path / 'cli.db'}"
+    monkeypatch.setenv("DATABASE_URL", db_url)
+    Base.metadata.create_all(make_engine(db_url))
+
     assert main(["users", "list"]) == EXIT_OK
+
+
+def test_main_against_an_unmigrated_database_fails_cleanly_naming_the_fix(
+    tmp_path, monkeypatch, capsys
+):
+    """The database exists (SQLite creates the file on connect) but nobody
+    has run `alembic upgrade head` against it -- exactly what a freshly
+    pointed `DATABASE_URL` looks like on day one. `main()` must not paper
+    over that with `Base.metadata.create_all` (see its docstring: that would
+    create the tables without stamping `alembic_version`, so a later real
+    migration fails with "table already exists"). It must fail cleanly
+    instead, naming the actual fix.
+    """
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{tmp_path / 'unmigrated.db'}")
+
+    code = main(["users", "list"])
+
+    assert code == EXIT_FAILED
+    assert "alembic upgrade head" in capsys.readouterr().err
