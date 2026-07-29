@@ -39,8 +39,21 @@ worker = ["rq>=1.16", "redis>=5"]
 # light; the API tests importorskip on it exactly as the pipeline tests do.
 api = ["fastapi>=0.110", "python-multipart>=0.0.9", "itsdangerous>=2", "uvicorn>=0.27"]
 
+[project.scripts]
+receipts = "receipts.cli:_console_main"
+
 [tool.setuptools.packages.find]
-where = ["src"]
+# `config` (settings) lives at the repo root, a sibling of `src/`, not under
+# it -- `receipts.cli` imports `config.settings` the same way the worker and
+# the review API already do. The console script is the first thing that
+# actually runs outside pytest's `pythonpath = ["src", "."]`, so `config` has
+# to be installed too or `receipts --help` fails with `ModuleNotFoundError`
+# the moment it imports `receipts.cli`. `include` keeps this scoped to the
+# two packages that belong in the distribution -- `eval/` also lives at the
+# root with its own `__init__.py` but is dev/research tooling, not part of
+# the installed CLI, and stays out.
+where = ["src", "."]
+include = ["receipts*", "config*"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src", "."]
