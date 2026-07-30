@@ -158,6 +158,39 @@ def test_a_missing_file_under_app_is_a_404_not_the_shell(session_factory, tmp_pa
     assert "<div id=root></div>" not in response.text
 
 
+def test_a_404_html_in_the_build_cannot_shadow_the_spa_shell(session_factory, tmp_path):
+    """The deep-link fallback must not depend on the build's file list.
+
+    The mount is ``html=True``. Measured against Starlette rather than read off
+    its documentation: with a ``404.html`` sitting in the served directory, a
+    miss is **returned** as that file with status 404 instead of raising
+    ``HTTPException``, so the ``except`` branch in ``_SpaFiles.get_response``
+    never runs and every client-side route answers with the 404 page.
+
+    Nothing in the repository puts that file there today -- ``frontend/public/``
+    holds ``favicon.svg`` and nothing else -- but Vite copies ``public/``
+    verbatim into ``dist/``, so adding the single most conventional file in
+    static-site publishing would have broken every bookmark and every hard
+    refresh under ``/app`` with no test going red. This is that test.
+    """
+    dist = _built_dist(tmp_path)
+    (dist / "404.html").write_text("<!doctype html><title>Gone</title>", encoding="utf-8")
+
+    app = _build(session_factory, tmp_path, dist)
+    client = TestClient(app)
+
+    response = client.get("/app/review")
+    assert response.status_code == 200
+    assert "<div id=root></div>" in response.text
+    assert "Gone" not in response.text
+
+    # ...and the narrowing survives it: a request that names a file is still a
+    # 404, which is what the 404 page is for.
+    missing = client.get("/app/assets/index-deadbeef.js")
+    assert missing.status_code == 404
+    assert "<div id=root></div>" not in missing.text
+
+
 def test_a_half_built_dist_is_treated_as_not_built(session_factory, tmp_path):
     """An interrupted ``npm run build`` must not mount at all.
 

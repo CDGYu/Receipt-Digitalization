@@ -669,15 +669,31 @@ class _SpaFiles(StaticFiles):
     Only a 404 is swallowed. A 405 (``StaticFiles`` rejects a non-GET/HEAD
     before it ever looks at the path) or a 401 from a permission error is a
     real failure and still propagates to the app's error handlers.
+
+    **A miss arrives here in two shapes, and both are handled.** Normally
+    ``StaticFiles`` raises ``HTTPException(404)``. With ``html=True`` and a
+    ``404.html`` in the served directory it *returns* that file with status
+    404 instead -- measured against Starlette, not read off its docs -- so an
+    ``except`` clause alone leaves the fallback at the mercy of the build's
+    file list. Vite copies ``frontend/public/`` verbatim into ``dist/``, which
+    put every deep link one conventional filename away from breaking.
+    ``test_a_404_html_in_the_build_cannot_shadow_the_spa_shell`` is what binds
+    the second shape.
     """
+
+    def _is_navigation(self, path: str) -> bool:
+        return not _names_a_file(path)
 
     async def get_response(self, path: str, scope):
         try:
-            return await super().get_response(path, scope)
+            response = await super().get_response(path, scope)
         except StarletteHTTPException as exc:
-            if exc.status_code != 404 or _names_a_file(path):
+            if exc.status_code != 404 or not self._is_navigation(path):
                 raise
             return await super().get_response("index.html", scope)
+        if response.status_code == 404 and self._is_navigation(path):
+            return await super().get_response("index.html", scope)
+        return response
 
 
 def _install_spa(app: FastAPI, settings: Settings) -> None:
