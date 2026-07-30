@@ -148,6 +148,45 @@ const CLAIMED_ROUTES = {
   '/receipts/a1/image': [200, { url: '/receipts/a1/image/blob?variant=original&exp=1&sig=s' }],
 } as const
 
+/** The task waiting behind the one the reviewer is stuck on. */
+const SECOND_TASK: ReviewTask = { ...TASK, id: 't2', receipt_id: 'b2', priority: 1 }
+const SECOND_SUMMARY: ReceiptSummary = { ...SUMMARY, id: 'b2', merchant_name_raw: 'Second Merchant' }
+const SECOND_RECEIPT: ReceiptDetail = { ...RECEIPT, id: 'b2', merchant_name_raw: 'Second Merchant' }
+
+/** `fetch` with `/review/next` behaving the way ADR-0016 makes it behave.
+ *
+ *  **The claimed task comes back on every poll until it is completed.** That is
+ *  the decision the ADR records -- a reviewer who reloads is handed the receipt
+ *  they were part-way through -- and it is exactly why a stuck receipt cannot
+ *  be escaped by asking the queue again. Modelled here rather than expressed as
+ *  a reply queue, because a reply queue would hand out a *different* task on
+ *  the second poll and quietly test the pre-ADR behaviour instead.
+ *
+ *  Measured against the real backend, not assumed: `tests/test_api_write.py::
+ *  test_review_next_returns_the_same_task_when_a_reviewer_reloads`. */
+function resumingApi(routes: Record<string, Reply | readonly Reply[]>) {
+  const base = stubApi(routes)
+  let completed = false
+  return vi.fn((path: string, init?: RequestInit) => {
+    const method = init?.method ?? 'GET'
+    if (method === 'POST' && path === `/review/${TASK.id}/complete`) {
+      completed = true
+      return Promise.resolve(jsonResponse(200, { ...TASK, state: 'done' }))
+    }
+    if (path === '/review/next') {
+      return Promise.resolve(
+        jsonResponse(
+          200,
+          completed
+            ? { task: SECOND_TASK, receipt: SECOND_SUMMARY }
+            : { task: TASK, receipt: SUMMARY },
+        ),
+      )
+    }
+    return base(path, init)
+  })
+}
+
 describe('ReviewScreen', () => {
   it('treats an empty queue as a state and never asks for a receipt', async () => {
     // `{"task": null}` arrives as 200 with a body (src/receipts/review/api.py
@@ -251,6 +290,74 @@ describe('ReviewScreen', () => {
     render(<ReviewScreen />)
 
     expect((await screen.findByRole('alert')).textContent).toBe('could not load the review queue')
+  })
+
+  it('lets the reviewer give up on a receipt that never loads', async () => {
+    // The bug: `claimed.current` is set before `fetchReceipt` and never cleared
+    // when it fails, "Try again" re-runs only the failing call, and ADR-0016
+    // guarantees a fresh poll hands back *the same task*. A receipt that fails
+    // once is a nuisance; a receipt that fails every time took the reviewer out
+    // of service, with everything behind it in the queue unreachable.
+    const fetchMock = resumingApi({
+      'GET /receipts/a1': [503, { error: { message: 'database unavailable' } }],
+      'GET /receipts/b2': [200, SECOND_RECEIPT],
+      '/receipts/b2/image': [200, { url: '/receipts/b2/image/blob?exp=1&sig=s' }],
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const user = userEvent.setup()
+
+    render(<ReviewScreen />)
+    expect((await screen.findByRole('alert')).textContent).toBe('database unavailable')
+
+    // "Try again" is not an escape: it re-runs the call that is failing, and it
+    // is right not to re-enter `fetchNext`, which is a claiming write.
+    await user.click(screen.getByRole('button', { name: 'Try again' }))
+    await screen.findByRole('alert')
+    expect(callsTo(fetchMock, '/receipts/a1')).toBe(2)
+    expect(callsTo(fetchMock, '/review/next')).toBe(1)
+
+    // The escape: close the held task, so the next poll draws from the queue
+    // instead of resuming this one.
+    await user.click(screen.getByRole('button', { name: /skip this receipt/i }))
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'Second Merchant' })).toBeDefined()
+    expect(chain(fetchMock)).toContain('POST /review/t1/complete')
+    expect(callsTo(fetchMock, '/review/next')).toBe(2)
+  })
+
+  it('offers nothing to skip when no task was claimed in the first place', async () => {
+    // The queue call itself failed, so there is no task in hand. A "skip" here
+    // would have nothing to close and would be an offer the screen cannot keep.
+    vi.stubGlobal(
+      'fetch',
+      stubApi({ '/review/next': [503, { error: { message: 'database unavailable' } }] }),
+    )
+
+    render(<ReviewScreen />)
+
+    await screen.findByRole('alert')
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeDefined()
+    expect(screen.queryByRole('button', { name: /skip this receipt/i })).toBeNull()
+  })
+
+  it('says so when the skip itself fails, and leaves the escape on screen', async () => {
+    // Silence here would be the worst of both: the reviewer believes they have
+    // moved on, and the task is still theirs.
+    const fetchMock = stubApi({
+      '/review/next': [200, { task: TASK, receipt: SUMMARY }],
+      'GET /receipts/a1': [503, { error: { message: 'database unavailable' } }],
+      'POST /review/t1/complete': [403, { error: { message: 'not your task' } }],
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const user = userEvent.setup()
+
+    render(<ReviewScreen />)
+    await screen.findByRole('alert')
+    await user.click(screen.getByRole('button', { name: /skip this receipt/i }))
+
+    expect((await screen.findByRole('alert')).textContent).toContain('not your task')
+    expect(screen.getByRole('button', { name: /skip this receipt/i })).toBeDefined()
+    expect(callsTo(fetchMock, '/review/next')).toBe(1)
   })
 
   it('loads again when the reviewer asks after a failure', async () => {

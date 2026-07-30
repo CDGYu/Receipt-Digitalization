@@ -56,7 +56,9 @@ import type { FieldMap } from './patch'
  *     `fetchReceipt` then failing turns every "Try again" into another claim.
  *     Re-measured by replacing the read with `null`: `resumes the task it
  *     already holds instead of claiming another` fails with
- *     `expected 2 to be 1`.
+ *     `expected 2 to be 1`. A receipt that fails *every* time would then leave
+ *     the reviewer with no way forward at all, which is what `skipHeldTask`
+ *     exists for -- see its own note.
  *   * `submittedTask` -- the keyboard listener is re-registered every render and
  *     closes over that render's `phase`, so a second Ctrl+Enter can run against
  *     a closure whose task is already submitted. A plain in-flight boolean does
@@ -71,8 +73,9 @@ import type { FieldMap } from './patch'
  * the second StrictMode invocation runs -- a `setState` would not have landed by
  * then.
  *
- * **`claimed.current` is cleared the moment a task is closed**, in `approve` and
- * in `closeTaskOnly`. Without it the screen never asks for the next task at all:
+ * **`claimed.current` is cleared the moment a task is closed**, in `approve`,
+ * in `closeTaskOnly` and in `skipHeldTask` -- the three places a `complete`
+ * succeeds. Without it the screen never asks for the next task at all:
  * measured by deleting the line, five of the editing tests fail, including the
  * one that pins the whole call chain down to its closing
  * `GET /review/next`, and every wait for the next state times out. It is cleared
@@ -82,7 +85,16 @@ import type { FieldMap } from './patch'
 type Phase =
   | { readonly kind: 'loading' }
   | { readonly kind: 'empty' }
-  | { readonly kind: 'failed'; readonly message: string }
+  | {
+      readonly kind: 'failed'
+      readonly message: string
+      /** The task this reviewer is holding while the load fails, or `null` when
+       *  the queue call itself failed and nothing was claimed. Carried in the
+       *  phase rather than read from `claimed.current` at render time: a ref
+       *  read during render is a value React did not schedule the render for,
+       *  and the escape below is offered on the strength of it. */
+      readonly heldTask: ReviewTask | null
+    }
   | {
       readonly kind: 'claimed'
       readonly task: ReviewTask
@@ -193,9 +205,57 @@ export function ReviewScreen() {
       setPhase({
         kind: 'failed',
         message: caught instanceof ApiError ? caught.message : 'could not load the review queue',
+        heldTask: claimed.current,
       })
     }
   }, [])
+
+  /** Give up on the receipt behind a failed load, so the queue can move on.
+   *
+   * **Closing the held task, not clearing `claimed.current`.** Clearing the ref
+   * and polling again looks like the smaller change and does nothing at all:
+   * ADR-0016 makes `GET /review/next` *resume* the caller's own `IN_PROGRESS`
+   * task before it draws from the queue, so every poll hands back the same
+   * receipt. That is the ADR working as designed -- a reviewer who reloads gets
+   * the receipt they were part-way through -- and it is what turned "one
+   * receipt is stranded" into "one reviewer is stranded". `POST
+   * /review/{task_id}/complete` is the only call in the review API that takes
+   * an `IN_PROGRESS` row out of the caller's hands; nothing releases one back
+   * to `OPEN`.
+   *
+   * What that costs, stated plainly because the button spends it: the task is
+   * closed over a receipt nobody reviewed, and the receipt keeps
+   * `needs_review`. It is still the better end state of the two available --
+   * `close_task` writes `DONE`, and `DONE` is the one state `enqueue_review`
+   * reopens (`queue.py`'s reopen branch), while the `IN_PROGRESS` row this
+   * replaces is the one state nothing in the codebase can recover.
+   *
+   * Design §5 asks for "surface, re-fetch `next`" on a receipt that will not
+   * load. Re-fetching alone stopped meaning anything when ADR-0016 landed; this
+   * is that row implemented against the queue as it now behaves -- release
+   * first, then re-fetch -- rather than dropped.
+   */
+  async function skipHeldTask(task: ReviewTask): Promise<void> {
+    // Straight to `loading`, which unmounts the button: a second click cannot
+    // reach a task that is already being closed, without a flag to release.
+    setPhase({ kind: 'loading' })
+    try {
+      await completeTask(task.id)
+    } catch (caught) {
+      setPhase({
+        kind: 'failed',
+        message: `could not release this receipt: ${
+          caught instanceof ApiError ? caught.message : 'the request did not reach the API'
+        }`,
+        // Still held, so the escape stays on screen. Silence here would leave a
+        // reviewer believing they had moved on from a task that is still theirs.
+        heldTask: task,
+      })
+      return
+    }
+    claimed.current = null
+    await load()
+  }
 
   useEffect(() => {
     if (started.current) {
@@ -284,12 +344,21 @@ export function ReviewScreen() {
   })
 
   if (phase.kind === 'failed') {
+    const held = phase.heldTask
     return (
       <main>
         <p role="alert">{phase.message}</p>
         <button type="button" onClick={() => void load()}>
           Try again
         </button>
+        {held === null ? null : (
+          <>
+            <button type="button" onClick={() => void skipHeldTask(held)}>
+              Skip this receipt
+            </button>
+            <p>Closes this receipt&rsquo;s review task without reviewing it, and moves on.</p>
+          </>
+        )}
       </main>
     )
   }
