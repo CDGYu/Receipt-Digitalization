@@ -95,11 +95,12 @@ test('a reviewer corrects a receipt and the correction is persisted', async ({ p
   const was = await before.json()
   expect(was.status).toBe('needs_review')
 
-  // `exact` on every label. Without it `Total` also matches `Subtotal`,
-  // `Line total 0` and `Line total 1` -- Playwright's default is a
-  // case-insensitive substring match, and the locator resolves to five
-  // elements. `Qty 1` addresses the item at *position* 1, which is the second
-  // row: the form labels line-item controls by position, not by index.
+  // `exact` on every label. Playwright's default label match is a
+  // case-insensitive substring, so a bare `Total` resolves to every label
+  // containing `total` -- `Subtotal`, and one `Line total N` per line item --
+  // which is a strict-mode violation and fails the call. `Qty 1` addresses the
+  // item at *position* 1, which is the second row: the form labels line-item
+  // controls by position, not by index.
   await page.getByLabel('Total', { exact: true }).fill(NEW_TOTAL)
   await page.getByLabel('Qty 1', { exact: true }).fill(NEW_QTY)
   await page.keyboard.press('ControlOrMeta+Enter')
@@ -138,10 +139,16 @@ test('a reviewer corrects a receipt and the correction is persisted', async ({ p
   // `corrections.corrected_by` is written from the *server's* idea of who is
   // signed in, so this is also what proves the login mattered.
   //
-  // Two, and not more: the server writes no row for a path whose stored value
-  // already matches, so this does not catch an over-broad patch on its own --
-  // what it does catch is a *reformatted* value being sent for a field nobody
-  // edited, which is the failure mode `txn_time` above describes.
+  // Two, and not more -- but not every over-broad patch would show up here.
+  // The server writes no row for a path whose *coerced* value already matches
+  // what is stored, so a reformat that survives coercion is invisible to this:
+  // measured, `PATCH {'totals.subtotal': '925'}` (and `'925.00'`, and
+  // `'0925.0000'`) against a stored `925.0000` books nothing and changes no
+  // read-back. What this does catch is a value that coerces to something
+  // *different* being sent for a field nobody edited -- measured, `PATCH
+  // {'receipt.time': '14:30'}` against a stored `14:30:45` answers 200, stores
+  // `14:30:00` and books `('receipt.time', '14:30:45', '14:30:00')`, which is
+  // the failure mode `txn_time` above describes.
   const rows = corrections(seed.db_url, seed.receipt_id)
   expect(rows.map((row) => row.field_path).sort()).toEqual([
     'line_items[1].qty',

@@ -40,6 +40,16 @@ scroll away.
 browser binary that is not part of a normal install, so it stays an explicit
 step -- see `frontend/playwright.config.ts`. A green run of this script says
 nothing about it.
+
+**Also not a gate:** `npm run lint`, which is oxlint (`frontend/package.json`,
+configured by `frontend/.oxlintrc.json`). Measured: it exits 0 while printing a
+`react(only-export-components)` warning, which is what its configuration asks
+for -- so its exit status cannot tell "clean" from "warned", and a gate here is
+a command whose exit status decides a verdict. Promoting it would mean deciding
+first what its warnings are for; nothing in this repository records such a
+decision (`oxlint` appears in `package.json`, its own config and the lockfile,
+and in no prose). Until that is decided it is named here rather than left to
+look like an oversight.
 """
 
 from __future__ import annotations

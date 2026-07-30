@@ -107,6 +107,35 @@ def _sqlite_file(db_url: str) -> Path:
     return Path(path)
 
 
+#: The bytes every SQLite database file begins with (SQLite file format, 1.3).
+_SQLITE_MAGIC = b"SQLite format 3\x00"
+
+
+def _refuse_unless_sqlite(db_file: Path) -> None:
+    """Refuse to delete a file that is not a SQLite database.
+
+    :func:`_sqlite_file` proves the target's *shape* -- the URL scheme, and that
+    it names a file -- and can say nothing about its **contents**. That is one
+    mistyped ``--db`` away from data loss, and it was measured before this
+    function existed: a text file holding ``quarterly numbers nobody backed
+    up`` was unlinked and replaced with a database, silently, exit 0.
+
+    A zero-byte file is allowed through. SQLite reads one as a valid empty
+    database, a half-finished run can leave one behind, and there is nothing in
+    it to destroy.
+    """
+    if db_file.stat().st_size == 0:
+        return
+    with db_file.open("rb") as handle:
+        header = handle.read(len(_SQLITE_MAGIC))
+    if header != _SQLITE_MAGIC:
+        raise SystemExit(
+            f"{db_file} exists and is not a SQLite database -- it does not begin "
+            f"with {_SQLITE_MAGIC!r} -- so --reset will not delete it. Check the "
+            "--db path."
+        )
+
+
 def seed(db_url: str, storage_root: Path, *, reset: bool) -> dict[str, str]:
     """Create the schema and the fixture rows. Returns the manifest."""
     from receipts.extract.schema import Legibility
@@ -127,6 +156,7 @@ def seed(db_url: str, storage_root: Path, *, reset: bool) -> dict[str, str]:
                 "a second seed into the same file leaves two queued receipts and the "
                 "acceptance run cannot tell which one it claimed."
             )
+        _refuse_unless_sqlite(db_file)
         db_file.unlink()
     db_file.parent.mkdir(parents=True, exist_ok=True)
 
