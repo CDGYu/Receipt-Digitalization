@@ -12,6 +12,12 @@ dist/
 venv/
 env/
 
+# Node toolchain (the review UI, P5). `dist/` above already covers
+# frontend/dist -- a bare pattern matches at every level -- so only the
+# dependency tree needs its own entry, and `npm install` drops tens of
+# thousands of files there.
+node_modules/
+
 # Test / type / lint caches
 .pytest_cache/
 .mypy_cache/
