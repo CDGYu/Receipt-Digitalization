@@ -381,6 +381,52 @@ def test_the_newly_exposed_payment_method_never_returns_a_full_pan(
     assert "4111111111111111" not in body.text
 
 
+@pytest.mark.parametrize(
+    "typed",
+    [
+        "VISA 4111.1111.1111.1111",
+        "VISA 4111_1111_1111_1111",
+        "VISA 4111/1111/1111/1111",
+        "VISA 4111,1111,1111,1111",
+        "VISA 4111 1111-1111.1111",
+    ],
+)
+def test_a_dotted_pan_is_masked_in_the_row_the_body_and_the_audit_copy(
+    reviewer_client, session_factory, receipt_id, typed
+):
+    """§18 end to end, through the route a reviewer actually types into.
+
+    Three places, because fixing one of them later cannot fix the others: the
+    ``receipts`` row, the ``GET`` body, and ``corrections.value_after``. The
+    audit table is durable and append-only -- a correction row is never
+    rewritten -- so a PAN that lands there is not recoverable from by scrubbing
+    the receipt afterwards. ``_plan_change``'s own docstring calls it "precisely
+    the copy nothing later scrubs".
+
+    Only spaces and hyphens were separators until this test existed, so every
+    parametrisation below stored the whole card number verbatim in all three.
+    """
+    response = reviewer_client.patch(
+        f"/receipts/{receipt_id}", json={"payment": {"method": typed}}
+    )
+    assert response.status_code == 200
+
+    digits = "".join(ch for ch in typed if ch.isdigit())
+    assert response.json()["payment_method"] == "VISA ************1111"
+
+    body = reviewer_client.get(f"/receipts/{receipt_id}")
+    assert body.json()["payment_method"] == "VISA ************1111"
+    assert digits not in body.text
+    assert typed not in body.text
+
+    with session_factory() as session:
+        assert session.get(Receipt, receipt_id).payment_method == "VISA ************1111"
+        correction = session.scalars(select(Correction)).one()
+        assert correction.value_after == "VISA ************1111"
+        assert digits not in correction.value_after
+        assert typed not in correction.value_after
+
+
 def test_patch_rejects_a_json_float_for_money(reviewer_client, receipt_id):
     response = reviewer_client.patch(f"/receipts/{receipt_id}", json={"totals": {"total": 1234.56}})
     assert response.status_code == 422

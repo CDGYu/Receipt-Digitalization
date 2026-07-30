@@ -712,6 +712,140 @@ def test_redact_pan_masks_a_pan_with_mixed_separators() -> None:
     assert redact_pan("3782-822463 10005") == "***********0005"
 
 
+#: Every character a card line is printed or typed with between groups. The
+#: first two were the whole class until a reviewer typing off a slip -- or a
+#: model transcribing one -- produced the rest, and each of the others put a
+#: full PAN in ``receipts`` and in ``corrections.value_after``.
+_SEPARATORS = [" ", "-", ".", "_", "/", ","]
+_SEPARATOR_IDS = ["space", "hyphen", "dot", "underscore", "slash", "comma"]
+
+#: The digit groups a separated PAN is printed in, by scheme. A run longer than
+#: four groups has no entry: see ``_PAN_RE``'s docstring for what the pattern
+#: does with one.
+_GROUPINGS = [
+    ("4111", "1111", "1111", "1"),
+    ("4111", "1111", "1111", "111"),
+    ("4111", "1111", "1111", "1111"),
+    ("3782", "822463", "10005"),
+]
+_GROUPING_IDS = ["13-digit", "15-digit", "16-digit", "amex-4-6-5"]
+
+
+def _masked(digits: str) -> str:
+    """What §18 permits to be stored for ``digits``: stars, then the last four."""
+    return "*" * (len(digits) - 4) + digits[-4:]
+
+
+@pytest.mark.parametrize("separator", _SEPARATORS, ids=_SEPARATOR_IDS)
+@pytest.mark.parametrize("groups", _GROUPINGS, ids=_GROUPING_IDS)
+def test_redact_pan_masks_a_separated_pan_however_it_is_punctuated(
+    groups: tuple[str, ...], separator: str
+) -> None:
+    """§18 must not depend on which glyph sits between the groups.
+
+    The separator class used to be spaces and hyphens alone, so a dot, an
+    underscore, a slash or a comma left the whole number verbatim in
+    ``receipts`` and in the ``corrections`` audit copy.
+    """
+    printed = separator.join(groups)
+    expected = _masked("".join(groups))
+
+    assert redact_pan(f"CARD {printed} OK") == f"CARD {expected} OK"
+
+
+@pytest.mark.parametrize(
+    "digits",
+    ["4111111111111", "411111111111111", "4111111111111111", "4111111111111111111"],
+    ids=["13-digit", "15-digit", "16-digit", "19-digit"],
+)
+def test_redact_pan_masks_an_unseparated_pan_at_every_accepted_length(digits: str) -> None:
+    assert redact_pan(f"CARD {digits} OK") == f"CARD {_masked(digits)} OK"
+
+
+@pytest.mark.parametrize(
+    "printed",
+    [
+        "4111 1111-1111.1111",
+        "4111.1111 1111,1111",
+        "4111_1111/1111-1111",
+        "4111,1111.1111_1111",
+        "4111/1111 1111.1111",
+        "3782 822463.10005",
+        "3782-822463_10005",
+    ],
+)
+def test_redact_pan_masks_a_pan_whose_separators_disagree_with_each_other(printed: str) -> None:
+    """One worn glyph in the middle of a card line must not save the rest of it."""
+    expected = _masked("".join(ch for ch in printed if ch.isdigit()))
+
+    assert redact_pan(f"CARD {printed} OK") == f"CARD {expected} OK"
+
+
+def test_redact_pan_masks_a_pan_that_runs_straight_into_an_amount() -> None:
+    """The trailing decimal guard belongs to the unseparated shape alone.
+
+    ``(?!\\.\\d)`` exists so ``1234567890123.45`` stays a number. Applied to the
+    *separated* shapes as well -- which is where it sat while the separator
+    class was widened -- it pushes the match one group late: measured,
+    ``4111 1111 1111 1111.99`` stored as ``4111 **********1199``, leaving the
+    leading group in the clear and destroying the amount. Scoped to the
+    unseparated alternative it stores the whole card number masked and leaves
+    the amount alone.
+    """
+    assert redact_pan("CARD 4111 1111 1111 1111.99") == "CARD ************1111.99"
+    assert redact_pan("CARD 4111.1111.1111.1111.99") == "CARD ************1111.99"
+    # ...and the guard still does the job it was added for.
+    assert redact_pan("SUBTOTAL 1234567890123.45") == "SUBTOTAL 1234567890123.45"
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "TOTAL 1234.56",
+        "amount 1234.5678",
+        "1,000.00",
+        "qty 2 x 18.00",
+        "2 18.00 3 20.00 4 25.00 5 30.00",
+        "SUBTOTAL 1234567890123.45",
+        "confidence 0.4111111111111111",
+        PHASH,
+        "prompt_bundle 0123456789abcdef",
+        "last4 1234",
+        "REF.1234",
+        "phone 555-1234",
+        "2026-07-27 14:30",
+        "2026-07-30",
+        "01/02/2026",
+        "2026/07/30",
+        "12.3456.7890.1234",
+    ],
+)
+def test_redact_pan_stays_silent_on_text_the_widened_separators_could_have_swept(
+    text: str,
+) -> None:
+    """The silent half, re-proved against every separator the class now accepts.
+
+    A dot, a slash and a comma are all ordinary punctuation in money and dates,
+    so widening the class is exactly the change that could have started firing
+    on them. Each of these was silent before the widening and must stay silent
+    after it.
+    """
+    assert redact_pan(text) == text
+
+
+def test_two_column_scale_amounts_side_by_side_are_the_cost_of_the_dot_separator() -> None:
+    """The one false positive the dot buys, pinned so the docstring is bound.
+
+    ``1000.0000 2000.0000`` is four groups of four digits separated by a dot and
+    a space, which is the same shape as a dotted PAN and cannot be told apart
+    from one by inspection. Measured, not reasoned about. It is accepted because
+    the money path never reaches here -- ``_coerce_money`` returns a ``Decimal``,
+    and :func:`_plan_change` only redacts ``str`` -- so this needs two
+    column-scale amounts inside one *free-text* value to fire at all.
+    """
+    assert redact_pan("1000.0000 2000.0000") == "************0000"
+
+
 def test_redact_pan_redacts_dict_keys_as_well_as_values() -> None:
     assert redact_pan({"4111111111111111": "x"}) == {"************1111": "x"}
     assert redact_pan({"CARD NO.4111111111111111": {"nested 4111111111111111": 1}}) == {
@@ -1223,6 +1357,76 @@ def test_apply_corrections_redacts_a_pan_typed_into_a_free_text_field(
         assert "4111111111111111" not in stored
         assert "4111-1111-1111-1111" not in stored
         assert "1111" in stored  # the last four survive
+
+
+@pytest.mark.parametrize(
+    ("field_path", "column"),
+    [
+        ("merchant.name", "merchant_name_raw"),
+        ("receipt.number", "receipt_number"),
+        ("receipt.date_raw", "date_raw"),
+        ("payment.method", "payment_method"),
+    ],
+)
+@pytest.mark.parametrize("separator", _SEPARATORS, ids=_SEPARATOR_IDS)
+def test_apply_corrections_redacts_a_pan_on_every_reviewer_typed_text_path(
+    engine: sa.Engine, separator: str, field_path: str, column: str
+) -> None:
+    """Every free-text path a reviewer can type into, against every separator.
+
+    ``payment.method`` is where a reviewer types the card line off the slip, but
+    nothing stops them putting it in the merchant name or the printed date --
+    and the redaction lives in :func:`_plan_change`, one layer above all of
+    them, precisely so it does not have to be repeated per path.
+
+    ``receipt.currency`` is the one reviewer-typed text path absent here: the
+    column is ``String(3)``, so ``_bounded_optional_text`` raises before a card
+    number of any length can reach :func:`redact_pan`.
+    """
+    job = _job()
+    with Session(engine) as session:
+        _save(session, job=job)
+        session.commit()
+
+    typed = f"VISA {separator.join(('4111', '1111', '1111', '1111'))}"
+    with Session(engine) as session:
+        apply_corrections(session, job.id, {field_path: typed}, "reviewer")
+
+    with Session(engine) as session:
+        got = get_receipt(session, job.id)
+        assert got is not None
+        assert getattr(got, column) == "VISA ************1111"
+
+        after = [row.value_after for row in session.scalars(select(Correction))]
+        # The audit copy is the one nothing later scrubs, so it is asserted
+        # separately rather than trusted to follow the column.
+        assert after == ["VISA ************1111"]
+        assert typed not in json.dumps(after)
+
+
+@pytest.mark.parametrize("field", ["description_raw", "sku", "unit"])
+def test_apply_corrections_redacts_a_dotted_pan_on_a_line_item_text_field(
+    engine: sa.Engine, field: str
+) -> None:
+    """The line-item text fields reach ``_plan_change`` by the same route."""
+    job = _job()
+    with Session(engine) as session:
+        _save(session, job=job)
+        session.commit()
+
+    with Session(engine) as session:
+        apply_corrections(
+            session, job.id, {f"line_items[1].{field}": "4111.1111.1111.1111"}, "reviewer"
+        )
+
+    with Session(engine) as session:
+        got = get_receipt(session, job.id)
+        assert got is not None
+        item = next(row for row in got.line_items if row.position == 1)
+        assert getattr(item, field) == "************1111"
+        assert [row.value_after for row in session.scalars(select(Correction))] == [
+            "************1111"
+        ]
 
 
 def test_apply_corrections_leaves_non_pan_text_and_money_alone(engine: sa.Engine) -> None:

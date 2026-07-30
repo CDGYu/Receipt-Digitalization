@@ -82,33 +82,61 @@ __all__ = [
 _PAN_MIN_DIGITS = 13
 _PAN_MAX_DIGITS = 19
 
-#: Matches a PAN in the three shapes a model actually emits: unseparated, the
-#: usual 4-4-4-N grouping, and Amex's 4-6-5. Separators may be any mix of spaces
-#: and hyphens, because OCR of a worn thermal print reads one of them
-#: differently from the rest (``4111 1111-1111 1111``). Three deliberate design
-#: choices keep it from firing on things that merely look numeric:
+#: Matches a PAN in the three shapes a model or a reviewer actually writes:
+#: unseparated, the usual 4-4-4-N grouping, and Amex's 4-6-5.
+#:
+#: **The separator is any of space, dot, hyphen, underscore, slash or comma, in
+#: any mix.** The class held spaces and hyphens alone until each of the other
+#: four was measured through ``PATCH /receipts/{id}`` storing the whole card
+#: number verbatim -- in the ``receipts`` row, in the ``GET`` body, and in
+#: ``corrections.value_after``. A mix is accepted because OCR of a worn thermal
+#: print reads one glyph differently from the rest (``4111 1111-1111.1111``),
+#: and because a reviewer retyping a card line is under no obligation to be
+#: consistent. Three design choices keep it from firing on things that merely
+#: look numeric:
 #:
 #:   * every group in a separated shape is 4-6 digits wide, so a run of small
-#:     space-separated numbers -- ``"2 18.00 3 20.00 ..."`` -- matches nothing,
-#:     and :func:`_mask_pan` re-checks the total digit count either way;
+#:     separated numbers -- ``"2 18.00 3 20.00 ..."`` -- matches nothing, and
+#:     :func:`_mask_pan` re-checks the total digit count either way;
 #:   * ``(?<!\d)`` refuses a match that starts mid-number, and ``(?<!\d\.)``
 #:     refuses one that starts just after a *decimal point*, so the fraction of
 #:     ``0.4111111111111111`` is not mistaken for a card number. A period that is
 #:     **not** preceded by a digit is label punctuation, not a decimal point --
 #:     ``CARD NO.``, ``ACCT NO.``, ``REF.`` is exactly what a receipt prints, and
 #:     the PAN behind it must still be masked;
-#:   * the trailing lookaheads refuse a match that continues into more digits or
-#:     into a decimal fraction, so ``1234567890123.45`` stays a number and a
-#:     longer digit run is never partially masked.
+#:   * ``(?!\.\d)`` refuses a match that continues into a decimal fraction, so
+#:     ``1234567890123.45`` stays a number. **It sits on the unseparated
+#:     alternative alone**, which is the only one that can be read as a single
+#:     number. Left on all three, as it was while the separator class was
+#:     widened, ``4111 1111 1111 1111.99`` matched one group *late* and stored
+#:     ``4111 **********1199`` -- the leading group in the clear and the amount
+#:     destroyed. Scoped here it stores ``************1111.99``. Both forms
+#:     measured; neither reasoned about.
+#:
+#: Two false positives are accepted, because a rule that must never miss a PAN
+#: cannot also never fire on something else: a 13-19 digit all-numeric
+#: identifier, and two column-scale amounts side by side inside one free-text
+#: value (``1000.0000 2000.0000`` is four groups of four digits, which is a
+#: dotted PAN's shape exactly). Neither is distinguishable from a card number by
+#: inspection. Money itself never reaches here -- ``_coerce_money`` returns a
+#: ``Decimal`` and :func:`_plan_change` redacts only ``str``.
+#:
+#: A separated run of *more* than four groups is only partly masked: the leading
+#: four groups are replaced and the remainder is left. That is unchanged by the
+#: widening -- it was already true of the space and hyphen forms -- and it is
+#: recorded rather than fixed, because a fifth alternative wide enough to cover
+#: it also swallows a PAN that happens to be followed by two more four-digit
+#: groups, which :func:`_mask_pan` then rejects for length and leaves whole.
+#: Measured both ways.
 _PAN_RE = re.compile(
     r"""
-    (?<!\d)(?<!\d\.)                          # not mid-number, not a decimal fraction
+    (?<!\d)(?<!\d\.)                                # not mid-number, not a decimal fraction
     (?:
-        \d{4}[ -]\d{4}[ -]\d{4}[ -]\d{1,4}    # 4-4-4-N (Visa, Mastercard, ...)
-      | \d{4}[ -]\d{6}[ -]\d{5}               # 4-6-5 (Amex)
-      | \d{13,19}                             # unseparated
+        \d{4}(?:[ .\-_/,]\d{4}){2}[ .\-_/,]\d{1,4}  # 4-4-4-N (Visa, Mastercard, ...)
+      | \d{4}[ .\-_/,]\d{6}[ .\-_/,]\d{5}           # 4-6-5 (Amex)
+      | \d{13,19}(?!\.\d)                           # unseparated, and not an integer part
     )
-    (?!\d)(?!\.\d)                            # ... and not the integer part
+    (?!\d)
     """,
     re.VERBOSE,
 )
@@ -143,13 +171,13 @@ def redact_pan(value: Any) -> Any:
     masked when its digits look like a PAN -- and every other scalar passes
     through unchanged.
 
-    What it deliberately does *not* touch, because a rule that fires when it
-    should not is worse than no rule: money (``1234.56``, and any ``float`` with
-    a fractional part), a 4-digit ``card_last4``, a 16-character hash, dates, and
-    phone-style numbers -- all are shorter than :data:`_PAN_MIN_DIGITS` digits,
-    fail the separator grouping, or sit behind a decimal point. The one accepted
-    false positive is a 13-19 digit *all-numeric* identifier, which is
-    indistinguishable from a PAN by inspection.
+    What it deliberately does *not* touch: money (``1234.56``, and any ``float``
+    with a fractional part), a 4-digit ``card_last4``, a 16-character hash,
+    dates written with either a hyphen or a slash, and phone-style numbers --
+    all are shorter than :data:`_PAN_MIN_DIGITS` digits, fail the separator
+    grouping, or sit behind a decimal point. The false positives it does accept
+    are listed on :data:`_PAN_RE`; both are cases nothing can tell apart from a
+    card number by inspection, and §18 is not a rule that may miss.
     """
     if isinstance(value, str):
         return _PAN_RE.sub(_mask_pan, value)
