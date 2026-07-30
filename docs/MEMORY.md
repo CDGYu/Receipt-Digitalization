@@ -1,98 +1,49 @@
 # Agent Memory — Receipt Digitization System
 
-Durable working memory for cross-session continuity. Read this first, then the
-files in "Key references" below. Last updated: **2026-07-29**.
+Durable working memory for cross-session continuity. Read this first, then
+`docs/NEXT_SESSION_PROMPT.md` for the task list and the reading order.
+Last updated: **2026-07-31**.
 
 ## Snapshot
 
-- **`main` @ `28f6c7a` — PHASE 5 IS COMPLETE AND MERGED** (2026-07-31, true
-  fast-forward from `5e4d708`). **844 Python tests + 170 Vitest, ruff clean,
-  typecheck clean, build clean, e2e 2 passed.**
-- **There are now two test suites.** Python (`python -m pytest`, still offline
-  and Node-free — verified with `node` stripped from `PATH`) and **Vitest in
-  `frontend/`**. **`npm test` does NOT type-check**: run `npm run typecheck`
-  too, or a type error ships green. That trap fired three times this milestone.
-  **`python scripts/verify.py` runs all five gates** and skips the Node three
-  loudly when `npm` is absent.
-- **`git push` is authorised for `feat/*` branches** (user decision,
-  2026-07-30). **Ask before pushing `main`.**
-- Milestone ledger: `.superpowers/sdd/2026-07-29-review-ui/progress.md` — it
-  carries the deferred work, the parked rulings and the next task's scope.
+- **`main` @ `31943bb`. PHASE 5 (the review UI) IS COMPLETE AND MERGED**
+  (2026-07-31, true fast-forward from `5e4d708`). `feat/review-ui` is kept at its
+  merge point `28f6c7a`; merged branches and SDD workspaces are never cleaned up.
+- **844 Python tests + 170 Vitest**, ruff clean, typecheck clean, build clean,
+  Playwright e2e 2 passed.
+- **Phases 0–5 are complete.** Phase 3 is complete except **P3.T6 calibration**
+  (blocked on ISSUE-001).
+- Dev interpreter **Python 3.14.4**. Node **v22.22.2** / npm **10.9.7**.
+- Plan of record: `IMPLEMENTATION_PLAN.md`. The Phase 5 ledger, with every
+  measurement and parked ruling, is
+  `.superpowers/sdd/2026-07-29-review-ui/progress.md` — **`.superpowers/` is
+  gitignored, so nothing in it is findable by searching the tracked tree.**
 
-### What Phase 5 shipped
+## How to run — this changed in Phase 5
 
-A keyboard-first review UI (React 19 + Vite + TS in `frontend/`), served
-same-origin under `/app` by a guarded `StaticFiles` mount (ADR-0015); login,
-the review screen, the confidence rail, the findings panel, an image pane with a
-single re-sign retry; editing across all 17 correctable paths with money as a
-string end to end; a strictly sequential `PATCH → complete → next` with
-step-tagged failures; a warning that **holds the screen when the server stored
-something other than what was sent**; a Playwright acceptance test asserting the
-`corrections` rows; and `scripts/verify.py`.
+- **There are two test suites now.**
+  - `python -m pytest` — **844**, offline and **Node-free** (proven by running it
+    with the nodejs directory stripped from `PATH`). `pyproject` sets
+    `pythonpath=["src","."]`, `testpaths=["tests"]`.
+  - **Vitest, in `frontend/`** — **170**. `npm test`.
+- **`npm test` does NOT type-check.** A TypeScript error ships green through it.
+  **That trap fired three times in one milestone.** Run `npm run typecheck` too.
+- **`python scripts/verify.py` is the gate runner** — pytest, ruff, typecheck,
+  vitest, build. Fails loudly naming the gate; when `npm` is absent it prints a
+  per-gate `SKIPPED` and still gates the Python half. **See ADR-0017.**
+- Lint: `python -m ruff check .` — bare `ruff` is not on PATH. Types: `mypy src`
+  (informational). Alembic: `python -m alembic` — its console script is not on
+  PATH either.
+- CLI: `python -m receipts.cli <command>` — the console script needs the
+  interpreter's `Scripts`/`bin` on `PATH`, which it is **not** on this machine.
+- E2E (deliberate, not part of the sweep): `python scripts/seed_review_e2e.py
+  --reset`, then `cd frontend && npx playwright test`. Playwright's Chromium is
+  installed.
+- Baseline: `python -m eval.run_baseline` — needs a **real provider + a labeled
+  golden set**, else it refuses the `fake` provider / scores an empty set.
+- **Terminal quirk:** PowerShell clips piped Python output. Use `--junitxml` and
+  parse the XML when you need exact counts.
 
-Backend changes it forced: `receipt_detail` now returns `receipt_number`,
-`txn_time` and `payment_method` (correctable but previously invisible), and
-**`GET /review/next` resumes the caller's own in-progress task** before claiming
-a new one (**ADR-0016**) — because nothing in the system releases a claim.
-
-### The next task, already scoped
-
-**PAN hardening.** `_PAN_RE` was widened this milestone to cover `.`, `_`, `/`
-and `,` separators, but two residuals remain and **the obvious fix for one of
-them is measured worse**. Read the ledger's "NEXT TASK" section before touching
-that regex — it has produced a surprise on both of its last two widenings.
-- **The default branch is now `main`, not `master`** (renamed 2026-07-29), and a
-  GitHub remote exists: `origin` → `CDGYu/Receipt-Digitalization` (**private** —
-  verified: an unauthenticated API read returns 404).
-- **PHASE 4 IS COMPLETE.** `feat/service` (P4.T3) and `feat/cli` (P4.T5/T6) both
-  fast-forward merged on 2026-07-29; every milestone branch is kept at its merge
-  point.
-- Merged on `master`: Phase 0 foundations, Phase 1 offline modules, the online
-  wiring (config, client factory, M1 pipeline, confidence scoring, one-command
-  baseline runner), **Phase 3 persistence** (7-table ORM + `docker-compose.yml`,
-  Alembic migrations, repository layer, DB-backed dedupe, review queue, 4-sheet
-  XLSX export), plus the R020/R024 VAT-inclusive fix and the currency default
-  chain.
-- Merged with that branch: **P4.T4** (`process_receipt`, the RQ worker, the two
-  VLM guards — ADR-0011) and **P4.T3** (the review API: `users` table, session
-  auth + roles, machine upload key, eleven routes — ADR-0012).
-- Phase 3 is complete except **P3.T6 calibration** (blocked on ISSUE-001).
-- Dev interpreter **Python 3.14.4**; CI matrix 3.11/3.12.
-- Plan of record: `IMPLEMENTATION_PLAN.md`. Running log: `.superpowers/sdd/progress.md`.
-
-## Decisions the user has made (do not re-ask)
-
-- **Auth model (P4.T2) — DECIDED 2026-07-28, IMPLEMENTED 2026-07-29: session auth
-  + role checks (`reviewer` / `admin`), plus a separate API key for machine
-  upload.** Rationale: a shared key cannot attribute a correction to a reviewer,
-  which would hollow out the `corrections` audit trail the review UI depends on.
-- **Three more decided with P4.T3 (2026-07-29), all in ADR-0012:** accounts live
-  in a `users` table (not env-declared, not an external IdP); the confidence
-  breakdown is **persisted** at process time (it cannot be honestly recomputed —
-  triage issues and `meta.ambiguous_fields` are not stored); `admin` owns
-  `/export/xlsx` + user management and the API key authorizes `POST /upload` and
-  nothing else; and `POST /upload` writes a `pending` row before queueing so a job
-  the queue loses is a visible stuck row rather than a vanished upload.
-- **ISSUE-001 (the real baseline) is deferred until the system is built** — the
-  user's explicit call. Do not start it unprompted.
-- **P5.T0 frontend framework — DECIDED 2026-07-29: React 19 + Vite +
-  TypeScript.** Taken *after* the bbox rationale was removed (see below), so the
-  plan's own "richest bbox/image UX" reasoning did not drive it. ADR-0015.
-- **bbox highlighting is OUT of P5.T1's scope (2026-07-29).** `line_items[].bbox`
-  is structurally `None` — `extract/prompts.py` never asks the model for it and
-  nothing computes it. Adding it would cost a `PROMPT_VERSION` bump plus an eval
-  re-run that ISSUE-001 blocks. Revisit only if P2.T2 is resolved with an OCR
-  pass, which would supply both the grounding text layer and the coordinates.
-- **Review-screen findings are labelled historical (2026-07-29).**
-  `apply_corrections` never re-runs validation, so findings go stale the moment a
-  reviewer edits. A dry-run `POST /validate` endpoint was considered and deferred.
-- **Git: local commits are fine, pushes are NOT (2026-07-29).** The user pushes
-  to GitHub manually. Never run `git push`.
-
-## Still needing a user decision
-
-- **R060/R061 OCR grounding (P2.T2)** — model returns the text it read / a cheap
-  OCR pass / drop the rules. (Now also gates bbox highlighting — see above.)
 ## What this project is
 
 A VLM pipeline turning receipt photos into accounting-grade structured data.
@@ -102,7 +53,7 @@ extraction accuracy. A wrong number is far worse than a missing one — prefer
 with deterministic validation between extract and repair, self-consistency for
 handwriting, and one confidence score that routes to auto-approve or review.
 
-## Invariants (never violate — see `.kiro/steering/receipt-system.md` + ADRs)
+## Invariants (never violate — see `.kiro/steering/receipt-system.md` + the ADRs)
 
 `Decimal` on the money path, never `float` (ADR-0001). Validation is
 deterministic/pure, never mutates, never raises, stable rule IDs. Tolerance is
@@ -110,107 +61,138 @@ cents-bounded (`rel=0.0002`, floor scales with line count). Repair keeps the
 **best** attempt `(errors, warns, nulls)`; only errors trigger repair;
 unparseable → re-extract; never alter numbers to force arithmetic. Structured
 output via tool-use. Few-shot images first, target last. Consistency runs are
-never cached. Merchant hints end with "trust the image." Nothing is silently
-dropped. Excel is output only; the DB is the source of truth.
+never cached. Merchant hints end with "trust the image." **A full PAN is never
+persisted.** Nothing is silently dropped — every receipt reaches a terminal
+state. **A machine run never overwrites a `reviewed` row.** Excel is output only;
+the DB is the source of truth.
 
-## Built (on `master` unless noted)
+**Frontend (ADR-0015):** money is a string end to end; **`<input type="number">`
+and `valueAsNumber` are banned**; the browser stays same-origin so **no
+`CORSMiddleware` is ever added**; SPA pages live under `/app/*` and no API path
+moves.
 
-- `extract/`: schema, prompts, json_io, paths, extractor (3-pass + repair +
-  best-attempt + self-consistency), lineitem_align, clients/{base, fake,
-  anthropic_client, openai_compat, **factory**}
-- `validate/`: rules (28), report, context, validator
-- `normalize/`: numbers, dates, text  ·  `preprocess/`: image_ops, bounds, quality
-- `ingest/`: storage, dedupe, ingest  ·  `export/`: xlsx (all four §13 sheets)
-- `score/`: confidence (score_confidence / explain_confidence / route / ReceiptStatus)
-- `pipeline.py`: prepare_image, run_receipt, build_eval_pipeline
-- `config/settings.py`; `eval/`: metrics, harness, golden_set, run_baseline
-- Foundations: eval harness, golden-set on-ramp, CI, ruff/mypy, float-guard test
-- **Phase 3 (persistence):** `persist/models.py` (7-table ORM) +
-  `docker-compose.yml`; `alembic/` + `alembic.ini` (migration `b9342906a5a6`
-  creates all 7 tables; a `compare_metadata` test guards ORM/migration drift —
-  but it is SQLite-only, so it cannot see a new ENUM member);
-  `persist/session.py` (`make_engine` / `make_session_factory`);
-  `persist/repository.py` (§14.8 + DB-backed dedupe: `find_duplicate_by_phash`,
-  `find_duplicate_by_content`, `mark_duplicate`); `review/queue.py` (§14.9:
-  `enqueue_review`, `next_task`, `close_task`, `queue_stats`);
-  `export/xlsx.py` now writes all four sheets with §13.5 formatting via the
-  `ReceiptExportRow` metadata dataclass.
-  - Alembic's console script is not on PATH — use `python -m alembic`.
-  - `persist/__init__` is **lazy** (PEP 562 `__getattr__`): the models import
-    eagerly, the repository/session names resolve on first access, so a base
-    install (no `pipeline` extra) can still run migrations. Public API unchanged.
-  - `next_task` applies `FOR UPDATE SKIP LOCKED` only on dialects that support
-    it — **SQLite silently drops the clause instead of erroring**, which is why
-    the guard lives in Python.
-  - `redact_pan` is the §18 defence for `raw_response`; a review found it
-    leaking on `CARD NO.<PAN>`, mixed separators, and dict keys — all fixed and
-    regression-tested. Keep its silent-case tests intact when touching it.
+## Decisions the user has made (do not re-ask)
 
-- **P4.T4 (on `feat/service`, commit `6d35575`) — see ADR-0011:**
-  `pipeline.process_receipt` (the only function the worker calls; all 8 stages in
-  `STAGES` wrapped so any exception lands `needs_review` naming the stage, with a
-  row *and* a review task), `process_batch`, `prepare_image_bytes`,
-  `ProcessResult`/`BatchResult`; `extract/clients/limits.py`
-  (`VLMGate` + `CostGuard` + `GuardedVLMClient` + `CostCeilingExceeded`);
-  `worker.py` (RQ, `rq`/`redis` lazily imported behind a new `worker` extra so the
-  suite stays offline). The raw-report / normalized-extraction mismatch is closed
-  here by passing `normalize` as `extract_with_repair`'s `normalize_fn`;
-  `run_receipt` is deliberately unchanged because it feeds the eval baseline.
+- **Auth model — session auth + role checks (`reviewer`/`admin`), plus a separate
+  API key for machine upload.** A shared key cannot attribute a correction to a
+  reviewer, which would hollow out the `corrections` audit trail. (ADR-0012.)
+- **Accounts live in a `users` table**; the confidence breakdown is **persisted**
+  at process time (it cannot be honestly recomputed — triage issues and
+  `meta.ambiguous_fields` are not stored); `admin` owns `/export/xlsx` + user
+  management; `POST /upload` writes a `pending` row before queueing.
+- **ISSUE-001 (the real baseline) is deferred until the system is built** — the
+  user's explicit call. Do not start it unprompted.
+- **Frontend is React 19 + Vite + TypeScript** (ADR-0015).
+- **bbox highlighting is out of scope.** `line_items[].bbox` is structurally
+  `None` — nothing asks for it and nothing computes it. Revisit only if P2.T2 is
+  resolved with an OCR pass, which would supply both the grounding text layer and
+  the coordinates.
+- **Review-screen findings are labelled historical.** `apply_corrections` never
+  re-runs validation, so findings go stale the moment a reviewer edits. A dry-run
+  `POST /validate` endpoint was considered and deferred.
+- **Push policy (2026-07-30): pushing `feat/*` branches is authorised. Ask before
+  pushing `main`.** This replaced the earlier "never push" rule.
+- **`GET /review/next` resumes the caller's own in-progress task** before claiming
+  a new one (2026-07-30, ADR-0016) — chosen over an explicit release route, which
+  only fires when the client remembers to call it and so fixes deliberate
+  abandonment but not reload, crash, or a dropped response.
+- **`receipt.date_raw` is editable** (2026-07-31), as plain text — a date control
+  would reformat the string, and preserving what the document printed is the whole
+  reason the field exists.
+- **The UI warns when the server stored something other than what was sent**
+  (2026-07-31), by diffing the patch against the `ReceiptDetail` that `PATCH`
+  returns. Money fields compare with trailing fractional zeros normalised, because
+  `_MONEY = Numeric(14,4)` means every money value reads back at four decimals and
+  a naive diff would fire on every edit.
+- **Phase 5 merged with the PAN residual open** (2026-07-31), with hardening as its
+  own next task — the branch strictly improved masking, and the regex has
+  surprised on both of its last two widenings, so it needs a measured battery
+  rather than a patch appended to a merge.
+- **Task 5's CI job was cut.** `.github/workflows/ci.yml` is gitignored and
+  Actions does not run, so a tracked workflow would be a false signal.
+  `scripts/verify.py` replaces it (ADR-0017).
 
-- **P4.T3 (on `feat/service`) — see ADR-0012:** `persist/users.py` (stdlib scrypt,
-  the user store, and a `python -m receipts.persist.users create <name> --role
-  admin` bootstrap that reads the password from stdin); the `users` table and
-  `receipts.confidence_reasons` (migration `a1c4d2f80b31`, which also adds
-  `validation_findings.created_at`); `review/auth.py` (signed-cookie sessions,
-  `require_user`/`require_role`/`require_upload`, HMAC URL signing);
-  `review/{api,schemas,serializers}.py` — `create_app` plus eleven routes.
-  `save_extraction` is now update-or-insert and **refuses to overwrite a
-  `reviewed` row**; `POST /upload` writes a `pending` row before queueing.
-  `score/thresholds.py` is the single source for `0.85`/`0.60` (was four copies).
+## Still needing a user decision
 
-- **P4.T5/T6 (`cli.py`) — see ADR-0013:** `receipts ingest|process|export|eval|
-  calibrate|merchants|reprocess|users`, plus `review/signing.py` (the HMAC helpers
-  split out of `auth.py` so the export path needs no FastAPI). `ingest` writes a
-  `pending` row and does not enqueue — `process` drains those rows, so upload and
-  ingest share one work list. `reprocess` never overwrites a `reviewed` row;
-  `--force` is a status gate reaching only `auto_approved`. `calibrate` passes
-  three gates before recommending anything (§ ADR-0013). Every optional-extra
-  import is lazy, so a base install runs the CLI.
-  - **Invocation:** the console script needs the interpreter's `Scripts`/`bin`
-    directory on `PATH`, which it is **not** on this machine.
-    `python -m receipts.cli <command>` always works and is what the tests use.
+1. **A hosted tool-capable provider + a freshly rotated key** — for ISSUE-001, and
+   therefore for all calibration.
+2. **R060/R061 OCR grounding (P2.T2)** — model returns the text it read / a cheap
+   OCR pass / drop the rules. Also gates bbox highlighting.
+3. **Whether GitHub Actions should run again.** Nothing runs the frontend gates
+   remotely. If yes, the workflow should call `scripts/verify.py` rather than
+   re-listing the gates, so the two cannot drift.
 
-- **P5.T1 Task 1 of 5 (on `feat/review-ui`) — see ADR-0015:** `Settings.
-  frontend_dist`; `_SpaFiles` + `_install_spa` in `review/api.py`, called last in
-  `create_app`; `tests/test_api_static.py` (5 tests). Serves the built SPA under
-  `/app`, **skipped entirely when `frontend/dist` is absent**. No API path moved.
-  - **What actually protects API paths is the `/app` prefix, not the
-    registration order.** A Starlette mount only intercepts under its own prefix,
-    so it cannot compete with `/health` at any order — proven by moving the mount
-    ahead of the read routes and watching all 5 tests stay green. The first draft
-    of the design claimed the opposite and shipped a vacuous test on it; both are
-    corrected. Registering last is kept as a cheap habit only.
+## Built
 
-## NOT built yet (remaining work)
+**Core (Phases 0–2).** `extract/`: schema, prompts, json_io, paths, extractor
+(3-pass + repair + best-attempt + self-consistency), lineitem_align,
+clients/{base, fake, anthropic_client, openai_compat, factory}. `validate/`:
+rules (28), report, context, validator. `normalize/`: numbers, dates, text.
+`preprocess/`: image_ops, bounds, quality. `ingest/`: storage, dedupe, ingest.
+`export/xlsx.py` (all four §13 sheets). `score/confidence.py` +
+`score/thresholds.py` (the single source for `0.85`/`0.60`). `pipeline.py`,
+`config/settings.py`, `eval/` (metrics, harness, golden_set, run_baseline).
+**The R020/R024 VAT-inclusive fix shipped** — `prices_include_tax` is threaded
+from `extract/schema.py` into `validate/rules.py`, so the rule is
+convention-aware rather than assuming `Σ lines ≈ subtotal`.
 
-- **Phase 5 Tasks 2–5:** the frontend scaffold + API client + login, the review
-  screen display, editing + the submit chain, and e2e/seed/CI. Plan:
-  `docs/superpowers/plans/2026-07-29-review-ui.md`.
-- `merchants/{fingerprint,registry}.py` + few-shot injection (Phase 6)
-- Self-consistency wired into `run_receipt` (extractor supports it; the M1
-  runner does not call it yet) (Phase 7)
-- Confidence-weight calibration against the golden set (Phase 8)
+**Phase 3 — persistence.** `persist/models.py` (**8 tables**: receipts,
+line_items, merchants, extraction_runs, validation_findings, review_tasks,
+corrections, users) + `docker-compose.yml`; `alembic/`; `persist/session.py`;
+`persist/repository.py` (§14.8 + DB-backed dedupe); `review/queue.py`.
+- `persist/__init__` is **lazy** (PEP 562 `__getattr__`) so a base install can
+  still run migrations.
+- `next_task` applies `FOR UPDATE SKIP LOCKED` only on dialects that support it —
+  **SQLite silently drops the clause instead of erroring**, which is why the guard
+  lives in Python.
+- The migration drift guard runs on SQLite only, so a new ENUM member would pass
+  locally and fail on Postgres.
 
-## How to run
+**Phase 4 — service + CLI.** `pipeline.process_receipt` (the only function the
+worker calls; all 8 stages wrapped so any exception lands `needs_review` naming
+the stage, with a row *and* a review task); `extract/clients/limits.py`
+(`VLMGate` + `CostGuard` + `GuardedVLMClient`); `worker.py` (RQ, lazily imported
+behind a `worker` extra). `persist/users.py` (stdlib scrypt); `review/auth.py`
+(signed-cookie sessions, HMAC URL signing); `review/{api,schemas,serializers}.py`
+— `create_app` plus eleven routes. `cli.py`:
+`ingest|process|export|eval|calibrate|merchants|reprocess|users`. ADR-0011,
+ADR-0012, ADR-0013, ADR-0014.
 
-- Tests: `python -m pytest` (pyproject sets `pythonpath=["src","."]`,
-  `testpaths=["tests"]`). Lint: `python -m ruff check .`. Types: `mypy src`
-  (informational).
-- Baseline: `python -m eval.run_baseline` — needs a **real provider + a labeled
-  golden set** (else it refuses the `fake` provider / scores an empty set).
-- **Terminal quirk:** PowerShell sometimes clips piped Python output. Use
-  `python -m pytest 2>&1 | Select-Object -Last 3` and capture summary lines
-  explicitly.
+**Phase 5 — the review UI.** `frontend/` (React 19 + Vite + TS): login, the
+review screen, `ConfidenceRail`, `FindingsPanel`, `ImagePane` (signed URL, one
+re-sign retry, then a visible failure), `ReceiptForm` (all 17 correctable paths),
+`LineItemsTable` (7 fields, `position` read-only), `MoneyInput`, `patch.ts`
+(`buildPatch` / `fieldsFromReceipt` / `findRewrites`), `session.ts`,
+`ErrorBoundary`. A strictly sequential `PATCH → complete → next` with step-tagged
+failures; ⌘/Ctrl+Enter approves; a rewrite warning that **holds the screen**
+until acknowledged. Served same-origin under `/app` by a guarded `StaticFiles`
+mount whose history fallback is navigation-only. Plus `scripts/seed_review_e2e.py`,
+`scripts/serve_review_e2e.py` (**e2e-scoped, deliberately not a production entry
+point**), `scripts/verify.py`, a Playwright acceptance spec, and
+`frontend/tests/no-float-in-money-path.test.ts` (a source-scanning float guard —
+measured sound, but it has **no rule that can fire on arithmetic**, so it cannot
+settle whether an expression violates ADR-0001; read the code for that).
+
+Backend changes Phase 5 forced: `receipt_detail` now returns `receipt_number`,
+`txn_time` and `payment_method` (correctable but previously **invisible** — the
+17 write paths and the 17 read keys were different 17s); and **`GET /review/next`
+resumes the caller's own in-progress task** (ADR-0016), because nothing in the
+system releases a claim.
+
+## Remaining work
+
+**`docs/NEXT_SESSION_PROMPT.md` carries the full ordered task list.** Headlines:
+
+1. **PAN hardening** — two residuals, one undocumented, and the obvious fix for
+   the documented one is *measured worse*. Read the Phase 5 ledger's "NEXT TASK"
+   section and ADR-0007 first.
+2. Phase 5 follow-ups: the five design §5 error-recovery behaviours that never
+   shipped (including **no logout control**), a read route for `corrections`, a
+   real ASGI entry point, an admin release for a claimed task.
+3. **Phase 6** — merchants & few-shot. **Phase 7** — self-consistency wired into
+   the pipeline, gated on `triage.is_handwritten`. **Phase 8** — calibration and
+   eval-harness honesty.
+4. **ISSUE-001 last.**
 
 ## Environment / provider (user's `.env`, gitignored)
 
@@ -220,222 +202,170 @@ dropped. Excel is output only; the DB is the source of truth.
 - **Golden set is LIVE** — `eval/golden/labels|images/{r001,r002,r003}` on disk,
   both flagged readings user-verified. `eval/golden/images/` is gitignored (the
   parent is not — do not move real receipts up a level).
-- Ollama runs in Docker via `docker-compose.yml` (service `ollama`, host port
-  **11435** → container 11434, `restart: unless-stopped`, external volume
-  `ollama`). Start with `docker compose up -d ollama`. The native Windows Ollama
-  CLI on PATH points at 11434 and will say "could not connect" — use
-  `docker exec ollama ollama …` or set `OLLAMA_HOST=http://localhost:11435`.
-- **Local CPU inference is not viable for real numbers.** No GPU passthrough
-  (Intel iGPU, WSL2 can't pass it through); measured 262s–1205s for a *single*
-  call. Ollama rejects a `tools` payload for models that do not declare the
-  capability, so the local path runs JSON mode, not the intended tool-use route
-  (ADR-0002). Keep it for offline spot checks only — see ISSUE-001.
+- Ollama runs in Docker (service `ollama`, host port **11435** → container 11434).
+  The native Windows Ollama CLI on PATH points at 11434 and will say "could not
+  connect" — use `docker exec ollama ollama …` or set `OLLAMA_HOST`.
+- **Local CPU inference is not viable for real numbers.** No GPU passthrough;
+  measured 262 s–1205 s for a *single* call. Ollama rejects a `tools` payload for
+  models that do not declare the capability, so the local path runs JSON mode, not
+  the intended tool-use route (ADR-0002). Offline spot checks only.
 - **Security:** a commented-out Gemini key was once echoed in output → **rotate it
-  before use.** Never echo `.env` secret values; `.env` is gitignored.
-- **Git / repository (changed 2026-07-29):** default branch renamed `master` →
-  **`main`**; remote `origin` → `CDGYu/Receipt-Digitalization`, **private**
-  (unauthenticated API read returns 404). **Never `git push`** — the user pushes
-  manually. Local commits are fine.
-  - **`.kiro/` and `.github/workflows/` are now gitignored and untracked** (commit
-    `5e4d708`). The files are still on disk and `.kiro/steering/receipt-system.md`
-    still auto-loads, but a fresh clone does not carry them and **GitHub Actions
-    no longer runs for this repository.** The old "never stage
-    `.kiro/settings/mcp.json`" rule is therefore obsolete — it is ignored now.
-  - Audited what the first push actually contained: **no `.env`, no receipt
-    images** (`eval/golden/images/` stayed ignored), no `.db`/`.log` files, and
-    `mcp.json` held only a `${GITHUB_PERSONAL_ACCESS_TOKEN}` placeholder, not a
-    literal secret.
+  before use.** Never echo `.env` secret values.
+- **Git:** default branch `main`; `origin` → `CDGYu/Receipt-Digitalization`,
+  **private**. Push `feat/*` freely; **ask before `main`**.
+- **Gitignored and untracked:** `.kiro/` (steering still auto-loads from disk),
+  `.github/workflows/` (**Actions does not run**), `.superpowers/` (the SDD
+  ledgers — invisible to anything searching the tracked tree), and **`var/`**,
+  where `STORAGE_ROOT` defaults to `var/blobs` and writes **real receipt images**.
+  Never stage one.
 - **Harness note:** the `developer-kit` plugin's `prevent-destructive-commands.py`
-  hook used to block `git add` and `git commit` outright, which stopped the
-  commit-per-task workflow. Those two checks were removed on 2026-07-28; every
-  genuinely destructive guard (`reset --hard`, `clean`, force-push, `rebase`,
-  `filter-branch`, `branch -D`, `tag -d`, `update-ref -d`, `reflog expire`, docker
-  and aws deletes, secret-file reads) is still active and was re-verified. **A
-  plugin update will overwrite this** — if commits start failing, re-apply it in
-  `~/.claude/plugins/cache/developer-kit/developer-kit/*/hooks/`.
+  hook used to block `git add`/`git commit`; those checks were removed on
+  2026-07-28 and every genuinely destructive guard is still active. **A plugin
+  update will overwrite this.** The same hook false-positives on a `grep` whose
+  *pattern* names a sensitive file, and `developer-kit-typescript`'s
+  `ts-file-validator.py` complains about PascalCase `.tsx` — it is a
+  **PostToolUse** hook, so it cannot block a write and the file is created
+  successfully; ignore the message.
 
-## The real receipt corpus (learned from the user's first 3 samples, 2026-07-28)
+## The real receipt corpus (from the user's first 3 samples, 2026-07-28)
 
-The user's actual documents are **Philippine BIR "SALES INVOICE" forms: a
-machine-printed template with every value filled in by hand.** Three samples are
-labelled in `eval/golden/labels/r001-r003.json` (Metro Oil Subic, Summit Fuel
-OPC, Serv Central). Implications, all confirmed against the code:
+The user's documents are **Philippine BIR "SALES INVOICE" forms: a
+machine-printed template with every value filled in by hand.** Labelled in
+`eval/golden/labels/r001-r003.json` (Metro Oil Subic, Summit Fuel OPC, Serv
+Central). All confirmed against the code:
 
-- **They are `document_type=INVOICE` + `print_type=MIXED`, not `handwritten_receipt`.**
+- **`document_type=INVOICE` + `print_type=MIXED`, not `handwritten_receipt`.**
   `TriageResult.is_handwritten` already returns True for `MIXED`, so **gate
-  self-consistency on `triage.is_handwritten`, never on `document_type`** (Phase 7).
-- **The handwriting penalty must read triage too.** `score_confidence` currently
-  reads only `receipt.meta.is_handwritten`; on these forms a model may report
-  `False` (the template is printed) while triage says `MIXED`, so the −0.15 would
-  be missed on exactly the receipts that need it. This promotes that deferred item
-  to a real fix.
-- **R020 FALSE-ERRORS ON 100% OF THESE RECEIPTS — see below.** Highest-priority
-  open issue.
+  self-consistency on `triage.is_handwritten`, never on `document_type`.**
+- **The handwriting penalty must read triage too.** `score_confidence` reads only
+  `receipt.meta.is_handwritten`; on these forms a model may report `False` while
+  triage says `MIXED`, so the −0.15 is missed on exactly the receipts that need it.
 - **Blank pre-printed product rows.** Metro Oil's form pre-prints six fuel rows
-  and only one is filled in; a VLM will likely emit all six. Needs a prompt
-  instruction and/or a rule (sibling of R052) so empty template rows are dropped.
+  with one filled in; a VLM will likely emit all six. Needs a prompt instruction
+  and/or a rule (sibling of R052).
 - **Buyer-vs-merchant trap.** Every form has `SOLD TO: Ideal Source` (the user's
   own company). `merchant.name` must be the ISSUER, never the buyer.
-- **Printer-TIN trap.** The footer carries the *printing press's* TIN and
-  accreditation (e.g. Midland Press `000-296-795-000`). `merchant.tax_id` must be
-  the `VAT Reg. TIN` in the header.
+- **Printer-TIN trap.** The footer carries the *printing press's* TIN (e.g.
+  Midland Press `000-296-795-000`). `merchant.tax_id` must be the `VAT Reg. TIN`
+  in the header.
 - **Currency is never printed.** `normalize_currency` correctly refuses to guess,
-  so **set `DEFAULT_CURRENCY=PHP`** or currency stays null.
+  so `DEFAULT_CURRENCY=PHP` is required or currency stays null.
 - **Composition:** if this hybrid form is the whole corpus, the spec's §15 target
-  mix (60% printed-clean / 20% handwritten) does not describe reality — the golden
-  set should be dominated by this one type. Raise before scaling M0.
-- Useful details: VAT is 12% and totals read `net + VAT = TOTAL AMOUNT DUE`;
-  `Less: Withholding Tax` and the VATable / VAT-Exempt / Zero-Rated buckets appear
-  on the forms but have no dedicated schema fields (withholding was blank on all
-  three); merchant `VAT Reg. TIN` is printed, which is the strongest fingerprint
-  for merchant matching (Phase 6).
+  mix (60% printed-clean / 20% handwritten) does not describe reality. Raise
+  before scaling M0.
+- VAT is 12% and totals read `net + VAT = TOTAL AMOUNT DUE`. `Less: Withholding
+  Tax` and the VATable / VAT-Exempt / Zero-Rated buckets appear on the forms but
+  have no dedicated schema fields. Merchant `VAT Reg. TIN` is the strongest
+  fingerprint for Phase 6 matching.
 
-### OPEN ISSUE — R020 vs VAT-inclusive line pricing
+## DEFERRED — do this LAST
 
-On these invoices the line-item **Amount column is VAT-INCLUSIVE**, so
-`Σ line_total == total`, while `subtotal` is the net-of-VAT tax base. R020
-(`Σ line_total ≈ subtotal`) therefore fails by exactly the VAT on all three
-samples (verified: 1000 vs 892.86; 2000 vs 1785.71 ×2). R022 passes, so the
-receipts are internally consistent — **the labels are right and the rule's
-assumption is wrong.**
+**ISSUE-001: run the first real baseline.** Parked by the user on 2026-07-28.
+Full diagnosis and exact resume steps are in **`docs/KNOWN_ISSUES.md`** — read
+that, do not re-derive it.
 
-Consequences if unfixed: a false ERROR blocks auto-approval, burns a repair call,
-costs −0.35 confidence, and hands the repair prompt a demand to reconcile numbers
-that are already correct — pressuring the model to alter good values, which the
-steering rules forbid.
+Everything needed is in place and the three labels validate with zero findings,
+but `python -m eval.run_baseline` has never completed. The blocker is that
+`granite3.2-vision:2b` on CPU takes ~262 s per call, so a run is 30–60 min and
+dies to any interruption. **Fix: point it at a hosted tool-capable model** (the
+commented-out Gemini block in `.env`; rotate that key first).
 
-Recommended fix (needs a decision; touches a stable rule ID): make R020/R024
-**convention-aware** — add an explicit `prices_include_tax` flag the model reads
-off the form (these say "Total Sales (VAT Inclusive)"), and when it is true (or
-unknown) accept `Σ lines ≈ total` as well as `Σ lines ≈ subtotal`. Do **not**
-widen the tolerance to paper over it. Never renumber R020.
-
-## DEFERRED — do this LAST, after the system is built
-
-**ISSUE-001: run the first real baseline.** Parked by the user on 2026-07-28 with
-"I will do this after I build the system." Full diagnosis, the exact resume steps,
-and what to expect are in **`docs/KNOWN_ISSUES.md`** — read that, do not
-re-derive it.
-
-One-line summary: everything needed is in place (labels, images, pipeline, scorer,
-harness) and the three labels validate with zero findings, but
-`python -m eval.run_baseline` has never completed. Two attempts failed — one to a
-timeout bug (since fixed in `1f9f122`), one to the process being killed mid-run.
-The open blocker is that `granite3.2-vision:2b` on CPU takes ~262s per call, so a
-run is 30–60 min and dies to any interruption. **Recommended fix: point the
-baseline at a hosted tool-capable model** (the commented-out Gemini block in
-`.env`; rotate that key first, it was echoed in terminal output).
-
-Until this is done there are **no real accuracy numbers**, and therefore no
-threshold calibration (P3.T6 / P8.T1) and no way to judge a prompt or rule change.
-Do not treat any precision claim as measured before it runs.
-
-## Blockers that need the user
-
-1. **A hosted tool-capable provider + a freshly rotated key** — required for
-   ISSUE-001 (the first real baseline) and therefore for all calibration.
-   *(Golden set: DONE. Auth model: DECIDED — see "Decisions" above.)*
-2. Decisions: **frontend framework** (P5.T0), **R060/R061 OCR-grounding**
-   approach (P2.T2).
+Until this runs there are **no real accuracy numbers**, no threshold calibration
+(P3.T6 / P8.T1), and no way to judge a prompt or rule change. **Do not treat any
+precision claim as measured.**
 
 ## Deferred follow-ups / known minors (non-blocking)
 
-*Fixed during P4.T3 and no longer open: the `CostGuard._as_money` `is_finite()`
-gate; the four-way `0.85`/`0.60` duplication; `enqueue_review`'s check-then-insert
-race; the §17 spec drift (§17 now also carries the service settings); the vacuous
-`eval/results/2026-07-27-1.0.0.json`, which was deleted.*
-
-- Move confidence penalty weights into `config/rules.yaml` (calibration, P3.T6).
-- **Parked from the whole-branch review** (adjudicated, none load-bearing):
-  `apply_corrections` redacts *any* coerced text, so a 13–19-digit
-  `receipt.number` is masked the moment a reviewer merely confirms it (and writes
-  a spurious `corrections` row), while `save_extraction` redacts only
-  `merchant_name_raw` and `payment_method` — the two sides should agree;
-  `_persist_failure` never writes `image_phash`, so a failed receipt keeps `""`
-  and can never later serve as a dedupe **original** (address with Phase 6 dedupe);
-  closing a review task on an auto-approving reprocess also closes one a reviewer
-  had already claimed (revisit with the review UI, P5).
+- **PAN:** `apply_corrections` redacts *any* coerced text, so confirming a 13–19
+  digit `receipt.number` masks it and writes a spurious `corrections` row, while
+  `save_extraction` redacts only two columns — the two sides should agree. The
+  review UI makes this reachable by a human.
+- `_persist_failure` never writes `image_phash`, so a failed receipt keeps `""`
+  and can never serve as a dedupe **original** (address with Phase 6 dedupe).
+- An auto-approving reprocess closes a review task a reviewer had already claimed.
 - **No login rate limiting**, and each attempt costs a full scrypt derivation
   (~16 MB, ~57 ms) — `POST /auth/login` is an unauthenticated CPU/memory amplifier
   as well as an enumeration surface. Address before this faces more than a LAN.
-- **Parked from the CLI branch review** (rulings in
-  `.superpowers/sdd/2026-07-29-cli/progress.md`): `receipts eval`/`calibrate`
-  still traceback without the `pipeline` extra while the other six commands
-  degrade cleanly — `eval.run_baseline` imports `receipts.pipeline` at module top,
-  and `calibrate` needs nothing from it; and an **all-failed** eval run still
-  persists `"auto_approval_precision": 1.0` to the results JSON even though the
-  terminal correctly prints `n/a`. **The artifact ban is not fully closed until
-  the file is honest too** — fix with the eval-harness work in P8.
-- With `_MIN_APPROVED_SAMPLE = 5` and only 3 committed golden labels, `receipts
-  calibrate` cannot produce a recommendation on today's data. That is the floor
-  working as designed, not a bug.
-- **`_attempt_prompt_hash` reconstructs each call's prompt** rather than threading
-  prompts out of the repair loop. When merchant hints / few-shot land (M5), the
-  same values must be passed there or the stored hash drifts from what was sent.
+- `receipts eval`/`calibrate` traceback without the `pipeline` extra while the
+  other six commands degrade cleanly; `calibrate` needs nothing from it.
+- An **all-failed** eval run still persists `"auto_approval_precision": 1.0` to the
+  results JSON though the terminal prints `n/a`. **The artifact ban is not closed
+  until the file is honest too** — fix with P8.
+- Reprocessing a `reviewed` receipt records **no** `extraction_runs` — the
+  transaction rolls back (ADR-0013's dated correction).
+- Move confidence penalty weights into `config/rules.yaml` (P3.T6).
+- `_attempt_prompt_hash` reconstructs each call's prompt; when merchant hints /
+  few-shot land, the same values must be passed there or the stored hash drifts.
 - **Semantic (merchant+date+total) dedupe is deliberately not wired** into
-  `process_receipt` — `merchant_id` is NULL until M5, so it would merge different
-  purchases. Wire it with the merchant registry. (ADR-0011.)
-- Handwriting penalty reads only `receipt.meta.is_handwritten`; consider OR-ing
-  `triage.is_handwritten`.
-- `vllm`/`ollama` still require `VLM_API_KEY`; `VLM_BASE_URL` ignored for `anthropic`.
-- Statistical caveat: ≥99% precision can't be validated on a tiny golden set —
-  grow the held-out set before trusting that number.
-- `save_extraction` takes `report` (per §14.8) but does **not** write findings —
-  the pipeline must call `save_findings` separately (findings accumulate across
-  passes via `resolved_by_repair`). Revisit if replace-semantics is wanted.
+  `process_receipt` — `merchant_id` is NULL until Phase 6 (ADR-0011).
+- `save_extraction` takes `report` but does **not** write findings — the pipeline
+  calls `save_findings` separately.
 - `_build_line_items` falls back to list order when emitted positions aren't
   distinct, so `unique(receipt_id, position)` can't sink a whole receipt.
+- `enqueue_review` is check-then-insert against a UNIQUE column; concurrent
+  enqueues can still raise `IntegrityError`.
+- `vllm`/`ollama` still require `VLM_API_KEY`; `VLM_BASE_URL` ignored for
+  `anthropic`.
+- XLSX `write_only` streaming above 5000 rows is deferred.
 - ruff sorts `from alembic import command` as **first-party** in tests (the
   repo-root `alembic/` dir shadows the package) — don't "fix" that import order.
-- `enqueue_review` is check-then-insert against a UNIQUE column: concurrent
-  enqueues can still raise `IntegrityError`. Wrap it or use an upsert when the
-  API lands (P4.T3).
-- The migration drift guard runs on SQLite only, so a new ENUM member would pass
-  locally and fail on Postgres.
-- XLSX `write_only` streaming above 5000 rows is deferred (incompatible with the
-  random-access §13.5 formatting pass).
+- An intermittent
+  `tests/test_cli_pipeline.py::test_inline_one_failing_receipt_does_not_abandon_the_others`
+  failed twice in full runs and has not reproduced in ~20 since. **Test the
+  hypothesis first:** this repo uses `pytest-randomly`, so order varies per run.
+- Phase 5's own minors are in its ledger with rulings.
 
 ## Workflow & conventions
 
-- **subagent-driven-development**: one fresh implementer subagent
-  (**`general-purpose`** — that is the type that exists; older notes said
-  `general-task-execution`, which does not) per task. Its brief must tell it to read the real
-  signatures first, work TDD, keep the full suite green + ruff clean, stage only
-  its own files, and **never stage `.kiro/settings/mcp.json`** (a persistent
-  local working-tree edit). The controller then reviews (read the diff + run
-  `pytest`/`ruff`) and the task ends with a commit.
-- **Per milestone**: work on a feature branch; when done, run a final
-  whole-branch review (`semantic_reviewer`), then fast-forward merge to `master`.
-  Review write-ups land under `semantic-review/` (untracked).
-- Conventional commit messages (`feat(scope): …`, `chore: …`, `fix: …`).
-- Global skills (`~/.kiro/skills`) and MCP (`~/.kiro/settings/mcp.json`) are
-  configured; steering `.kiro/steering/receipt-system.md` auto-loads.
+- **subagent-driven-development**: one fresh **`general-purpose`** implementer per
+  task, briefed to read the real signatures first, work TDD, keep **both** suites
+  green + ruff clean, and stage only its own files. The controller reviews the
+  diff, re-runs the gates **independently**, then dispatches a task review, then
+  commits and appends to the ledger.
+- **Per milestone**: a feature branch; at the end a whole-branch review on the
+  strongest model, **one** consolidated fix wave, one scoped re-review, then a
+  fast-forward merge. Branches and SDD workspaces are **kept**.
+- **Probe before dispatching.** Phase 5's plan was wrong about existing code
+  **eleven times**, including an acceptance test that would have failed against a
+  correct system. The plan's prose is reliable; its claims about existing APIs
+  are not.
+- Conventional commit messages (`feat(scope): …`, `fix: …`, `chore: …`, `docs: …`).
+
+### Review standards — hold all of them
+
+1. **Reviewers reproduce, they do not reason.**
+2. **Every new test must be proven to fail** with its fix reverted.
+3. **A test asserting the absence of breakage cannot be proven by a RED run** —
+   revert each guarantee separately.
+4. **A mutation must change exactly one thing**, or the result names the wrong
+   cause.
+5. **If a number can change without its sentence changing, it does not go in the
+   comment.** One citation drifted `61 → 81 → 94 → 101`, once *inside the commit
+   documenting the drift*.
+6. **A claim about what your own artefacts say is itself a claim requiring a
+   command.** Grep; do not recall.
+7. **Do not credit a tool with settling a question you have not put to it** —
+   including `grep` and the float guard.
+8. **A stub that does not reflect the write is a fixture bug** that lies dormant
+   until something reads the reply.
+
+And: **a green suite is not evidence that installed software works.** Anything
+with an entry point gets run from outside the repository.
 
 ## Key references
 
-- `RECEIPT_SYSTEM_SPEC.md` — build spec: §3 architecture, §6 data model, §9
+- `RECEIPT_SYSTEM_SPEC.md` — §3 architecture, §6 data model (**8 tables**), §9
   normalization, §10 validation, §12 confidence + routing, §14 function
-  inventory, §15 milestones, §16 eval, §17 config, §18 traps, §19 DoD.
-- `README.md` (overview, §5 design decisions), `VLM_AND_DATA.md` (model/data).
-- `IMPLEMENTATION_PLAN.md` — the phased task list (authoritative).
-- **`docs/KNOWN_ISSUES.md`** — parked problems with their diagnosis and resume
-  steps. ISSUE-001 (the baseline run) is the deferred final task.
-- `docs/adr/` — implementation decisions (**0001–0015**; see `docs/adr/README.md`).
-  0001 `Decimal` money path · 0002 provider abstraction/config · 0003 confidence
-  penalties · 0004 portable persistence + Docker · 0005 tooling/offline tests ·
-  0006 repository conventions · **0007 PAN redaction + money integrity (read
-  before touching card/money writes)** · 0008 review-queue concurrency ·
-  0009 lazy `persist` surface · 0010 export decoupling · **0011 terminal-state
-  contract + VLM concurrency/cost guards (read before touching
-  `process_receipt` or the worker)** · **0012 review API: identity, the pending
-  row, and "a machine run never overwrites a `reviewed` row"** · **0013 CLI
-  contract, including `calibrate`'s three gates** · **0014 optional-dependency
-  import discipline — read before adding any import to a module reachable from an
-  entry point** · **0015 the review UI is served same-origin under `/app`; the
-  prefix (not the registration order) is what protects API paths; money stays a
-  string in the browser and `<input type="number">` is banned on money fields**.
-- `semantic-review/` — the whole-branch review write-ups (now tracked, since the
-  2026-07-29 "Inital Commit" swept them in). The
-  `2026-07-28-…-feat-db-layer` one documents the PAN/NaN findings in detail.
-- `.kiro/steering/receipt-system.md` — always-on load-bearing rules.
-- `.superpowers/sdd/progress.md` — the running task ledger.
+  inventory, §15 milestones, §16 eval, §17 config, **§18 traps (PAN)**, §19 DoD.
+- `docs/NEXT_SESSION_PROMPT.md` — the ordered task list and reading order.
+- `IMPLEMENTATION_PLAN.md` · `README.md` (§5 design decisions) · `VLM_AND_DATA.md`
+- **`docs/KNOWN_ISSUES.md`** — ISSUE-001 with its diagnosis and resume steps.
+- **`docs/adr/` — 0001–0017**; see `docs/adr/README.md`. Read **0001** first;
+  **0007** before touching card/money writes; **0017** before believing a green
+  test run.
+- `docs/superpowers/specs/` and `docs/superpowers/plans/` — per-milestone design
+  and plan documents.
+- `.superpowers/sdd/<plan-name>/progress.md` — per-milestone ledgers.
+  **Gitignored: open by path, they cannot be found by searching.**
+- `semantic-review/` — older whole-branch review write-ups.
+- `.kiro/steering/receipt-system.md` — always-on load-bearing rules (untracked).
