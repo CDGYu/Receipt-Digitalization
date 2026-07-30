@@ -231,11 +231,13 @@ describe('fieldsFromReceipt', () => {
   })
 
   it('carries an edited printed date out verbatim, whitespace and all', () => {
-    // `receipt.date_raw` is `_coerce_optional_text` (measured: it returns
-    // `'  1L/O7/2O26  '` for `'  1L/O7/2O26  '`, `'2026-13-45'` for
-    // `'2026-13-45'`), so whatever a reviewer types is stored character for
-    // character. Nothing in this client may trim, pad, or reformat it -- the
-    // point of the column is to record what the paper actually said.
+    // Nothing in this client may trim, pad, or reformat what the reviewer
+    // typed: the point of the column is to record what the paper actually said.
+    // This is a claim about **transmission** only. Measured through the real
+    // PATCH route, the server rewrites some of what it receives -- `redact_pan`
+    // runs after `_coerce_optional_text`, so `'4111111111111111'` is read back
+    // as `'************1111'`. What leaves here goes verbatim; what lands in
+    // the column is the server's business. See `ReceiptForm`'s docblock.
     const original = fieldsFromReceipt(RECEIPT)
     const edited = { ...original, 'receipt.date_raw': '  14 / 07 / 2026  ' }
     expect(buildPatch(original, edited)).toEqual({
@@ -244,10 +246,15 @@ describe('fieldsFromReceipt', () => {
   })
 
   it('clears the printed date to null rather than to an empty string', () => {
-    // Measured: `_coerce_optional_text(None)` is `None` while `''` stores the
-    // empty string, and `PATCH {'receipt.date_raw': None}` writes the
-    // correction `('receipt.date_raw', '  14 / 07 / 2026  ', None)`. "Nothing
-    // was printed" and "an empty string was printed" are different facts.
+    // Measured: `_coerce_optional_text(None)` returns `None` while `''` returns
+    // `''`, and `PATCH {'receipt.date_raw': None}` writes the correction
+    // `('receipt.date_raw', '  14 / 07 / 2026  ', None)`. "Nothing was printed"
+    // and "an empty string was printed" are different facts.
+    //
+    // Bound by neither of round 2's date_raw mutations -- measured, N3 and N6
+    // both leave it green. The mutation that does trip it (`buildPatch` dropping
+    // nulls) also trips `carries an explicit null through as a cleared field`
+    // above, so this test adds no coverage that one does not already give.
     const original = fieldsFromReceipt(RECEIPT)
     expect(buildPatch(original, { ...original, 'receipt.date_raw': null })).toEqual({
       'receipt.date_raw': null,

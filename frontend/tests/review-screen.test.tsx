@@ -432,9 +432,12 @@ describe('ReviewScreen: editing and approval', () => {
 
   it('sends a repaired printed date verbatim, and only once it is dirty', async () => {
     // The whole point of `receipt.date_raw` being correctable: the model misread
-    // the printed date, and the reviewer retypes what the paper says. Measured
-    // server side -- `_coerce_optional_text` stores it character for character,
-    // and an unchanged value writes no `corrections` row.
+    // the printed date, and the reviewer retypes what the paper says. What this
+    // test pins is the **request**: the exact characters reach the wire, and a
+    // field nobody touched is not on it at all. Measured through the real PATCH
+    // route, an unchanged value writes no `corrections` row -- but the server
+    // does rewrite some inputs on the way into the column (see
+    // `ReceiptForm`'s docblock), so this is not a claim about what gets stored.
     const fetchMock = stubApi(DRAINING)
     vi.stubGlobal('fetch', fetchMock)
     const user = userEvent.setup()

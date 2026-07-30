@@ -72,22 +72,31 @@ export type SubmitStep = 'patch' | 'complete'
  * is: `tsconfig.app.json` sets `erasableSyntaxOnly: true`, under which the
  * parameter-property form is
  * `error TS1294: This syntax is not allowed when 'erasableSyntaxOnly' is
- * enabled` -- two of them, one per property. (No line:column here on purpose:
- * they point into this very file, so editing this comment would move them and
- * make the citation a lie. The exact positions are in the task report, measured
- * against the file as it shipped.)
+ * enabled` -- two distinct diagnostics, one per property, printed four times
+ * because `tsc -b` compiles this file under both `tsconfig.app.json` and
+ * `tsconfig.test.json`.
+ *
+ * No line:column here, and no test counts either. Both point at moving targets:
+ * the positions are in this very file, so editing this comment shifts them, and
+ * a suite total goes stale the next time anyone adds a test -- as the count that
+ * used to be here did, one commit after it was written. Measured drift for the
+ * positions alone, across successive edits of this block: `(61,5)` -> `(81,5)`
+ * -> `(94,5)`, and again when this very sentence was added. The task report
+ * carries the current pair, dated.
  *
  * **Vitest does not catch this at all.** Measured by rewriting only this class
  * in the parameter-property form and changing nothing else:
  *
- *     $ npx vitest run tests/submit-chain.test.ts   -> 10 passed (10),  exit 0
- *     $ npx vitest run                              -> 125 passed (125), exit 0
- *     $ npm run typecheck                           -> TS1294 x2,       exit 2
+ *     $ npx vitest run tests/submit-chain.test.ts   -> exit 0, every test green
+ *     $ npx vitest run                              -> exit 0, every test green
+ *     $ npm run typecheck                           -> exit 2, TS1294
+ *     $ npm run build                               -> exit 2, TS1294
  *
- * Not "most tests pass" and not one failure in ten -- the whole suite, all
- * fifteen files, is green while the build is broken, because esbuild strips the
- * syntax happily and `npm test` never type-checks. Nothing in the runner can
- * tell you about this class of defect; only `npm run typecheck` can.
+ * Not "most tests pass" and not one failure in ten -- the entire suite, every
+ * file, is green while the build is broken, because esbuild strips the syntax
+ * happily and `npm test` never type-checks. Nothing in the runner can tell you
+ * about this class of defect. `npm run typecheck` and `npm run build` both can,
+ * and they are the only two that can.
  */
 export class SubmitError extends Error {
   readonly step: SubmitStep

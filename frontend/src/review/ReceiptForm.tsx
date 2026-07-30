@@ -18,15 +18,38 @@ import type { FieldMap } from './patch'
  *
  * `receipt.date_raw` is not `<input type="date">` either, and here the reason is
  * sharper: the column holds *what the paper said*, so its normal contents are
- * whatever the model misread -- a date control cannot even display
- * `"1L/O7/2O26"`, which is exactly the value a reviewer opens the field to
- * repair. The server agrees: it is `_coerce_optional_text`, measured to return
- * `'2026-13-45'` for `'2026-13-45'` and `'  1L/O7/2O26  '` for
- * `'  1L/O7/2O26  '`, padding included. Nothing here may trim or reformat it.
+ * whatever the model misread -- and a date control cannot even display
+ * `"1L/O7/2O26"`. Measured: bound to `type="date"`, the input renders
+ * `value === ''` for that string. It does not reformat the value, it loses it,
+ * and the value it loses is exactly the one a reviewer opened the field to
+ * repair. Nothing here may trim or reformat it either.
  *
  * `receipt.date` keeps the same treatment for consistency with its neighbour;
  * not measured: whether `<input type="date">` would round-trip a valid
  * `YYYY-MM-DD` losslessly.
+ *
+ * ## Verbatim ends at the wire
+ *
+ * Every text control here sends exactly what was typed. **It is not what gets
+ * stored.** `_plan_change` runs `redact_pan` over every coerced text value, so
+ * any 13-19 digit run is masked before it reaches the column -- and the
+ * `corrections` row records only the masked form, so the original is not
+ * recoverable from the audit trail either. Measured through the real `PATCH`
+ * route, reading the value back with `GET /receipts/{id}`:
+ *
+ *     sent '4111111111111111'      -> read '************1111'
+ *     sent '4111 1111 1111 1111'   -> read '************1111'   (separators lost)
+ *     sent '378282246310005'       -> read '***********0005'
+ *     sent '411111111111'          -> read '411111111111'       (12 digits, kept)
+ *     sent '  2026-07-30  '        -> read '  2026-07-30  '     (padding kept)
+ *     sent '\t1L/O7/2O26 ~'        -> read '\t1L/O7/2O26 ~'     (tab kept)
+ *
+ * That is SPEC 18 working as intended and it applies to every text path here,
+ * `payment.method` most of all. What it means for this form is narrow but real:
+ * the box may go on showing something the database does not hold. The PATCH
+ * reply is a full `ReceiptDetail` and already carries the stored value, so
+ * echoing it back is possible; whether to is a product decision and is not
+ * implemented.
  */
 const TEXT_FIELDS: ReadonlyArray<readonly [string, string]> = [
   ['merchant.name', 'Merchant'],
