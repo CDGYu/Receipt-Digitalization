@@ -7,6 +7,37 @@ cannot infer — a placeholder left in place costs a round trip).
 Last refreshed: **2026-07-29**, at `feat/review-ui @ dae3e41` (722 tests, ruff
 clean). **Phase 5 is in progress: Task 1 of 5 done.**
 
+> ## ⚠️ STALE AS OF 2026-07-30 — READ THE LEDGER FIRST
+>
+> The body below describes `dae3e41`. Phase 5 has moved a long way since, and
+> **two of its standing rules are now wrong.** It has not been rewritten because
+> the milestone is still in flight; it will be refreshed when Phase 5 closes.
+>
+> **The live source of truth is
+> `.superpowers/sdd/2026-07-29-review-ui/progress.md`.** Read that, then verify
+> against `git log`. Do not trust the state block below.
+>
+> Corrections that matter before you run any command:
+>
+> - **`git push` IS NOW AUTHORIZED for `feat/*` branches** (user decision,
+>   2026-07-30), and everything through the current head is already on GitHub.
+>   The body's "NEVER `git push`" is obsolete. **`main` is still hands-off** —
+>   ask before pushing it. See the `push-policy-feature-branches` memory.
+> - **Tasks 1, 2 and 3 are complete and reviewed**, plus an unplanned backend
+>   task (`receipt_detail` gained `receipt_number`/`txn_time`/`payment_method`,
+>   and `GET /review/next` now resumes the caller's own in-progress task —
+>   **ADR-0016**). Task 4 is in its fix rounds. Task 5 has not started.
+> - **The test counts in the body are wrong.** Python is well past 722, and there
+>   is now a **second suite** — Vitest, in `frontend/`. `npm test` does **not**
+>   type-check: run `npm run typecheck` too, or a type error ships green.
+> - **Task 5's plan step for `.github/workflows/ci.yml` is cut.** That file is
+>   gitignored and Actions does not run; a tracked `scripts/verify.py` replaces
+>   it. There is also **no ASGI entry point anywhere** — `create_app` is a
+>   factory nothing calls — so the e2e needs its own launcher.
+>
+> Everything else in the body — the ADR list, the non-negotiables, the workflow,
+> the four review standards, the blocked-on-the-user items — still holds.
+
 ---
 
 You are continuing work on the **Receipt Digitization System**, a VLM pipeline
