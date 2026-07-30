@@ -12,11 +12,16 @@ dist/
 venv/
 env/
 
-# Node toolchain (the review UI, P5). `dist/` above already covers
-# frontend/dist -- a bare pattern matches at every level -- so only the
-# dependency tree needs its own entry, and `npm install` drops tens of
-# thousands of files there.
+# Node toolchain (the review UI, P5). Every ignore rule in this repo lives in
+# this file -- the `npm create vite` scaffold ships its own frontend/.gitignore
+# that duplicated `node_modules` and `dist`, which only made `git check-ignore`
+# blame the nested copy; it was removed in favour of these entries.
+# `dist/` above already covers frontend/dist (a bare pattern matches at every
+# level), so only the dependency tree needs its own line -- `npm install` drops
+# tens of thousands of files there.
 node_modules/
+dist-ssr/
+*.local
 
 # Test / type / lint caches
 .pytest_cache/

@@ -48,5 +48,11 @@ export default defineConfig({
       API_PREFIXES.map((p) => [p, { target: 'http://localhost:8000', changeOrigin: false }]),
     ),
   },
-  test: { environment: 'jsdom', globals: true },
+  // No `globals: true`. Every test imports `describe`/`it`/`expect` from
+  // 'vitest' explicitly, and no tsconfig lists `vitest/globals` in `types` --
+  // so a test that leaned on the globals would run green under Vitest and fail
+  // `tsc -b`. Dropping it keeps the runner and the compiler telling the same
+  // story. (`@testing-library/react`'s auto-cleanup needs a global `afterEach`,
+  // which is why every component test calls `cleanup()` in its own `afterEach`.)
+  test: { environment: 'jsdom' },
 })

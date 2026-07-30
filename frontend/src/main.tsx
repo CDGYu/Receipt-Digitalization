@@ -1,6 +1,6 @@
-import { StrictMode, useEffect, useState } from 'react'
+import { StrictMode, useSyncExternalStore } from 'react'
 import { createRoot } from 'react-dom/client'
-import { onUnauthorized } from './api/client'
+import { isSignedIn, setSignedIn, subscribe } from './session'
 import { LoginPage } from './login/LoginPage'
 import { ReviewScreen } from './review/ReviewScreen'
 
@@ -14,16 +14,14 @@ import { ReviewScreen } from './review/ReviewScreen'
  * receipt data -- an id, a merchant name, an uploaded filename -- is not, so it
  * belongs in a query string, not in a path segment.
  *
- * The initial guess is "signed in unless the URL says otherwise", and the 401
- * handler corrects it: the session cookie is HttpOnly-by-nature server state,
- * so the page cannot read it and must learn from a rejected request instead.
+ * Session state lives in `./session` rather than in this component's `useState`,
+ * and the 401 handler is registered when that module is *imported* -- before
+ * `createRoot` runs, and so before any child effect can fire a request. An
+ * effect here was too late: React flushes child effects first. See
+ * `session.ts`'s docstring.
  */
 function App() {
-  const [signedIn, setSignedIn] = useState(window.location.pathname !== '/app/login')
-
-  useEffect(() => {
-    onUnauthorized(() => setSignedIn(false))
-  }, [])
+  const signedIn = useSyncExternalStore(subscribe, isSignedIn)
 
   if (!signedIn) {
     return <LoginPage onSignedIn={() => setSignedIn(true)} />
