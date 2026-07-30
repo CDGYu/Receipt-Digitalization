@@ -24,10 +24,15 @@ import { describe, expect, it } from 'vitest'
  * Modelled on `tests/test_no_float_in_money_path.py`, including the thing that
  * test gets right and most guards get wrong: **it proves it is not passing
  * vacuously.** A textual scan that silently matched nothing -- wrong directory,
- * over-eager comment stripping, a regex that never fires -- would be green and
- * worthless. The checks below establish, in order, that the scan reads real
- * files, that the stripper keeps real code, that every pattern can fire, and
- * that none of them fires on legitimate integer work.
+ * a stripper that ate the file, a regex that never fires, an allowlist that
+ * excuses everything -- would be green and worthless. The checks in the first
+ * `describe` establish that the scan reads real files, that the stripper keeps
+ * real code and cannot run past a newline, that every pattern can fire, that
+ * none of them fires on legitimate integer work, and that the allowlist excuses
+ * only the exact file and pattern named.
+ *
+ * Every one of those checks exists because something got past an earlier version
+ * of this file. See the "Fix round 2" section of the task report.
  */
 
 const SRC = fileURLToPath(new URL('../src', import.meta.url))
@@ -49,6 +54,43 @@ interface Banned {
   readonly scan: 'code' | 'code+strings'
   readonly why: string
 }
+
+/** Every token after which a `+` **cannot** be the binary operator.
+ *
+ * A `+` is unary exactly when what precedes it is an operator, an opening
+ * delimiter, a separator, or a keyword that starts an expression. So the rule is
+ * sound in one direction by construction: `a + b`, `item.position + 1`,
+ * `items[i] + items[j]` and `f(a) + g(b)` can never match, because an
+ * identifier, a `)` and a `]` are all absent from this set.
+ *
+ * `(?<![-+])` on the single-character alternative is what keeps `a++ + b` and
+ * `a-- + b` out: without it the second `+` of `++` reads as an operator context
+ * for the third, and the binary `+` gets flagged. `(?!readonly\b)` excludes the
+ * mapped-type modifier `{ +readonly [K in keyof T]: T[K] }`, which is valid
+ * TypeScript and not arithmetic at all.
+ *
+ * **What is deliberately NOT in the set, and why** -- an accurate narrow claim
+ * beats a confident broad one:
+ *
+ * * `>` -- `a > +b` is a genuine unary position, but `>` is also the end of a
+ *   JSX opening tag, so `<span>+VAT</span>` (a literal plus in JSX text) would
+ *   be flagged. `=>` is included as its own two-character alternative, which is
+ *   the case that actually matters. Missing: `a > +b`.
+ * * `}` and `)` and `]` -- `} +x` at statement position is unary, but these also
+ *   close object literals, calls and index expressions, where `+` is binary
+ *   (`f(a) + 1`). Not separable textually. Missing: `+x` as the first statement
+ *   after a block.
+ * * start-of-line -- `^` with the `m` flag would catch `+x` at statement
+ *   position, but it would also flag the continuation line of a multi-line
+ *   binary expression (`const t = a\n  + b`), which is a formatting style, not a
+ *   bug. `;` is in the set instead, which covers `;\n  +x` soundly. Missing:
+ *   `+x` opening a file, or after an ASI line break with no semicolon.
+ */
+const UNARY_PLUS_CONTEXT = /(?:=>|&&|\|\||\?\?|(?<![-+])[-+*/%!~^&|<=([{,;:?]|\b(?:return|typeof|void|delete|await|yield|throw|case|in|of)\b)/
+
+const UNARY_PLUS = new RegExp(
+  `${UNARY_PLUS_CONTEXT.source}\\s*\\+\\s*(?!readonly\\b)[A-Za-z_$(]`,
+)
 
 const BANNED: readonly Banned[] = [
   {
@@ -76,31 +118,57 @@ const BANNED: readonly Banned[] = [
     why: 'toFixed rounds a float; the API already sent the exact string to display',
   },
   {
-    // Sound but deliberately incomplete: only positions where a `+` CANNOT be
-    // the binary operator. `a + b` is never matched, so legitimate integer
-    // arithmetic on `position`/indices/counts is safe. `+x` after `=>`, `:` or
-    // `?` is missed -- text cannot see the grammar, and a guard that guessed
-    // would fire on `item.position + 1`, which is exactly the false positive
-    // that teaches implementers to route around it.
     name: 'unary + (numeric coercion)',
-    pattern: /(?:[(,={[]|\breturn\b)\s*\+\s*[A-Za-z_$(]/,
+    pattern: UNARY_PLUS,
     scan: 'code',
     why: '+money is Number(money) with less punctuation',
   },
   {
-    // Beyond the four tokens above, and flagged as such in the task report:
-    // ADR-0015 bans `<input type="number">` on money fields in the same breath,
-    // for the same reason (`valueAsNumber` and the browser's own reformatting).
-    // Banned everywhere rather than "on money fields" because text cannot tell
-    // which field an input is bound to. `position` is the one genuinely numeric
-    // correctable field (`_LINE_ITEM_FIELDS` in persist/repository.py), so an
-    // input for it belongs in ALLOWLIST with that reason written down.
+    // Beyond the tokens above, and flagged as such in the task report: ADR-0015
+    // bans `<input type="number">` on money fields in the same breath, for the
+    // same reason. Banned everywhere rather than "on money fields" because text
+    // cannot tell which field an input is bound to. `position` is the one
+    // genuinely numeric correctable field (`_LINE_ITEM_FIELDS` in
+    // persist/repository.py), so an input for it belongs in ALLOWLIST with that
+    // reason written down.
+    //
+    // `type=` with **no whitespace around the `=`** is what makes this a JSX
+    // attribute rather than an assignment: `const type = 'number'` and a prop
+    // default `function F({ type = 'number' })` both space the `=` and are
+    // therefore not flagged. The cost is that the unconventional
+    // `<input type = "number">` is missed.
     name: 'input type="number"',
-    pattern: /type\s*=\s*(?:"number"|'number'|\{\s*['"]number['"]\s*\})/,
+    pattern: /(?:^|[\s{])type=(?:"number"|'number'|\{\s*['"]number['"]\s*\})/,
     scan: 'code+strings',
-    why: 'valueAsNumber and the browser\'s reformatting are the float path (ADR-0015); use type="text" inputMode="decimal"',
+    why: 'the browser reformats the value and rounds it (ADR-0015); use type="text" inputMode="decimal"',
+  },
+  {
+    // The second door into the same room. ADR-0015 names `valueAsNumber` as the
+    // mechanism `type="number"` exposes -- but it is a property of every
+    // HTMLInputElement, so `e.currentTarget.valueAsNumber` needs no
+    // `type="number"` attribute to compile, and banning only the attribute
+    // leaves it open. It returns a float or NaN; there is no non-float use.
+    //
+    // `Intl.NumberFormat` is deliberately NOT banned. Its `format()` accepts a
+    // *string* and preserves the exact decimal (verified by execution:
+    // `format('12345678901234567890.99')` gives "$12,345,678,901,234,567,890.99"
+    // while the number form gives "...567,000.00"), so it is a correct display
+    // path, not a float path -- and passing it `Number(m)` instead is already
+    // caught by the `Number(` rule above. It does round to the currency's
+    // fraction digits (`format('19.999')` gives "$20.00"), so it is for display
+    // only and must never feed a value back into an edit field.
+    name: 'valueAsNumber',
+    pattern: /\bvalueAsNumber\b/,
+    scan: 'code',
+    why: 'valueAsNumber is a float or NaN -- read .value and keep the string (ADR-0015)',
   },
 ]
+
+interface AllowlistEntry {
+  readonly file: string
+  readonly name: string
+  readonly why: string
+}
 
 /** Deliberate exceptions, each with the reason written down.
  *
@@ -109,8 +177,13 @@ const BANNED: readonly Banned[] = [
  * is justified when the value provably is not money and never becomes money:
  * an array index, a `position`, a page size. It is NOT justified for "the
  * number happens to be right in this case".
+ *
+ * This is the one mechanism that can silently defang the whole guard, which is
+ * why `it('honours the allowlist, and only for the exact file and pattern')`
+ * exists: an over-broad entry has to be a visible code change here, and the
+ * matching itself is pinned in both directions.
  */
-const ALLOWLIST: readonly { file: string; name: string; why: string }[] = []
+const ALLOWLIST: readonly AllowlistEntry[] = []
 
 function sourceFiles(dir: string): string[] {
   const found: string[] = []
@@ -125,6 +198,33 @@ function sourceFiles(dir: string): string[] {
   return found.sort()
 }
 
+/** The index of the quote that closes the literal opened at `start`, or -1.
+ *
+ * **Bounded at a newline**, which is the whole point. A JavaScript string
+ * literal cannot span a raw line break, so a quote with no partner before the
+ * next newline is not opening a string at all -- it is an apostrophe in JSX
+ * prose (`<p>You're signed out</p>`) or a quote inside a regex literal
+ * (`/['"]/`). A backslash still consumes the following character, so a genuine
+ * `\`-continued literal is handled.
+ */
+function closingQuoteOnSameLine(source: string, start: number): number {
+  const quote = source[start]
+  for (let i = start + 1; i < source.length; i++) {
+    const c = source[i]
+    if (c === '\\') {
+      i++
+      continue
+    }
+    if (c === '\n') {
+      return -1
+    }
+    if (c === quote) {
+      return i
+    }
+  }
+  return -1
+}
+
 /** Remove comments, and optionally quoted strings too.
  *
  * String awareness is **not** optional even when `dropStrings` is false: the
@@ -137,10 +237,19 @@ function sourceFiles(dir: string): string[] {
  * literal text inside a backtick string would be flagged; that is what
  * ALLOWLIST is for, and it has never happened.
  *
- * Known limitation: a regex literal containing a quote character (`/['"]/`)
- * would be mis-read as the start of a string. There are none in `src` today,
- * and `it('strips no more than it should')` below fails loudly if the scanner
- * ever runs away and swallows a file.
+ * **Residual limitation, stated exactly.** Because a literal is bounded at a
+ * newline, a stray quote can now cost at most the remainder of its own line, and
+ * only when a *second* quote of the same kind appears on that line: in
+ * `<p>Don't worry, it's fine</p>` the run between the two apostrophes is treated
+ * as a string and dropped from the `'code'` view, so a banned token written
+ * between them on that one line would be missed. The `'code+strings'` view still
+ * sees it, so `type="number"` and anything else scanned there is unaffected.
+ * There is no ratio heuristic protecting this and there never was -- an earlier
+ * version of this docstring claimed `it('strips no more than it should')` caught
+ * a runaway scanner, which was measured to be false (a whole-file runaway left
+ * the ratio at 0.457, comfortably above the 0.15 threshold). What actually
+ * protects the file now is the newline bound itself, pinned by
+ * `it('treats a quote with no partner on its line as ordinary text')`.
  */
 export function strip(source: string, dropStrings: boolean): string {
   let out = ''
@@ -159,17 +268,17 @@ export function strip(source: string, dropStrings: boolean): string {
       continue
     }
     if (c === '"' || c === "'") {
-      const quote = c
-      const start = i
-      i++
-      while (i < source.length && source[i] !== quote) {
-        if (source[i] === '\\') i++
+      const end = closingQuoteOnSameLine(source, i)
+      if (end === -1) {
+        // Not a string literal. Emit it as the ordinary character it is.
+        out += c
         i++
+        continue
       }
-      i++
       // When dropping: a placeholder, so the tokens either side of the literal
       // cannot fuse into a new one.
-      out += dropStrings ? '""' : source.slice(start, Math.min(i, source.length))
+      out += dropStrings ? '""' : source.slice(i, end + 1)
+      i = end + 1
       continue
     }
     out += c
@@ -191,6 +300,24 @@ function violationsIn(code: string): string[] {
   return BANNED.filter((banned) => banned.pattern.test(views[banned.scan])).map(
     (banned) => banned.name,
   )
+}
+
+/** The unexcused violations in one file's source. Exported so the allowlist
+ *  logic can be tested against synthetic input -- the real tree is clean, so
+ *  the guard below can never exercise the excusing branch at all. */
+export function offendersFor(
+  file: string,
+  source: string,
+  allowlist: readonly AllowlistEntry[],
+): string[] {
+  const offenders: string[] = []
+  for (const name of violationsIn(source)) {
+    const excused = allowlist.some((entry) => entry.file === file && entry.name === name)
+    if (!excused) {
+      offenders.push(`${file}: ${name} -- ${BANNED.find((b) => b.name === name)?.why}`)
+    }
+  }
+  return offenders
 }
 
 const FILES = sourceFiles(SRC)
@@ -248,9 +375,38 @@ describe('the guard is not passing vacuously', () => {
     expect(strip("const t = 'http://x'\nconst n = Number(x)", true)).toContain('Number(x)')
   })
 
+  it('treats a quote with no partner on its line as ordinary text', () => {
+    // A string literal cannot span a raw newline, so an unpartnered quote is an
+    // apostrophe or part of a regex -- not the start of a literal. Before the
+    // newline bound it opened a "string" that ran to end of file.
+    expect(strip("<p>You're signed out</p>\nconst n = Number(x)", true)).toContain('Number(x)')
+    expect(strip('const re = /[\'"]/\nconst n = Number(x)', true)).toContain('Number(x)')
+    expect(strip('const unterminated = "oops\nconst n = Number(x)', true)).toContain('Number(x)')
+    // ...while a properly quoted string containing an apostrophe is still a string.
+    expect(strip('const msg = "Don\'t"\nconst n = Number(x)', true)).not.toContain('Don')
+    expect(strip('const msg = "Don\'t"\nconst n = Number(x)', true)).toContain('Number(x)')
+  })
+
+  it('does not let an apostrophe in JSX prose hide a violation below it', () => {
+    // The measured defect, end to end through violationsIn rather than through
+    // `strip` alone: one apostrophe used to disarm all five 'code' patterns for
+    // the remainder of the file.
+    const component = [
+      'export function Banner({ total }: { total: string }) {',
+      "  return <p>You're signed out. Total was {Number(total).toFixed(2)}</p>",
+      '}',
+    ].join('\n')
+    expect(violationsIn(component)).toEqual(
+      expect.arrayContaining(['Number(', '.toFixed(']),
+    )
+  })
+
   it('strips no more than it should', () => {
-    // A runaway scanner (an unterminated quote, a mis-read regex literal) would
-    // swallow the rest of a file and make every pattern silently un-matchable.
+    // Catches a stripper that collapses a file wholesale -- the R6f shape, where
+    // `strip` returns nothing at all. It does NOT catch a partial runaway; the
+    // newline bound in `closingQuoteOnSameLine` is what handles that, and the
+    // test above is what pins it. Recording the division of labour because an
+    // earlier comment credited this test with both.
     for (const file of FILES) {
       const source = readFileSync(file, 'utf8')
       const stripped = strip(source, true)
@@ -270,13 +426,43 @@ describe('the guard is not passing vacuously', () => {
       ['parseFloat(', 'const n = parseFloat(receipt.totals.total)'],
       ['parseInt(', 'const n = parseInt(item.qty)'],
       ['.toFixed(', 'const shown = total.toFixed(2)'],
+      ['.toFixed(', 'const shown = `$${total.toFixed(2)}`'],
+      ['valueAsNumber', 'const n = e.currentTarget.valueAsNumber'],
+      ['input type="number"', '<input type="number" value={total} />'],
+      ['input type="number"', '<input type={"number"} value={total} />'],
+      ['input type="number"', '<input\n  type="number"\n  value={total}\n/>'],
+      // Unary +: every context in UNARY_PLUS_CONTEXT, and the two realistic
+      // shapes the re-review measured as silent before this round.
       ['unary + (numeric coercion)', 'const n = +receipt.totals.total'],
       ['unary + (numeric coercion)', 'sum(+a, b)'],
       ['unary + (numeric coercion)', 'return +total'],
       ['unary + (numeric coercion)', '<td>{+total}</td>'],
-      ['.toFixed(', 'const shown = `$${total.toFixed(2)}`'],
-      ['input type="number"', '<input type="number" value={total} />'],
-      ['input type="number"', '<input type={"number"} value={total} />'],
+      ['unary + (numeric coercion)', 'const o = { total: +x }'],
+      ['unary + (numeric coercion)', 'const v = cond ? +a : 0'],
+      ['unary + (numeric coercion)', 'const f = () => +x'],
+      ['unary + (numeric coercion)', 'const d = a - +x'],
+      ['unary + (numeric coercion)', 'if (!+x) return'],
+      ['unary + (numeric coercion)', 'const v = ok && +x'],
+      ['unary + (numeric coercion)', 'const v = cached ?? +x'],
+      ['unary + (numeric coercion)', 'if (limit < +x) return'],
+      ['unary + (numeric coercion)', 'doThing();\n  +x'],
+      ['unary + (numeric coercion)', 'const arr = [+x, y]'],
+      ['unary + (numeric coercion)', 'const t = typeof +x'],
+      ['unary + (numeric coercion)', 'const p = a * +x'],
+      ['unary + (numeric coercion)', 'const q = a / +x'],
+      ['unary + (numeric coercion)', 'const r = a % +x'],
+      ['unary + (numeric coercion)', 'const s = ~+x'],
+      // S6 from the re-review: the "sort by total silently lies" bug that
+      // money.test.ts warns about, written the way someone would actually write it.
+      [
+        'unary + (numeric coercion)',
+        'rows.sort((a, b) => +a.totals.total - +b.totals.total)',
+      ],
+      // S7 from the re-review: a PATCH body built by coercion.
+      [
+        'unary + (numeric coercion)',
+        'return { totals: { total: +receipt.totals.total } }',
+      ],
     ] as const
     for (const [name, code] of offenders) {
       expect(violationsIn(code), `should have caught: ${code}`).toContain(name)
@@ -300,10 +486,54 @@ describe('the guard is not passing vacuously', () => {
       'const swapped = a === b ? a : b',
       'let count = 0; count += 1',
       'const flags = { readonly: true }',
+      // Binary + reached through the operator contexts, which must stay clean.
+      'const total = subtotal + tax + tip',
+      'const n = items[i] + items[j]',
+      'const n = f(a) + g(b)',
+      'const n = a-- + b',
+      'const n = a++ + b',
+      'const n = (a) + (b)',
+      // Mapped-type modifier: valid TypeScript, not arithmetic.
+      'type Frozen<T> = { +readonly [K in keyof T]: T[K] }',
+      // The type= false positives the re-review measured.
+      "const type = 'number'",
+      "function F({ type = 'number' }) { return type }",
+      'const inputType = "number"',
+      // A literal plus in JSX prose, which is why `>` is not a unary context.
+      '<span>+VAT included</span>',
     ]
     for (const code of legitimate) {
       expect(violationsIn(code), `false positive on: ${code}`).toEqual([])
     }
+  })
+
+  it('honours the allowlist, and only for the exact file and pattern', () => {
+    // The allowlist is the one mechanism that can silently defang the guard, and
+    // the real tree is clean, so `finds none` below never reaches the excusing
+    // branch. Forcing `excused = true` used to leave all seven tests green even
+    // with a real violation present in `src`.
+    const violation = 'const n = Number(receipt.totals.total)'
+    const excuse = (file: string, name: string): AllowlistEntry[] => [
+      { file, name, why: 'test fixture' },
+    ]
+
+    // Not excused at all: the violation must be reported.
+    expect(offendersFor('a.tsx', violation, [])).toHaveLength(1)
+
+    // Excused by an exact match: reported no longer.
+    expect(offendersFor('a.tsx', violation, excuse('a.tsx', 'Number('))).toEqual([])
+
+    // ...but only exactly. A different file or a different pattern must not
+    // excuse it, or one entry would quietly cover the whole tree.
+    expect(offendersFor('a.tsx', violation, excuse('b.tsx', 'Number('))).toHaveLength(1)
+    expect(offendersFor('a.tsx', violation, excuse('a.tsx', 'parseInt('))).toHaveLength(1)
+
+    // And the reported string names the file, the pattern, and the reason, so a
+    // failure tells the next author what to do about it.
+    const [reported] = offendersFor('a.tsx', violation, [])
+    expect(reported).toContain('a.tsx')
+    expect(reported).toContain('Number(')
+    expect(reported).toContain('trailing zeros')
   })
 })
 
@@ -313,17 +543,13 @@ describe('the guard is not passing vacuously', () => {
 
 describe('no float coercion in frontend/src', () => {
   it('finds none', () => {
-    const offenders: string[] = []
-    for (const file of FILES) {
-      const rel = relative(SRC, file).replace(/\\/g, '/')
-      for (const name of violationsIn(readFileSync(file, 'utf8'))) {
-        const excused = ALLOWLIST.some((a) => a.file === rel && a.name === name)
-        if (!excused) {
-          const why = BANNED.find((b) => b.name === name)?.why
-          offenders.push(`${rel}: ${name} -- ${why}`)
-        }
-      }
-    }
+    const offenders = FILES.flatMap((file) =>
+      offendersFor(
+        relative(SRC, file).replace(/\\/g, '/'),
+        readFileSync(file, 'utf8'),
+        ALLOWLIST,
+      ),
+    )
     expect(
       offenders,
       'money must stay a string end to end (ADR-0001). If one of these is ' +
