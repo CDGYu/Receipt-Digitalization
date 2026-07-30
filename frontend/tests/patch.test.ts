@@ -16,7 +16,10 @@ const RECEIPT: ReceiptDetail = {
   merchant_name_raw: 'METRO OIL',
   receipt_number: 'INV-88213',
   txn_date: '2026-07-14',
-  date_raw: '14/07/2026',
+  // Deliberately garbled, with padding. `date_raw` is whatever the model read
+  // off the paper -- an OCR misread is the normal case, not the exotic one, and
+  // it is exactly what a reviewer opens this field to fix.
+  date_raw: "  1L/O7/2O26 '~ ",
   txn_time: '14:30:45',
   currency: 'USD',
   created_at: '2026-07-14T09:31:02+00:00',
@@ -122,7 +125,7 @@ describe('fieldsFromReceipt', () => {
       'merchant.name': 'METRO OIL', // <- merchant_name_raw
       'receipt.number': 'INV-88213', // <- receipt_number
       'receipt.date': '2026-07-14', // <- txn_date
-      'receipt.date_raw': '14/07/2026', // <- date_raw
+      'receipt.date_raw': "  1L/O7/2O26 '~ ", // <- date_raw, verbatim
       'receipt.time': '14:30:45', // <- txn_time
       'receipt.currency': 'USD', // <- currency
       'totals.subtotal': '1000.00',
@@ -221,5 +224,33 @@ describe('fieldsFromReceipt', () => {
     expect(buildPatch(original, fieldsFromReceipt(RECEIPT))).toEqual({})
     expect(original['receipt.time']).toBe('14:30:45')
     expect(original['totals.subtotal']).toBe('1000.00')
+    // A garbled `date_raw` is still an untouched one. Trimming it, or "helpfully"
+    // normalising it on the way in, would put it in the patch and book a
+    // correction against a field the reviewer never opened.
+    expect(original['receipt.date_raw']).toBe("  1L/O7/2O26 '~ ")
+  })
+
+  it('carries an edited printed date out verbatim, whitespace and all', () => {
+    // `receipt.date_raw` is `_coerce_optional_text` (measured: it returns
+    // `'  1L/O7/2O26  '` for `'  1L/O7/2O26  '`, `'2026-13-45'` for
+    // `'2026-13-45'`), so whatever a reviewer types is stored character for
+    // character. Nothing in this client may trim, pad, or reformat it -- the
+    // point of the column is to record what the paper actually said.
+    const original = fieldsFromReceipt(RECEIPT)
+    const edited = { ...original, 'receipt.date_raw': '  14 / 07 / 2026  ' }
+    expect(buildPatch(original, edited)).toEqual({
+      'receipt.date_raw': '  14 / 07 / 2026  ',
+    })
+  })
+
+  it('clears the printed date to null rather than to an empty string', () => {
+    // Measured: `_coerce_optional_text(None)` is `None` while `''` stores the
+    // empty string, and `PATCH {'receipt.date_raw': None}` writes the
+    // correction `('receipt.date_raw', '  14 / 07 / 2026  ', None)`. "Nothing
+    // was printed" and "an empty string was printed" are different facts.
+    const original = fieldsFromReceipt(RECEIPT)
+    expect(buildPatch(original, { ...original, 'receipt.date_raw': null })).toEqual({
+      'receipt.date_raw': null,
+    })
   })
 })

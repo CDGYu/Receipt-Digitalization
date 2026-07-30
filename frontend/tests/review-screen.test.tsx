@@ -109,7 +109,9 @@ const RECEIPT: ReceiptDetail = {
   merchant_name_raw: 'Whole Foods Market',
   receipt_number: 'WF-100244',
   txn_date: '2026-07-14',
-  date_raw: '14/07/2026',
+  // Garbled, so `confirms an untouched receipt with an empty patch` also proves
+  // that a printed date nobody edited stays out of the patch.
+  date_raw: "  1L/O7/2O26 '~ ",
   // `HH:MM:SS`, the way `_iso_time` renders it. See `ReceiptDetail.txn_time`.
   txn_time: '09:31:02',
   currency: 'USD',
@@ -426,6 +428,26 @@ describe('ReviewScreen: editing and approval', () => {
     await user.click(screen.getByRole('button', { name: /approve/i }))
 
     expect((await screen.findByRole('alert')).textContent).toMatch(/could not be submitted/i)
+  })
+
+  it('sends a repaired printed date verbatim, and only once it is dirty', async () => {
+    // The whole point of `receipt.date_raw` being correctable: the model misread
+    // the printed date, and the reviewer retypes what the paper says. Measured
+    // server side -- `_coerce_optional_text` stores it character for character,
+    // and an unchanged value writes no `corrections` row.
+    const fetchMock = stubApi(DRAINING)
+    vi.stubGlobal('fetch', fetchMock)
+    const user = userEvent.setup()
+
+    render(<ReviewScreen />)
+    await screen.findByRole('heading', { level: 1, name: 'Whole Foods Market' })
+    const printed = screen.getByLabelText('Printed date')
+    await user.clear(printed)
+    await user.type(printed, '14 JUL 2026')
+    await user.click(screen.getByRole('button', { name: /approve/i }))
+
+    await screen.findByText(/review queue is empty/i)
+    expect(patchBody(fetchMock)).toEqual({ 'receipt.date_raw': '14 JUL 2026' })
   })
 
   it('edits a line item by its position and leaves the rest of the row alone', async () => {

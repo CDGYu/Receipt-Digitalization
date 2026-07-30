@@ -43,7 +43,9 @@ const RECEIPT: ReceiptDetail = {
   merchant_name_raw: 'METRO OIL',
   receipt_number: 'INV-88213',
   txn_date: '2026-07-14',
-  date_raw: '14/07/2026',
+  // Garbled on purpose: an OCR misread of the printed date is the case this
+  // field exists to let a reviewer fix.
+  date_raw: "  1L/O7/2O26 '~ ",
   txn_time: '14:30:45',
   currency: 'USD',
   created_at: '2026-07-14T09:31:02+00:00',
@@ -98,6 +100,7 @@ describe('ReceiptForm', () => {
     expect(shown('Merchant')).toBe('METRO OIL')
     expect(shown('Receipt number')).toBe('INV-88213')
     expect(shown('Date (ISO)')).toBe('2026-07-14')
+    expect(shown('Printed date')).toBe("  1L/O7/2O26 '~ ")
     expect(shown('Time')).toBe('14:30:45')
     expect(shown('Currency')).toBe('USD')
     expect(shown('Payment method')).toBe('VISA')
@@ -165,20 +168,40 @@ describe('ReceiptForm', () => {
     expect(onChange).toHaveBeenLastCalledWith('meta.is_handwritten', 'false')
   })
 
-  it('shows what was printed on the slip without offering it as an edit', () => {
-    // `receipt.date_raw` is what the machine read off the paper. It is the
-    // evidence a reviewer checks `receipt.date` against, so it is displayed --
-    // and it is not a control, so nothing can accidentally overwrite it.
+  it('offers the printed date as free text, never as a date control', () => {
+    // `receipt.date_raw` is what the machine read off the paper, and the model
+    // misreads it -- so it is correctable. It must stay free text:
+    // `<input type="date">` refuses to display anything that is not a valid
+    // `YYYY-MM-DD`, which is precisely the value a reviewer opens this field to
+    // repair. Server side it is `_coerce_optional_text` (measured:
+    // `'2026-13-45'` in, `'2026-13-45'` out), so free text is what the API
+    // expects.
     renderForm()
-    expect(screen.getByText(/14\/07\/2026/)).toBeDefined()
-    expect(screen.queryByLabelText(/printed date/i)).toBeNull()
+    const printed = screen.getByLabelText('Printed date') as HTMLInputElement
+    expect(printed.type).toBe('text')
+    expect(printed.value).toBe("  1L/O7/2O26 '~ ")
   })
 
-  it('has no control that is not one of the sixteen it offers', () => {
+  it('sends the corrected printed date verbatim, including its spacing', async () => {
+    const onChange = renderForm()
+    const printed = screen.getByLabelText('Printed date')
+    await userEvent.clear(printed)
+    await userEvent.type(printed, ' 14 / 07 / 2026 ')
+    expect(onChange).toHaveBeenLastCalledWith('receipt.date_raw', ' 14 / 07 / 2026 ')
+  })
+
+  it('clears the printed date to null, not to an empty string', async () => {
+    const onChange = renderForm()
+    await userEvent.clear(screen.getByLabelText('Printed date'))
+    expect(onChange).toHaveBeenLastCalledWith('receipt.date_raw', null)
+  })
+
+  it('has no control that is not one of the seventeen it offers', () => {
     // An absence assertion: an eighteenth path would be a 400 naming it, and a
-    // stray control is how one gets added by accident.
+    // stray control is how one gets added by accident. 8 text + 6 money = 14
+    // textboxes, plus the legibility select and the two booleans.
     renderForm()
-    expect(screen.getAllByRole('textbox')).toHaveLength(13)
+    expect(screen.getAllByRole('textbox')).toHaveLength(14)
     expect(screen.getAllByRole('checkbox')).toHaveLength(2)
     expect(screen.getAllByRole('combobox')).toHaveLength(1)
   })
