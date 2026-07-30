@@ -102,8 +102,12 @@ def _resume_stmt(assignee: str) -> Select[tuple[ReviewTask]]:
     each poll. **``priority`` is deliberately absent from the order** -- these
     rows are already claimed, so §12's queue ranking has nothing left to say
     about them, and "the one I have been holding longest" is the pick a
-    reviewer holding several stranded tasks actually wants. A user holds more
-    than one only because tasks stranded before ADR-0016 still exist.
+    reviewer holding several stranded tasks actually wants.
+
+    **A user genuinely can hold several, which is why this is ordered and
+    ``limit(1)``-ed rather than asserted to be unique.** Two sources: tasks
+    stranded before ADR-0016, and concurrent polls from one user (see
+    :func:`next_task` on the window that allows it).
 
     **No locking clause, on purpose.** ``FOR UPDATE SKIP LOCKED`` here would
     reintroduce the very defect this query removes: a second concurrent request
@@ -237,9 +241,30 @@ def next_task(session: Session, assignee: str) -> ReviewTask | None:
 
     **Resume outranks priority.** A held task comes back even when a
     priority-0 task is waiting; §12's ranking orders the queue, and a claimed
-    task has already left it. Among several held tasks (possible only for
-    claims stranded before this change) the earliest ``opened_at`` wins -- see
-    :func:`_resume_stmt`, which also explains why that query takes no lock.
+    task has already left it. Among several held tasks the earliest
+    ``opened_at`` wins -- see :func:`_resume_stmt`, which also explains why
+    that query takes no lock.
+
+    **The guarantee is per *sequential* caller, not absolute.** A reviewer
+    whose previous poll committed before the next one begins holds at most one
+    task. Two *overlapping* polls from one user can still both claim, because
+    the second one's resume query cannot see the first one's uncommitted
+    write: measured on a file-backed SQLite database, with session A's claim
+    flushed but not committed, ``session_b.scalars(_resume_stmt("ada")).first()``
+    returned ``None``, so B falls through to the claim path. ``GET
+    /review/next`` is a sync ``def``, so Starlette serves it from a threadpool
+    and two tabs, a double-click, or a double-invoked effect genuinely
+    overlap. This is **not** true of a poll that overlaps an already-committed
+    claim: two concurrent calls then both resume the same row (measured -- both
+    returned the held task, neither claimed a second), which is precisely what
+    a locking clause here would break.
+
+    **The overflow is self-correcting, which is why it is documented rather
+    than fixed.** A user left holding several gets them back one per poll,
+    oldest first, and nothing is stranded -- measured: a user holding two
+    resumed the 09:00 task, then the 12:00 task after it closed, then ``None``.
+    That is why :func:`_resume_stmt` is ordered and ``limit(1)``-ed instead of
+    assuming a single row.
 
     The claim path is unchanged and keeps ADR-0008's guarantee: the row is
     selected ``FOR UPDATE SKIP LOCKED`` where the backend supports it (see

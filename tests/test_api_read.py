@@ -37,6 +37,7 @@ pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient  # noqa: E402
 
 from config.settings import Settings  # noqa: E402
+from receipts.extract.schema import Legibility  # noqa: E402
 from receipts.ingest.storage import LocalStorage  # noqa: E402
 from receipts.persist.models import Base, Receipt, ValidationFinding  # noqa: E402
 from receipts.persist.repository import _RECEIPT_FIELDS  # noqa: E402
@@ -81,16 +82,32 @@ def _seed(session_factory) -> None:
                     {"reason": "an ERROR finding", "penalty": "-0.350"},
                     {"reason": "a WARN finding", "penalty": "-0.080"},
                 ],
+                # Every correctable column carries a **distinct** value, and
+                # deliberately so: ``test_every_correctable_receipt_column_is_
+                # readable_in_the_detail`` compares the value at each declared
+                # path against the column it names, and two columns sharing a
+                # value (or both being NULL) would let a wrong declared path
+                # pass. See that test.
                 merchant_name_raw="TOTAL WINE",
                 receipt_number="OR-2026-0042",
                 txn_date=date(2026, 7, 2),
+                date_raw="02/07/2026",
                 # Seconds on purpose: a ``%H:%M`` rendering would drop them,
                 # and ``receipt.time`` is a correctable path, so what the API
                 # renders has to be what PATCH takes back.
                 txn_time=time(14, 30, 45),
                 currency="USD",
+                subtotal=Decimal("900"),
+                tax_total=Decimal("80"),
+                discount_total=Decimal("5"),
                 total=Decimal("1000"),
+                tender_amount=Decimal("1100"),
+                change_amount=Decimal("100"),
                 payment_method="VISA",
+                card_last4="4242",
+                is_handwritten=True,
+                legibility=Legibility.FAIR,
+                receipt_is_inconsistent=True,
                 image_key="receipts/2026/07/b/original.jpg",
                 image_phash="",
             )
@@ -319,7 +336,28 @@ def _at(body: dict, path: tuple[str, ...]) -> object:
     return cursor
 
 
-def test_every_correctable_receipt_column_is_readable_in_the_detail(reviewer_client, receipt_id):
+def _rendered(value: object) -> object:
+    """A column value as ``receipt_detail`` is entitled to render it.
+
+    The serializer applies exactly three transformations on the correctable
+    columns -- ``money()`` (``Decimal`` -> ``str``, ADR-0001), ``_iso_date`` /
+    ``_iso_time`` (``isoformat()``), and ``.value`` on the ``Legibility`` enum
+    -- and passes text and booleans through untouched. Mirroring only those
+    three keeps this a check on *which column reached which key*, not a second
+    copy of the serializer.
+    """
+    if isinstance(value, Legibility):
+        return value.value
+    if isinstance(value, (date, time)):
+        return value.isoformat()
+    if isinstance(value, Decimal):
+        return str(value)
+    return value
+
+
+def test_every_correctable_receipt_column_is_readable_in_the_detail(
+    reviewer_client, session_factory, receipt_id
+):
     """A field a reviewer may overwrite is a field they must first be able to see.
 
     ``_RECEIPT_FIELDS`` (the closed map ``apply_corrections`` resolves a patch
@@ -330,19 +368,36 @@ def test_every_correctable_receipt_column_is_readable_in_the_detail(reviewer_cli
     reviewer could replace what the machine read without ever being shown it.
     This test is that binding, and it fails on the next unpaired addition
     rather than on the next reviewer to notice.
+
+    **The value is asserted, not merely the key's presence** (fix round 1).
+    Presence alone made the guidance message below satisfiable *incorrectly*:
+    declaring a new column at some path that merely happens to exist passed.
+    Measured -- an 18th correctable path (``image_phash``) declared as
+    ``("currency",)`` gave ``50 passed, 0 failures``. Comparing the value at
+    the declared path against the column it names is what closes that, and it
+    is why ``_seed`` gives every correctable column on ``RECEIPT_B`` a
+    distinct, non-null value: two columns sharing one (or both being NULL)
+    would let a wrong path through again.
     """
     body = reviewer_client.get(f"/receipts/{receipt_id}").json()
+    with session_factory() as session:
+        receipt = session.get(Receipt, receipt_id)
+        stored = {column: getattr(receipt, column) for column in _COLUMN_TO_DETAIL_PATH}
 
     correctable = {column for column, _coerce in _RECEIPT_FIELDS.values()}
     assert correctable == set(_COLUMN_TO_DETAIL_PATH), (
         "_RECEIPT_FIELDS changed: add the new column to _COLUMN_TO_DETAIL_PATH "
-        "naming where receipt_detail exposes it"
+        "naming the path where receipt_detail exposes *that column's value* -- "
+        "the assertion below compares them, so a path that merely exists fails"
     )
     assert [
         column
         for column, path in sorted(_COLUMN_TO_DETAIL_PATH.items())
         if _at(body, path) is _ABSENT
     ] == []
+    assert {
+        column: _at(body, path) for column, path in sorted(_COLUMN_TO_DETAIL_PATH.items())
+    } == {column: _rendered(value) for column, value in sorted(stored.items())}
 
 
 def test_detail_returns_the_number_the_time_and_the_payment_method(reviewer_client, receipt_id):

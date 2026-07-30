@@ -351,6 +351,36 @@ def test_the_time_the_detail_returns_patches_back_unchanged(
         assert session.scalars(select(Correction)).all() == []
 
 
+def test_the_newly_exposed_payment_method_never_returns_a_full_pan(
+    reviewer_client, receipt_id
+):
+    """§18 at the layer that now serves the column (P5.T3b, fix round 1).
+
+    ``payment_method`` became readable over the API in this task, and its
+    redaction was bound only one layer down, in ``tests/test_repository.py``.
+    Measured: with ``redact_pan`` neutered to the identity function, all 116
+    tests across ``test_api_read.py``/``test_api_write.py``/
+    ``test_review_queue.py`` still passed while ``test_repository.py`` failed
+    11 -- so nothing at the route layer would have noticed a third writer of
+    this column, or a serializer that reached around the repository. This is
+    that binding.
+
+    ``payment.method`` is the motivating path named in ``_plan_change``'s own
+    docstring: it is where a reviewer types "VISA 4111111111111111" straight
+    off the slip.
+    """
+    response = reviewer_client.patch(
+        f"/receipts/{receipt_id}", json={"payment": {"method": "VISA 4111111111111111"}}
+    )
+
+    assert response.status_code == 200
+    assert response.json()["payment_method"] == "VISA ************1111"
+    # ...and it stays masked on the way back out, not just in the echo.
+    body = reviewer_client.get(f"/receipts/{receipt_id}")
+    assert body.json()["payment_method"] == "VISA ************1111"
+    assert "4111111111111111" not in body.text
+
+
 def test_patch_rejects_a_json_float_for_money(reviewer_client, receipt_id):
     response = reviewer_client.patch(f"/receipts/{receipt_id}", json={"totals": {"total": 1234.56}})
     assert response.status_code == 422

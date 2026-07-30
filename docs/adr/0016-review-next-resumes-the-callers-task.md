@@ -48,8 +48,10 @@ the whole time.
 **`GET /review/next` resumes the caller's own in-progress task before claiming a
 new one.** If the requesting user already holds an `IN_PROGRESS` task assigned
 to them, that task is returned; only a caller holding none draws from the queue.
-The change lives in `queue.next_task`, so the route stays a thin wrapper and the
-CLI and any future caller inherit it.
+The change lives in `queue.next_task`, so the route stays a thin wrapper and any
+future caller inherits it. (`next_task` currently has exactly one caller under
+`src/` — `review/api.py:508`, plus the `review/__init__.py` re-export; there is
+no review command in `receipts/cli.py`.)
 
 This shape was chosen over an explicit release route because it recovers from
 the cases a release cannot. A `POST /review/{id}/release` on page unload relies
@@ -105,10 +107,30 @@ earns a `corrections` row for an edit they never made.
 
 ## Consequences
 
-- **A reviewer can hold at most one task through this API.** Claiming a second
-  now requires completing the first. That is a deliberate narrowing of what the
-  endpoint could previously do by accident, and it is what makes the queue's
-  in-progress count meaningful.
+- **A reviewer polling *sequentially* holds at most one task**, and claiming a
+  second requires completing the first. That is a deliberate narrowing of what
+  the endpoint could previously do by accident. **It is not an absolute
+  invariant, and nothing should be built on it as one.** Two *overlapping*
+  polls from one user can both claim: the second one's resume query cannot see
+  the first one's uncommitted write, so it falls through to the claim path.
+  Measured on file-backed SQLite with session A's claim flushed but not
+  committed — `session_b.scalars(_resume_stmt("ada")).first()` returned `None`.
+  `GET /review/next` is a sync `def`, so it is served from a threadpool and two
+  tabs, a double-click or a double-invoked effect genuinely overlap.
+
+  A poll that overlaps an *already-committed* claim is safe: two concurrent
+  calls then both resume the same row (measured — both returned the held task,
+  neither claimed a second). It is only the pre-commit window that races.
+
+  **The overflow is self-correcting, which is why this is recorded rather than
+  fixed.** The extra claims are handed back one per poll, oldest first, by the
+  same resume path, and nothing is stranded — measured: a user holding two
+  resumed the 09:00 task, then the 12:00 task once it closed, then `None`. That
+  is why `_resume_stmt` is ordered and `limit(1)`-ed rather than written as if a
+  single row were guaranteed. Closing the window entirely would need a
+  transaction-level lock or a UNIQUE partial index on
+  `(assigned_to) WHERE state = 'in_progress'`, both of which cost more than the
+  bounded, self-healing duplicate they would prevent.
 - **Tasks stranded before this change come back on their owner's next poll**, one
   at a time, oldest first — no migration and no admin sweep. A task stranded
   under a username that no longer polls stays stranded; nothing here reassigns
