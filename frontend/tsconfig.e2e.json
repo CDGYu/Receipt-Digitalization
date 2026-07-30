@@ -1,0 +1,16 @@
+{
+  "extends": "./tsconfig.app.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.e2e.tsbuildinfo",
+    // "node" instead of "vite/client": the acceptance spec runs in Node, reads
+    // the seed manifest with node:fs and shells out to the seed script with
+    // node:child_process. It never sees `import.meta.env`.
+    "types": ["node"]
+  },
+  // Referenced from tsconfig.json so `npm run typecheck` and `npm run build`
+  // both compile the acceptance spec. Without it the one suite that drives the
+  // real application would be the only TypeScript in the repository nothing
+  // type-checks -- and `npm test` does not type-check anything, which is the
+  // whole reason this project keeps `tsc -b` as a separate gate.
+  "include": ["e2e", "playwright.config.ts"]
+}

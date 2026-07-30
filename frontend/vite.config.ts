@@ -4,7 +4,7 @@
 // running `tsc -b` on the 'vite' version first. 'vitest/config' re-exports a
 // `defineConfig` whose config type is Vite's plus `test`, so every option
 // below (base, build, server) still means exactly what it means to Vite.
-import { defineConfig } from 'vitest/config'
+import { configDefaults, defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 
 // Every prefix the API owns. A missing entry fails only at runtime, and the
@@ -54,5 +54,11 @@ export default defineConfig({
   // `tsc -b`. Dropping it keeps the runner and the compiler telling the same
   // story. (`@testing-library/react`'s auto-cleanup needs a global `afterEach`,
   // which is why every component test calls `cleanup()` in its own `afterEach`.)
-  test: { environment: 'jsdom' },
+  // `e2e/**` is excluded because Vitest's default `include` is
+  // `**/*.{test,spec}.*` -- which matches `e2e/review.spec.ts`, the Playwright
+  // acceptance spec. The two runners share a filename convention and nothing
+  // else. Measured by dropping this `exclude` and running `npx vitest run`:
+  // `FAIL e2e/review.spec.ts` / `Error: Playwright Test did not expect test()
+  // to be called here.`, one failed file alongside the fifteen that pass.
+  test: { environment: 'jsdom', exclude: [...configDefaults.exclude, 'e2e/**'] },
 })
