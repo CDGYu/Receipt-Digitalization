@@ -49,6 +49,35 @@ describe('ConfidenceRail', () => {
     expect(screen.getByText('-0.160')).toBeDefined()
   })
 
+  it('shows an em dash for a score that was never recorded, never a zero', () => {
+    // The project's own null-is-not-zero rule, on the one line that renders it.
+    // `money()` keeps `None` as `null` all the way out (review/serializers.py
+    // :65-73) precisely so the UI does not invent a recorded 0.000 here.
+    render(<ConfidenceRail confidence={null} reasons={null} />)
+
+    expect(screen.getByText('—')).toBeDefined()
+    expect(screen.queryByText('0.000')).toBeNull()
+    expect(screen.queryByText('0')).toBeNull()
+  })
+
+  it('marks the entry that raises the score, without touching its digits', () => {
+    // `verified merchant prior` is the one positive "penalty", and in a bare
+    // column it is indistinguishable from a deduction. The `+` is read off the
+    // string's first character, never computed, so the digits stay byte-identical.
+    const reasons = [
+      { reason: 'verified merchant prior', penalty: '0.05' },
+      { reason: 'validation errors present', penalty: '-0.35' },
+    ] as ConfidenceReason[]
+    render(<ConfidenceRail confidence={'1.000' as Money} reasons={reasons} />)
+
+    expect(screen.getByText('0.05')).toBeDefined()
+    expect(screen.getByText('-0.35')).toBeDefined()
+
+    const [bonus, deduction] = screen.getAllByRole('listitem')
+    expect(bonus.textContent).toBe('verified merchant prior +0.05')
+    expect(deduction.textContent).toBe('validation errors present -0.35')
+  })
+
   it('keeps the reasons in the order the API sent them', () => {
     // `_signals` emits them in a fixed, meaningful order -- findings, triage,
     // extraction metadata, missing fields, disputes, then the bonus

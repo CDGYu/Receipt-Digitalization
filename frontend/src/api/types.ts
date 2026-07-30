@@ -119,17 +119,6 @@ export interface ReceiptSummary {
   created_at: string
 }
 
-/** `GET /receipts` -- one page of summaries.
- *
- * `has_more` comes off the extra row a `limit + 1` fetch returned, not a
- * `COUNT(*)` (review/api.py:182-198), so it answers "is there another page"
- * and never "how many rows are there".
- */
-export interface ReceiptListResponse {
-  items: ReceiptSummary[]
-  has_more: boolean
-}
-
 /** `GET /review/next` -- claim the next task for the caller.
  *
  * Two nulls, both load-bearing and both distinct from each other:

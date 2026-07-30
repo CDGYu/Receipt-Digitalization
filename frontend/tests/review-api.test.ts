@@ -54,6 +54,17 @@ describe('fetchImageUrl', () => {
     expect(fetchMock.mock.calls[0]?.[0]).toBe('/receipts/a1/image')
   })
 
+  it('encodes the id here too, not only on the detail route', async () => {
+    // `fetchReceipt` and this function build their paths independently, so
+    // pinning one says nothing about the other -- fix round 1 found this one
+    // unbound while the table implied both were covered.
+    const fetchMock = stub(jsonResponse(200, { url: '/blob' }))
+
+    await fetchImageUrl('a b/c')
+
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('/receipts/a%20b%2Fc/image')
+  })
+
   it('raises an ApiError, not a TypeError, when the reply carries no url', async () => {
     // `request` resolves an empty body to `undefined` rather than throwing, so
     // without the guard this is `Cannot read properties of undefined (reading

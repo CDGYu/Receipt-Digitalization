@@ -19,7 +19,7 @@ export function fetchNext(): Promise<ReviewNextResponse> {
  *
  *  `id` is encoded even though every id this app holds came from the API as a
  *  UUID: the parameter's type is `string`, and the route parses it as
- *  `uuid.UUID` (review/api.py:201), so anything that is not one is a 422 rather
+ *  `uuid.UUID` (review/api.py:202), so anything that is not one is a 422 rather
  *  than a path this function helped build.
  */
 export function fetchReceipt(id: string): Promise<ReceiptDetail> {

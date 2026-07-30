@@ -1,4 +1,5 @@
 import { cleanup, render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ErrorBoundary } from '../src/ErrorBoundary'
 
@@ -14,6 +15,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup()
   consoleError.mockRestore()
+  vi.unstubAllGlobals()
 })
 
 /** The shape this boundary exists for. `request<T>` is an unchecked cast, so a
@@ -61,6 +63,23 @@ describe('ErrorBoundary', () => {
     expect(container.textContent).toBe('')
 
     container.remove()
+  })
+
+  it('offers a reload that really reloads', async () => {
+    // The only recovery a boundary can honestly offer -- re-rendering the same
+    // children hits the same error. A button that looked like an escape and did
+    // nothing would be worse than no button, and nothing pinned it before.
+    const reload = vi.fn()
+    vi.stubGlobal('location', { pathname: '/app/review', reload })
+
+    render(
+      <ErrorBoundary>
+        <Boom />
+      </ErrorBoundary>,
+    )
+    await userEvent.click(screen.getByRole('button', { name: /reload/i }))
+
+    expect(reload).toHaveBeenCalledOnce()
   })
 
   it('renders a thrown non-Error rather than the word undefined', () => {

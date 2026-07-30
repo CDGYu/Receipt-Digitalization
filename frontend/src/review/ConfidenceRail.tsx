@@ -36,6 +36,22 @@ export interface ConfidenceRailProps {
   readonly reasons: ConfidenceReason[] | null
 }
 
+/** A leading `+` for the one kind of entry that *raises* the score.
+ *
+ * `verified merchant prior` arrives as `"0.05"` with no sign, in the same bare
+ * column as `"-0.35"`, and nothing on the row says which way it moved the
+ * number. This adds the missing marker **without touching the value**: the sign
+ * is read off the first character of the string that arrived, never computed
+ * from it -- no `Number`, no comparison, no arithmetic (ADR-0001). The digits
+ * are rendered separately and unchanged.
+ *
+ * `+` is only added when the string carries no sign of its own, so a hand-written
+ * row holding `"+0.05"` cannot come out as `"++0.05"`.
+ */
+function signPrefixFor(penalty: string): string {
+  return penalty.startsWith('-') || penalty.startsWith('+') ? '' : '+'
+}
+
 export function ConfidenceRail({ confidence, reasons }: ConfidenceRailProps) {
   return (
     <aside>
@@ -57,7 +73,13 @@ export function ConfidenceRail({ confidence, reasons }: ConfidenceRailProps) {
                came from anywhere else can repeat a reason, and duplicate React
                keys are not a failure mode worth inheriting for that. */
             <li key={`${entry.reason}-${index}`}>
-              <span>{entry.reason}</span> <span>{entry.penalty}</span>
+              <span>{entry.reason}</span>{' '}
+              <span>
+                {signPrefixFor(entry.penalty)}
+                {/* Its own element, so the digits stay byte-identical and a test
+                    asking for exactly "0.05" still finds them. */}
+                <span>{entry.penalty}</span>
+              </span>
             </li>
           ))}
         </ul>

@@ -1,3 +1,4 @@
+import { StrictMode } from 'react'
 import { cleanup, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -16,18 +17,37 @@ function jsonResponse(status: number, body: unknown): Response {
   })
 }
 
+type Reply = readonly [number, unknown]
+
+function isReply(value: Reply | readonly Reply[]): value is Reply {
+  return typeof value[0] === 'number'
+}
+
 /** `fetch`, answering by exact path. An unstubbed path is a 404 naming itself,
  *  so a request the screen was not supposed to make shows up as a readable
- *  failure instead of an undefined body. */
-function stubApi(routes: Record<string, readonly [number, unknown]>) {
+ *  failure instead of an undefined body.
+ *
+ *  A path may carry a *queue* of replies instead of one: each call takes the
+ *  next and the last repeats, which is how "the detail call fails, then works"
+ *  is expressed without a bespoke mock. */
+function stubApi(routes: Record<string, Reply | readonly Reply[]>) {
+  const pending = new Map<string, Reply[]>(
+    Object.entries(routes).map(([path, value]) => [path, isReply(value) ? [value] : [...value]]),
+  )
   return vi.fn((path: string) => {
-    const route = routes[path]
-    return Promise.resolve(
-      route === undefined
-        ? jsonResponse(404, { error: { message: `no stub for ${path}` } })
-        : jsonResponse(route[0], route[1]),
-    )
+    const queue = pending.get(path)
+    if (queue === undefined) {
+      return Promise.resolve(jsonResponse(404, { error: { message: `no stub for ${path}` } }))
+    }
+    const reply = queue.length > 1 ? queue.shift()! : queue[0]
+    return Promise.resolve(jsonResponse(reply[0], reply[1]))
   })
+}
+
+/** How many times `path` was requested. The whole point of the two claim tests
+ *  is a count, not a presence. */
+function callsTo(fetchMock: ReturnType<typeof stubApi>, path: string): number {
+  return fetchMock.mock.calls.filter(([called]) => called === path).length
 }
 
 const TASK: ReviewTask = {
@@ -127,9 +147,55 @@ describe('ReviewScreen', () => {
     expect(screen.getByText('validation errors present')).toBeDefined()
     expect(screen.getByText('-0.35')).toBeDefined()
     // Findings are what the extraction run found; nothing re-checks them when a
-    // reviewer edits, so the heading must not imply current state.
+    // reviewer edits, so neither the heading nor the note may imply current
+    // state. Both are asserted -- the note carries the part a heading cannot
+    // say, and was previously unpinned.
     expect(screen.getByRole('heading', { name: /at extraction time/i })).toBeDefined()
+    expect(screen.getByText(/not re-checked when you edit/i)).toBeDefined()
     expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('claims exactly one task when React mounts the tree twice', async () => {
+    // `main.tsx` renders under `<StrictMode>`, which invokes the mount effect
+    // twice. `fetchNext` is a claiming write, so an unguarded effect makes the
+    // very first thing the app does a double claim -- and the second task is
+    // stranded, because nothing returns an `IN_PROGRESS` row to `OPEN`.
+    const fetchMock = stubApi(CLAIMED_ROUTES)
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(
+      <StrictMode>
+        <ReviewScreen />
+      </StrictMode>,
+    )
+
+    await screen.findByRole('heading', { level: 1, name: 'Whole Foods Market' })
+    expect(callsTo(fetchMock, '/review/next')).toBe(1)
+  })
+
+  it('resumes the task it already holds instead of claiming another', async () => {
+    // No StrictMode here: this is the production path. `fetchNext` succeeds and
+    // charges the queue, `fetchReceipt` then fails, and the reviewer clicks
+    // "Try again". Re-entering `fetchNext` would claim a second task and lose
+    // the first for good.
+    const fetchMock = stubApi({
+      '/review/next': [200, { task: TASK, receipt: SUMMARY }],
+      '/receipts/a1': [
+        [503, { error: { message: 'database unavailable' } }],
+        [200, RECEIPT],
+      ],
+      '/receipts/a1/image': [200, { url: '/receipts/a1/image/blob?variant=original&exp=1&sig=s' }],
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const user = userEvent.setup()
+
+    render(<ReviewScreen />)
+    expect((await screen.findByRole('alert')).textContent).toBe('database unavailable')
+    await user.click(screen.getByRole('button', { name: 'Try again' }))
+
+    await screen.findByRole('heading', { level: 1, name: 'Whole Foods Market' })
+    expect(callsTo(fetchMock, '/review/next')).toBe(1)
+    expect(callsTo(fetchMock, '/receipts/a1')).toBe(2)
   })
 
   it("shows the API's own message when the queue call fails", async () => {

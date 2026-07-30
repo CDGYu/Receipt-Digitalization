@@ -1,4 +1,5 @@
-import { cleanup, render, screen, waitFor, fireEvent } from '@testing-library/react'
+import { act, cleanup, render, screen, waitFor, fireEvent } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ImagePane } from '../src/review/ImagePane'
 import { ApiError } from '../src/api/client'
@@ -103,6 +104,76 @@ describe('ImagePane', () => {
 
     const alert = await screen.findByRole('alert')
     expect(alert.textContent).toContain('not signed in')
+  })
+
+  it('says it is loading before the link has arrived', () => {
+    // A pane that renders nothing while the link is in flight is indistinguishable
+    // from one that has silently given up.
+    const fetchUrl = vi.fn(() => new Promise<string>(() => {}))
+    render(<ImagePane receiptId="r1" fetchUrl={fetchUrl} />)
+
+    expect(screen.getByText(/loading the receipt image/i)).toBeDefined()
+    expect(screen.queryByAltText(/receipt/i)).toBeNull()
+  })
+
+  it('re-signs once even when two error events arrive in the same batch', async () => {
+    // Both events are dispatched inside one `act()`, so both handlers run before
+    // React re-renders. With the spent-retry flag in `useState` both read the
+    // pre-update `false` and both re-fetch (3 calls); as a ref, the second sees
+    // it set and goes straight to the visible failure.
+    const fetchUrl = vi.fn().mockResolvedValue('/receipts/r1/image/blob?sig=s')
+    render(<ImagePane receiptId="r1" fetchUrl={fetchUrl} />)
+    const image = await screen.findByAltText(/receipt/i)
+
+    act(() => {
+      fireEvent.error(image)
+      fireEvent.error(image)
+    })
+
+    await waitFor(() => expect(screen.getByRole('alert')).toBeDefined())
+    expect(fetchUrl).toHaveBeenCalledTimes(2)
+  })
+
+  it('starts clean when it is handed a different receipt', async () => {
+    // `ReviewScreen` passes a `key`, but the component claims to be correct on
+    // its own, and the reset in the effect is what makes that true: without it a
+    // failed pane keeps the previous receipt's error on screen and denies the new
+    // receipt its own retry budget.
+    const fetchUrl = vi.fn().mockResolvedValue('/receipts/x/image/blob?sig=s')
+    const { rerender } = render(<ImagePane receiptId="r1" fetchUrl={fetchUrl} />)
+
+    fireEvent.error(await screen.findByAltText(/receipt/i))
+    await waitFor(() => expect(fetchUrl).toHaveBeenCalledTimes(2))
+    fireEvent.error(screen.getByAltText(/receipt/i))
+    await screen.findByRole('alert')
+
+    rerender(<ImagePane receiptId="r2" fetchUrl={fetchUrl} />)
+
+    // r2 is shown, not r1's failure...
+    expect(await screen.findByAltText(/receipt/i)).toBeDefined()
+    expect(screen.queryByRole('alert')).toBeNull()
+    // ...and it gets its own re-sign: 2 for r1, then r2's own mount and retry.
+    fireEvent.error(screen.getByAltText(/receipt/i))
+    await waitFor(() => expect(fetchUrl).toHaveBeenCalledTimes(4))
+  })
+
+  it('leaves a way back from a failure, without going near the queue', async () => {
+    // The failure replaces the image, not the pane: the controls survive and the
+    // retry re-asks for a link only. A reload would be the alternative, and a
+    // reload strands the reviewer's claimed queue task.
+    const fetchUrl = vi
+      .fn()
+      .mockRejectedValueOnce(new ApiError(503, 'database unavailable'))
+      .mockResolvedValueOnce('/receipts/r1/image/blob?sig=fresh')
+    render(<ImagePane receiptId="r1" fetchUrl={fetchUrl} />)
+
+    await screen.findByRole('alert')
+    expect(screen.getByRole('button', { name: 'Rotate' })).toBeDefined()
+
+    await userEvent.click(screen.getByRole('button', { name: /try loading the image again/i }))
+
+    expect(await screen.findByAltText(/receipt/i)).toBeDefined()
+    expect(screen.queryByRole('alert')).toBeNull()
   })
 
   it('zooms and rotates the image it is showing', async () => {

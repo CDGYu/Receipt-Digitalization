@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 /** The receipt image, with the one retry its signed link needs.
  *
@@ -23,6 +23,19 @@ import { useEffect, useState } from 'react'
  *      rejection and left the pane blank for ever.
  *   2. the image fails to load once -- re-fetch, silently, exactly once.
  *   3. the retry's `fetchUrl` rejects, or the second load fails too -- shown.
+ *
+ * "Exactly once" is true **by construction**, not by event timing: the spent-retry
+ * flag is a `useRef`, so the second of two `error` events dispatched inside one
+ * `act()` sees it already set. Held in `useState` it did not -- both handlers read
+ * the pre-update value and both re-fetched (measured: 3 calls to `fetchUrl` where
+ * the contract allows 2, pinned by `re-signs once even when two error events
+ * arrive in the same batch`).
+ *
+ * **The failure is not a dead end.** It replaces only the image, never the pane:
+ * the zoom and rotate controls stay put and an explicit retry sits beside the
+ * message. That retry re-asks for a link and nothing else -- it must never reach
+ * `fetchNext`, which is a claiming write, so the only escape from a broken image
+ * is not a page reload that strands the reviewer's queue task.
  *
  * **Why the retry does not depend on the URL changing.** A re-signed link is
  * usually different (`exp` moves, so `sig` moves), but two calls inside the same
@@ -55,6 +68,11 @@ const ZOOM_STEP = 1.25
 const QUARTER_TURN = 90
 const FULL_TURN = 360
 
+/** Shared by the mount effect and the explicit retry -- both are "ask for a link
+ *  from nothing", and a reviewer should not get two different sentences for the
+ *  same failure depending on which one asked. */
+const LINK_FAILED = 'Could not get a link to the receipt image'
+
 /** A caught value as one line a reviewer can read and quote.
  *
  * `ApiError` extends `Error`, so this surfaces the API's own message (the
@@ -67,20 +85,23 @@ function messageFor(prefix: string, caught: unknown): string {
 
 export function ImagePane({ receiptId, fetchUrl }: ImagePaneProps) {
   const [source, setSource] = useState<Source | null>(null)
-  const [retried, setRetried] = useState(false)
   const [failure, setFailure] = useState<string | null>(null)
   const [zoom, setZoom] = useState(1)
   const [rotation, setRotation] = useState(0)
+  /** Whether the one silent re-sign has already been spent. A ref, not state:
+   *  two `error` events in one batch must not both read `false`. */
+  const retried = useRef(false)
 
   useEffect(() => {
     // Reset rather than rely on the caller remounting us: a new receipt gets its
     // own retry budget, and a failure from the previous one must not survive
     // into it. `ReviewScreen` also passes a `key`, so in the app this branch is
-    // belt and braces; on its own the component is still correct.
+    // belt and braces; on its own the component is still correct -- which
+    // `starts clean when it is handed a different receipt` pins.
     let live = true
     setSource(null)
-    setRetried(false)
     setFailure(null)
+    retried.current = false
     fetchUrl(receiptId).then(
       (url) => {
         if (live) {
@@ -89,7 +110,7 @@ export function ImagePane({ receiptId, fetchUrl }: ImagePaneProps) {
       },
       (caught: unknown) => {
         if (live) {
-          setFailure(messageFor('Could not get a link to the receipt image', caught))
+          setFailure(messageFor(LINK_FAILED, caught))
         }
       },
     )
@@ -98,31 +119,34 @@ export function ImagePane({ receiptId, fetchUrl }: ImagePaneProps) {
     }
   }, [receiptId, fetchUrl])
 
+  /** Install a link, bumping `generation` so an identical URL still remounts. */
+  function installLink(url: string): void {
+    setSource((current) => ({ url, generation: (current === null ? 0 : current.generation) + 1 }))
+  }
+
   // Not `async`: an async event handler's rejection is nobody's to catch, and
   // the plan's version (`setUrl(await fetchUrl(...))`) had exactly that hole.
   // Both settlement paths are passed to `then`, so neither can go unhandled.
   function handleError(): void {
-    if (retried) {
+    if (retried.current) {
       setFailure('Could not load the receipt image, even with a freshly signed link.')
       return
     }
-    setRetried(true)
-    fetchUrl(receiptId).then(
-      (url) => {
-        setSource((current) => ({ url, generation: (current === null ? 0 : current.generation) + 1 }))
-      },
-      (caught: unknown) => {
-        setFailure(messageFor('Could not re-sign the receipt image link', caught))
-      },
-    )
+    retried.current = true
+    fetchUrl(receiptId).then(installLink, (caught: unknown) => {
+      setFailure(messageFor('Could not re-sign the receipt image link', caught))
+    })
   }
 
-  if (failure !== null) {
-    return (
-      <div>
-        <p role="alert">{failure}</p>
-      </div>
-    )
+  /** The reviewer asking again after a visible failure. Re-asks for a link and
+   *  restores the retry budget; deliberately touches nothing but this pane. */
+  function askForLinkAgain(): void {
+    setFailure(null)
+    setSource(null)
+    retried.current = false
+    fetchUrl(receiptId).then(installLink, (caught: unknown) => {
+      setFailure(messageFor(LINK_FAILED, caught))
+    })
   }
 
   return (
@@ -141,7 +165,16 @@ export function ImagePane({ receiptId, fetchUrl }: ImagePaneProps) {
           Rotate
         </button>
       </div>
-      {source === null ? (
+      {failure !== null ? (
+        // Only the image is replaced. The controls above survive, and so does a
+        // way forward that does not cost a queue task.
+        <div>
+          <p role="alert">{failure}</p>
+          <button type="button" onClick={askForLinkAgain}>
+            Try loading the image again
+          </button>
+        </div>
+      ) : source === null ? (
         <p>Loading the receipt image…</p>
       ) : (
         <img
