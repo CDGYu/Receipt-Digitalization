@@ -21,6 +21,10 @@ Two details are load-bearing:
     one. On backends that support it the row is locked with
     ``FOR UPDATE SKIP LOCKED``; see :func:`_supports_skip_locked` for why that is
     decided in Python rather than left to the SQL compiler.
+  * :func:`next_task` **resumes before it claims** (ADR-0016): a caller who
+    already holds an ``IN_PROGRESS`` task gets that one back. Nothing else
+    releases a claim, so without this a reload -- or a lost response -- took a
+    task out of the queue for good.
 """
 
 from __future__ import annotations
@@ -87,6 +91,38 @@ def _claim_stmt(*, skip_locked: bool) -> Select[tuple[ReviewTask]]:
         # blocking on them -- or, worse, both claiming the same task.
         stmt = stmt.with_for_update(skip_locked=True)
     return stmt
+
+
+def _resume_stmt(assignee: str) -> Select[tuple[ReviewTask]]:
+    """``assignee``'s own in-progress task -- the one :func:`next_task` hands back.
+
+    Ordered ``opened_at`` ASC then ``id``: the longest-held task first, with a
+    total order so a backend whose ``opened_at`` resolution is coarse (SQLite's
+    ``CURRENT_TIMESTAMP`` is whole seconds) cannot return a different row on
+    each poll. **``priority`` is deliberately absent from the order** -- these
+    rows are already claimed, so §12's queue ranking has nothing left to say
+    about them, and "the one I have been holding longest" is the pick a
+    reviewer holding several stranded tasks actually wants. A user holds more
+    than one only because tasks stranded before ADR-0016 still exist.
+
+    **No locking clause, on purpose.** ``FOR UPDATE SKIP LOCKED`` here would
+    reintroduce the very defect this query removes: a second concurrent request
+    from the *same* reviewer would skip its own locked row, fall through to
+    :func:`_claim_stmt`, and take a second task. Plain ``FOR UPDATE`` would
+    block one request on the other instead. Nothing needs serializing, because
+    the ``assigned_to`` filter means the only rows this can match are already
+    stamped with this one caller's name -- no other caller's request competes
+    for them. Split out from :func:`next_task` for the same reason
+    :func:`_claim_stmt` is: so a test can compile it and read the clauses off
+    the SQL rather than infer them from a call that happened to pass.
+    """
+    return (
+        select(ReviewTask)
+        .where(ReviewTask.state == ReviewState.IN_PROGRESS)
+        .where(ReviewTask.assigned_to == assignee)
+        .order_by(ReviewTask.opened_at, ReviewTask.id)
+        .limit(1)
+    )
 
 
 @dataclass(frozen=True)
@@ -182,14 +218,44 @@ def enqueue_review(
 
 
 def next_task(session: Session, assignee: str) -> ReviewTask | None:
-    """Claim the most urgent open task for ``assignee``, or ``None`` if empty.
+    """``assignee``'s own in-progress task, else a freshly claimed one, else ``None``.
 
-    Atomic where the backend allows it: the row is selected ``FOR UPDATE SKIP
-    LOCKED`` (see :func:`_supports_skip_locked`) and flipped to
+    **Resume before claim** (ADR-0016). If ``assignee`` already holds an
+    ``IN_PROGRESS`` task it is returned unchanged -- nothing is written, and
+    the queue is not drawn from. Only a caller holding none claims.
+
+    Without this the queue had no way back: ``ReviewState.OPEN`` is assigned in
+    exactly three places (the column default, a brand-new task in
+    :func:`enqueue_review`, and its reopen branch, which is gated on
+    ``state is ReviewState.DONE``), :func:`_claim_stmt` selects ``state ==
+    OPEN`` only, and no route releases a claim -- ``POST
+    /review/{id}/complete`` closes a task, which is not a release. A reviewer
+    who reloaded the page, whose browser died, or whose claim committed
+    server-side while the response was lost took that task out of the queue
+    permanently. Resuming is also what a reviewer wants on a reload: their own
+    half-finished receipt back, not a different one.
+
+    **Resume outranks priority.** A held task comes back even when a
+    priority-0 task is waiting; §12's ranking orders the queue, and a claimed
+    task has already left it. Among several held tasks (possible only for
+    claims stranded before this change) the earliest ``opened_at`` wins -- see
+    :func:`_resume_stmt`, which also explains why that query takes no lock.
+
+    The claim path is unchanged and keeps ADR-0008's guarantee: the row is
+    selected ``FOR UPDATE SKIP LOCKED`` where the backend supports it (see
+    :func:`_supports_skip_locked`, and note that SQLite drops the clause
+    *silently*, which is why the decision is made in Python) and flipped to
     ``IN_PROGRESS`` with ``assigned_to`` set in the same transaction, so two
-    reviewers polling at once get two different tasks. The lock is released when
-    the caller commits -- which, per the layer's convention, the caller does.
+    reviewers polling at once still get two different tasks. The two queries
+    cannot collide over a row: they select disjoint states, and the resume one
+    additionally matches only rows already carrying this caller's own name.
+    The lock is released when the caller commits -- which, per the layer's
+    convention, the caller does.
     """
+    held = session.scalars(_resume_stmt(assignee)).first()
+    if held is not None:
+        return held
+
     stmt = _claim_stmt(skip_locked=_supports_skip_locked(session.get_bind()))
     task = session.scalars(stmt).first()
     if task is None:

@@ -483,7 +483,18 @@ def _install_write_routes(app: FastAPI) -> None:
         request: Request,
         user: Annotated[SessionUser, Depends(require_user)],
     ) -> dict[str, Any]:
-        """Claim the next task for the caller, with a compact receipt payload.
+        """Resume the caller's own task, or claim the next one (ADR-0016).
+
+        **A caller who already holds an ``IN_PROGRESS`` task gets that one
+        back**, unchanged and without touching the queue; only a caller
+        holding none claims. That is what makes a reload, a crashed browser,
+        or a claim whose response never arrived recoverable: nothing else in
+        this service releases a claim -- ``POST /review/{id}/complete``
+        closes a task, which is not the same thing -- so before this the
+        task left the queue permanently. Per-user by construction (the
+        resume query matches on ``assigned_to``), and it outranks priority:
+        a held task comes back even when a priority-0 one is waiting. See
+        :func:`receipts.review.queue.next_task`.
 
         ``{"task": null}`` (200, not 204) on an empty queue -- one response
         shape for the client to parse rather than an empty-body special

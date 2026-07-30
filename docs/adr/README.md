@@ -21,6 +21,7 @@ Accepted; supersede it with a new ADR rather than editing history.
 | [0013](0013-cli-contract.md) | CLI contract: one work list, no overrides, no prompts | Accepted |
 | [0014](0014-optional-dependency-import-discipline.md) | Optional dependencies stay out of every import path | Accepted |
 | [0015](0015-review-ui-same-origin-and-app-prefix.md) | The review UI is served same-origin under `/app` | Accepted |
+| [0016](0016-review-next-resumes-the-callers-task.md) | `GET /review/next` resumes the caller's own in-progress task | Accepted |
 
 Read **0001** first: it is the invariant everything else defers to. **0007** is
 the one to read before touching anything that writes card data or money.

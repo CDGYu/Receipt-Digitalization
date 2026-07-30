@@ -42,7 +42,7 @@ from receipts.review import (
     next_task,
     queue_stats,
 )
-from receipts.review.queue import _claim_stmt, _supports_skip_locked
+from receipts.review.queue import _claim_stmt, _resume_stmt, _supports_skip_locked
 from receipts.score.confidence import ReceiptStatus
 
 PHASH = "0123456789abcdef"
@@ -367,13 +367,18 @@ def test_next_task_claims_the_task_and_records_the_assignee(engine: sa.Engine) -
 
 
 def test_next_task_returns_tasks_in_priority_order(engine: sa.Engine) -> None:
+    """One reviewer per claim: since ADR-0016 a caller who already holds a task
+    is handed that one back rather than a second, so draining the queue takes
+    three different names. What is asserted -- the order the queue hands work
+    out in -- is unchanged.
+    """
     with Session(engine) as session:
         # Inserted out of order on purpose: 0 must come out first.
         quick = _task(session, 2, reason="quick verify")
         rekey = _task(session, 1, reason="full re-key")
         urgent = _task(session, 0, reason="urgent: total is missing")
 
-        claimed = [next_task(session, "ada") for _ in range(3)]
+        claimed = [next_task(session, name) for name in ("ada", "grace", "hopper")]
 
         assert [task.id for task in claimed if task is not None] == [
             urgent.id,
@@ -383,18 +388,26 @@ def test_next_task_returns_tasks_in_priority_order(engine: sa.Engine) -> None:
 
 
 def test_next_task_breaks_priority_ties_by_opened_at(engine: sa.Engine) -> None:
+    """Two names for the same reason as the test above (ADR-0016)."""
     with Session(engine) as session:
         later = _task(session, 1, opened_at=datetime(2026, 7, 27, 12, 0, tzinfo=UTC))
         earlier = _task(session, 1, opened_at=datetime(2026, 7, 27, 9, 0, tzinfo=UTC))
 
         first = next_task(session, "ada")
-        second = next_task(session, "ada")
+        second = next_task(session, "grace")
 
         assert first is not None and first.id == earlier.id
         assert second is not None and second.id == later.id
 
 
 def test_next_task_does_not_hand_out_the_same_task_twice(engine: sa.Engine) -> None:
+    """The drained-queue check needs a *third* name since ADR-0016.
+
+    Asking ``ada`` again would now resume the task she is already holding --
+    the right answer, but not an answer about whether the queue still has
+    anything open in it. ``hopper`` holds nothing, so ``None`` means the queue
+    is genuinely empty.
+    """
     with Session(engine) as session:
         _task(session, 0)
         _task(session, 1)
@@ -406,7 +419,7 @@ def test_next_task_does_not_hand_out_the_same_task_twice(engine: sa.Engine) -> N
         assert first.id != second.id
         assert second.assigned_to == "grace"
         # The queue is now empty: every task is claimed.
-        assert next_task(session, "ada") is None
+        assert next_task(session, "hopper") is None
 
 
 def test_next_task_returns_none_on_an_empty_queue(engine: sa.Engine) -> None:
@@ -421,6 +434,183 @@ def test_next_task_ignores_closed_tasks(engine: sa.Engine) -> None:
         close_task(session, task.id)
 
         assert next_task(session, "grace") is None
+
+
+# --------------------------------------------------------------------------- #
+# next_task resumes the caller's own in-progress task (ADR-0016)
+#
+# Nothing releases a claim: ``_claim_stmt`` selects ``state == OPEN`` only,
+# ``enqueue_review`` reopens a task only when it is ``DONE``, and no route in
+# ``review/api.py`` unclaims. So a reviewer who reloaded the page, or whose
+# response was lost, stranded the task permanently. ``next_task`` now hands
+# them their own work back before it claims anything new.
+# --------------------------------------------------------------------------- #
+
+EARLY = datetime(2026, 7, 27, 9, 0, tzinfo=UTC)
+MIDDLE = datetime(2026, 7, 27, 10, 0, tzinfo=UTC)
+LATE = datetime(2026, 7, 27, 12, 0, tzinfo=UTC)
+
+
+def test_next_task_resumes_the_callers_own_in_progress_task(engine: sa.Engine) -> None:
+    """A second call returns the same task instead of claiming a second one."""
+    with Session(engine) as session:
+        held = _task(session, 1, opened_at=EARLY)
+        waiting = _task(session, 1, opened_at=LATE)
+
+        first = next_task(session, "ada")
+        again = next_task(session, "ada")
+
+        assert first is not None and first.id == held.id
+        assert again is not None and again.id == held.id
+        assert again.assigned_to == "ada"
+        assert again.state is ReviewState.IN_PROGRESS
+        # The queue was not drawn from a second time.
+        assert session.get(ReviewTask, waiting.id).state is ReviewState.OPEN
+
+
+def test_next_task_never_resumes_another_users_task(engine: sa.Engine) -> None:
+    """Resume matches ``assigned_to``. Grace must never be handed Ada's work.
+
+    The queue holds exactly one task, so if the resume path ignored the
+    assignee this call would return it -- the "two reviewers, one receipt"
+    failure ADR-0008 exists to prevent, arriving through the new door rather
+    than the claim.
+    """
+    with Session(engine) as session:
+        only = _task(session, 1, opened_at=EARLY)
+
+        ada = next_task(session, "ada")
+        grace = next_task(session, "grace")
+
+        assert ada is not None and ada.id == only.id
+        assert grace is None
+        assert session.get(ReviewTask, only.id).assigned_to == "ada"
+
+
+def test_a_held_task_comes_back_even_when_something_more_urgent_waits(
+    engine: sa.Engine,
+) -> None:
+    """Priority does not override resume (§12 orders the *queue*, not a claim).
+
+    A reviewer mid-receipt is holding context no urgency ranking can restore;
+    handing them a different task on reload would abandon the one they are
+    part-way through, which is the state this change exists to end.
+    """
+    with Session(engine) as session:
+        held = _task(session, 2, reason="quick verify", opened_at=EARLY)
+        claimed = next_task(session, "ada")
+        assert claimed is not None and claimed.id == held.id
+
+        urgent = _task(session, 0, reason="urgent: total is missing", opened_at=LATE)
+
+        resumed = next_task(session, "ada")
+
+        assert resumed is not None and resumed.id == held.id
+        assert resumed.priority == 2
+        assert session.get(ReviewTask, urgent.id).state is ReviewState.OPEN
+
+
+def test_a_caller_whose_only_task_is_done_claims_a_new_one(engine: sa.Engine) -> None:
+    """Resume matches ``IN_PROGRESS`` only -- finished work is not held work.
+
+    ``close_task`` is what ``POST /review/{id}/complete`` calls, so this is the
+    ordinary loop: a reviewer who has just completed a receipt is asking for
+    the next one, and must get it.
+    """
+    with Session(engine) as session:
+        finished = _task(session, 1, opened_at=EARLY)
+        waiting = _task(session, 1, opened_at=LATE)
+        next_task(session, "ada")
+        close_task(session, finished.id)
+
+        claimed = next_task(session, "ada")
+
+        assert claimed is not None and claimed.id == waiting.id
+        assert claimed.state is ReviewState.IN_PROGRESS
+        assert claimed.assigned_to == "ada"
+
+
+def test_resume_returns_the_earliest_opened_of_several_held_tasks(engine: sa.Engine) -> None:
+    """One user, several claims: **earliest ``opened_at`` wins**, not priority.
+
+    Tasks stranded before this change already exist, so a user can hold more
+    than one and the pick has to be deterministic. The three tasks below carry
+    priorities 0/2/1 in ``opened_at`` order specifically so an ordering that
+    led with ``priority`` -- the claim path's -- would return a different row
+    and fail here.
+    """
+    with Session(engine) as session:
+        middle = _task(session, 0, opened_at=MIDDLE)
+        earliest = _task(session, 2, opened_at=EARLY)
+        latest = _task(session, 1, opened_at=LATE)
+        for task in (middle, earliest, latest):
+            task.state = ReviewState.IN_PROGRESS
+            task.assigned_to = "ada"
+        session.flush()
+
+        resumed = next_task(session, "ada")
+
+        assert resumed is not None and resumed.id == earliest.id
+
+
+def test_resume_breaks_an_opened_at_tie_by_id(engine: sa.Engine) -> None:
+    """``opened_at`` then ``id`` -- a total order, as ``_claim_stmt`` already uses.
+
+    ``opened_at`` defaults to ``CURRENT_TIMESTAMP``, which SQLite resolves only
+    to the second, so several tasks claimed in one burst genuinely can share a
+    timestamp; without the ``id`` tiebreaker the backend would be free to
+    return a different one of them on each poll.
+    """
+    with Session(engine) as session:
+        tasks = [_task(session, 1, opened_at=EARLY) for _ in range(3)]
+        for task in tasks:
+            task.state = ReviewState.IN_PROGRESS
+            task.assigned_to = "ada"
+        session.flush()
+        lowest = min(task.id for task in tasks)
+
+        resumed = next_task(session, "ada")
+
+        assert resumed is not None and resumed.id == lowest
+
+
+def test_two_reviewers_polling_at_once_still_get_two_different_tasks(
+    engine: sa.Engine,
+) -> None:
+    """Adding a second query must not open a way for two callers to share a row.
+
+    **What this does NOT establish**: that the row lock works. This engine is
+    in-memory SQLite, which drops ``FOR UPDATE SKIP LOCKED`` silently (see
+    ``test_sqlite_silently_drops_the_locking_clause``) and which SQLAlchemy
+    backs with a ``SingletonThreadPool``, so the two ``Session`` objects below
+    share one DBAPI connection and ``b`` sees ``a``'s uncommitted write. The
+    production lock is guarded by the compile tests at the bottom of this
+    module, exactly as ADR-0008 says.
+
+    **What this DOES establish**: the resume path cannot re-offer a row the
+    claim path has just taken. ``b``'s call runs after ``a`` flipped its row to
+    ``IN_PROGRESS`` and before either committed -- so the row has left
+    ``_claim_stmt``'s ``state == OPEN`` filter and entered ``_resume_stmt``'s
+    reach -- and ``b`` still does not get it, because it is assigned to ``a``.
+    """
+    with Session(engine) as setup:
+        first_id = _task(setup, 0, opened_at=EARLY).id
+        second_id = _task(setup, 0, opened_at=LATE).id
+        setup.commit()
+
+    with Session(engine) as a, Session(engine) as b:
+        claimed_by_a = next_task(a, "ada")
+        claimed_by_b = next_task(b, "grace")
+        a.commit()
+        b.commit()
+
+        assert claimed_by_a is not None and claimed_by_b is not None
+        assert claimed_by_a.id != claimed_by_b.id
+        assert {claimed_by_a.id, claimed_by_b.id} == {first_id, second_id}
+
+    with Session(engine) as check:
+        assert check.get(ReviewTask, first_id).assigned_to == "ada"
+        assert check.get(ReviewTask, second_id).assigned_to == "grace"
 
 
 # --------------------------------------------------------------------------- #
@@ -571,6 +761,49 @@ def test_claim_statement_orders_by_priority_then_opened_at() -> None:
     opened_at = sql.index("review_tasks.opened_at", priority_at)
     assert "ORDER BY" in sql
     assert priority_at < opened_at
+
+
+def test_the_resume_statement_takes_no_lock(engine: sa.Engine) -> None:
+    """The resume query is deliberately an unlocked read (ADR-0016).
+
+    ``FOR UPDATE SKIP LOCKED`` here would be actively harmful, not merely
+    redundant: a second request from the *same* reviewer -- two tabs, an
+    impatient double-refresh -- would skip its own locked row, fall through to
+    the claim path, and take a second task. That is the exact defect this
+    change exists to remove, reintroduced by the fix. Plain ``FOR UPDATE``
+    would instead block one of the two requests on the other.
+
+    It is safe unlocked because the statement can only ever match rows already
+    stamped with the caller's own ``assigned_to``: no *other* caller's request
+    is competing for them, so there is nothing to serialize.
+    """
+    sql = str(_resume_stmt("ada").compile(dialect=postgresql.dialect()))
+
+    assert "FOR UPDATE" not in sql
+    assert "SKIP LOCKED" not in sql
+
+
+def test_the_resume_statement_filters_on_state_and_assignee() -> None:
+    """Both filters, in the compiled SQL -- not inferred from a passing call."""
+    sql = str(
+        _resume_stmt("ada").compile(
+            dialect=sqlite.dialect(), compile_kwargs={"literal_binds": True}
+        )
+    )
+
+    assert "review_tasks.state = 'in_progress'" in sql
+    assert "review_tasks.assigned_to = 'ada'" in sql
+
+
+def test_the_resume_statement_orders_by_opened_at_then_id() -> None:
+    """``opened_at`` leads; ``priority`` is deliberately not in the order at all."""
+    sql = str(_resume_stmt("ada").compile(dialect=sqlite.dialect()))
+    order_by = sql[sql.index("ORDER BY"):]
+
+    opened_at = order_by.index("review_tasks.opened_at")
+    task_id = order_by.index("review_tasks.id")
+    assert opened_at < task_id
+    assert "review_tasks.priority" not in order_by
 
 
 def test_skip_locked_guard_is_on_for_postgresql_and_off_for_sqlite(engine: sa.Engine) -> None:

@@ -27,7 +27,7 @@ The database is seeded once per test with three receipts:
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, time
 from decimal import Decimal
 
 import pytest
@@ -39,6 +39,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 from config.settings import Settings  # noqa: E402
 from receipts.ingest.storage import LocalStorage  # noqa: E402
 from receipts.persist.models import Base, Receipt, ValidationFinding  # noqa: E402
+from receipts.persist.repository import _RECEIPT_FIELDS  # noqa: E402
 from receipts.persist.session import make_engine, make_session_factory  # noqa: E402
 from receipts.persist.users import ROLE_ADMIN, ROLE_REVIEWER, create_user  # noqa: E402
 from receipts.review.api import create_app  # noqa: E402
@@ -81,9 +82,15 @@ def _seed(session_factory) -> None:
                     {"reason": "a WARN finding", "penalty": "-0.080"},
                 ],
                 merchant_name_raw="TOTAL WINE",
+                receipt_number="OR-2026-0042",
                 txn_date=date(2026, 7, 2),
+                # Seconds on purpose: a ``%H:%M`` rendering would drop them,
+                # and ``receipt.time`` is a correctable path, so what the API
+                # renders has to be what PATCH takes back.
+                txn_time=time(14, 30, 45),
                 currency="USD",
                 total=Decimal("1000"),
+                payment_method="VISA",
                 image_key="receipts/2026/07/b/original.jpg",
                 image_phash="",
             )
@@ -267,6 +274,106 @@ def test_detail_returns_findings_and_the_reasons_that_made_the_score(reviewer_cl
 def test_reasons_never_recorded_is_null_not_empty(reviewer_client, pending_receipt_id):
     body = reviewer_client.get(f"/receipts/{pending_receipt_id}").json()
     assert body["confidence_reasons"] is None
+
+
+# --------------------------------------------------------------------------- #
+# A reviewer can read every field they are allowed to correct (P5.T3b)
+# --------------------------------------------------------------------------- #
+
+#: ``receipts`` column -> the path ``receipt_detail`` exposes it at. Written out
+#: rather than derived, because the money columns are deliberately *renamed*
+#: on the way out: ``receipt_detail`` names them after
+#: :class:`receipts.extract.schema.Totals` (``tax``, ``tender``, ``change``)
+#: rather than after the table (``tax_total``, ``tender_amount``,
+#: ``change_amount``), so no rule turns one into the other.
+_COLUMN_TO_DETAIL_PATH = {
+    "merchant_name_raw": ("merchant_name_raw",),
+    "receipt_number": ("receipt_number",),
+    "txn_date": ("txn_date",),
+    "date_raw": ("date_raw",),
+    "txn_time": ("txn_time",),
+    "currency": ("currency",),
+    "subtotal": ("totals", "subtotal"),
+    "tax_total": ("totals", "tax"),
+    "discount_total": ("totals", "discount"),
+    "total": ("totals", "total"),
+    "tender_amount": ("totals", "tender"),
+    "change_amount": ("totals", "change"),
+    "payment_method": ("payment_method",),
+    "card_last4": ("card_last4",),
+    "is_handwritten": ("is_handwritten",),
+    "legibility": ("legibility",),
+    "receipt_is_inconsistent": ("receipt_is_inconsistent",),
+}
+
+_ABSENT = object()
+
+
+def _at(body: dict, path: tuple[str, ...]) -> object:
+    """``body`` at ``path``, or :data:`_ABSENT` if any segment is missing."""
+    cursor: object = body
+    for segment in path:
+        if not isinstance(cursor, dict) or segment not in cursor:
+            return _ABSENT
+        cursor = cursor[segment]
+    return cursor
+
+
+def test_every_correctable_receipt_column_is_readable_in_the_detail(reviewer_client, receipt_id):
+    """A field a reviewer may overwrite is a field they must first be able to see.
+
+    ``_RECEIPT_FIELDS`` (the closed map ``apply_corrections`` resolves a patch
+    against) and ``receipt_detail`` are two independently written lists of the
+    same columns, and until P5.T3b nothing bound them together: three
+    correctable paths -- ``receipt.number``, ``receipt.time``,
+    ``payment.method`` -- had no key in the detail response at all, so a
+    reviewer could replace what the machine read without ever being shown it.
+    This test is that binding, and it fails on the next unpaired addition
+    rather than on the next reviewer to notice.
+    """
+    body = reviewer_client.get(f"/receipts/{receipt_id}").json()
+
+    correctable = {column for column, _coerce in _RECEIPT_FIELDS.values()}
+    assert correctable == set(_COLUMN_TO_DETAIL_PATH), (
+        "_RECEIPT_FIELDS changed: add the new column to _COLUMN_TO_DETAIL_PATH "
+        "naming where receipt_detail exposes it"
+    )
+    assert [
+        column
+        for column, path in sorted(_COLUMN_TO_DETAIL_PATH.items())
+        if _at(body, path) is _ABSENT
+    ] == []
+
+
+def test_detail_returns_the_number_the_time_and_the_payment_method(reviewer_client, receipt_id):
+    """The three values, rendered the way the correction path takes them back.
+
+    ``txn_time`` is ``isoformat()``, not ``strftime("%H:%M")``: the seconds in
+    the seeded ``14:30:45`` survive, which is what makes the value a reviewer
+    reads identical to the value ``PATCH receipt.time`` would store again --
+    see ``test_the_time_the_detail_returns_patches_back_unchanged`` in
+    ``tests/test_api_write.py``.
+    """
+    body = reviewer_client.get(f"/receipts/{receipt_id}").json()
+
+    assert body["receipt_number"] == "OR-2026-0042"
+    assert body["txn_time"] == "14:30:45"
+    assert body["payment_method"] == "VISA"
+
+
+def test_the_three_added_fields_are_null_when_the_column_is(reviewer_client, pending_receipt_id):
+    """``None`` in, ``null`` out -- never ``""`` and never an invented time.
+
+    ``RECEIPT_C`` is the ``pending`` row: nothing has been extracted onto it
+    yet, so all three columns are NULL and the API must say so rather than
+    render an empty string a reviewer could mistake for "the receipt printed
+    nothing here".
+    """
+    body = reviewer_client.get(f"/receipts/{pending_receipt_id}").json()
+
+    assert body["receipt_number"] is None
+    assert body["txn_time"] is None
+    assert body["payment_method"] is None
 
 
 def test_list_filters_and_pages(reviewer_client):

@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import date as date_cls
+from datetime import time as time_cls
 from decimal import Decimal
 from typing import Any
 
@@ -74,6 +75,25 @@ def money(value: Decimal | None) -> str | None:
 
 
 def _iso_date(value: date_cls | None) -> str | None:
+    return None if value is None else value.isoformat()
+
+
+def _iso_time(value: time_cls | None) -> str | None:
+    """A ``time`` column as ISO text -- ``isoformat()``, not ``"%H:%M"``.
+
+    ``receipt.time`` is one of the seventeen paths ``apply_corrections``
+    accepts (``_RECEIPT_FIELDS`` in
+    :mod:`receipts.persist.repository`), so whatever this renders is what a
+    reviewer's screen sends back through ``PATCH``. ``_coerce_time`` parses it
+    with :meth:`datetime.time.fromisoformat`, which reads ``isoformat()``'s
+    output exactly -- seconds and microseconds included -- while
+    ``strftime("%H:%M")`` (what :func:`_export_extraction` uses, one-way, into
+    a spreadsheet cell) silently truncates them. Measured: for
+    ``time(14, 30, 45)``, ``_coerce_time(v.isoformat()) == v`` while
+    ``_coerce_time(v.strftime("%H:%M")) != v``. A lossy rendering would mean a
+    reviewer who merely *confirms* an untouched receipt rewrites its stored
+    time and gets a ``corrections`` row for an edit they never made.
+    """
     return None if value is None else value.isoformat()
 
 
@@ -136,6 +156,36 @@ def receipt_detail(receipt: Receipt, findings: list[ValidationFinding]) -> dict[
     ``receipts`` table's own column names (``tax_total``, ``tender_amount``,
     ...), so a client already speaking the extraction schema's vocabulary
     does not have to learn a second one.
+
+    **Every column a reviewer may correct is returned here** (P5.T3b).
+    ``_RECEIPT_FIELDS`` in :mod:`receipts.persist.repository` accepts
+    corrections for seventeen paths; this function returned seventeen
+    top-level keys, and they were different seventeen -- ``receipt_number``,
+    ``txn_time`` and ``payment_method`` were correctable but had no key at
+    all, so a reviewer could overwrite what the machine read without ever
+    being shown it. The three are additive: no existing key moved or changed
+    shape. ``tests/test_api_read.py::
+    test_every_correctable_receipt_column_is_readable_in_the_detail`` is what
+    now binds the two lists together.
+
+    ``payment_method`` is redacted on the way *in*. It is one of the two
+    columns ``save_extraction`` passes through ``redact_pan`` -- the other is
+    ``merchant_name_raw``, which this function already returned -- and
+    ``_plan_change`` redacts every coerced text value a reviewer submits, so
+    the correction path is covered too. Those are the only two writers of the
+    column under ``src/`` (``create_pending_receipt``, the sole other
+    ``Receipt(...)`` construction, leaves it NULL), so what leaves here is
+    what §18 already permits to be stored: a PAN read off the card line
+    reaches this key as ``"VISA ************1111"``. Measured through the
+    route -- ``PATCH {"payment": {"method": "VISA 4111111111111111"}}``
+    returns ``"VISA ************1111"`` and the unmasked digits appear nowhere
+    in the body. Asserted at the layer below by
+    ``test_save_extraction_redacts_a_pan_the_model_put_in_free_text`` and
+    ``test_apply_corrections_redacts_a_pan_typed_into_a_free_text_field``.
+
+    The guarantee therefore belongs to the repository layer, not to the
+    column: a test that seeds a row by constructing ``Receipt(...)`` directly
+    bypasses both writers and can put anything it likes in this key.
     """
     return {
         "id": str(receipt.id),
@@ -143,10 +193,13 @@ def receipt_detail(receipt: Receipt, findings: list[ValidationFinding]) -> dict[
         "confidence": money(receipt.confidence),
         "confidence_reasons": receipt.confidence_reasons,  # verbatim: None stays None
         "merchant_name_raw": receipt.merchant_name_raw,
+        "receipt_number": receipt.receipt_number,
         "txn_date": _iso_date(receipt.txn_date),
         "date_raw": receipt.date_raw,
+        "txn_time": _iso_time(receipt.txn_time),
         "currency": receipt.currency,
         "created_at": receipt.created_at.isoformat(),
+        "payment_method": receipt.payment_method,
         "card_last4": receipt.card_last4,
         "is_handwritten": receipt.is_handwritten,
         "legibility": receipt.legibility.value,

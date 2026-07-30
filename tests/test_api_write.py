@@ -32,7 +32,7 @@ import io
 import os
 import tempfile
 import uuid
-from datetime import date
+from datetime import date, time
 from decimal import Decimal
 
 import pytest
@@ -47,7 +47,14 @@ from sqlalchemy import event, select  # noqa: E402
 import receipts.review.api as api_module  # noqa: E402
 from config.settings import Settings  # noqa: E402
 from receipts.ingest.storage import LocalStorage, make_image_key  # noqa: E402
-from receipts.persist.models import Base, Correction, Merchant, Receipt, ReviewTask  # noqa: E402
+from receipts.persist.models import (  # noqa: E402
+    Base,
+    Correction,
+    Merchant,
+    Receipt,
+    ReviewState,
+    ReviewTask,
+)
 from receipts.persist.session import make_engine, make_session_factory  # noqa: E402
 from receipts.persist.users import ROLE_ADMIN, ROLE_REVIEWER, create_user  # noqa: E402
 from receipts.review.api import create_app  # noqa: E402
@@ -144,6 +151,9 @@ def receipt_id(session_factory, storage) -> uuid.UUID:
                 confidence=Decimal("0.700"),
                 merchant_name_raw="COFFEE CO",
                 txn_date=date(2026, 7, 1),
+                # Seconds on purpose: they are what tells an ``isoformat()``
+                # round-trip apart from a lossy ``%H:%M`` one.
+                txn_time=time(14, 30, 45),
                 currency="USD",
                 total=Decimal("12.50"),
                 image_key=key,
@@ -315,6 +325,32 @@ def test_patch_writes_a_correction_attributed_to_the_session_user(
     assert correction.value_after == "1234.56"
 
 
+def test_the_time_the_detail_returns_patches_back_unchanged(
+    reviewer_client, session_factory, receipt_id
+):
+    """``receipt.time`` is correctable, so the rendering has to round-trip.
+
+    A reviewer's screen is populated from ``GET /receipts/{id}`` and its edits
+    go back through ``PATCH``. If the two disagree about how a ``time`` is
+    written, a reviewer who merely *confirms* an untouched receipt rewrites the
+    stored value -- and ``apply_corrections`` would log that as a correction
+    they never made. Asserting the ``corrections`` table stayed empty is what
+    makes this test see a lossy rendering: ``14:30:45`` rendered as ``14:30``
+    would patch back as a genuine change and write a row.
+    """
+    rendered = reviewer_client.get(f"/receipts/{receipt_id}").json()["txn_time"]
+
+    response = reviewer_client.patch(
+        f"/receipts/{receipt_id}", json={"receipt": {"time": rendered}}
+    )
+
+    assert response.status_code == 200
+    assert response.json()["txn_time"] == rendered
+    with session_factory() as session:
+        assert session.get(Receipt, receipt_id).txn_time == time(14, 30, 45)
+        assert session.scalars(select(Correction)).all() == []
+
+
 def test_patch_rejects_a_json_float_for_money(reviewer_client, receipt_id):
     response = reviewer_client.patch(f"/receipts/{receipt_id}", json={"totals": {"total": 1234.56}})
     assert response.status_code == 422
@@ -398,6 +434,38 @@ def test_review_next_claims_one_task_per_caller(reviewer_client, admin_client):
     first = reviewer_client.get("/review/next").json()["task"]
     second = admin_client.get("/review/next").json()["task"]
     assert first["id"] != (second or {}).get("id")
+
+
+def test_review_next_returns_the_same_task_when_a_reviewer_reloads(
+    reviewer_client, session_factory, receipt_id, other_receipt_id
+):
+    """The page-reload case ADR-0016 exists for, end to end.
+
+    Nothing releases a claim: ``_claim_stmt`` selects ``state == OPEN`` only,
+    ``enqueue_review`` reopens a task only when it is ``DONE``, and none of the
+    routes in ``review/api.py`` unclaims -- ``POST /review/{id}/complete``
+    closes, which is not a release. So before this, a reviewer who reloaded
+    claimed a *second* task and stranded the first out of the queue for good.
+    Two tasks are queued here rather than one precisely so a regression could
+    take the second: with one task the buggy behaviour and the fixed one both
+    return the same id.
+    """
+    with session_factory() as session:
+        enqueue_review(session, receipt_id, reason="quick verify", priority=2)
+        enqueue_review(session, other_receipt_id, reason="urgent: no total", priority=0)
+        session.commit()
+
+    first = reviewer_client.get("/review/next").json()
+    second = reviewer_client.get("/review/next").json()
+
+    assert first["task"]["id"] == second["task"]["id"]
+    assert first["receipt"]["id"] == second["receipt"]["id"]
+    assert second["task"]["assigned_to"] == "alice"
+    with session_factory() as session:
+        held = session.scalars(
+            select(ReviewTask).where(ReviewTask.state == ReviewState.IN_PROGRESS)
+        ).all()
+        assert [str(task.id) for task in held] == [first["task"]["id"]]
 
 
 def test_review_next_on_an_empty_queue_returns_null(empty_reviewer_client):
