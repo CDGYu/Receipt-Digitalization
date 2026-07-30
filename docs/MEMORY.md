@@ -3,6 +3,34 @@
 Durable working memory for cross-session continuity. Read this first, then the
 files in "Key references" below. Last updated: **2026-07-29**.
 
+> ## ⚠️ THE SNAPSHOT BELOW IS STALE AS OF 2026-07-30
+>
+> Phase 5 has moved a long way past `dae3e41` and **two standing rules in this
+> file are now wrong.** Not rewritten yet because the milestone is still in
+> flight — full refresh when Phase 5 closes.
+>
+> **Live source of truth:
+> `.superpowers/sdd/2026-07-29-review-ui/progress.md`**, then `git log`.
+>
+> - **`git push` is authorised for `feat/*`** (user decision, 2026-07-30), and
+>   everything through the current head is on GitHub. The "Never `git push`"
+>   rule below is obsolete. **`main` is still hands-off — ask first.**
+> - **Tasks 1–3 complete and reviewed**, plus an unplanned backend task:
+>   `receipt_detail` gained `receipt_number`/`txn_time`/`payment_method`, and
+>   `GET /review/next` now **resumes the caller's own in-progress task**
+>   (**ADR-0016** — the ADR list below stops at 0015). Task 4 is in fix rounds;
+>   Task 5 not started.
+> - **Test counts below are wrong**, and there is now a **second suite**:
+>   Vitest, in `frontend/`. **`npm test` does not type-check** — run
+>   `npm run typecheck` as well, or a type error ships green. That trap has
+>   fired three times.
+> - **No ASGI entry point exists** — `create_app` is a factory nothing calls, so
+>   the API has no supported way to be served. Task 5's CI step is cut in favour
+>   of a tracked `scripts/verify.py`.
+>
+> The invariants, the corpus notes, the R020 issue, ISSUE-001 and the blocked-on-
+> the-user list are all still accurate.
+
 ## Snapshot
 
 - **Branch `feat/review-ui` @ `dae3e41`** (2 commits off `main` @ `5e4d708`) —
