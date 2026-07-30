@@ -3,40 +3,44 @@
 Durable working memory for cross-session continuity. Read this first, then the
 files in "Key references" below. Last updated: **2026-07-29**.
 
-> ## ⚠️ THE SNAPSHOT BELOW IS STALE AS OF 2026-07-30
->
-> Phase 5 has moved a long way past `dae3e41` and **two standing rules in this
-> file are now wrong.** Not rewritten yet because the milestone is still in
-> flight — full refresh when Phase 5 closes.
->
-> **Live source of truth:
-> `.superpowers/sdd/2026-07-29-review-ui/progress.md`**, then `git log`.
->
-> - **`git push` is authorised for `feat/*`** (user decision, 2026-07-30), and
->   everything through the current head is on GitHub. The "Never `git push`"
->   rule below is obsolete. **`main` is still hands-off — ask first.**
-> - **Tasks 1–3 complete and reviewed**, plus an unplanned backend task:
->   `receipt_detail` gained `receipt_number`/`txn_time`/`payment_method`, and
->   `GET /review/next` now **resumes the caller's own in-progress task**
->   (**ADR-0016** — the ADR list below stops at 0015). Task 4 is in fix rounds;
->   Task 5 not started.
-> - **Test counts below are wrong**, and there is now a **second suite**:
->   Vitest, in `frontend/`. **`npm test` does not type-check** — run
->   `npm run typecheck` as well, or a type error ships green. That trap has
->   fired three times.
-> - **No ASGI entry point exists** — `create_app` is a factory nothing calls, so
->   the API has no supported way to be served. Task 5's CI step is cut in favour
->   of a tracked `scripts/verify.py`.
->
-> The invariants, the corpus notes, the R020 issue, ISSUE-001 and the blocked-on-
-> the-user list are all still accurate.
-
 ## Snapshot
 
-- **Branch `feat/review-ui` @ `dae3e41`** (2 commits off `main` @ `5e4d708`) —
-  **722 tests passing, ruff clean.** **PHASE 5 IS IN PROGRESS:** Task 1 of 5
-  (the guarded SPA static mount) is implemented and verified; Tasks 2–5 are not
-  started. See `.superpowers/sdd/2026-07-29-review-ui/progress.md`.
+- **`main` @ `28f6c7a` — PHASE 5 IS COMPLETE AND MERGED** (2026-07-31, true
+  fast-forward from `5e4d708`). **844 Python tests + 170 Vitest, ruff clean,
+  typecheck clean, build clean, e2e 2 passed.**
+- **There are now two test suites.** Python (`python -m pytest`, still offline
+  and Node-free — verified with `node` stripped from `PATH`) and **Vitest in
+  `frontend/`**. **`npm test` does NOT type-check**: run `npm run typecheck`
+  too, or a type error ships green. That trap fired three times this milestone.
+  **`python scripts/verify.py` runs all five gates** and skips the Node three
+  loudly when `npm` is absent.
+- **`git push` is authorised for `feat/*` branches** (user decision,
+  2026-07-30). **Ask before pushing `main`.**
+- Milestone ledger: `.superpowers/sdd/2026-07-29-review-ui/progress.md` — it
+  carries the deferred work, the parked rulings and the next task's scope.
+
+### What Phase 5 shipped
+
+A keyboard-first review UI (React 19 + Vite + TS in `frontend/`), served
+same-origin under `/app` by a guarded `StaticFiles` mount (ADR-0015); login,
+the review screen, the confidence rail, the findings panel, an image pane with a
+single re-sign retry; editing across all 17 correctable paths with money as a
+string end to end; a strictly sequential `PATCH → complete → next` with
+step-tagged failures; a warning that **holds the screen when the server stored
+something other than what was sent**; a Playwright acceptance test asserting the
+`corrections` rows; and `scripts/verify.py`.
+
+Backend changes it forced: `receipt_detail` now returns `receipt_number`,
+`txn_time` and `payment_method` (correctable but previously invisible), and
+**`GET /review/next` resumes the caller's own in-progress task** before claiming
+a new one (**ADR-0016**) — because nothing in the system releases a claim.
+
+### The next task, already scoped
+
+**PAN hardening.** `_PAN_RE` was widened this milestone to cover `.`, `_`, `/`
+and `,` separators, but two residuals remain and **the obvious fix for one of
+them is measured worse**. Read the ledger's "NEXT TASK" section before touching
+that regex — it has produced a surprise on both of its last two widenings.
 - **The default branch is now `main`, not `master`** (renamed 2026-07-29), and a
   GitHub remote exists: `origin` → `CDGYu/Receipt-Digitalization` (**private** —
   verified: an unauthenticated API read returns 404).

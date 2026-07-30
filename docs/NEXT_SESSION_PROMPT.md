@@ -4,39 +4,53 @@ Paste the block between the `---` markers as the first message of the next
 session, and **fill in the "Today's goal" line** (it is the one thing the prompt
 cannot infer — a placeholder left in place costs a round trip).
 
-Last refreshed: **2026-07-29**, at `feat/review-ui @ dae3e41` (722 tests, ruff
-clean). **Phase 5 is in progress: Task 1 of 5 done.**
+Last refreshed: **2026-07-31**, at `main @ 28f6c7a`. **Phase 5 is complete and
+merged.** 844 Python tests + 170 Vitest, all gates green.
 
-> ## ⚠️ STALE AS OF 2026-07-30 — READ THE LEDGER FIRST
+> ## READ THIS BLOCK — IT SUPERSEDES "Where we are" BELOW
 >
-> The body below describes `dae3e41`. Phase 5 has moved a long way since, and
-> **two of its standing rules are now wrong.** It has not been rewritten because
-> the milestone is still in flight; it will be refreshed when Phase 5 closes.
+> The "Where we are" section further down describes Phase 5's *start*
+> (`dae3e41`, Task 1 of 5). It is kept as history. **This block is current.**
 >
-> **The live source of truth is
-> `.superpowers/sdd/2026-07-29-review-ui/progress.md`.** Read that, then verify
-> against `git log`. Do not trust the state block below.
+> **State:** `main @ 28f6c7a`, Phase 5 merged 2026-07-31 as a true
+> fast-forward from `5e4d708`. `feat/review-ui` is kept at its merge point.
+> **844 Python / 170 Vitest**, ruff clean, typecheck clean, build clean, e2e 2
+> passed. Everything is pushed.
 >
-> Corrections that matter before you run any command:
+> **Live source of truth:
+> `.superpowers/sdd/2026-07-29-review-ui/progress.md`** — the milestone ledger
+> carries the deferred work, the parked rulings, and the next task's full scope.
+> Then `git log`.
 >
-> - **`git push` IS NOW AUTHORIZED for `feat/*` branches** (user decision,
->   2026-07-30), and everything through the current head is already on GitHub.
->   The body's "NEVER `git push`" is obsolete. **`main` is still hands-off** —
->   ask before pushing it. See the `push-policy-feature-branches` memory.
-> - **Tasks 1, 2 and 3 are complete and reviewed**, plus an unplanned backend
->   task (`receipt_detail` gained `receipt_number`/`txn_time`/`payment_method`,
->   and `GET /review/next` now resumes the caller's own in-progress task —
->   **ADR-0016**). Task 4 is in its fix rounds. Task 5 has not started.
-> - **The test counts in the body are wrong.** Python is well past 722, and there
->   is now a **second suite** — Vitest, in `frontend/`. `npm test` does **not**
->   type-check: run `npm run typecheck` too, or a type error ships green.
-> - **Task 5's plan step for `.github/workflows/ci.yml` is cut.** That file is
->   gitignored and Actions does not run; a tracked `scripts/verify.py` replaces
->   it. There is also **no ASGI entry point anywhere** — `create_app` is a
->   factory nothing calls — so the e2e needs its own launcher.
+> Things the body below gets wrong, and that matter before you run anything:
 >
-> Everything else in the body — the ADR list, the non-negotiables, the workflow,
-> the four review standards, the blocked-on-the-user items — still holds.
+> - **`git push` IS authorised for `feat/*` branches** (user decision,
+>   2026-07-30). The body's "NEVER `git push`" is obsolete. **Ask before
+>   pushing `main`.** See the `push-policy-feature-branches` memory.
+> - **There are now TWO test suites.** Python, and **Vitest in `frontend/`**.
+>   **`npm test` does not type-check** — run `npm run typecheck` too, or a type
+>   error ships green. That trap fired three times in Phase 5.
+>   **`python scripts/verify.py` runs all five gates** (pytest, ruff, typecheck,
+>   vitest, build) and skips the Node three *loudly* when `npm` is absent.
+> - **The ADR list stops at 0015 below; there is an ADR-0016** —
+>   `GET /review/next` resumes the caller's own in-progress task, because
+>   nothing in the system releases a claim.
+> - **Task 5's CI step was cut.** `.github/workflows/ci.yml` is gitignored and
+>   Actions does not run, so a tracked workflow would be a false signal.
+>   `scripts/verify.py` replaces it. **Nothing runs the frontend gates on
+>   GitHub.**
+> - **There is no ASGI entry point** — `create_app` is a factory nothing calls,
+>   so this API has no supported way to be served. `scripts/serve_review_e2e.py`
+>   is deliberately e2e-scoped; do not promote it without deciding the
+>   deployment policy on purpose.
+>
+> **The next task is already scoped: PAN hardening.** Two residuals, one of them
+> undocumented in the tree, and **the obvious fix for the documented one is
+> measured worse.** Read the ledger's "NEXT TASK" section before touching
+> `_PAN_RE` — it has produced a surprise on both of its last two widenings.
+>
+> Everything else in the body — the non-negotiables, the workflow, the review
+> standards, ISSUE-001, the blocked-on-the-user items — still holds.
 
 ---
 
