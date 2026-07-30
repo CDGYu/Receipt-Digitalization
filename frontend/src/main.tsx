@@ -1,5 +1,6 @@
 import { StrictMode, useSyncExternalStore } from 'react'
 import { createRoot } from 'react-dom/client'
+import { ErrorBoundary } from './ErrorBoundary'
 import { isSignedIn, setSignedIn, subscribe } from './session'
 import { LoginPage } from './login/LoginPage'
 import { ReviewScreen } from './review/ReviewScreen'
@@ -19,6 +20,11 @@ import { ReviewScreen } from './review/ReviewScreen'
  * `createRoot` runs, and so before any child effect can fire a request. An
  * effect here was too late: React flushes child effects first. See
  * `session.ts`'s docstring.
+ *
+ * `ErrorBoundary` wraps `App` rather than sitting inside it, so a throw from
+ * either screen -- or from `App` itself -- still has somewhere to land. Without
+ * it React unmounts the tree and the reviewer gets a blank page; `request` is an
+ * unchecked cast, so a reply missing a field really can throw inside render.
  */
 function App() {
   const signedIn = useSyncExternalStore(subscribe, isSignedIn)
@@ -31,6 +37,8 @@ function App() {
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
   </StrictMode>,
 )

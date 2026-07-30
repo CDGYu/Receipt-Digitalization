@@ -94,6 +94,62 @@ export interface ReceiptDetail {
   findings: Finding[]
 }
 
+/** One row of `GET /receipts`, and the `receipt` half of `GET /review/next`.
+ *
+ * **Not derivable from `ReceiptDetail`.** `receipt_summary`
+ * (review/serializers.py:80-96) puts `total` at the *top level*, while
+ * `receipt_detail` puts every amount under `totals` -- so no `Pick` or `Omit`
+ * over `ReceiptDetail` produces this shape, and the two responses genuinely
+ * disagree about where the one number a reviewer triages on lives. Read off the
+ * serializer, which is the only place that shape is written down.
+ *
+ * The plan had no type for this at all: `fetchNext` was specified as returning
+ * `receipt: unknown`.
+ */
+export interface ReceiptSummary {
+  id: string
+  status: string
+  confidence: Money | null
+  merchant_name_raw: string | null
+  txn_date: string | null
+  currency: string | null
+  /** Top level here; `totals.total` on `ReceiptDetail`. Not a transcription slip. */
+  total: Money | null
+  /** ISO 8601, never null -- `receipt.created_at.isoformat()`. */
+  created_at: string
+}
+
+/** `GET /receipts` -- one page of summaries.
+ *
+ * `has_more` comes off the extra row a `limit + 1` fetch returned, not a
+ * `COUNT(*)` (review/api.py:182-198), so it answers "is there another page"
+ * and never "how many rows are there".
+ */
+export interface ReceiptListResponse {
+  items: ReceiptSummary[]
+  has_more: boolean
+}
+
+/** `GET /review/next` -- claim the next task for the caller.
+ *
+ * Two nulls, both load-bearing and both distinct from each other:
+ *
+ * * `task: null` is an **empty queue**, returned as 200 with a body rather than
+ *   204 (review/api.py:496-500), so it is a state to render and not an error to
+ *   catch. On that branch the route returns `{"task": None}` and **no `receipt`
+ *   key at all** -- hence `receipt` is optional here, not merely nullable.
+ * * `receipt: null` alongside a **non-null** task: the route serialises
+ *   `receipt_summary(receipt) if receipt is not None else None`
+ *   (review/api.py:504), so a claimed task whose receipt row cannot be loaded
+ *   arrives with the task present and the receipt missing. `ReviewScreen` does
+ *   not read this field -- it re-fetches the full `ReceiptDetail` from
+ *   `task.receipt_id`, because the summary carries no line items and no findings.
+ */
+export interface ReviewNextResponse {
+  task: ReviewTask | null
+  receipt?: ReceiptSummary | null
+}
+
 /** A review-queue task, as `_task_summary` (review/api.py:273-284) returns it.
  *
  * `assigned_to`, `opened_at` and `closed_at` were missing from the plan's
