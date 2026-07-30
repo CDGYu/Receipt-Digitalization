@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildPatch, fieldsFromReceipt } from '../src/review/patch'
+import { buildPatch, fieldsFromReceipt, findRewrites } from '../src/review/patch'
 import type { Money, ReceiptDetail } from '../src/api/types'
 
 /** A receipt with every correctable column populated and distinguishable.
@@ -259,5 +259,118 @@ describe('fieldsFromReceipt', () => {
     expect(buildPatch(original, { ...original, 'receipt.date_raw': null })).toEqual({
       'receipt.date_raw': null,
     })
+  })
+})
+
+describe('findRewrites', () => {
+  it('reports a value the server rewrote, naming the field and both sides', () => {
+    // `redact_pan` masks any 13-19 digit run, which includes plausible printed
+    // data -- measured: `redact_pan('20260730123456')` is `'**********3456'`.
+    // Without this the reviewer has no way to learn their input did not land.
+    expect(
+      findRewrites(
+        { 'receipt.date_raw': '20260730123456' },
+        { 'receipt.date_raw': '**********3456' },
+      ),
+    ).toEqual([{ path: 'receipt.date_raw', sent: '20260730123456', stored: '**********3456' }])
+  })
+
+  it('says nothing when the server kept exactly what was sent', () => {
+    expect(findRewrites({ 'merchant.name': 'METRO OIL' }, { 'merchant.name': 'METRO OIL' })).toEqual(
+      [],
+    )
+  })
+
+  it('compares only the paths that were actually sent', () => {
+    // Every other field on the receipt is untouched by definition -- the patch
+    // omitted it -- so a difference there is not this reviewer's edit.
+    expect(
+      findRewrites(
+        { 'merchant.name': 'METRO OIL' },
+        { 'merchant.name': 'METRO OIL', 'totals.total': 'anything at all' },
+      ),
+    ).toEqual([])
+  })
+
+  describe('money: the column scale is not a rewrite', () => {
+    // Measured through the real PATCH route -- EVERY money field comes back at
+    // the column's scale, always:
+    //   sent '1000.00' -> returned '1000.0000'    sent '1000' -> '1000.0000'
+    //   sent '892.86'  -> returned '892.8600'     sent '2.5'  -> '2.5000'
+    //   sent '-2.50'   -> returned '-2.5000'      sent '0.00' -> '0.0000'
+    // A warning that fires on every money edit teaches reviewers to dismiss it,
+    // so trailing fractional zeros are normalised away before comparing. The
+    // amount is never converted to a number -- indexOf/charAt/slice, and what
+    // arithmetic there is runs on string indices, not on the digits (ADR-0001).
+    // tests/no-float-in-money-path.test.ts is the arbiter, and it passes.
+    const cases: ReadonlyArray<readonly [string, string, string]> = [
+      ['a scale-only difference', '1000.00', '1000.0000'],
+      ['no fractional part at all on the way in', '1000', '1000.0000'],
+      ['a negative amount', '-2.50', '-2.5000'],
+      ['zero', '0.00', '0.0000'],
+      ['every fractional digit stripped', '0.000', '0'],
+      ['a bare trailing point', '1000.', '1000.0000'],
+      ['a quantity', '2.5', '2.5000'],
+    ]
+    for (const [label, sent, stored] of cases) {
+      it(`is silent for ${label}: ${sent} -> ${stored}`, () => {
+        expect(findRewrites({ 'totals.total': sent }, { 'totals.total': stored })).toEqual([])
+        expect(
+          findRewrites({ 'line_items[3].unit_price': sent }, { 'line_items[3].unit_price': stored }),
+        ).toEqual([])
+      })
+    }
+
+    it('never strips zeros to the left of the point', () => {
+      // The bug this rules out: normalising `1000` to `1` would hide the server
+      // turning a thousand into one.
+      expect(findRewrites({ 'totals.total': '1000' }, { 'totals.total': '1' })).toEqual([
+        { path: 'totals.total', sent: '1000', stored: '1' },
+      ])
+      expect(findRewrites({ 'totals.total': '100.00' }, { 'totals.total': '1.0000' })).toEqual([
+        { path: 'totals.total', sent: '100.00', stored: '1.0000' },
+      ])
+    })
+
+    it('still catches a coercion that changed the number', () => {
+      // `'1,000.00'` normalises to `'1,000'` and the stored value to `'1000'`:
+      // the stripped comma survives the exemption, which is the point of
+      // normalising only trailing zeros rather than comparing loosely.
+      expect(findRewrites({ 'totals.total': '1,000.00' }, { 'totals.total': '1000.0000' })).toEqual([
+        { path: 'totals.total', sent: '1,000.00', stored: '1000.0000' },
+      ])
+    })
+
+    it('does not extend the exemption to fields that are not money', () => {
+      // `receipt.number` is `_coerce_optional_text`; trailing zeros there are
+      // characters, not scale.
+      expect(findRewrites({ 'receipt.number': '1000.00' }, { 'receipt.number': '1000.0000' })).toEqual(
+        [{ path: 'receipt.number', sent: '1000.00', stored: '1000.0000' }],
+      )
+    })
+  })
+
+  it('reports a reformatted date, which is an exact comparison', () => {
+    expect(findRewrites({ 'receipt.date': '2026-7-3' }, { 'receipt.date': '2026-07-03' })).toEqual([
+      { path: 'receipt.date', sent: '2026-7-3', stored: '2026-07-03' },
+    ])
+  })
+
+  it('reports a cleared field that came back with a value, and the reverse', () => {
+    expect(findRewrites({ 'payment.method': null }, { 'payment.method': 'VISA' })).toEqual([
+      { path: 'payment.method', sent: null, stored: 'VISA' },
+    ])
+    expect(findRewrites({ 'payment.method': 'VISA' }, { 'payment.method': null })).toEqual([
+      { path: 'payment.method', sent: 'VISA', stored: null },
+    ])
+  })
+
+  it('reports a path the reply does not carry at all as stored null', () => {
+    // Reachable if a line item moved: `line_items[3].*` addresses a position,
+    // so a reply whose items sit elsewhere has no key for it. Absent is not
+    // "unchanged", and reporting it is the safe direction.
+    expect(findRewrites({ 'line_items[3].sku': 'D-1' }, {})).toEqual([
+      { path: 'line_items[3].sku', sent: 'D-1', stored: null },
+    ])
   })
 })

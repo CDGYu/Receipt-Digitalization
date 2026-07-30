@@ -160,3 +160,95 @@ describe('the two calls the chain is made of', () => {
     expect(CALLS).toEqual(['PATCH /receipts/a%2Fb', 'POST /review/a%2Fb/complete'])
   })
 })
+
+/** A `ReceiptDetail` good enough for `fieldsFromReceipt`, with overrides. */
+function detail(over: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    id: 'r1',
+    status: 'reviewed',
+    confidence: '0.620',
+    confidence_reasons: [],
+    merchant_name_raw: 'METRO OIL',
+    receipt_number: 'INV-1',
+    txn_date: '2026-07-30',
+    date_raw: '30/07/2026',
+    txn_time: '14:30:45',
+    currency: 'USD',
+    created_at: '2026-07-30T09:31:02+00:00',
+    payment_method: 'VISA',
+    card_last4: '4242',
+    is_handwritten: false,
+    legibility: 'good',
+    duplicate_of: null,
+    receipt_is_inconsistent: false,
+    totals: {
+      subtotal: '1000.0000',
+      tax: null,
+      discount: null,
+      total: '1000.0000',
+      tender: null,
+      change: null,
+    },
+    line_items: [],
+    findings: [],
+    ...over,
+  }
+}
+
+describe('submitReview: what the server actually stored', () => {
+  it('reports clean when the reply matches what was sent', async () => {
+    stubFetch(() => ok(detail()))
+    expect(await submitReview('r1', 't1', { 'merchant.name': 'METRO OIL' })).toEqual({
+      kind: 'clean',
+    })
+  })
+
+  it('treats the column display scale as clean, not as a rewrite', async () => {
+    // Measured through the real route: every money field comes back at the
+    // column's scale (`'1000.00'` in, `'1000.0000'` out). Warning on that would
+    // fire on every money edit ever made.
+    stubFetch(() => ok(detail()))
+    expect(await submitReview('r1', 't1', { 'totals.total': '1000.00' })).toEqual({ kind: 'clean' })
+  })
+
+  it('reports a redacted value, naming the field and both sides', async () => {
+    stubFetch(() => ok(detail({ date_raw: '**********3456' })))
+    expect(await submitReview('r1', 't1', { 'receipt.date_raw': '20260730123456' })).toEqual({
+      kind: 'rewritten',
+      rewrites: [
+        { path: 'receipt.date_raw', sent: '20260730123456', stored: '**********3456' },
+      ],
+    })
+  })
+
+  it('still closes the task when the server rewrote something', async () => {
+    // The write landed and the reviewer's work is done; the warning is a notice,
+    // not a failure. Stopping the chain here would leave the queue task open
+    // over a receipt that is already `reviewed`.
+    stubFetch(() => ok(detail({ date_raw: '**********3456' })))
+    await submitReview('r1', 't1', { 'receipt.date_raw': '20260730123456' })
+    expect(CALLS).toEqual(['PATCH /receipts/r1', 'POST /review/t1/complete'])
+  })
+
+  it('says so when the reply cannot be checked, rather than claiming it was clean', async () => {
+    // `request` resolves an empty body to `undefined`. This route always returns
+    // a document, so that means something other than the API answered -- and
+    // "we could not check" must not be reported as "nothing was rewritten".
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (path: string, init?: RequestInit) => {
+        const method = init?.method ?? 'GET'
+        CALLS.push(`${method} ${path}`)
+        return new Response('', { status: 200 })
+      }),
+    )
+    const outcome = await submitReview('r1', 't1', { 'totals.total': '1000.00' })
+    expect(outcome.kind).toBe('unverified')
+    expect(CALLS).toEqual(['PATCH /receipts/r1', 'POST /review/t1/complete'])
+  })
+
+  it('is clean for a confirmation, which sent nothing to check', async () => {
+    stubFetch(() => ok(detail()))
+    expect(await submitReview('r1', 't1', {})).toEqual({ kind: 'clean' })
+  })
+})

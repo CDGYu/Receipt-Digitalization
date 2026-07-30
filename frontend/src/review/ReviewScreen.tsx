@@ -8,6 +8,7 @@ import {
   fetchReceipt,
   submitReview,
 } from '../api/review'
+import type { SubmitOutcome } from '../api/review'
 import type { ReceiptDetail, ReviewTask } from '../api/types'
 import { ConfidenceRail } from './ConfidenceRail'
 import { FindingsPanel } from './FindingsPanel'
@@ -93,6 +94,9 @@ type Phase =
       readonly fields: FieldMap
     }
 
+/** A submit that succeeded but has something to say first. */
+type Held = Exclude<SubmitOutcome, { kind: 'clean' }>
+
 /** The submit chain's own state, kept apart from `Phase` because a failed
  *  submission must leave the receipt and the reviewer's edits on screen, while a
  *  failed *load* has nothing to show. */
@@ -106,6 +110,11 @@ type Submit =
        *  is `reviewed` and this task is still open. */
       readonly openTaskId: string | null
     }
+  /** The chain finished -- receipt saved, task closed -- but the server did not
+   *  store what was sent, or the reply could not be checked. Nothing is broken
+   *  and nothing can be retried; the screen simply must not advance until the
+   *  reviewer has had the chance to read it. */
+  | { readonly kind: 'held'; readonly outcome: Held }
 
 /** The API's own words when it gave us any.
  *
@@ -211,8 +220,9 @@ export function ReviewScreen() {
     const { task, receipt, original, fields } = phase
     submittedTask.current = task.id
     setSubmit({ kind: 'busy' })
+    let outcome: SubmitOutcome
     try {
-      await submitReview(receipt.id, task.id, buildPatch(original, fields))
+      outcome = await submitReview(receipt.id, task.id, buildPatch(original, fields))
     } catch (caught) {
       // Nothing was written, or only the close failed; either way this task can
       // be submitted again, so the guard is released.
@@ -220,8 +230,13 @@ export function ReviewScreen() {
       setSubmit(submitFailure(caught, task.id))
       return
     }
+    // The task is closed either way -- the write landed. Only the advance waits.
     claimed.current = null
-    await load()
+    if (outcome.kind === 'clean') {
+      await load()
+      return
+    }
+    setSubmit({ kind: 'held', outcome })
   }
 
   /** Close a task whose receipt was already patched. Not a retry of the chain:
@@ -312,14 +327,61 @@ export function ReviewScreen() {
       <ReceiptForm fields={fields} onChange={edit} />
       <LineItemsTable items={receipt.line_items} fields={fields} onChange={edit} />
       {submit.kind === 'failed' ? <p role="alert">{submit.message}</p> : null}
-      <button type="button" onClick={() => void approve()} disabled={busy}>
-        Approve (⌘↵)
-      </button>
+      {submit.kind === 'held' ? <StoredDifferently outcome={submit.outcome} /> : null}
+      {submit.kind === 'held' ? (
+        // The only way past the notice, and deliberately the only way: the
+        // receipt is saved and the task is closed, so there is nothing to retry
+        // and nothing to fix here -- but advancing on its own would destroy the
+        // one notice a reviewer ever gets that the database does not hold what
+        // they typed. So the chain runs to completion and the *advance* waits
+        // for a click. Ctrl+Enter is not wired to this on purpose: the chord
+        // means "approve", and a reviewer clearing a warning by reflex with the
+        // same key they submit with is how the warning stops being read.
+        <button type="button" onClick={() => void load()}>
+          Next receipt
+        </button>
+      ) : (
+        <button type="button" onClick={() => void approve()} disabled={busy}>
+          Approve (⌘↵)
+        </button>
+      )}
       {openTaskId === null ? null : (
         <button type="button" onClick={() => void closeTaskOnly(openTaskId)} disabled={busy}>
           Close task
         </button>
       )}
     </main>
+  )
+}
+
+/** What the server stored, where it differs from what was sent.
+ *
+ * `role="alert"` rather than a quiet note: it is the only signal that a
+ * correction did not land as typed, and the reviewer is about to move to another
+ * receipt. Both values are shown because neither alone is actionable -- "we
+ * changed it" without saying to what leaves nothing to check against the paper.
+ */
+function StoredDifferently({ outcome }: { outcome: Held }) {
+  if (outcome.kind === 'unverified') {
+    return (
+      <section role="alert">
+        <h2>Saved, but not checked</h2>
+        <p>{outcome.why}</p>
+      </section>
+    )
+  }
+  return (
+    <section role="alert">
+      <h2>Saved, but the server stored something different</h2>
+      <ul>
+        {outcome.rewrites.map((rewrite) => (
+          <li key={rewrite.path}>
+            <strong>{rewrite.path}</strong>: you entered{' '}
+            <code>{rewrite.sent ?? '(nothing)'}</code>, the receipt now holds{' '}
+            <code>{rewrite.stored ?? '(nothing)'}</code>
+          </li>
+        ))}
+      </ul>
+    </section>
   )
 }

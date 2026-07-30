@@ -1,6 +1,7 @@
 import { ApiError, request } from './client'
 import type { ReceiptDetail, ReviewNextResponse } from './types'
-import type { FieldMap } from '../review/patch'
+import { fieldsFromReceipt, findRewrites } from '../review/patch'
+import type { FieldMap, Rewrite } from '../review/patch'
 
 /** Claim the next review task for the signed-in reviewer.
  *
@@ -147,6 +148,38 @@ export function completeTask(taskId: string): Promise<unknown> {
   return request(`/review/${encodeURIComponent(taskId)}/complete`, { method: 'POST' })
 }
 
+/** What the submit chain has to say once it has succeeded.
+ *
+ * Three outcomes rather than a `Rewrite[]`, because "nothing was rewritten" and
+ * "we could not tell" are different facts and collapsing them would report the
+ * second as the first -- the one direction a warning must never fail in.
+ */
+export type SubmitOutcome =
+  | { readonly kind: 'clean' }
+  | { readonly kind: 'rewritten'; readonly rewrites: readonly Rewrite[] }
+  | { readonly kind: 'unverified'; readonly why: string }
+
+/** The patch reply as a `FieldMap`, or `null` if it is not a receipt.
+ *
+ * `request` resolves an empty body to `undefined`, and this route always returns
+ * a document, so `undefined` here means something other than the API answered.
+ * The shape is checked rather than trusted because `request<T>` is an unchecked
+ * cast: `fieldsFromReceipt` reads `.totals` and `.line_items`, and a reply
+ * missing either would throw a `TypeError` *after* the write had already landed.
+ */
+function storedFields(reply: ReceiptDetail | undefined): FieldMap | null {
+  if (reply === undefined || reply === null) {
+    return null
+  }
+  if (typeof reply.totals !== 'object' || reply.totals === null) {
+    return null
+  }
+  if (!Array.isArray(reply.line_items)) {
+    return null
+  }
+  return fieldsFromReceipt(reply)
+}
+
 /** Strictly sequential. Nothing advances past a step that failed.
  *
  * The patch is always sent, even when it is `{}`: an empty body is legal and
@@ -154,24 +187,45 @@ export function completeTask(taskId: string): Promise<unknown> {
  * skipping it for an untouched receipt would close the task and leave the row at
  * `needs_review`.
  *
- * The `ReceiptDetail` the patch returns is deliberately not propagated. The
- * caller's next move after a successful complete is the *next* task, so there is
- * nothing here to render it into; `patchReceipt` is exported separately for a
- * caller that wants it.
+ * The reply is compared against what was sent before the task is closed, because
+ * **the server does not always store what it is given**: `_plan_change` runs
+ * `redact_pan` over every coerced text value, and measured through the real
+ * route, `PATCH {'receipt.date_raw': '4111111111111111'}` reads back as
+ * `'************1111'`. The reviewer would otherwise never learn their input did
+ * not land. `PATCH` already returns the full `ReceiptDetail`, so this costs no
+ * extra request.
+ *
+ * The comparison runs between the two calls but never blocks the second: the
+ * write has landed and the reviewer's work is done, so a rewrite is a notice,
+ * not a failure. Stopping here would leave the queue task open over a receipt
+ * that is already `reviewed` -- the exact orphan the `complete` step exists to
+ * prevent.
  */
 export async function submitReview(
   receiptId: string,
   taskId: string,
   patch: FieldMap,
-): Promise<void> {
+): Promise<SubmitOutcome> {
+  let reply: ReceiptDetail | undefined
   try {
-    await patchReceipt(receiptId, patch)
+    reply = await patchReceipt(receiptId, patch)
   } catch (caught) {
     throw new SubmitError('patch', caught)
   }
+  const stored = storedFields(reply)
+  const rewrites = stored === null ? [] : findRewrites(patch, stored)
+
   try {
     await completeTask(taskId)
   } catch (caught) {
     throw new SubmitError('complete', caught)
   }
+
+  if (stored === null) {
+    return {
+      kind: 'unverified',
+      why: 'the reply to the save was not a receipt, so what was stored could not be checked',
+    }
+  }
+  return rewrites.length === 0 ? { kind: 'clean' } : { kind: 'rewritten', rewrites }
 }

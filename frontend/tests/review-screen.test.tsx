@@ -273,13 +273,30 @@ describe('ReviewScreen', () => {
 /** The queue drains: the claimed task first, then nothing. Reaching the second
  *  reply is what proves the screen asked again rather than re-opening what it
  *  had just finished. */
+/** The receipt as the server would return it after storing an edit.
+ *
+ *  `PATCH` replies with the full `ReceiptDetail` it just wrote, and the screen
+ *  now compares that against what it sent -- so a stub that echoes the *old*
+ *  state is not merely lazy, it is a receipt the server never could have
+ *  returned. Amounts are given at the column scale (`Numeric(14, 4)`), which is
+ *  what the real route does: measured, `'97.43'` in comes back `'97.4300'`. */
+function storedAs(over: Partial<ReceiptDetail>): ReceiptDetail {
+  return { ...RECEIPT, ...over }
+}
+
+function storedTotal(total: string): ReceiptDetail {
+  return storedAs({ totals: { ...RECEIPT.totals, total: total as Money } })
+}
+
 const DRAINING = {
   '/review/next': [
     [200, { task: TASK, receipt: SUMMARY }],
     [200, { task: null }],
   ],
   'GET /receipts/a1': [200, RECEIPT],
-  'PATCH /receipts/a1': [200, RECEIPT],
+  // Every test that edits the total types a `1` onto `97.43`; the column scale
+  // is what comes back.
+  'PATCH /receipts/a1': [200, storedTotal('97.4310')],
   'POST /review/t1/complete': [200, { ...TASK, state: 'done', closed_at: '2026-07-14T10:00:00Z' }],
   '/receipts/a1/image': [200, { url: '/receipts/a1/image/blob?variant=original&exp=1&sig=s' }],
 } as const
@@ -438,7 +455,10 @@ describe('ReviewScreen: editing and approval', () => {
     // route, an unchanged value writes no `corrections` row -- but the server
     // does rewrite some inputs on the way into the column (see
     // `ReceiptForm`'s docblock), so this is not a claim about what gets stored.
-    const fetchMock = stubApi(DRAINING)
+    const fetchMock = stubApi({
+      ...DRAINING,
+      'PATCH /receipts/a1': [200, storedAs({ date_raw: '14 JUL 2026' })],
+    })
     vi.stubGlobal('fetch', fetchMock)
     const user = userEvent.setup()
 
@@ -470,7 +490,17 @@ describe('ReviewScreen: editing and approval', () => {
         },
       ],
     }
-    const fetchMock = stubApi({ ...DRAINING, 'GET /receipts/a1': [200, withItems] })
+    const fetchMock = stubApi({
+      ...DRAINING,
+      'GET /receipts/a1': [200, withItems],
+      'PATCH /receipts/a1': [
+        200,
+        {
+          ...withItems,
+          line_items: [{ ...withItems.line_items[0], line_total: '7.0010' as Money }],
+        },
+      ],
+    })
     vi.stubGlobal('fetch', fetchMock)
     const user = userEvent.setup()
 
@@ -481,5 +511,102 @@ describe('ReviewScreen: editing and approval', () => {
 
     await screen.findByText(/review queue is empty/i)
     expect(patchBody(fetchMock)).toEqual({ 'line_items[3].line_total': '7.001' })
+  })
+})
+
+describe('ReviewScreen: what the server actually stored', () => {
+  /** A printed date the reviewer types that `redact_pan` will mask. Measured:
+   *  `redact_pan('20260730123456')` is `'**********3456'`, and 14 digits is a
+   *  plausible thing to read off a slip. */
+  const TYPED = '20260730123456'
+  const MASKED = '**********3456'
+
+  function rewritingApi() {
+    return stubApi({
+      ...DRAINING,
+      'PATCH /receipts/a1': [200, storedAs({ date_raw: MASKED })],
+    })
+  }
+
+  async function editThePrintedDate(user: ReturnType<typeof userEvent.setup>) {
+    const printed = screen.getByLabelText('Printed date')
+    await user.clear(printed)
+    await user.type(printed, TYPED)
+    await user.click(screen.getByRole('button', { name: /approve/i }))
+  }
+
+  it('holds the screen and names the field and both values', async () => {
+    const fetchMock = rewritingApi()
+    vi.stubGlobal('fetch', fetchMock)
+    const user = userEvent.setup()
+
+    render(<ReviewScreen />)
+    await screen.findByRole('heading', { level: 1, name: 'Whole Foods Market' })
+    await editThePrintedDate(user)
+
+    const alert = await screen.findByRole('alert')
+    expect(alert.textContent).toContain('receipt.date_raw')
+    expect(alert.textContent).toContain(TYPED)
+    expect(alert.textContent).toContain(MASKED)
+    // The task IS closed -- the write landed and the reviewer's work is done --
+    // but the queue is not asked for another receipt until they have seen this.
+    expect(chain(fetchMock)).toContain('POST /review/t1/complete')
+    expect(callsTo(fetchMock, '/review/next')).toBe(1)
+    expect(screen.queryByText(/review queue is empty/i)).toBeNull()
+  })
+
+  it('moves on only once the reviewer acknowledges it', async () => {
+    const fetchMock = rewritingApi()
+    vi.stubGlobal('fetch', fetchMock)
+    const user = userEvent.setup()
+
+    render(<ReviewScreen />)
+    await screen.findByRole('heading', { level: 1, name: 'Whole Foods Market' })
+    await editThePrintedDate(user)
+    await screen.findByRole('alert')
+
+    await user.click(screen.getByRole('button', { name: /next receipt/i }))
+
+    expect(await screen.findByText(/review queue is empty/i)).toBeDefined()
+    expect(callsTo(fetchMock, '/review/next')).toBe(2)
+    // Acknowledging is not a second submit.
+    expect(chain(fetchMock).filter((c) => c === 'PATCH /receipts/a1')).toHaveLength(1)
+    expect(chain(fetchMock).filter((c) => c === 'POST /review/t1/complete')).toHaveLength(1)
+  })
+
+  it('does not cry wolf when only the column scale differs', async () => {
+    // The false positive that would make this warning worthless. `DRAINING`
+    // replies `'97.4310'` to a typed `'97.431'` -- exactly what the real route
+    // does -- and the screen must advance without a word.
+    const fetchMock = stubApi(DRAINING)
+    vi.stubGlobal('fetch', fetchMock)
+
+    const user = await claimAndEditTheTotal(fetchMock)
+    await user.click(screen.getByRole('button', { name: /approve/i }))
+
+    expect(await screen.findByText(/review queue is empty/i)).toBeDefined()
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(screen.queryByRole('button', { name: /next receipt/i })).toBeNull()
+  })
+
+  it('holds the screen when the reply could not be checked at all', async () => {
+    // A body-less 200 means something other than the API answered. "Could not
+    // check" must not be shown as "nothing was rewritten".
+    const fetchMock = vi.fn((path: string, init?: RequestInit) => {
+      const method = init?.method ?? 'GET'
+      if (method === 'PATCH') {
+        return Promise.resolve(new Response('', { status: 200 }))
+      }
+      return stubApi(DRAINING)(path, init)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const user = userEvent.setup()
+
+    render(<ReviewScreen />)
+    await screen.findByRole('heading', { level: 1, name: 'Whole Foods Market' })
+    await user.click(screen.getByRole('button', { name: /approve/i }))
+
+    expect((await screen.findByRole('alert')).textContent).toMatch(/could not be checked/i)
+    expect(screen.getByRole('button', { name: /next receipt/i })).toBeDefined()
   })
 })

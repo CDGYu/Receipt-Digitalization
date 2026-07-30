@@ -142,3 +142,97 @@ export function buildPatch(original: FieldMap, edited: FieldMap): FieldMap {
   }
   return patch
 }
+
+/** One field the server did not store as it was sent. */
+export interface Rewrite {
+  readonly path: string
+  readonly sent: string | null
+  readonly stored: string | null
+}
+
+/** The nine correctable paths whose column is `Numeric`, so their text form
+ *  carries a scale. Read off `_RECEIPT_FIELDS`/`_LINE_ITEM_FIELDS` by asking
+ *  which entries coerce with `_coerce_money`:
+ *
+ *      receipt  : totals.change discount subtotal tax tender total
+ *      line item: line_total qty unit_price
+ */
+const MONEY_RECEIPT_PATHS: ReadonlySet<string> = new Set([
+  'totals.subtotal',
+  'totals.tax',
+  'totals.discount',
+  'totals.total',
+  'totals.tender',
+  'totals.change',
+])
+const MONEY_ITEM_FIELDS: ReadonlySet<string> = new Set(['qty', 'unit_price', 'line_total'])
+const LINE_ITEM_FIELD = /^line_items\[\d+\]\.([A-Za-z_][A-Za-z0-9_]*)$/
+
+function isMoneyPath(path: string): boolean {
+  if (MONEY_RECEIPT_PATHS.has(path)) {
+    return true
+  }
+  const match = LINE_ITEM_FIELD.exec(path)
+  return match !== null && MONEY_ITEM_FIELDS.has(match[1])
+}
+
+/** An amount with the column's display scale removed: trailing zeros in the
+ *  fractional part, and a point left bare by removing them.
+ *
+ *  **The amount is never converted to a number.** `indexOf`, `charAt` and
+ *  `slice`; no `Number`, no `parseFloat`, no unary `+`. There *is* arithmetic
+ *  here -- `end -= 1`, `point + 1` -- but it is on string indices, never on the
+ *  digits, which is the distinction ADR-0001 draws.
+ *  `tests/no-float-in-money-path.test.ts` is the arbiter of whether this
+ *  qualifies, and it passes. Digits left of the point are never touched, so
+ *  `"1000"` cannot become `"1"`.
+ *
+ *  Only trailing zeros go. `"1,000.00"` becomes `"1,000"`, not `"1000"`, so a
+ *  server that stripped the comma is still reported -- which is the whole reason
+ *  this is a narrow normalisation rather than a loose comparison.
+ */
+function withoutDisplayScale(amount: string): string {
+  const point = amount.indexOf('.')
+  if (point === -1) {
+    return amount
+  }
+  let end = amount.length
+  while (end > point + 1 && amount.charAt(end - 1) === '0') {
+    end -= 1
+  }
+  return amount.slice(0, end === point + 1 ? point : end)
+}
+
+function comparable(path: string, value: string | null): string | null {
+  if (value === null || !isMoneyPath(path)) {
+    return value
+  }
+  return withoutDisplayScale(value)
+}
+
+/** What the server stored that is not what the reviewer sent.
+ *
+ * `PATCH /receipts/{id}` returns the full `ReceiptDetail` it just wrote, so the
+ * reply *is* the new state and this needs no extra request. It catches every
+ * server-side rewrite, not only redaction -- though redaction is the one that
+ * prompted it: `redact_pan` masks any 13-19 digit run, and measured,
+ * `redact_pan('20260730123456')` is `'**********3456'`, which is a plausible
+ * thing to read off a receipt.
+ *
+ * Only the paths that were sent are compared. Everything else was omitted from
+ * the patch by definition, so a difference there is not this reviewer's edit.
+ *
+ * A path the reply does not carry counts as a rewrite with `stored: null`.
+ * Absent is not "unchanged", and over-reporting is the safe direction for a
+ * warning whose whole job is to say "check this".
+ */
+export function findRewrites(sent: FieldMap, stored: FieldMap): Rewrite[] {
+  const rewrites: Rewrite[] = []
+  for (const [path, value] of Object.entries(sent)) {
+    const back = stored[path] ?? null
+    if (comparable(path, value) !== comparable(path, back)) {
+      rewrites.push({ path, sent: value, stored: back })
+    }
+  }
+  return rewrites
+}
