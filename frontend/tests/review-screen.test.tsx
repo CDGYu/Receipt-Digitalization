@@ -1,5 +1,5 @@
 import { StrictMode } from 'react'
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ReviewScreen } from '../src/review/ReviewScreen'
@@ -270,9 +270,6 @@ describe('ReviewScreen', () => {
   })
 })
 
-/** The queue drains: the claimed task first, then nothing. Reaching the second
- *  reply is what proves the screen asked again rather than re-opening what it
- *  had just finished. */
 /** The receipt as the server would return it after storing an edit.
  *
  *  `PATCH` replies with the full `ReceiptDetail` it just wrote, and the screen
@@ -288,6 +285,9 @@ function storedTotal(total: string): ReceiptDetail {
   return storedAs({ totals: { ...RECEIPT.totals, total: total as Money } })
 }
 
+/** The queue drains: the claimed task first, then nothing. Reaching the second
+ *  reply is what proves the screen asked again rather than re-opening what it
+ *  had just finished. */
 const DRAINING = {
   '/review/next': [
     [200, { task: TASK, receipt: SUMMARY }],
@@ -572,6 +572,51 @@ describe('ReviewScreen: what the server actually stored', () => {
     // Acknowledging is not a second submit.
     expect(chain(fetchMock).filter((c) => c === 'PATCH /receipts/a1')).toHaveLength(1)
     expect(chain(fetchMock).filter((c) => c === 'POST /review/t1/complete')).toHaveLength(1)
+  })
+
+  it('leaves no focused control that a stray keystroke could dismiss it with', async () => {
+    // The regression this pins: `Approve` and the acknowledgement used to be two
+    // buttons alternating in one JSX slot, so React reconciled them into the same
+    // DOM node and the relabel happened under the reviewer's finger. Measured
+    // before the fix -- `document.activeElement.textContent` was `'Next receipt'`,
+    // `focused === approve` was true, and a bare Enter took /review/next from 1
+    // to 2. Click-to-approve is the ordinary path, so that is one keystroke of
+    // muscle memory between a reviewer and a warning they never read.
+    const fetchMock = rewritingApi()
+    vi.stubGlobal('fetch', fetchMock)
+    const user = userEvent.setup()
+
+    render(<ReviewScreen />)
+    await screen.findByRole('heading', { level: 1, name: 'Whole Foods Market' })
+    const approve = screen.getByRole('button', { name: /approve/i })
+    await editThePrintedDate(user)
+    await screen.findByRole('alert')
+
+    // The Approve button is gone, not relabelled.
+    expect(screen.queryByRole('button', { name: /approve/i })).toBeNull()
+    const acknowledge = screen.getByRole('button', { name: /next receipt/i })
+    expect(acknowledge).not.toBe(approve)
+    expect(document.activeElement).not.toBe(acknowledge)
+
+    // ...so neither bare key does anything.
+    const before = callsTo(fetchMock, '/review/next')
+    await user.keyboard('{Enter}')
+    await user.keyboard(' ')
+    expect(callsTo(fetchMock, '/review/next')).toBe(before)
+    expect(screen.getByRole('alert')).toBeDefined()
+  })
+
+  it('puts the acknowledgement inside the notice, where the reviewer is looking', async () => {
+    const fetchMock = rewritingApi()
+    vi.stubGlobal('fetch', fetchMock)
+    const user = userEvent.setup()
+
+    render(<ReviewScreen />)
+    await screen.findByRole('heading', { level: 1, name: 'Whole Foods Market' })
+    await editThePrintedDate(user)
+
+    const alert = await screen.findByRole('alert')
+    expect(within(alert).getByRole('button', { name: /next receipt/i })).toBeDefined()
   })
 
   it('does not cry wolf when only the column scale differs', async () => {

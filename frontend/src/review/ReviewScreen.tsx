@@ -327,19 +327,18 @@ export function ReviewScreen() {
       <ReceiptForm fields={fields} onChange={edit} />
       <LineItemsTable items={receipt.line_items} fields={fields} onChange={edit} />
       {submit.kind === 'failed' ? <p role="alert">{submit.message}</p> : null}
-      {submit.kind === 'held' ? <StoredDifferently outcome={submit.outcome} /> : null}
       {submit.kind === 'held' ? (
-        // The only way past the notice, and deliberately the only way: the
-        // receipt is saved and the task is closed, so there is nothing to retry
-        // and nothing to fix here -- but advancing on its own would destroy the
-        // one notice a reviewer ever gets that the database does not hold what
-        // they typed. So the chain runs to completion and the *advance* waits
-        // for a click. Ctrl+Enter is not wired to this on purpose: the chord
-        // means "approve", and a reviewer clearing a warning by reflex with the
-        // same key they submit with is how the warning stops being read.
-        <button type="button" onClick={() => void load()}>
-          Next receipt
-        </button>
+        // `Next receipt` lives **inside** the notice, not in the Approve slot.
+        // Two buttons alternating in one slot are the same DOM node to React, so
+        // the relabel used to happen under the reviewer's finger: measured, after
+        // clicking Approve, `document.activeElement.textContent` was
+        // `"Next receipt"`, it was the identical node (`focused === approve`),
+        // and a bare Enter advanced the queue (1 -> 2 calls to /review/next).
+        // One keystroke of muscle memory dismissed the warning unread, which is
+        // the whole thing this state exists to prevent. Rendering it in a
+        // different parent means the Approve node unmounts instead of being
+        // reused, and focus has nowhere to carry over to.
+        <StoredDifferently outcome={submit.outcome} onAcknowledge={() => void load()} />
       ) : (
         <button type="button" onClick={() => void approve()} disabled={busy}>
           Approve (⌘↵)
@@ -354,34 +353,55 @@ export function ReviewScreen() {
   )
 }
 
-/** What the server stored, where it differs from what was sent.
+/** What the server stored, where it differs from what was sent, and the only way
+ *  past it.
  *
  * `role="alert"` rather than a quiet note: it is the only signal that a
  * correction did not land as typed, and the reviewer is about to move to another
  * receipt. Both values are shown because neither alone is actionable -- "we
  * changed it" without saying to what leaves nothing to check against the paper.
+ *
+ * The acknowledgement is rendered here, beside what it acknowledges, for two
+ * reasons: it is where the reviewer is already looking, and it cannot be the same
+ * DOM node React just relabelled from `Approve` (see the call site).
+ *
+ * The receipt is saved and the task is closed by the time this renders, so there
+ * is nothing to retry and nothing to fix -- only an advance to authorise.
+ * Ctrl+Enter is deliberately not wired to it: the chord means "approve", and
+ * letting it also clear a warning is how a reviewer clears the warning by reflex
+ * with the same key they submit with.
  */
-function StoredDifferently({ outcome }: { outcome: Held }) {
-  if (outcome.kind === 'unverified') {
-    return (
-      <section role="alert">
-        <h2>Saved, but not checked</h2>
-        <p>{outcome.why}</p>
-      </section>
-    )
-  }
+function StoredDifferently({
+  outcome,
+  onAcknowledge,
+}: {
+  outcome: Held
+  onAcknowledge: () => void
+}) {
   return (
     <section role="alert">
-      <h2>Saved, but the server stored something different</h2>
-      <ul>
-        {outcome.rewrites.map((rewrite) => (
-          <li key={rewrite.path}>
-            <strong>{rewrite.path}</strong>: you entered{' '}
-            <code>{rewrite.sent ?? '(nothing)'}</code>, the receipt now holds{' '}
-            <code>{rewrite.stored ?? '(nothing)'}</code>
-          </li>
-        ))}
-      </ul>
+      {outcome.kind === 'unverified' ? (
+        <>
+          <h2>Saved, but not checked</h2>
+          <p>{outcome.why}</p>
+        </>
+      ) : (
+        <>
+          <h2>Saved, but the server stored something different</h2>
+          <ul>
+            {outcome.rewrites.map((rewrite) => (
+              <li key={rewrite.path}>
+                <strong>{rewrite.path}</strong>: you entered{' '}
+                <code>{rewrite.sent ?? '(nothing)'}</code>, the receipt now holds{' '}
+                <code>{rewrite.stored ?? '(nothing)'}</code>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+      <button type="button" onClick={onAcknowledge}>
+        Next receipt
+      </button>
     </section>
   )
 }

@@ -300,9 +300,10 @@ describe('findRewrites', () => {
     //   sent '-2.50'   -> returned '-2.5000'      sent '0.00' -> '0.0000'
     // A warning that fires on every money edit teaches reviewers to dismiss it,
     // so trailing fractional zeros are normalised away before comparing. The
-    // amount is never converted to a number -- indexOf/charAt/slice, and what
-    // arithmetic there is runs on string indices, not on the digits (ADR-0001).
-    // tests/no-float-in-money-path.test.ts is the arbiter, and it passes.
+    // amount is never converted to a number -- trim/indexOf/charAt/slice, and
+    // every number in there is a string offset, not a digit (ADR-0001). What
+    // establishes that is reading `withoutDisplayScale`; the float guard passes
+    // but cannot settle it, having no rule that fires on arithmetic.
     const cases: ReadonlyArray<readonly [string, string, string]> = [
       ['a scale-only difference', '1000.00', '1000.0000'],
       ['no fractional part at all on the way in', '1000', '1000.0000'],
@@ -372,5 +373,64 @@ describe('findRewrites', () => {
     expect(findRewrites({ 'line_items[3].sku': 'D-1' }, {})).toEqual([
       { path: 'line_items[3].sku', sent: 'D-1', stored: null },
     ])
+  })
+})
+
+describe('findRewrites: the ways a reviewer legitimately types an amount', () => {
+  // Every pair below was measured through the real PATCH route: the value on the
+  // left was sent, the value on the right is what `GET` read back. `_coerce_money`
+  // accepts all of them, so they reach the diff -- and `.50` for fifty cents is
+  // an ordinary keystroke, not an exotic one. A warning that fires on it trains
+  // reviewers to dismiss the warning, which is the failure this whole feature
+  // exists to prevent.
+  const accepted: ReadonlyArray<readonly [string, string]> = [
+    ['.50', '0.5000'],
+    ['-.50', '-0.5000'],
+    ['1000.00 ', '1000.0000'],
+    ['  1000.00  ', '1000.0000'],
+    ['+1000.00', '1000.0000'],
+    ['1000.', '1000.0000'],
+  ]
+  for (const [sent, stored] of accepted) {
+    it(`is silent for ${JSON.stringify(sent)} -> ${stored}`, () => {
+      expect(findRewrites({ 'totals.total': sent }, { 'totals.total': stored })).toEqual([])
+    })
+  }
+
+  it('still reports the two spellings the normalisation deliberately leaves alone', () => {
+    // Both measured through the real route: '00100.00' stores as '100.0000' and
+    // '-0.00' as '0.0000'. Neither is a normal way to key an amount, and
+    // stripping leading zeros is a separate rule with its own edges, so they stay
+    // reported rather than guessed at. Pinned so the docblock saying so is bound.
+    expect(findRewrites({ 'totals.total': '00100.00' }, { 'totals.total': '100.0000' })).toEqual([
+      { path: 'totals.total', sent: '00100.00', stored: '100.0000' },
+    ])
+    expect(findRewrites({ 'totals.total': '-0.00' }, { 'totals.total': '0.0000' })).toEqual([
+      { path: 'totals.total', sent: '-0.00', stored: '0.0000' },
+    ])
+  })
+
+  it('still reports a representation the server genuinely rewrote', () => {
+    // Measured: `PATCH {'totals.total': '1e3'}` is accepted and reads back
+    // '1000.0000'. The amount is the same but the text is not what the reviewer
+    // typed, and unlike a trailing zero that is worth showing -- it is the
+    // server, not the column, that changed the characters.
+    expect(findRewrites({ 'totals.total': '1e3' }, { 'totals.total': '1000.0000' })).toEqual([
+      { path: 'totals.total', sent: '1e3', stored: '1000.0000' },
+    ])
+  })
+})
+
+describe('findRewrites: a path the reply does not carry', () => {
+  it('reports it when a value was sent', () => {
+    expect(findRewrites({ 'line_items[3].sku': 'D-1' }, {})).toEqual([
+      { path: 'line_items[3].sku', sent: 'D-1', stored: null },
+    ])
+  })
+
+  it('says nothing when the reviewer cleared it, because absent and null agree', () => {
+    // Both mean "no value there". Reporting it would render as "you entered
+    // (nothing), the receipt now holds (nothing)", which is not a warning.
+    expect(findRewrites({ 'payment.method': null }, {})).toEqual([])
   })
 })

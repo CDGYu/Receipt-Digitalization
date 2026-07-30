@@ -176,31 +176,62 @@ function isMoneyPath(path: string): boolean {
   return match !== null && MONEY_ITEM_FIELDS.has(match[1])
 }
 
-/** An amount with the column's display scale removed: trailing zeros in the
- *  fractional part, and a point left bare by removing them.
+/** An amount reduced to the form two spellings of the same figure share: the
+ *  column's display scale removed, and the punctuation a reviewer may or may not
+ *  type normalised away.
  *
- *  **The amount is never converted to a number.** `indexOf`, `charAt` and
- *  `slice`; no `Number`, no `parseFloat`, no unary `+`. There *is* arithmetic
- *  here -- `end -= 1`, `point + 1` -- but it is on string indices, never on the
- *  digits, which is the distinction ADR-0001 draws.
- *  `tests/no-float-in-money-path.test.ts` is the arbiter of whether this
- *  qualifies, and it passes. Digits left of the point are never touched, so
- *  `"1000"` cannot become `"1"`.
+ *  **The amount is never converted to a number.** `trim`, `indexOf`, `charAt`,
+ *  `startsWith` and `slice`; no `Number`, no `parseFloat`, no unary `+`. There
+ *  *is* arithmetic -- `end -= 1`, `point + 1` -- but every one of those numbers
+ *  is a string offset, no character is ever turned into a value, and the return
+ *  is always a substring of the input with a possible `"0"` in front. That, read
+ *  off the four statements below, is what establishes it stays inside ADR-0001;
+ *  `tests/no-float-in-money-path.test.ts` passes, but it is **not** evidence
+ *  either way -- it has no rule that fires on arithmetic of any kind, and its
+ *  own `LEGITIMATE` list pins `item.position + 1` as must-not-fire.
  *
- *  Only trailing zeros go. `"1,000.00"` becomes `"1,000"`, not `"1000"`, so a
- *  server that stripped the comma is still reported -- which is the whole reason
- *  this is a narrow normalisation rather than a loose comparison.
+ *  Digits left of the point are never touched, so `"1000"` cannot become `"1"`.
+ *
+ *  The tidying is comparison-only -- nothing here is ever sent or displayed --
+ *  and each rule closes a measured false positive. All six were sent through the
+ *  real `PATCH` route and read back with `GET`:
+ *
+ *      '.50'         -> '0.5000'     '1000.00 '    -> '1000.0000'
+ *      '-.50'        -> '-0.5000'    '  1000.00  ' -> '1000.0000'
+ *      '+1000.00'    -> '1000.0000'  '1000.'       -> '1000.0000'
+ *
+ *  `.50` for fifty cents is an ordinary keystroke; a warning that fires on it is
+ *  a warning reviewers learn to dismiss.
+ *
+ *  What is deliberately *not* normalised, so the exemption stays narrow: a
+ *  thousands separator (`"1,000.00"` becomes `"1,000"`, not `"1000"`) -- though
+ *  measured, that one never reaches here, because `_coerce_money` answers
+ *  `not a decimal amount: '1,000.00'` and the route 400s. Also not normalised,
+ *  and these two do reach here: leading zeros (`'00100.00'` -> stored
+ *  `'100.0000'`) and negative zero (`'-0.00'` -> `'0.0000'`), both measured to
+ *  still fire. Neither is a normal way to key an amount, and stripping leading
+ *  zeros is a separate rule with its own edge cases, so they are left reported
+ *  rather than guessed at.
  */
 function withoutDisplayScale(amount: string): string {
-  const point = amount.indexOf('.')
-  if (point === -1) {
-    return amount
+  let text = amount.trim()
+  if (text.startsWith('+')) {
+    text = text.slice(1)
   }
-  let end = amount.length
-  while (end > point + 1 && amount.charAt(end - 1) === '0') {
+  if (text.startsWith('.')) {
+    text = `0${text}`
+  } else if (text.startsWith('-.')) {
+    text = `-0${text.slice(1)}`
+  }
+  const point = text.indexOf('.')
+  if (point === -1) {
+    return text
+  }
+  let end = text.length
+  while (end > point + 1 && text.charAt(end - 1) === '0') {
     end -= 1
   }
-  return amount.slice(0, end === point + 1 ? point : end)
+  return text.slice(0, end === point + 1 ? point : end)
 }
 
 function comparable(path: string, value: string | null): string | null {
@@ -222,9 +253,13 @@ function comparable(path: string, value: string | null): string | null {
  * Only the paths that were sent are compared. Everything else was omitted from
  * the patch by definition, so a difference there is not this reviewer's edit.
  *
- * A path the reply does not carry counts as a rewrite with `stored: null`.
- * Absent is not "unchanged", and over-reporting is the safe direction for a
- * warning whose whole job is to say "check this".
+ * A path the reply does not carry reads as `null`. So a value the reply omits is
+ * reported (`stored: null`), while a field the reviewer *cleared* and the reply
+ * omits is not -- measured, `findRewrites({'payment.method': null}, {})` is `[]`.
+ * Absent and null are the same fact here ("no value there"), and reporting that
+ * pair would render as "you entered (nothing), the receipt now holds
+ * (nothing)", which is not a warning. Both cases are pinned in
+ * tests/patch.test.ts.
  */
 export function findRewrites(sent: FieldMap, stored: FieldMap): Rewrite[] {
   const rewrites: Rewrite[] = []
