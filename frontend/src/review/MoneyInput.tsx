@@ -13,11 +13,12 @@ export interface MoneyInputProps {
  * shows. `type="text" inputMode="decimal"` keeps the exact characters the API
  * sent and still brings up a numeric keypad on a phone.
  *
- * The `type` is a literal, not an expression. `tests/no-float-in-money-path.ts`
- * matches a JSX `type` attribute whose value is the string `number` in any
- * spelling, but a computed one (`type={cond ? 'number' : 'text'}`) is not a
- * string literal and is not matched -- measured, see the task report -- so the
- * guard would not catch this file going wrong that way. Keep it a literal.
+ * The `type` is a literal, not an expression.
+ * `tests/no-float-in-money-path.test.ts` matches a JSX `type` attribute whose
+ * value is the string `number` in any spelling, but a computed one
+ * (`type={cond ? 'number' : 'text'}`) is not a string literal and is not
+ * matched -- measured, see the task report -- so the guard would not catch this
+ * file going wrong that way. Keep it a literal.
  *
  * Emptying the box reports `null`, not `""`. Measured: `_coerce_money(None)` is
  * `None` while `_coerce_money('')` raises

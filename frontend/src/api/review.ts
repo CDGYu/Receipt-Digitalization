@@ -69,12 +69,25 @@ export type SubmitStep = 'patch' | 'complete'
  *
  * `step` and `cause` are declared as fields and assigned in the body rather than
  * written as constructor parameter properties, for the same reason `ApiError`
- * is: `tsconfig.app.json` sets `erasableSyntaxOnly: true`. Measured -- the
- * parameter-property form gives
- * `src/api/review.ts(61,5): error TS1294: This syntax is not allowed when
- * 'erasableSyntaxOnly' is enabled` from `npm run typecheck` while 9 of the 10
- * tests in tests/submit-chain.test.ts pass under Vitest, because esbuild strips
- * it happily and `npm test` does not type-check.
+ * is: `tsconfig.app.json` sets `erasableSyntaxOnly: true`, under which the
+ * parameter-property form is
+ * `error TS1294: This syntax is not allowed when 'erasableSyntaxOnly' is
+ * enabled` -- two of them, one per property. (No line:column here on purpose:
+ * they point into this very file, so editing this comment would move them and
+ * make the citation a lie. The exact positions are in the task report, measured
+ * against the file as it shipped.)
+ *
+ * **Vitest does not catch this at all.** Measured by rewriting only this class
+ * in the parameter-property form and changing nothing else:
+ *
+ *     $ npx vitest run tests/submit-chain.test.ts   -> 10 passed (10),  exit 0
+ *     $ npx vitest run                              -> 125 passed (125), exit 0
+ *     $ npm run typecheck                           -> TS1294 x2,       exit 2
+ *
+ * Not "most tests pass" and not one failure in ten -- the whole suite, all
+ * fifteen files, is green while the build is broken, because esbuild strips the
+ * syntax happily and `npm test` never type-checks. Nothing in the runner can
+ * tell you about this class of defect; only `npm run typecheck` can.
  */
 export class SubmitError extends Error {
   readonly step: SubmitStep
