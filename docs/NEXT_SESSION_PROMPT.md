@@ -1,56 +1,11 @@
 # Next-Session Kickoff Prompt
 
 Paste the block between the `---` markers as the first message of the next
-session, and **fill in the "Today's goal" line** (it is the one thing the prompt
-cannot infer — a placeholder left in place costs a round trip).
+session, and **fill in the "Today's goal" line** — it is the one thing the
+prompt cannot infer, and a placeholder left in place costs a round trip.
 
-Last refreshed: **2026-07-31**, at `main @ 28f6c7a`. **Phase 5 is complete and
-merged.** 844 Python tests + 170 Vitest, all gates green.
-
-> ## READ THIS BLOCK — IT SUPERSEDES "Where we are" BELOW
->
-> The "Where we are" section further down describes Phase 5's *start*
-> (`dae3e41`, Task 1 of 5). It is kept as history. **This block is current.**
->
-> **State:** `main @ 28f6c7a`, Phase 5 merged 2026-07-31 as a true
-> fast-forward from `5e4d708`. `feat/review-ui` is kept at its merge point.
-> **844 Python / 170 Vitest**, ruff clean, typecheck clean, build clean, e2e 2
-> passed. Everything is pushed.
->
-> **Live source of truth:
-> `.superpowers/sdd/2026-07-29-review-ui/progress.md`** — the milestone ledger
-> carries the deferred work, the parked rulings, and the next task's full scope.
-> Then `git log`.
->
-> Things the body below gets wrong, and that matter before you run anything:
->
-> - **`git push` IS authorised for `feat/*` branches** (user decision,
->   2026-07-30). The body's "NEVER `git push`" is obsolete. **Ask before
->   pushing `main`.** See the `push-policy-feature-branches` memory.
-> - **There are now TWO test suites.** Python, and **Vitest in `frontend/`**.
->   **`npm test` does not type-check** — run `npm run typecheck` too, or a type
->   error ships green. That trap fired three times in Phase 5.
->   **`python scripts/verify.py` runs all five gates** (pytest, ruff, typecheck,
->   vitest, build) and skips the Node three *loudly* when `npm` is absent.
-> - **The ADR list stops at 0015 below; there is an ADR-0016** —
->   `GET /review/next` resumes the caller's own in-progress task, because
->   nothing in the system releases a claim.
-> - **Task 5's CI step was cut.** `.github/workflows/ci.yml` is gitignored and
->   Actions does not run, so a tracked workflow would be a false signal.
->   `scripts/verify.py` replaces it. **Nothing runs the frontend gates on
->   GitHub.**
-> - **There is no ASGI entry point** — `create_app` is a factory nothing calls,
->   so this API has no supported way to be served. `scripts/serve_review_e2e.py`
->   is deliberately e2e-scoped; do not promote it without deciding the
->   deployment policy on purpose.
->
-> **The next task is already scoped: PAN hardening.** Two residuals, one of them
-> undocumented in the tree, and **the obvious fix for the documented one is
-> measured worse.** Read the ledger's "NEXT TASK" section before touching
-> `_PAN_RE` — it has produced a surprise on both of its last two widenings.
->
-> Everything else in the body — the non-negotiables, the workflow, the review
-> standards, ISSUE-001, the blocked-on-the-user items — still holds.
+Last refreshed: **2026-07-31**, at `main @ cd464d5`. **Phase 5 is complete and
+merged.** 844 Python + 170 Vitest, all gates green, everything pushed.
 
 ---
 
@@ -58,297 +13,298 @@ You are continuing work on the **Receipt Digitization System**, a VLM pipeline
 that turns receipt photos into accounting-grade structured data. Pick up exactly
 where the last session left off.
 
-**Read these first (in order), then confirm the state back to me** — and verify
-the snapshot below against the repo rather than trusting it; it has been stale
-before, including at the start of the last two sessions.
+**Read these first, then confirm the state back to me — and verify the snapshot
+below against the repo rather than trusting it.** It has been stale at the start
+of several sessions.
 
-1. `docs/MEMORY.md` — current state, decisions already made, what's built/not
-   built, environment, blockers, deferred and parked items, and the workflow.
-2. **`.superpowers/sdd/2026-07-29-review-ui/progress.md`** — the live ledger for
-   the milestone in flight, including the vacuous-test reproduction and its
-   ruling. `.superpowers/sdd/progress.md` is the older cross-milestone log;
-   per-milestone detail lives under `.superpowers/sdd/<plan-name>/progress.md`.
-3. `docs/adr/README.md`, then the ADRs it indexes (**0001–0015**). Mandatory
+## Reading order
+
+1. **`docs/MEMORY.md`** — current state, decisions already made, what is built,
+   the environment, blockers, deferred and parked items.
+2. **`.superpowers/sdd/2026-07-29-review-ui/progress.md`** — the Phase 5 ledger.
+   It carries every measurement, adjudication and parked ruling from that
+   milestone, and the full scope of the next task. **Note: `.superpowers/` is
+   gitignored, so nothing in it is findable by searching the tracked tree — you
+   must open it by path.**
+3. **`docs/adr/README.md`, then the ADRs it indexes (0001–0017).** Mandatory
    before touching the matching area:
-   - **0001** `Decimal` money path — anything that touches money.
-   - **0007** PAN redaction + money integrity — anything that writes card data.
+   - **0001** `Decimal` money path — anything touching money.
+   - **0007** PAN redaction + money integrity — anything writing card data.
+     **Read this with the PAN task below.**
    - **0006** repository conventions (injected session, **caller commits**,
-     `ValueError` boundary) — anything that writes to the DB.
-   - **0011** terminal-state contract + VLM concurrency/cost guards — anything
-     touching `process_receipt`, the worker, or model-call limits.
+     `ValueError` boundary) — anything writing to the DB.
+   - **0011** terminal-state contract + VLM concurrency/cost guards.
    - **0012** review API: identity, the `pending` row, the persisted confidence
-     breakdown, and **"a machine run never overwrites a `reviewed` row"** —
-     anything touching auth, the routes, `save_extraction`, or reprocessing.
-   - **0013** CLI contract, including `calibrate`'s three gates — anything
-     touching `cli.py` or the eval/calibrate reporting path.
+     breakdown, and **"a machine run never overwrites a `reviewed` row"**.
+   - **0013** CLI contract, including `calibrate`'s three gates.
    - **0014** optional-dependency import discipline — **anything adding an
      import to a module reachable from an entry point.**
    - **0015** the review UI: same-origin serving, the `/app` prefix, the guarded
-     static mount, and money as a string in the browser — **anything touching
-     `frontend/` or the SPA mount.**
-   - **0002** provider abstraction — anything touching clients/config.
-   - **0008** review-queue concurrency — anything touching `review/queue.py`.
-4. `.kiro/steering/receipt-system.md` — the load-bearing rules. Still auto-loads
-   and is still on disk, but **it is no longer tracked in git** (see below).
-5. `IMPLEMENTATION_PLAN.md` — the authoritative phased task list.
-6. **`docs/superpowers/plans/2026-07-29-review-ui.md`** — the five-task plan
-   being executed right now, and
-   **`docs/superpowers/specs/2026-07-29-review-ui-design.md`** — its design.
-   Read both before touching Phase 5.
-7. `docs/KNOWN_ISSUES.md` — ISSUE-001 (the deferred baseline run), with its full
-   diagnosis, the 2026-07-29 measured smoke run, and exact resume steps.
-   **Do not re-derive it.**
-8. `RECEIPT_SYSTEM_SPEC.md` as needed: §6 data model (**eight** tables), §8.5
-   repair, §9 normalization, §10 validation/tolerance, §12 confidence + routing,
-   §13 Excel, §14 function inventory (**§14.8** repository, **§14.9** review API,
-   **§14.10** the CLI as built), §15 milestones, §16 eval, §17 config, §18 traps,
-   §19 DoD.
-9. Older design docs, only if you are touching what they cover:
-   `docs/superpowers/specs/2026-07-29-cli-design.md` and
+     static mount, money as a string in the browser.
+   - **0016** `GET /review/next` resumes the caller's own in-progress task —
+     anything touching `review/queue.py` or the claim lifecycle.
+   - **0017** two test suites and `scripts/verify.py` — **read before believing
+     a green test run.**
+   - **0002** provider abstraction · **0008** review-queue concurrency.
+4. **`.kiro/steering/receipt-system.md`** — the always-on load-bearing rules.
+   Still auto-loads and is on disk, but **gitignored and untracked**.
+5. **`IMPLEMENTATION_PLAN.md`** — the authoritative phased task list.
+6. **`docs/KNOWN_ISSUES.md`** — ISSUE-001 (the deferred baseline), with its full
+   diagnosis and exact resume steps. **Do not re-derive it.**
+7. **`RECEIPT_SYSTEM_SPEC.md`** as needed: §6 data model (**eight** tables),
+   §8.5 repair, §9 normalization, §10 validation/tolerance, §12 confidence +
+   routing, §13 Excel, §14 function inventory (§14.8 repository, §14.9 review
+   API, §14.10 the CLI), §15 milestones, §16 eval, §17 config, §18 traps
+   (**PAN handling**), §19 DoD.
+8. Design docs, only if touching what they cover:
+   `docs/superpowers/specs/2026-07-29-review-ui-design.md`,
+   `docs/superpowers/specs/2026-07-29-cli-design.md`,
    `docs/superpowers/specs/2026-07-28-review-api-design.md`.
 
 ## Where we are
 
-**Branch `feat/review-ui` @ `dae3e41`**, 2 commits off `main` @ `5e4d708`.
-**722 tests passing, ruff clean.**
+**`main` @ `cd464d5`. Phase 5 (the review UI) merged 2026-07-31** as a true
+fast-forward from `5e4d708`. `feat/review-ui` is kept at its merge point
+(`28f6c7a`), per the project convention that merged branches and SDD workspaces
+are not cleaned up.
 
-**Git changed materially on 2026-07-29 — read this before running any git
-command:**
+**Phases 0–5 are complete.** Foundations; the offline modules; the online wiring
+(config → client factory → preprocess → triage → extract+repair → normalize →
+score → route → eval); persistence (8 tables, migrations, repository, review
+queue, 4-sheet XLSX); `process_receipt` + the RQ worker + the VLM guards; the
+review API with session auth, roles and a machine upload key; the operator CLI;
+and now the **review UI** — login, the review screen, editing across all 17
+correctable paths, a strictly sequential `PATCH → complete → next`, a Playwright
+acceptance test, and `scripts/verify.py`.
 
-- The default branch is **`main`**, not `master`.
-- A remote now exists: `origin` → `CDGYu/Receipt-Digitalization`, **private**
-  (verified — an unauthenticated API read returns 404).
-- **NEVER `git push`.** The user pushes manually. Local commits are fine.
-- **`.kiro/` and `.github/workflows/` are gitignored and untracked.** Files are
-  still on disk, but a fresh clone does not carry them and **GitHub Actions no
-  longer runs.** The old "never stage `.kiro/settings/mcp.json`" rule is obsolete.
+### Running it — this changed in Phase 5
 
-**Phases 0–4 are complete and merged.** Foundations; the offline modules
-(normalize, preprocess, ingest, export); the online wiring (config → client
-factory → preprocess → triage → extract+repair → normalize → score → route →
-eval); persistence (8 tables, migrations, repository, review queue, 4-sheet
-XLSX); `process_receipt` + the RQ worker + the VLM guards (ADR-0011); the review
-API with session auth, roles and a machine upload key (ADR-0012); and the
-operator CLI (ADR-0013, ADR-0014).
+- **There are two test suites.** `python -m pytest` (**844**, offline and
+  Node-free — proven by running it with `node` stripped from `PATH`) and
+  **Vitest in `frontend/`** (**170**).
+- **`npm test` does NOT type-check.** A TypeScript error ships green through it.
+  That trap fired three times in one milestone. Run `npm run typecheck` too.
+- **`python scripts/verify.py` is the gate runner** — pytest, ruff, typecheck,
+  vitest, build. It fails loudly naming the gate, and when `npm` is absent it
+  prints a per-gate `SKIPPED` and still gates the Python half. **ADR-0017.**
+- Lint is `python -m ruff check .` — bare `ruff` is not on PATH.
+- CLI: `python -m receipts.cli <command>` — the console script needs the
+  interpreter's `Scripts`/`bin` on `PATH`, which it is not on this machine.
+- The e2e is run deliberately, not as part of the sweep:
+  `python scripts/seed_review_e2e.py --reset` then
+  `cd frontend && npx playwright test`.
 
-**Running it:** `python -m receipts.cli <command>` — the console script needs the
-interpreter's `Scripts`/`bin` directory on `PATH`, which it is **not** on this
-machine. Commands: `ingest|process|export|eval|calibrate|merchants|reprocess|users`.
-Lint is **`python -m ruff check .`** — bare `ruff` is not on PATH.
+### Git
+
+- Default branch is **`main`**. Remote `origin` → `CDGYu/Receipt-Digitalization`,
+  **private**.
+- **Pushing `feat/*` branches is authorised.** **Ask before pushing `main`.**
+- **`.kiro/` and `.github/workflows/` are gitignored and untracked.** GitHub
+  Actions does not run; `scripts/verify.py` is the substitute, and **nothing
+  runs the frontend gates on GitHub.**
+- **`var/` is gitignored** — `STORAGE_ROOT` defaults to `var/blobs` and writes
+  real receipt images there. Never stage one.
 
 ## Non-negotiables
 
 `Decimal` on the money path (never `float`); deterministic, pure validation that
-never mutates and never raises; stable rule IDs (never renumber); prefer `null`
-over a confident wrong value; a full PAN never persisted (last 4 only); nothing
-silently dropped (every receipt reaches a terminal state); **a machine run never
-overwrites a `reviewed` row**; **no module-top import of an optional extra on any
-path reachable from an entry point** (ADR-0014); structured output via tool-use;
-few-shot images first, target receipt last; consistency runs never cached; keep
-the full suite green and `python -m ruff check .` clean; `python -m pytest` must
-stay **offline and Node-free** (fake client, SQLite, no Redis, no network, and it
-must pass on a machine with no `npm`).
+never mutates and never raises; stable rule IDs; prefer `null` over a confident
+wrong value; **a full PAN never persisted**; nothing silently dropped (every
+receipt reaches a terminal state); **a machine run never overwrites a `reviewed`
+row**; no module-top import of an optional extra on any path reachable from an
+entry point; structured output via tool-use; few-shot images first, target
+receipt last; consistency runs never cached; `python -m pytest` stays **offline
+and Node-free**.
 
-**Frontend-specific (ADR-0015):** money is a string end to end and
-**`<input type="number">` is banned on money fields**; the browser stays
-same-origin (Vite proxy in dev, `StaticFiles` in prod) so **no `CORSMiddleware`
-is ever added**; SPA pages live under `/app/*` and no API path moves.
+**Frontend (ADR-0015):** money is a string end to end and
+**`<input type="number">` and `valueAsNumber` are banned**; the browser stays
+same-origin so **no `CORSMiddleware` is ever added**; SPA pages live under
+`/app/*` and no API path moves.
 
-## Phase 5 — the milestone in flight
+## The work, in order
 
-Plan: `docs/superpowers/plans/2026-07-29-review-ui.md`. Ledger:
-`.superpowers/sdd/2026-07-29-review-ui/progress.md`.
+### 1. PAN hardening — the next task, already scoped
 
-**Task 1 — the guarded static mount. DONE** (commits `cea36d5`, `dae3e41`).
-`Settings.frontend_dist`, `_SpaFiles` + `_install_spa` in `review/api.py`,
-`tests/test_api_static.py`. Verified independently: 722 passing, ruff clean.
+**Read the ledger's "NEXT TASK" section and ADR-0007 before touching
+`_PAN_RE`.** It has produced a surprise on **both** of its last two widenings.
 
-> **Loose end to close first:** Task 1 never got its formal task review. The
-> controller verified it by hand and ran one fix round, but the independent
-> reviewer (spec-compliance + quality verdicts) was interrupted before it ran.
-> A review package is already built at
-> `.superpowers/sdd/2026-07-29-review-ui/review-5e4d708..dae3e41.diff`.
-> Two specific things to have a reviewer check, neither yet verified:
-> whether `_SpaFiles.get_response` correctly re-raises non-404s, and whether the
-> `index.html` fallback can recurse if `index.html` is itself missing from a
-> directory that exists.
+- **(a) Undocumented total leak.** A four-group PAN with a 5+ digit tail is
+  stored **whole**: `'4111 1111 1111 11111'` (17), `'…111111'` (18),
+  `'…1111111'` (19). The trailing group is `\d{1,4}`
+  (`src/receipts/persist/repository.py`). Pre-existing and byte-identical under
+  the old pattern. **Strictly worse than (b), and the only one the code's own
+  comments do not record.**
+- **(b) Documented partial leak.** More than four groups leaves seven digits
+  clear: `'4111 1111 1111 1111 111'` → `'************1111 111'`. **The obvious
+  fix is measured worse** — a fifth alternative lets
+  `'4111 1111 1111 1111 9999 9999'` and `'4111.1111.1111.1111.1111'` through
+  **whole**, because the long run is consumed and `_mask_pan` then rejects it
+  for length. Any fix must be measured in **both** directions.
+- **(c) A false sentence to fix in the same pass.** `ReceiptForm.tsx` asserts
+  that a 13–19 digit PAN in four-group form with any of the six separators is
+  masked. Falsified by (a). Bound it by the table it introduces, the way
+  `serializers.py` already does.
+- Also file alongside: a regression test binding the three recoverability
+  properties the review UI's "Skip this receipt" button spends — a skipped
+  receipt is still listed by `GET /receipts?status=needs_review`, still
+  `PATCH`-able to `reviewed`, and still re-openable by `enqueue_review`. All
+  three are true today; **none would go red if they stopped being.**
 
-**Task 2 — frontend scaffold, API client, login.** Brief already extracted at
-`.superpowers/sdd/2026-07-29-review-ui/task-2-brief.md`. React 19 + Vite + TS in
-`frontend/`, the exhaustive dev proxy, `base: '/app/'`, the `Money` branded type,
-the fetch wrapper (error envelope `{"error":{"message":...}}`, 401 → login), the
-login page, and a placeholder `ReviewScreen`. **This is the task that pulls the
-Node toolchain down** (`node v22.22.2` / `npm 10.9.7` confirmed present).
+### 2. Phase 5 follow-ups, each a named piece of work
 
-**Task 3 — review screen display.** `fetchNext`/`fetchReceipt`/`fetchImageUrl`;
-`ImagePane` (signed URL, one re-fetch on expiry, then a visible failure);
-`ConfidenceRail` (renders `{reason, penalty}` verbatim, and distinguishes
-`null` = *not recorded* from `[]` = *nothing lowered the score*); `FindingsPanel`
-headed as what the machine found **at extraction time**.
+- **The five design §5 error-recovery behaviours that never shipped** — no
+  logout control anywhere, no return-to-receipt after a 401, no inline
+  field-level error on a 400 (one page-level alert instead), no distinct
+  backend-down 503 state, no re-fetch-`next` on 403/404. The plan dropped design
+  §5's error table wholesale, so no task owned any of them.
+- **A read route for the `corrections` table.** The audit trail is write-only
+  from the API's perspective — a reviewer cannot see the correction history of
+  the receipt they are correcting, and an auditor needs database access.
+  Additive; needs its own auth question.
+- **An ASGI entry point and a deployment story.** `create_app` is a factory
+  nothing calls, so this API has **no supported way to be served**.
+  `scripts/serve_review_e2e.py` is deliberately e2e-scoped and says so — do not
+  promote it without deciding the settings, session, storage and host policy on
+  purpose.
+- **An admin release for a claimed task** (`IN_PROGRESS` → `OPEN`). There is no
+  inverse of a claim anywhere in the system.
+- **The intermittent test.**
+  `tests/test_cli_pipeline.py::test_inline_one_failing_receipt_does_not_abandon_the_others`
+  failed twice in full runs and has not reproduced in ~20 since. **Test the
+  hypothesis first:** this repo uses `pytest-randomly`, so order varies per run.
+- Smaller parked items are listed in the ledger with rulings: `ReviewScreen.tsx`
+  citing `queue.py:198-199` for writes at `:289-290`; no UI route reaching a
+  skipped receipt; 405 responses under `/app` carrying no `Allow` header; two
+  tabs of one reviewer silently overwriting each other; `ReviewScreen.tsx` past
+  its size ceiling; `preventDefault()` firing on screens with no approve action.
 
-**Task 4 — editing and the submit chain.** `MoneyInput`, `buildPatch`
-(dirty-only, flat dotted keys — the server allows extra keys at every level and
-flattens them), `ReceiptForm` (the 17 closed paths), `LineItemsTable` (7 fields,
-`position` read-only, no add/remove), and the strictly sequential
-`PATCH → complete → next` with step-tagged failures. ⌘/Ctrl+Enter approves.
+### 3. Phase 6 — merchants & few-shot (P6.T1)
 
-**Task 5 — e2e, seed, CI.** `scripts/seed_review_e2e.py`, Playwright asserting
-the `corrections` rows **through the API** rather than the UI's own success
-message, and a 10s regression budget (the 60s figure is a *human* target need­ing
-a human trial, not something a green CI run establishes).
+`merchants/{fingerprint,registry}.py`; inject verified few-shot examples with
+**images first, target receipt last**; hints always end with "trust the image".
+Measure top-10-merchant accuracy before/after. **Five things unblock here:**
+wire semantic merchant+date+total dedupe into `process_receipt`; pass the same
+hints/few-shot values into `_attempt_prompt_hash` or the stored hash drifts; set
+`merchant_default_currency` at the marked plug-in point (`pipeline.py:227`); fix
+the parked `image_phash` gap (`_persist_failure` never writes it, so a failed
+receipt keeps `""` and can never serve as a dedupe **original**); and increment
+`Merchant.receipt_count`, which nothing writes today. Merchant `VAT Reg. TIN` is
+the strongest fingerprint on this corpus.
 
-> **DECISION NEEDED at Task 5:** its final step adds a frontend job to
-> `.github/workflows/ci.yml`, but that file is now gitignored and untracked, so
-> the job cannot run on GitHub. Keep it local-only, drop it, or re-track just
-> that one file?
+### 4. Phase 7 — self-consistency (P7.T1)
 
-## Remaining work after Phase 5, in order
+Wire `run_consistency` (defined at `extract/extractor.py:295`, never called from
+`pipeline.py`) into the pipeline for handwritten / low-legibility receipts, and
+feed disputed fields into scoring. **Gate on `triage.is_handwritten`, never on
+`document_type`** — this corpus is `INVOICE` + `MIXED`. Consistency runs are
+never cached.
 
-*Phase 6 — merchants & few-shot*
-- **P6.T1 —** `merchants/{fingerprint,registry}.py`; inject verified few-shot
-  examples with **images first, target receipt last**; hints always end with
-  "trust the image". Measure top-10-merchant accuracy before/after.
-  **Five things unblock here:** wire semantic merchant+date+total dedupe into
-  `process_receipt`; pass the same hints/few-shot values into
-  `_attempt_prompt_hash` or the stored hash drifts; set
-  `merchant_default_currency` at the marked plug-in point (`pipeline.py:227`);
-  fix the parked `image_phash` gap; and increment `Merchant.receipt_count`, which
-  nothing writes today (`receipts merchants list` prints `-` rather than a
-  confident `0`). Merchant `VAT Reg. TIN` is the strongest fingerprint on this
-  corpus.
+### 5. Phase 8 — calibration & eval-harness honesty
 
-*Phase 7 — self-consistency*
-- **P7.T1 —** wire `run_consistency` (defined at `extract/extractor.py:295`,
-  never called from `pipeline.py`) into the pipeline for handwritten /
-  low-legibility receipts and feed disputed fields into scoring. **Gate on
-  `triage.is_handwritten`, never on `document_type`** — this corpus is
-  `INVOICE` + `MIXED`. Consistency runs are never cached.
-
-*Phase 8 — calibration & eval-harness honesty*
-- **P3.T6 / P8.T1 —** sweep the confidence threshold to hold auto-approval
-  precision ≥99%, then fit the penalty weights from data into `config/rules.yaml`.
-  **Blocked on ISSUE-001.**
-- **P8.T2 —** grow the held-out set until a ≥99% claim has a credible confidence
-  interval. `receipts calibrate` will not recommend from fewer than
-  `_MIN_APPROVED_SAMPLE` (5, at `cli.py:1193`) approved receipts, so with 3
-  golden labels it correctly refuses today.
+- **P3.T6 / P8.T1** — sweep the confidence threshold to hold auto-approval
+  precision ≥99%, then fit the penalty weights from data into
+  `config/rules.yaml`. **Blocked on ISSUE-001.**
+- **P8.T2** — grow the held-out set until a ≥99% claim has a credible confidence
+  interval. `receipts calibrate` refuses below `_MIN_APPROVED_SAMPLE` (5), so
+  with 3 golden labels it correctly refuses today.
 - **P8.T3 — close the artifact ban properly.** An **all-failed** eval run still
   persists `"auto_approval_precision": 1.0` to the results JSON even though the
-  terminal prints `n/a`. The ban is not closed until the file is honest too;
-  widening the field ripples into `_report_to_dict`, the committed schema, and
-  `calibration_curve`. Also consider excluding `meta.*` from `field_accuracy`'s
-  denominator — a golden label's `meta.notes` prose is currently scored against
-  model output, making per-field accuracy pessimistic.
+  terminal prints `n/a`. Widening the field ripples into `_report_to_dict`, the
+  committed schema, and `calibration_curve`. Also consider excluding `meta.*`
+  from `field_accuracy`'s denominator.
 
-*Still open from earlier phases*
+### 6. Still open from earlier phases
+
 - **P2.T2 — R060/R061 OCR grounding (DECISION NEEDED):** the two grounding rules
-  need a raw text layer nothing produces. Options: have the model return the text
-  it read / a cheap OCR pass / drop the rules. **This now also gates bbox
+  need a raw text layer nothing produces. Options: have the model return the
+  text it read / a cheap OCR pass / drop the rules. **This also gates bbox
   highlighting in the review UI** — an OCR pass would supply both.
 - **Score `is_handwritten` from triage too** — `score_confidence` reads only
   `receipt.meta.is_handwritten`; on these printed-template forms a model may say
   `False` while triage says `MIXED`, so the −0.15 is missed on exactly the
   receipts that need it.
-- **`is_receipt` has no consumer** — verified: declared at `extract/schema.py:201`,
-  referenced only in prompts and one comment. The §3 "reject garbage before you
-  pay for extraction" gate does not exist. It returned `False` for valid invoices
-  on both smoke-run receipts, so when the gate is built it must **not**
-  hard-reject on it; route to review.
+- **`is_receipt` has no consumer** — declared at `extract/schema.py:201`,
+  referenced only in prompts. The §3 "reject garbage before you pay for
+  extraction" gate does not exist. It returned `False` for valid invoices on
+  both smoke-run receipts, so when the gate is built it must **not** hard-reject
+  on it; route to review.
 - **Blank pre-printed template rows** must not become line items (a sibling of
   R052) — Metro Oil's form pre-prints six fuel rows with one filled in.
 
-*Parked, with rulings (see the per-milestone ledgers)*
-- `apply_corrections` redacts **any** coerced text, so confirming a 13–19-digit
-  `receipt.number` masks it and writes a spurious `corrections` row, while
-  `save_extraction` redacts only two columns — make the two sides agree.
-  **The review UI is what finally makes this reachable by a human.**
-- `_persist_failure` never writes `image_phash`, so a receipt whose stage failed
-  keeps `""` and can never serve as a dedupe **original**. Fix with Phase 6.
-- An auto-approving reprocess closes a review task a reviewer had already claimed.
-- **No login rate limiting**, and each attempt costs a full scrypt derivation
-  (~16 MB, ~57 ms) — `POST /auth/login` is an unauthenticated CPU/memory
-  amplifier as well as an enumeration surface. **A login page makes this
-  friendlier to reach.**
-- `receipts eval`/`calibrate` still traceback without the `pipeline` extra while
-  the other six commands degrade cleanly; `calibrate` only reads JSON.
-- Reprocessing a `reviewed` receipt records **no** `extraction_runs` — the
-  transaction rolls back (ADR-0013's dated correction).
+### 7. Parked, with rulings (see the ledgers)
 
-*LAST TASK — deferred by the user until the system is built*
-- **ISSUE-001 — run the first real baseline.** Read `docs/KNOWN_ISSUES.md`; do
-  not re-derive. The smoke run proved the **pipeline works end to end and the
-  safety machinery does not auto-approve garbage** — a bad extraction scored
-  `0.000` and routed urgent. It also proved `granite3.2-vision:2b` on CPU is too
-  slow *and* too weak: 314 s triage + 1057 s extract at `max_edge=768`, extraction
-  effectively empty. Fix: point the baseline at a hosted tool-capable model (the
-  commented-out Gemini block in `.env` — **rotate that key first**, it was echoed
-  in terminal output). Until this runs there are **no measured accuracy numbers**,
-  calibration stays blocked, and **no precision claim is real**.
+`apply_corrections` redacts **any** coerced text while `save_extraction` redacts
+only two columns — the two sides should agree, and the review UI now makes this
+reachable by a human. An auto-approving reprocess closes a review task a
+reviewer had already claimed. **No login rate limiting**, and each attempt costs
+a full scrypt derivation (~16 MB, ~57 ms), so `POST /auth/login` is an
+unauthenticated CPU/memory amplifier as well as an enumeration surface.
+`receipts eval`/`calibrate` still traceback without the `pipeline` extra while
+the other six commands degrade cleanly. Reprocessing a `reviewed` receipt
+records **no** `extraction_runs` — the transaction rolls back.
+
+### 8. LAST — ISSUE-001, deferred by the user until the system is built
+
+**Run the first real baseline.** Read `docs/KNOWN_ISSUES.md`; do not re-derive.
+The smoke run proved the pipeline works end to end and that the safety machinery
+does not auto-approve garbage — a bad extraction scored `0.000` and routed
+urgent. It also proved `granite3.2-vision:2b` on CPU is too slow *and* too weak:
+314 s triage + 1057 s extract at `max_edge=768`, extraction effectively empty.
+Fix: point the baseline at a hosted tool-capable model (the commented-out Gemini
+block in `.env` — **rotate that key first**, it was echoed in terminal output).
+Until this runs there are **no measured accuracy numbers**, calibration stays
+blocked, and **no precision claim is real**.
 
 ## Workflow
 
 brainstorm → design doc → ADR for anything load-bearing → implementation plan →
 subagent-driven execution. One fresh **`general-purpose`** implementer per task,
-briefed to read the real signatures first, work TDD, keep the suite green +
+briefed to read the real signatures first, work TDD, keep both suites green +
 `python -m ruff` clean, and stage only its own files. After each task: review the
-diff yourself, re-run `pytest` + `ruff` **independently**, then a task review,
-then commit **locally** and append to the ledger. At the end of a milestone: a
-whole-branch review on the strongest model, **one** consolidated fix wave, one
-scoped re-review, then fast-forward merge. Merged branches and SDD workspaces are
-**kept**, not cleaned up. **Never push.**
+diff yourself, re-run the gates **independently**, then a task review, then
+commit and append to the ledger. At the end of a milestone: a whole-branch review
+on the strongest model, **one** consolidated fix wave, one scoped re-review, then
+fast-forward merge. Merged branches and SDD workspaces are **kept**.
 
-## Four review standards this project learned the hard way — hold all of them
+**Probe before dispatching.** Phase 5's plan was wrong about existing code
+**eleven times** — including an acceptance test that would have failed against a
+correct system, and a field set that did not match reality. The plan's prose is
+reliable; its claims about existing APIs are not.
+
+## Review standards this project learned the hard way — hold all of them
 
 1. **Reviewers reproduce, they do not reason.** Every finding that mattered came
    from executing something.
-2. **Every new test must be proven to fail** with its fix reverted. Several tests
-   across these milestones passed against the unfixed code.
+2. **Every new test must be proven to fail** with its fix reverted.
 3. **A test that asserts the absence of breakage cannot be proven by a RED run** —
-   revert each guarantee separately instead. Three of Task 1's five tests passed
-   before the feature existed, because they assert that nothing broke. Reverting
-   the `is_dir()` guard proved two of them genuine; moving the mount ahead of the
-   routes proved the third **vacuous**, and it had been mandated by the plan.
-4. **Probe the existing code before dispatching, not after review.** Seven plan
-   defects in the CLI milestone were caught this way; the bbox finding and the
-   mount-ordering claim in Phase 5 were the same shape. **The plan's prose is
-   reliable; its claims about existing APIs and framework behaviour are not.**
+   revert each guarantee separately instead.
+4. **A mutation must change exactly one thing, or the result names the wrong
+   cause.** A two-variable mutation reads exactly like evidence and points at
+   the wrong variable.
+5. **If a number can change without its sentence changing, it does not go in the
+   comment.** One citation drifted `61 → 81 → 94 → 101`, once *inside the commit
+   documenting the drift*; its replacement, a test count, rotted one commit
+   later.
+6. **A claim about what your own artefacts say is itself a claim requiring a
+   command.** Grep for the word; do not recall it.
+7. **Do not credit a tool with settling a question you have not put to it** —
+   including `grep` and the float guard, which has no rule that can fire on
+   arithmetic at all.
+8. **A stub that does not reflect the write is a fixture bug that lies dormant
+   until something reads the reply.**
 
 And the environment lesson: **a green suite is not evidence that installed
-software works.** The same defect shipped twice — a module-top import of an
-optional extra broke every installed `receipts` command while all tests passed,
-because pytest puts the repo root on `sys.path`. Anything with an entry point
-gets run from outside the repository as part of verification.
+software works.** Anything with an entry point gets run from outside the
+repository as part of verification.
 
-## Blocked on me (the user) — surface these, don't guess
+## Blocked on me (the user) — surface these, do not guess
 
-1. **A hosted tool-capable provider + a freshly rotated key** — for ISSUE-001, and
-   therefore for all calibration.
+1. **A hosted tool-capable provider + a freshly rotated key** — for ISSUE-001,
+   and therefore for all calibration.
 2. **R060/R061 grounding (P2.T2)** — which also gates bbox highlighting.
-3. **The Task 5 CI question** above, when you get there.
+3. **Whether GitHub Actions should run again** — `.github/workflows/ci.yml` is
+   untracked, so nothing runs the frontend gates remotely. If yes, the workflow
+   should call `scripts/verify.py` rather than re-listing the gates.
 
-**Today's goal:** <FILL THIS IN — e.g. "Close Task 1's review, then Tasks 2–3 of
-the review UI" or "Finish Phase 5" or "I've rotated the key — do ISSUE-001.">
-
----
-
-## Quick status line (update each session)
-
-- **`feat/review-ui` @ `dae3e41`** (2 ahead of `main` @ `5e4d708`) · **722
-  passing** · ruff clean · remote `origin` exists and is **private** · **nothing
-  pushed, and I do not push**.
-- **Phase 5 Task 1 of 5 complete**, pending its formal task review. Tasks 2–5 not
-  started; Task 2's brief is already extracted.
-- Run it with `python -m receipts.cli <command>`; lint with `python -m ruff
-  check .` (bare `ruff` is not on PATH).
-- Golden set is **live**: 3 hand-verified real receipts, all validating with zero
-  findings. `eval/golden/images/` is gitignored and stayed out of the push.
-- **Deferred to LAST: ISSUE-001** — no measured accuracy numbers exist until a
-  hosted provider runs it.
-- `.kiro/` and `.github/workflows/` are untracked now; **CI does not run on
-  GitHub.**
-- Harness notes: the `developer-kit` `prevent-destructive-commands` hook was
-  edited to stop blocking `git add`/`git commit`; a plugin update will revert it.
-  It also false-positives on `git rm --cached` (reads it as a filesystem delete —
-  `git update-index --force-remove` is the way around) and on reading
-  `config/settings.py` (matches its "sensitive file" pattern — use the Grep tool
-  instead of `grep` via bash).
+**Today's goal:** <FILL THIS IN — e.g. "PAN hardening", "the design §5 error
+recovery rows", "start Phase 6", or "I've rotated the key — do ISSUE-001.">

@@ -22,9 +22,12 @@ Accepted; supersede it with a new ADR rather than editing history.
 | [0014](0014-optional-dependency-import-discipline.md) | Optional dependencies stay out of every import path | Accepted |
 | [0015](0015-review-ui-same-origin-and-app-prefix.md) | The review UI is served same-origin under `/app` | Accepted |
 | [0016](0016-review-next-resumes-the-callers-task.md) | `GET /review/next` resumes the caller's own in-progress task | Accepted |
+| [0017](0017-two-suites-and-the-gate-runner.md) | Two test suites, and `scripts/verify.py` is what "passing" means | Accepted |
 
 Read **0001** first: it is the invariant everything else defers to. **0007** is
 the one to read before touching anything that writes card data or money.
+**0017** is the one to read before believing a green test run — `npm test` does
+not type-check, and that trap fired three times in one milestone.
 
 Primary sources these build on: `RECEIPT_SYSTEM_SPEC.md` (build spec),
 `README.md` (§5 design decisions), `VLM_AND_DATA.md`, and the always-on
