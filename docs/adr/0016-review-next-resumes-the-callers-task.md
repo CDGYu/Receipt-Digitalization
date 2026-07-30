@@ -12,11 +12,12 @@ off the code rather than reasoned about:
 
 - `ReviewState.OPEN` is **assigned** in exactly three places, repo-wide: the
   column default (`persist/models.py:360`), a brand-new task in
-  `enqueue_review`, and `enqueue_review`'s reopen branch. Line numbers as of
-  this commit: `queue.py:195` and `queue.py:213`; they were `159` and `177`
-  before this change added `_resume_stmt` above them.
+  `enqueue_review`, and `enqueue_review`'s reopen branch: `queue.py:199` and
+  `queue.py:217`. Every line number in this section was re-read off the file
+  when these citations were corrected — they had already drifted by four lines
+  once, and will drift again. The symbol names are the durable half.
 - That reopen branch is gated on `if existing.state is ReviewState.DONE`
-  (`queue.py:212`). `enqueue_review`'s own docstring states the other half:
+  (`queue.py:216`). `enqueue_review`'s own docstring states the other half:
   *"An `IN_PROGRESS` task keeps its state."*
 - `_claim_stmt` selects `.where(ReviewTask.state == ReviewState.OPEN)`
   (`queue.py:85`) and nothing else, so an `IN_PROGRESS` row is invisible to

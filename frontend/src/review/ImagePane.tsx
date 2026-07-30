@@ -34,8 +34,16 @@ import { useEffect, useRef, useState } from 'react'
  * **The failure is not a dead end.** It replaces only the image, never the pane:
  * the zoom and rotate controls stay put and an explicit retry sits beside the
  * message. That retry re-asks for a link and nothing else -- it must never reach
- * `fetchNext`, which is a claiming write, so the only escape from a broken image
- * is not a page reload that strands the reviewer's queue task.
+ * `fetchNext`, which is a claiming write.
+ *
+ * The reason for that has changed since this file was written, though the rule
+ * has not. It used to be that a page reload stranded the reviewer's queue task
+ * for good; ADR-0016 landed afterwards and made `GET /review/next` resume the
+ * caller's own in-progress task, so a reload now hands the same receipt back.
+ * What a needless `fetchNext` from here would cost today is a *second* claim in
+ * the pre-commit window the ADR records as self-correcting but real -- and the
+ * pane has no business spending queue state to re-sign an image link either
+ * way.
  *
  * **Why the retry does not depend on the URL changing.** A re-signed link is
  * usually different (`exp` moves, so `sig` moves), but two calls inside the same

@@ -383,13 +383,16 @@ describe('findRewrites: the ways a reviewer legitimately types an amount', () =>
   // an ordinary keystroke, not an exotic one. A warning that fires on it trains
   // reviewers to dismiss the warning, which is the failure this whole feature
   // exists to prevent.
+  // `['1000.', '1000.0000']` is deliberately absent: it was a verbatim
+  // duplicate of the `a bare trailing point` case in the block above, which
+  // asserts the same pair *and* the line-item path, so this copy bound nothing
+  // the other did not already bind.
   const accepted: ReadonlyArray<readonly [string, string]> = [
     ['.50', '0.5000'],
     ['-.50', '-0.5000'],
     ['1000.00 ', '1000.0000'],
     ['  1000.00  ', '1000.0000'],
     ['+1000.00', '1000.0000'],
-    ['1000.', '1000.0000'],
   ]
   for (const [sent, stored] of accepted) {
     it(`is silent for ${JSON.stringify(sent)} -> ${stored}`, () => {

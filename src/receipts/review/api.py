@@ -656,8 +656,14 @@ class _SpaFiles(StaticFiles):
     than a 404 (ADR-0015).
 
     **The fallback is restricted to navigations** -- requests whose final
-    path segment has no file extension, which is the only shape a
-    client-side route can take. A request that names a file
+    path segment has no file extension. That is a constraint this mount
+    *imposes* on the SPA's routes, not a fact about them: measured through
+    the mount, ``/app/v1.2`` and ``/app/user@example.com`` are 404s while
+    ``/app/.env`` returns the shell, because ``Path.suffix`` is empty for a
+    name that is all extension. ``frontend/src/main.tsx`` states the
+    obligation the right way round -- every client-side path must keep its
+    final segment free of a dot -- and anything built from receipt data
+    belongs in a query string. A request that names a file
     (``/app/assets/index-abc123.js``, ``/app/favicon.ico``) keeps its 404.
     An unconditional fallback answers *every* miss under ``/app`` with
     ``200 text/html``, and once a content-hashed build sits here that is a

@@ -183,12 +183,19 @@ function isMoneyPath(path: string): boolean {
  *  **The amount is never converted to a number.** `trim`, `indexOf`, `charAt`,
  *  `startsWith` and `slice`; no `Number`, no `parseFloat`, no unary `+`. There
  *  *is* arithmetic -- `end -= 1`, `point + 1` -- but every one of those numbers
- *  is a string offset, no character is ever turned into a value, and the return
- *  is always a substring of the input with a possible `"0"` in front. That, read
- *  off the four statements below, is what establishes it stays inside ADR-0001;
- *  `tests/no-float-in-money-path.test.ts` passes, but it is **not** evidence
- *  either way -- it has no rule that fires on arithmetic of any kind, and its
- *  own `LEGITIMATE` list pins `item.position + 1` as must-not-fire.
+ *  is a string offset: no character is ever read as a value, and no value is
+ *  ever written back out as a character. Every character of the return came out
+ *  of the trimmed input, apart from one literal `"0"` that may be inserted in
+ *  front of a bare leading point -- **or after the sign**, which is where a
+ *  negative one goes. Measured: `withoutDisplayScale('-.50')` is `'-0.5'`,
+ *  which is neither a substring of its input nor a substring with a `"0"` in
+ *  front. This note said it was one, which is the sort of claim about its own
+ *  code that this comment exists to make checkable.
+ *
+ *  That, read off the statements below, is what establishes it stays inside
+ *  ADR-0001; `tests/no-float-in-money-path.test.ts` passes, but it is **not**
+ *  evidence either way -- it has no rule that fires on arithmetic of any kind,
+ *  and its own `LEGITIMATE` list pins `item.position + 1` as must-not-fire.
  *
  *  Digits left of the point are never touched, so `"1000"` cannot become `"1"`.
  *
