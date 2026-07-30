@@ -27,17 +27,25 @@ function isReply(value: Reply | readonly Reply[]): value is Reply {
  *  so a request the screen was not supposed to make shows up as a readable
  *  failure instead of an undefined body.
  *
- *  A path may carry a *queue* of replies instead of one: each call takes the
+ *  A key may be a bare path (`/receipts/a1`, any method) or a method and a path
+ *  (`PATCH /receipts/a1`); the specific one wins. `GET /receipts/{id}` and
+ *  `PATCH /receipts/{id}` are the same URL and answer with different bodies, so
+ *  path alone stopped being enough once the submit chain existed.
+ *
+ *  A key may carry a *queue* of replies instead of one: each call takes the
  *  next and the last repeats, which is how "the detail call fails, then works"
  *  is expressed without a bespoke mock. */
 function stubApi(routes: Record<string, Reply | readonly Reply[]>) {
   const pending = new Map<string, Reply[]>(
     Object.entries(routes).map(([path, value]) => [path, isReply(value) ? [value] : [...value]]),
   )
-  return vi.fn((path: string) => {
-    const queue = pending.get(path)
+  return vi.fn((path: string, init?: RequestInit) => {
+    const method = init?.method ?? 'GET'
+    const queue = pending.get(`${method} ${path}`) ?? pending.get(path)
     if (queue === undefined) {
-      return Promise.resolve(jsonResponse(404, { error: { message: `no stub for ${path}` } }))
+      return Promise.resolve(
+        jsonResponse(404, { error: { message: `no stub for ${method} ${path}` } }),
+      )
     }
     const reply = queue.length > 1 ? queue.shift()! : queue[0]
     return Promise.resolve(jsonResponse(reply[0], reply[1]))
@@ -48,6 +56,25 @@ function stubApi(routes: Record<string, Reply | readonly Reply[]>) {
  *  is a count, not a presence. */
 function callsTo(fetchMock: ReturnType<typeof stubApi>, path: string): number {
   return fetchMock.mock.calls.filter(([called]) => called === path).length
+}
+
+/** Every call as `METHOD /path`, in order. */
+function chain(fetchMock: ReturnType<typeof stubApi>): string[] {
+  return fetchMock.mock.calls.map(
+    ([path, init]) => `${(init as RequestInit | undefined)?.method ?? 'GET'} ${path}`,
+  )
+}
+
+/** The body of the first `PATCH`, parsed. Says what went wrong when there was
+ *  no PATCH at all, rather than throwing a `TypeError` about `undefined`. */
+function patchBody(fetchMock: ReturnType<typeof stubApi>): unknown {
+  const call = fetchMock.mock.calls.find(
+    ([, init]) => (init as RequestInit | undefined)?.method === 'PATCH',
+  )
+  if (call === undefined) {
+    throw new Error(`no PATCH was issued; the calls were ${chain(fetchMock).join(', ')}`)
+  }
+  return JSON.parse(String((call[1] as RequestInit).body))
 }
 
 const TASK: ReviewTask = {
@@ -80,10 +107,14 @@ const RECEIPT: ReceiptDetail = {
   confidence: '0.620' as Money,
   confidence_reasons: [{ reason: 'validation errors present', penalty: '-0.35' as Money }],
   merchant_name_raw: 'Whole Foods Market',
+  receipt_number: 'WF-100244',
   txn_date: '2026-07-14',
   date_raw: '14/07/2026',
+  // `HH:MM:SS`, the way `_iso_time` renders it. See `ReceiptDetail.txn_time`.
+  txn_time: '09:31:02',
   currency: 'USD',
   created_at: '2026-07-14T09:31:02+00:00',
+  payment_method: 'VISA',
   card_last4: '4242',
   is_handwritten: false,
   legibility: 'good',
@@ -234,5 +265,196 @@ describe('ReviewScreen', () => {
 
     expect(await screen.findByText(/review queue is empty/i)).toBeDefined()
     expect(screen.queryByRole('alert')).toBeNull()
+  })
+})
+
+/** The queue drains: the claimed task first, then nothing. Reaching the second
+ *  reply is what proves the screen asked again rather than re-opening what it
+ *  had just finished. */
+const DRAINING = {
+  '/review/next': [
+    [200, { task: TASK, receipt: SUMMARY }],
+    [200, { task: null }],
+  ],
+  'GET /receipts/a1': [200, RECEIPT],
+  'PATCH /receipts/a1': [200, RECEIPT],
+  'POST /review/t1/complete': [200, { ...TASK, state: 'done', closed_at: '2026-07-14T10:00:00Z' }],
+  '/receipts/a1/image': [200, { url: '/receipts/a1/image/blob?variant=original&exp=1&sig=s' }],
+} as const
+
+async function claimAndEditTheTotal(fetchMock: ReturnType<typeof stubApi>) {
+  const user = userEvent.setup()
+  render(<ReviewScreen />)
+  await screen.findByRole('heading', { level: 1, name: 'Whole Foods Market' })
+  await user.type(screen.getByLabelText('Total'), '1')
+  expect(callsTo(fetchMock, '/review/next')).toBe(1)
+  return user
+}
+
+describe('ReviewScreen: editing and approval', () => {
+  it('sends only what the reviewer changed, then closes the task, then asks for the next', async () => {
+    const fetchMock = stubApi(DRAINING)
+    vi.stubGlobal('fetch', fetchMock)
+
+    const user = await claimAndEditTheTotal(fetchMock)
+    await user.click(screen.getByRole('button', { name: /approve/i }))
+
+    expect(await screen.findByText(/review queue is empty/i)).toBeDefined()
+    // `97.43` with a `1` typed on the end. Every other one of the seventeen
+    // paths was left alone and must therefore be absent -- `exclude_unset` is
+    // what makes "absent" mean "do not touch".
+    expect(patchBody(fetchMock)).toEqual({ 'totals.total': '97.431' })
+    expect(chain(fetchMock)).toEqual([
+      'GET /review/next',
+      'GET /receipts/a1',
+      'GET /receipts/a1/image',
+      'PATCH /receipts/a1',
+      'POST /review/t1/complete',
+      'GET /review/next',
+    ])
+  })
+
+  it('confirms an untouched receipt with an empty patch', async () => {
+    // `{}` is legal and means "no changes, still mark reviewed". Every value the
+    // form seeds itself with has to survive the round trip untouched for this to
+    // be empty -- the `HH:MM:SS` time above all.
+    const fetchMock = stubApi(DRAINING)
+    vi.stubGlobal('fetch', fetchMock)
+    const user = userEvent.setup()
+
+    render(<ReviewScreen />)
+    await screen.findByRole('heading', { level: 1, name: 'Whole Foods Market' })
+    await user.click(screen.getByRole('button', { name: /approve/i }))
+
+    await screen.findByText(/review queue is empty/i)
+    expect(patchBody(fetchMock)).toEqual({})
+  })
+
+  it('approves on Ctrl+Enter without intercepting anything else', async () => {
+    const fetchMock = stubApi(DRAINING)
+    vi.stubGlobal('fetch', fetchMock)
+
+    const user = await claimAndEditTheTotal(fetchMock)
+    await user.keyboard('{Control>}{Enter}{/Control}')
+
+    expect(await screen.findByText(/review queue is empty/i)).toBeDefined()
+    expect(chain(fetchMock)).toContain('POST /review/t1/complete')
+  })
+
+  it('does not approve on a bare Enter', async () => {
+    // Enter moves focus on through a form; approving on it would submit a
+    // half-keyed receipt. An absence assertion: the mutation that breaks it is
+    // dropping the `metaKey || ctrlKey` test.
+    const fetchMock = stubApi(DRAINING)
+    vi.stubGlobal('fetch', fetchMock)
+
+    const user = await claimAndEditTheTotal(fetchMock)
+    await user.keyboard('{Enter}')
+
+    expect(chain(fetchMock)).not.toContain('PATCH /receipts/a1')
+    expect(screen.getByRole('heading', { level: 1, name: 'Whole Foods Market' })).toBeDefined()
+  })
+
+  it('submits once when Ctrl+Enter is pressed twice in a row', async () => {
+    const fetchMock = stubApi(DRAINING)
+    vi.stubGlobal('fetch', fetchMock)
+
+    const user = await claimAndEditTheTotal(fetchMock)
+    await user.keyboard('{Control>}{Enter}{Enter}{/Control}')
+
+    await screen.findByText(/review queue is empty/i)
+    expect(chain(fetchMock).filter((call) => call === 'PATCH /receipts/a1')).toHaveLength(1)
+  })
+
+  it('keeps the edits and never closes the task when the patch is rejected', async () => {
+    const message = "cannot apply a correction to unknown field path 'totals.grand_total'"
+    const fetchMock = stubApi({
+      ...DRAINING,
+      'PATCH /receipts/a1': [400, { error: { message } }],
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const user = await claimAndEditTheTotal(fetchMock)
+    await user.click(screen.getByRole('button', { name: /approve/i }))
+
+    expect((await screen.findByRole('alert')).textContent).toContain(message)
+    // Nothing was written, so the reviewer's typing must still be there to retry
+    // with -- and the task must not have been closed over a receipt that never
+    // took the edit.
+    expect((screen.getByLabelText('Total') as HTMLInputElement).value).toBe('97.431')
+    expect(chain(fetchMock)).not.toContain('POST /review/t1/complete')
+    expect(callsTo(fetchMock, '/review/next')).toBe(1)
+    expect(screen.queryByRole('button', { name: /close task/i })).toBeNull()
+  })
+
+  it('says the receipt was saved but the task is still open when only the close fails', async () => {
+    // `apply_corrections` commits inside its own transaction, so a 403 from
+    // `complete` leaves a `reviewed` receipt with an open queue entry. Advancing
+    // here would orphan it silently.
+    const fetchMock = stubApi({
+      ...DRAINING,
+      'POST /review/t1/complete': [
+        [403, { error: { message: 'only the assignee or an admin may complete this task' } }],
+        [200, { ...TASK, state: 'done' }],
+      ],
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const user = await claimAndEditTheTotal(fetchMock)
+    await user.click(screen.getByRole('button', { name: /approve/i }))
+
+    const alert = await screen.findByRole('alert')
+    expect(alert.textContent).toMatch(/saved/i)
+    expect(alert.textContent).toContain('only the assignee or an admin may complete this task')
+    expect(callsTo(fetchMock, '/review/next')).toBe(1)
+
+    // ...and the offered repair closes the task alone, without patching again.
+    await user.click(screen.getByRole('button', { name: /close task/i }))
+    expect(await screen.findByText(/review queue is empty/i)).toBeDefined()
+    expect(chain(fetchMock).filter((call) => call === 'PATCH /receipts/a1')).toHaveLength(1)
+    expect(chain(fetchMock).filter((call) => call === 'POST /review/t1/complete')).toHaveLength(2)
+  })
+
+  it('says something on screen when the submit never reaches the API', async () => {
+    const fetchMock = stubApi(DRAINING)
+    vi.stubGlobal('fetch', fetchMock)
+    const user = await claimAndEditTheTotal(fetchMock)
+    // A dev server that went away between the load and the approval: no status,
+    // no message worth quoting, but silence is not an option.
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')))
+
+    await user.click(screen.getByRole('button', { name: /approve/i }))
+
+    expect((await screen.findByRole('alert')).textContent).toMatch(/could not be submitted/i)
+  })
+
+  it('edits a line item by its position and leaves the rest of the row alone', async () => {
+    const withItems: ReceiptDetail = {
+      ...RECEIPT,
+      line_items: [
+        {
+          position: 3,
+          description_raw: 'AVOCADO',
+          sku: null,
+          qty: '2.000' as Money,
+          unit: null,
+          unit_price: '3.50' as Money,
+          line_total: '7.00' as Money,
+          modifiers: [],
+          line_confidence: null,
+        },
+      ],
+    }
+    const fetchMock = stubApi({ ...DRAINING, 'GET /receipts/a1': [200, withItems] })
+    vi.stubGlobal('fetch', fetchMock)
+    const user = userEvent.setup()
+
+    render(<ReviewScreen />)
+    await screen.findByRole('heading', { level: 1, name: 'Whole Foods Market' })
+    await user.type(screen.getByLabelText('Line total 3'), '1')
+    await user.click(screen.getByRole('button', { name: /approve/i }))
+
+    await screen.findByText(/review queue is empty/i)
+    expect(patchBody(fetchMock)).toEqual({ 'line_items[3].line_total': '7.001' })
   })
 })

@@ -70,11 +70,22 @@ export interface ReceiptDetail {
   /** `null` = never recorded. `[]` = nothing lowered the score. Different facts. */
   confidence_reasons: ConfidenceReason[] | null
   merchant_name_raw: string | null
+  receipt_number: string | null
   txn_date: string | null
   date_raw: string | null
+  /** **`HH:MM:SS`, and it must go back exactly as it came.** Measured against a
+   *  stored `time(14, 30, 45)`: `_iso_time` (review/serializers.py:81-97) renders
+   *  the column with `isoformat()`, so it arrives here as `"14:30:45"`;
+   *  `_coerce_time("14:30")` returns `time(14, 30)` rather than raising, and a
+   *  `PATCH {"receipt.time": "14:30"}` writes the correction row
+   *  `('receipt.time', '14:30:45', '14:30:00')` for an edit the reviewer never
+   *  made. So this string is carried, never reformatted, and never bound to
+   *  `<input type="time">`, whose `value` is `HH:MM`. */
+  txn_time: string | null
   currency: string | null
   /** ISO 8601, never null -- `receipt.created_at.isoformat()`. */
   created_at: string
+  payment_method: string | null
   card_last4: string | null
   is_handwritten: boolean | null
   legibility: string

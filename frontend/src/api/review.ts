@@ -1,5 +1,6 @@
 import { ApiError, request } from './client'
 import type { ReceiptDetail, ReviewNextResponse } from './types'
+import type { FieldMap } from '../review/patch'
 
 /** Claim the next review task for the signed-in reviewer.
  *
@@ -53,4 +54,102 @@ export async function fetchImageUrl(id: string): Promise<string> {
     throw new ApiError(200, `no image link in the reply for receipt ${id}`)
   }
   return body.url
+}
+
+/** Which half of `PATCH` -> `complete` failed. */
+export type SubmitStep = 'patch' | 'complete'
+
+/** A failed submission, tagged with the step that failed.
+ *
+ * The distinction is the whole point: a failed patch wrote nothing and can be
+ * retried as-is, while a failed complete means `apply_corrections` already
+ * committed -- it sets `receipt.status = REVIEWED` and commits inside its own
+ * transaction (persist/repository.py:1060-1061) -- with the queue task still
+ * open. The screen must not advance on the second, and must say what survived.
+ *
+ * `step` and `cause` are declared as fields and assigned in the body rather than
+ * written as constructor parameter properties, for the same reason `ApiError`
+ * is: `tsconfig.app.json` sets `erasableSyntaxOnly: true`. Measured -- the
+ * parameter-property form gives
+ * `src/api/review.ts(61,5): error TS1294: This syntax is not allowed when
+ * 'erasableSyntaxOnly' is enabled` from `npm run typecheck` while 9 of the 10
+ * tests in tests/submit-chain.test.ts pass under Vitest, because esbuild strips
+ * it happily and `npm test` does not type-check.
+ */
+export class SubmitError extends Error {
+  readonly step: SubmitStep
+  readonly cause: unknown
+
+  constructor(step: SubmitStep, cause: unknown) {
+    super(`review submit failed at ${step}`)
+    this.step = step
+    this.cause = cause
+    this.name = 'SubmitError'
+  }
+}
+
+/** Apply a reviewer's edits. **The reply is the new state.**
+ *
+ * The route returns `receipt_detail(receipt, findings)` for the row it just
+ * committed (review/api.py:392-398), so a follow-up `GET /receipts/{id}` would
+ * be a second round trip for data already in hand.
+ *
+ * `patch` is sent flat. Measured: `CorrectionPatch.model_validate({'totals.total':
+ * '1000.00', 'receipt.time': None, 'line_items[0].qty': '9.9'})
+ * .model_dump(exclude_unset=True, mode='json')` returns those three keys
+ * unchanged, so a dotted top-level key bypasses the typed sub-models and reaches
+ * `apply_corrections` as written. What that buys is the error currency: also
+ * measured, an unmapped path comes back as `cannot apply a correction to unknown
+ * field path 'totals.grand_total'`, which names the field. Not measured here:
+ * what shape a `RequestValidationError` on this route would take instead --
+ * see `ApiErrorBody` in client.ts, which covers both.
+ *
+ * `request` is an unchecked cast, so the `ReceiptDetail` here is a claim about
+ * the route, not a validation of the body.
+ */
+export function patchReceipt(id: string, patch: FieldMap): Promise<ReceiptDetail> {
+  return request(`/receipts/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(patch),
+  })
+}
+
+/** Close a review task. **`taskId` is a review task id, not a receipt id.**
+ *
+ * `POST /review/{task_id}/complete` looks the id up in `review_tasks`
+ * (review/api.py:520-547) and answers 403 unless the caller is the assignee or
+ * an admin, so passing a receipt id here is a 404 that reads like a
+ * permissions problem.
+ */
+export function completeTask(taskId: string): Promise<unknown> {
+  return request(`/review/${encodeURIComponent(taskId)}/complete`, { method: 'POST' })
+}
+
+/** Strictly sequential. Nothing advances past a step that failed.
+ *
+ * The patch is always sent, even when it is `{}`: an empty body is legal and
+ * means "no changes, still mark reviewed" (review/schemas.py:222-227), so
+ * skipping it for an untouched receipt would close the task and leave the row at
+ * `needs_review`.
+ *
+ * The `ReceiptDetail` the patch returns is deliberately not propagated. The
+ * caller's next move after a successful complete is the *next* task, so there is
+ * nothing here to render it into; `patchReceipt` is exported separately for a
+ * caller that wants it.
+ */
+export async function submitReview(
+  receiptId: string,
+  taskId: string,
+  patch: FieldMap,
+): Promise<void> {
+  try {
+    await patchReceipt(receiptId, patch)
+  } catch (caught) {
+    throw new SubmitError('patch', caught)
+  }
+  try {
+    await completeTask(taskId)
+  } catch (caught) {
+    throw new SubmitError('complete', caught)
+  }
 }
