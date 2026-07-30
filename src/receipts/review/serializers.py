@@ -176,12 +176,36 @@ def receipt_detail(receipt: Receipt, findings: list[ValidationFinding]) -> dict[
     column under ``src/`` (``create_pending_receipt``, the sole other
     ``Receipt(...)`` construction, leaves it NULL), so what leaves here is
     what §18 already permits to be stored: a PAN read off the card line
-    reaches this key as ``"VISA ************1111"``. Measured through the
-    route -- ``PATCH {"payment": {"method": "VISA 4111111111111111"}}``
-    returns ``"VISA ************1111"`` and the unmasked digits appear nowhere
-    in the body. Asserted at the layer below by
-    ``test_save_extraction_redacts_a_pan_the_model_put_in_free_text`` and
-    ``test_apply_corrections_redacts_a_pan_typed_into_a_free_text_field``.
+    reaches this key as ``"VISA ************1111"``.
+
+    **That sentence is a claim about every way a card line is written, so the
+    measurement behind it is a table rather than an example.** An earlier
+    version of this note was measured on the unseparated form alone and
+    generalised from it; at the time it was written, a PAN separated by
+    anything but a space or a hyphen reached this key whole. Re-measured
+    through the route, one fresh receipt per row --
+    ``PATCH {"payment": {"method": <sent>}}`` then ``GET /receipts/{id}``:
+
+        '4111111111111111'      -> '************1111'
+        '4111 1111 1111 1111'   -> '************1111'
+        '4111-1111-1111-1111'   -> '************1111'
+        '4111.1111.1111.1111'   -> '************1111'
+        '4111_1111_1111_1111'   -> '************1111'
+        '4111/1111/1111/1111'   -> '************1111'
+        '4111,1111,1111,1111'   -> '************1111'
+        '4111 1111-1111.1111'   -> '************1111'
+        '3782 822463 10005'     -> '***********0005'
+        '3782.822463.10005'     -> '***********0005'
+        '411111111111'          -> '411111111111'      (12 digits, not a PAN)
+
+    The ``receipts`` row and ``corrections.value_after`` hold the same string
+    as the body in every row above; all three were read, not inferred from one
+    another. Asserted at the layer below by
+    ``test_save_extraction_redacts_a_pan_the_model_put_in_free_text``,
+    ``test_apply_corrections_redacts_a_pan_typed_into_a_free_text_field`` and
+    ``test_apply_corrections_redacts_a_pan_on_every_reviewer_typed_text_path``,
+    and at this layer by
+    ``test_a_dotted_pan_is_masked_in_the_row_the_body_and_the_audit_copy``.
 
     The guarantee therefore belongs to the repository layer, not to the
     column: a test that seeds a row by constructing ``Receipt(...)`` directly

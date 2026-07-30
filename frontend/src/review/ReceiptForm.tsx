@@ -32,17 +32,36 @@ import type { FieldMap } from './patch'
  *
  * Every text control here sends exactly what was typed. **It is not what gets
  * stored.** `_plan_change` runs `redact_pan` over every coerced text value, so
- * any 13-19 digit run is masked before it reaches the column -- and the
+ * a 13-19 digit card number -- written as one run, or in the four-group or
+ * Amex grouping with any mix of space, dot, hyphen, underscore, slash or comma
+ * between the groups -- is masked before it reaches the column, and the
  * `corrections` row records only the masked form, so the original is not
- * recoverable from the audit trail either. Measured through the real `PATCH`
- * route, reading the value back with `GET /receipts/{id}`:
+ * recoverable from the audit trail either.
+ *
+ * **The separator list in that sentence is measured, not assumed.** An earlier
+ * version of this table held the first two rows below and nothing else, and
+ * the claim above it was written as if it covered every spelling; at the time,
+ * every row from the third onwards stored the card number whole. Re-measured
+ * through the real `PATCH` route on `receipt.date_raw`, one fresh receipt per
+ * row, reading the value back with `GET /receipts/{id}`:
  *
  *     sent '4111111111111111'      -> read '************1111'
  *     sent '4111 1111 1111 1111'   -> read '************1111'   (separators lost)
+ *     sent '4111-1111-1111-1111'   -> read '************1111'
+ *     sent '4111.1111.1111.1111'   -> read '************1111'
+ *     sent '4111_1111_1111_1111'   -> read '************1111'
+ *     sent '4111/1111/1111/1111'   -> read '************1111'
+ *     sent '4111,1111,1111,1111'   -> read '************1111'
+ *     sent '4111 1111-1111.1111'   -> read '************1111'   (mixed)
  *     sent '378282246310005'       -> read '***********0005'
+ *     sent '3782.822463.10005'     -> read '***********0005'
  *     sent '411111111111'          -> read '411111111111'       (12 digits, kept)
+ *     sent '1,000.00'              -> read '1,000.00'
  *     sent '  2026-07-30  '        -> read '  2026-07-30  '     (padding kept)
  *     sent '\t1L/O7/2O26 ~'        -> read '\t1L/O7/2O26 ~'     (tab kept)
+ *
+ * `payment.method` reads back identically for every row above; the two paths
+ * were measured separately rather than one being inferred from the other.
  *
  * That is SPEC 18 working as intended and it applies to every text path here,
  * `payment.method` most of all. What it means for this form is narrow but real:
