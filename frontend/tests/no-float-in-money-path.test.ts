@@ -26,7 +26,7 @@ import { describe, expect, it } from 'vitest'
  *
  * The first three versions of this guard matched regular expressions against
  * source text with comments and string literals stripped by a hand-written
- * scanner. Three review rounds found five distinct holes and three false
+ * scanner. Three review rounds found five distinct holes and four false
  * positives, all of them the same defect: **regular expressions cannot lex
  * JavaScript.** One apostrophe in JSX prose (`<p>You're signed out</p>`) opened
  * a "string" that ran to end of file; `//` inside a template literal blinded the
@@ -74,14 +74,27 @@ interface Rule {
   readonly matches: (node: ts.Node) => boolean
 }
 
-/** The name being *called*, for both `f(x)` and `o.f(x)`.
+/** A call or a `new`. Both node kinds hold the callee on `.expression`.
+ *
+ * `new` is included because `new Number("1000.00").valueOf()` is a float, and a
+ * `NewExpression` is not a `CallExpression` -- so a rule that checked only the
+ * latter was silent on it. The task brief originally listed `new Number(1)` as
+ * must-not-fire and was revised: a boxed number is rare enough that firing is the
+ * right default, and ALLOWLIST is the escape hatch.
+ */
+function isCallLike(node: ts.Node): node is ts.CallExpression | ts.NewExpression {
+  return ts.isCallExpression(node) || ts.isNewExpression(node)
+}
+
+/** The name being *called*, for `f(x)`, `o.f(x)` and `new C(x)`.
  *
  * Returning the property name rather than the whole callee expression is what
  * makes one check cover `Number(x)` and `globalThis.Number(x)`, and
  * `parseFloat(x)` and `Number.parseFloat(x)`, while leaving `Number.isInteger(n)`
- * alone -- its called name is `isInteger`.
+ * alone -- its called name is `isInteger` -- and `new Intl.NumberFormat(...)`
+ * alone, whose called name is `NumberFormat`.
  */
-function calledName(node: ts.CallExpression): string | null {
+function calledName(node: ts.CallExpression | ts.NewExpression): string | null {
   const callee = node.expression
   if (ts.isIdentifier(callee)) {
     return callee.text
@@ -92,7 +105,16 @@ function calledName(node: ts.CallExpression): string | null {
   return null
 }
 
-/** The property name being read, for `o.p` and for `o['p']`. */
+/** The property name being read, for `o.p`, `o['p']`, and destructuring.
+ *
+ * The `BindingElement` arm is not optional: `const { valueAsNumber } = el` and
+ * `({ currentTarget: { valueAsNumber } }) => ...` read the property just as much
+ * as `el.valueAsNumber` does, the second is idiomatic React, and a version of
+ * this helper without it was silent on all four destructuring shapes.
+ *
+ * For `{ p: local }` the *property* is `propertyName` and `local` is only the new
+ * binding, so `propertyName ?? name` is the name being read.
+ */
 function accessedName(node: ts.Node): string | null {
   if (ts.isPropertyAccessExpression(node)) {
     return node.name.text
@@ -100,8 +122,37 @@ function accessedName(node: ts.Node): string | null {
   if (ts.isElementAccessExpression(node) && ts.isStringLiteralLike(node.argumentExpression)) {
     return node.argumentExpression.text
   }
+  if (ts.isBindingElement(node)) {
+    const source = node.propertyName ?? node.name
+    if (ts.isIdentifier(source) || ts.isStringLiteralLike(source)) {
+      return source.text
+    }
+    if (ts.isComputedPropertyName(source) && ts.isStringLiteralLike(source.expression)) {
+      return source.expression.text
+    }
+  }
   return null
 }
+
+/** Strip the wrappers that do not change a value, so the literal inside is
+ *  reachable: `("number")`, `"number" as const`, `"number" satisfies string`,
+ *  `"number"!`. Without this, only a bare literal was matched. */
+function unwrapValue(node: ts.Expression): ts.Expression {
+  let current = node
+  while (
+    ts.isParenthesizedExpression(current) ||
+    ts.isAsExpression(current) ||
+    ts.isSatisfiesExpression(current) ||
+    ts.isNonNullExpression(current)
+  ) {
+    current = current.expression
+  }
+  return current
+}
+
+/** HTML's `type` is an enumerated attribute, matched **ASCII case-insensitively**
+ *  by the browser -- so `<input type="NUMBER" />` really is a number input. */
+const NUMBER_VALUE = /^number$/i
 
 /** A JSX `type="number"` attribute, in any of its spellings.
  *
@@ -110,6 +161,10 @@ function accessedName(node: ts.Node): string | null {
  * whitespace-based narrowing is needed. `data-type="number"` has the attribute
  * name `data-type` and is likewise not this. `{...props}` is a
  * `JsxSpreadAttribute` and does not hide a real `type` attribute beside it.
+ *
+ * Consequence of matching the attribute rather than the string: a `type` prop
+ * built by `React.createElement("input", { type: "number" })` is **not** caught,
+ * because that is an object literal and `{ type: 'number' }` has to stay silent.
  */
 function isJsxTypeNumber(node: ts.Node): boolean {
   if (!ts.isJsxAttribute(node) || !ts.isIdentifier(node.name) || node.name.text !== 'type') {
@@ -120,11 +175,11 @@ function isJsxTypeNumber(node: ts.Node): boolean {
     return false
   }
   if (ts.isStringLiteral(initializer)) {
-    return initializer.text === 'number'
+    return NUMBER_VALUE.test(initializer.text)
   }
-  if (ts.isJsxExpression(initializer)) {
-    const inner = initializer.expression
-    return inner !== undefined && ts.isStringLiteralLike(inner) && inner.text === 'number'
+  if (ts.isJsxExpression(initializer) && initializer.expression !== undefined) {
+    const inner = unwrapValue(initializer.expression)
+    return ts.isStringLiteralLike(inner) && NUMBER_VALUE.test(inner.text)
   }
   return false
 }
@@ -133,17 +188,17 @@ const RULES: readonly Rule[] = [
   {
     name: 'Number(',
     why: 'Number("1000.00") is 1000 -- the trailing zeros are gone and it is a float now',
-    matches: (node) => ts.isCallExpression(node) && calledName(node) === 'Number',
+    matches: (node) => isCallLike(node) && calledName(node) === 'Number',
   },
   {
     name: 'parseFloat(',
     why: 'the float path ADR-0001 exists to forbid; the answer is a server round-trip',
-    matches: (node) => ts.isCallExpression(node) && calledName(node) === 'parseFloat',
+    matches: (node) => isCallLike(node) && calledName(node) === 'parseFloat',
   },
   {
     name: 'parseInt(',
     why: 'parseInt("19.99") is 19 -- it truncates money silently',
-    matches: (node) => ts.isCallExpression(node) && calledName(node) === 'parseInt',
+    matches: (node) => isCallLike(node) && calledName(node) === 'parseInt',
   },
   {
     name: '.toFixed',
@@ -174,8 +229,15 @@ const RULES: readonly Rule[] = [
   {
     // The second door into the same room: `valueAsNumber` is a property of every
     // HTMLInputElement, so `e.currentTarget.valueAsNumber` needs no
-    // `type="number"` attribute to compile and banning the attribute alone
-    // leaves it open. It returns a float or NaN; there is no non-float use.
+    // `type="number"` attribute to compile and banning the attribute alone would
+    // leave it reachable. It returns a float or NaN; there is no non-float use.
+    //
+    // Reached through `accessedName`, so it covers the property read, the
+    // `el['valueAsNumber']` index, and all four destructuring shapes -- see
+    // MEASURED. Not covered: an alias that loses the name (`const { valueAsNumber:
+    // n } = el` IS covered because the property name survives, but
+    // `rows.map(Number)` and `const N = Number; N(total)` are not, which is
+    // recorded as accepted in the task report).
     //
     // `Intl.NumberFormat` is deliberately NOT banned. Its `format()` accepts a
     // *string* and preserves the exact decimal (measured:
@@ -231,9 +293,13 @@ interface ParsedSourceFile extends ts.SourceFile {
 }
 
 function parse(file: string, source: string): ParsedSourceFile {
-  // `.tsx` and `.ts` differ in one place that matters to nothing here (`<T>` is
-  // JSX in the former, a type argument list in the latter). Measured: the whole
-  // LEGITIMATE list, `f<T>(a) + b` included, behaves identically under both.
+  // The kind comes from the real extension, which matters: `.ts` and `.tsx` do
+  // NOT agree on everything. Under `ScriptKind.TS` a leading `<span>` is a type
+  // assertion, so `<span>Total: +VAT included</span>` parses as a cast of a unary
+  // `+VAT` and fires; some JSX rows do not parse as `.ts` at all. The shipped
+  // guard is unaffected -- JSX only occurs in `.tsx` files and those are parsed
+  // as TSX -- and `it('changes nothing except for the JSX fixtures')` pins the
+  // exact set of rows that diverge, rather than claiming there are none.
   const kind = file.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS
   return ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, kind)
 }
@@ -351,15 +417,45 @@ const MEASURED: readonly (readonly [string, string])[] = [
   ['input type="number"', '<input\n\ttype="number"\n\tvalue={total}\n/>'],
   ['input type="number"', '<input type="number" />'],
   ['input type="number"', '<input {...props} type="number" />'],
+  // HTML matches the `type` attribute ASCII case-insensitively, so these really
+  // are number inputs in the browser.
+  ['input type="number"', '<input type="NUMBER" value={total} />'],
+  ['input type="number"', '<input type="Number" value={total} />'],
+  // ...and the value can be wrapped in things that do not change it.
+  ['input type="number"', '<input type={("number")} value={total} />'],
+  ['input type="number"', '<input type={"number" as const} value={total} />'],
+  ['input type="number"', '<input type={"number" satisfies string} value={total} />'],
+  ['input type="number"', '<input type={`number`} value={total} />'],
   // valueAsNumber needs no type="number" to exist.
   ['valueAsNumber', '<input type="text" onChange={(e) => f(e.currentTarget.valueAsNumber)} />'],
+  // ...and it does not have to be reached through a property access at all. The
+  // last of these is idiomatic React and is the door ADR-0015 names.
+  ['valueAsNumber', 'const { valueAsNumber } = e.currentTarget'],
+  ['valueAsNumber', 'const { valueAsNumber: n } = e.currentTarget'],
+  ['valueAsNumber', '({ valueAsNumber }: HTMLInputElement) => valueAsNumber'],
+  [
+    'valueAsNumber',
+    '<input onChange={({ currentTarget: { valueAsNumber } }) => f(valueAsNumber)} />',
+  ],
+  ['valueAsNumber', "const { ['valueAsNumber']: n } = el"],
+  // A consequence of the same `BindingElement` arm rather than a separate
+  // decision: `.toFixed` is reached through `accessedName` too, so destructuring
+  // it now fires where it used to be silent. Pinned here so the behaviour is
+  // recorded instead of latent.
+  ['.toFixed', 'const { toFixed } = x'],
+  // `new Number("1000.00").valueOf()` is a float, and a NewExpression is not a
+  // CallExpression -- so this needs the `isCallLike` widening.
+  ['Number(', 'const n = new Number(total)'],
+  ['Number(', 'const n = new Number("1000.00").valueOf()'],
   // A unary + on a numeric literal fires too. Deliberate: see the rule comment.
   ['unary +', 'const a = [+1, -1]'],
 ]
 
 /** A unary `+` is the same node wherever it appears. One row per syntactic
- *  position, including the four the regex version deliberately gave up on
- *  (`>`, after `)`, after `}`, start-of-line). */
+ *  position, including the four the regex version deliberately gave up on: after
+ *  `>`, after `)`, after `}`, and at statement position with no preceding `;`
+ *  (round 2's stated miss was "`+x` opening a file, or after an ASI line break
+ *  with no semicolon" -- the last four rows below are exactly that). */
 const UNARY_POSITIONS: readonly (readonly [string, string])[] = [
   ['after :', 'const o = { total: +x }'],
   ['after ?', 'const v = c ? +a : 0'],
@@ -397,6 +493,12 @@ const UNARY_POSITIONS: readonly (readonly [string, string])[] = [
   ['after in', "const v = 'a' in +x"],
   ['after of', 'function f(x: string) { for (const v of +x) { void v } }'],
   ['inside a JSX expression', '<td>{+total}</td>'],
+  // Statement position with nothing before it, and after constructs that end a
+  // statement without a `;` -- round 2's stated miss.
+  ['as the whole program', '+x'],
+  ['opening the file, ASI after it', '+total\nconst a = 1'],
+  ['after a function declaration, no ;', 'function f() {}\n+x'],
+  ['after an import, no ;', "import './a'\n+x"],
 ]
 
 /** Every shape that hid a violation from a regex-based version of this guard.
@@ -445,18 +547,22 @@ const PREVIOUSLY_HIDDEN: readonly (readonly [string, string, readonly string[]])
  *  flagged any of these would be worse than no guard -- implementers would learn
  *  to route around it. */
 const LEGITIMATE: readonly string[] = [
-  // The three false positives the regex version shipped.
+  // The four false positives the regex version shipped.
   'for (let i = 0; i < items.length; ++i) { void i }',
   'const shown = count! + offset',
   '<span>Total: +VAT included</span>',
   'const s = `Total: +${n} more`',
-  // type= shapes that are not JSX attributes.
+  // type= shapes that are not JSX attributes. The case-insensitive match applies
+  // only to a real `type` attribute, so these stay silent whatever their casing.
   "const type = 'number'",
+  "const type = 'NUMBER'",
   "function F({ type = 'number' }) { return type }",
   'const inputType = "number"',
   '<input data-type="number" />',
+  '<input data-type="NUMBER" />',
   "const o = { type: 'number' }",
   '<input type="text" inputMode="decimal" value={total} />',
+  '<input type="tel" value={total} />',
   // Real integer arithmetic: position, lengths, indices, counters.
   'const next = item.position + 1',
   'const last = items.length - 1',
@@ -468,19 +574,34 @@ const LEGITIMATE: readonly string[] = [
   'const row = lineItems[index]',
   'if (task.priority > 2) { void 0 }',
   'const label = `item ${item.position + 1} of ${items.length}`',
-  // Binary + reached through each operator context the regex treated as a unary
-  // position. None of these may fire.
+  // Binary + reached through every operator context and keyword that appears in
+  // UNARY_POSITIONS above. One row per context, so "none of these may fire" is a
+  // statement about the same set the unary rows cover, not a subset of it.
   'const v = a ?? b + c',
   'const v = x < y + z',
+  'const v = x > y + z',
   'const v = !flag + count',
   'const v = a && b + c',
   'const v = a || b + c',
   'const v = i - j + k',
   'const v = a * b + c',
+  'const v = a / b + c',
   'const v = a % b + c',
   'const v = a ^ b + c',
   'const v = a & b + c',
   'const v = a | b + c',
+  'const v = ~a + b',
+  'const f = () => a + b',
+  'const v = (a) + b',
+  'const v = arr[a + b]',
+  'f(a, b + c)',
+  'let q = 1; const v = b + c',
+  'const o = { total: a + b }',
+  'const v = void a + b',
+  'const v = delete o[a + b]',
+  "function f(): never { throw new Error('a' + 'b') }",
+  "const v = 'a' in { a: b + c }",
+  'function f(xs: number[]) { for (const x of xs) { void (x + 1) } }',
   'function f(x: number, a: number, b: number) { switch (x) { case 1: return a + b } return 0 }',
   'lbl: { const v = a + b; void v }',
   'const v = c ? a + b : d + e',
@@ -514,14 +635,37 @@ const LEGITIMATE: readonly string[] = [
   'const flags = { readonly: true }',
 ]
 
-/** Positions where a unary `+` is not syntactically possible, so there is
- *  nothing for any guard to catch. Asserted, not asserted *about*: each must
- *  parse to a `BinaryExpression` and no prefix unary. */
+/** Places where a `+` following the named token is necessarily the **binary**
+ *  operator, so there is nothing for any guard to catch there. Asserted, not
+ *  asserted *about*: each must parse to a `BinaryExpression` and no prefix unary.
+ *
+ *  These are not "the positions the regex excluded" -- two of those (`>` and `}`)
+ *  are in UNARY_POSITIONS above and do fire. What these three share is that the
+ *  token before the `+` ends an expression, so the `+` cannot be unary whatever a
+ *  scanner believes. */
 const BINARY_NOT_UNARY: readonly (readonly [string, string])[] = [
   ['after ] at expression level', 'const v = a[0]\n+x'],
   ['after ) at expression level', 'const v = f()\n+x'],
   ['at line start with no terminator (ASI joins it)', 'const t = a\n  + b'],
 ]
+
+/** LEGITIMATE rows that do **not** parse under `ScriptKind.TS`, and rows that
+ *  parse under both kinds but produce a different hit set.
+ *
+ *  Both lists are measured by `it('changes nothing except for the JSX
+ *  fixtures')`, which fails if either set moves -- so the claim in `parse`'s
+ *  comment stays honest instead of being asserted in prose. Every unparseable row
+ *  is a JSX element; the differing list is empty, because among the rows that do
+ *  parse as both, the kind changes nothing. */
+const NOT_PARSEABLE_AS_TS: readonly string[] = [
+  '<span>Total: +VAT included</span>',
+  '<input data-type="number" />',
+  '<input data-type="NUMBER" />',
+  '<input type="text" inputMode="decimal" value={total} />',
+  '<input type="tel" value={total} />',
+]
+
+const KIND_SENSITIVE: readonly string[] = []
 
 const ALL_FIXTURES: readonly string[] = [
   ...PLAIN.map(([, code]) => code),
@@ -632,6 +776,37 @@ describe('the guard is not passing vacuously', () => {
     expect(ALL_FIXTURES.length).toBeGreaterThan(100)
   })
 
+  it('changes nothing except for the JSX fixtures, whose grammar differs', () => {
+    // `parse` takes its `ScriptKind` from the file extension. A round-4 review
+    // caught this file claiming the two kinds "behave identically" -- they do not,
+    // and this is the assertion that would have caught it. Measured: five JSX rows
+    // fail to parse as `.ts`, and of those, `<span>Total: +VAT included</span>`
+    // also *fires* there, because under `ScriptKind.TS` a leading `<span>` is a
+    // type assertion and `+VAT` inside it is a prefix unary. Among the rows that
+    // do parse as both kinds, nothing differs. Both sets are pinned, so neither
+    // can grow unnoticed.
+    const differing: string[] = []
+    const unparseable: string[] = []
+    for (const code of LEGITIMATE) {
+      if (syntaxErrorsIn(parse('fixture.ts', code)).length > 0) {
+        unparseable.push(code)
+        continue
+      }
+      if (
+        JSON.stringify(ruleNames(code, 'fixture.ts')) !==
+        JSON.stringify(ruleNames(code, 'fixture.tsx'))
+      ) {
+        differing.push(code)
+      }
+    }
+    expect(unparseable).toEqual([...NOT_PARSEABLE_AS_TS])
+    expect(differing).toEqual([...KIND_SENSITIVE])
+
+    // ...and the divergence itself, so the description above is executable.
+    expect(ruleNames('<span>Total: +VAT included</span>', 'fixture.tsx')).toEqual([])
+    expect(ruleNames('<span>Total: +VAT included</span>', 'fixture.ts')).toContain('unary +')
+  })
+
   it('every rule fires on its plain form', () => {
     // One row per rule, so a rule that stopped matching anything at all cannot
     // hide behind another rule's coverage.
@@ -666,10 +841,11 @@ describe('the guard is not passing vacuously', () => {
   })
 
   it('records where a unary + cannot occur, so nothing is being missed there', () => {
-    // The three positions a regex-based guard had to exclude to avoid a false
-    // positive. On the tree they are not misses: a `+` in these places is
-    // necessarily the binary operator, so there is nothing to catch. Measured
-    // rather than argued.
+    // Three places where the token before the `+` ends an expression, so the `+`
+    // is necessarily the binary operator and there is nothing to catch. NOT a
+    // re-slicing of the positions the regex excluded -- two of those (`>` and a
+    // block-closing `}`) are in UNARY_POSITIONS and do fire. Measured rather than
+    // argued: each row must yield no prefix unary and exactly one binary +.
     for (const [label, code] of BINARY_NOT_UNARY) {
       let prefixPlus = 0
       let binaryPlus = 0
