@@ -23,6 +23,14 @@ node_modules/
 dist-ssr/
 *.local
 
+# Local blob storage. `STORAGE_ROOT` defaults to `var/blobs` (config/settings.py,
+# and RECEIPT_SYSTEM_SPEC.md documents it), so any code path that saves an image
+# with default settings writes REAL RECEIPT IMAGES here. That has been true since
+# the storage layer landed and this directory was never ignored -- a `git add -A`
+# would have published them. Receipt images stay out of git, same as
+# eval/golden/images/.
+var/
+
 # Test / type / lint caches
 .pytest_cache/
 .mypy_cache/
