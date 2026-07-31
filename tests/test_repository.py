@@ -39,6 +39,7 @@ from receipts.extract.schema import (
     Payment,
     ReceiptExtraction,
     ReceiptMeta,
+    TaxBand,
     Totals,
 )
 from receipts.extract.schema import LineItem as ExtractedLineItem
@@ -656,17 +657,39 @@ def test_every_text_column_save_extraction_writes_is_redacted(engine: sa.Engine)
     see the task report.
 
     ``card_last4`` is excluded because it carries a stronger guarantee
-    (:func:`_last4`, four digits at most). ``Enum`` columns are excluded by
-    *type*: ``sa.Enum`` subclasses ``sa.String``, and ``Legibility`` is a
-    ``str`` enum, so both would otherwise be swept in and neither can hold free
-    text. ``JSON`` columns are walked separately -- a ``String`` walk is
+    (:func:`_last4`, four digits at most) -- excluded from the walk itself,
+    not merely unseeded, so seeding it would prove nothing this test's own
+    mechanism can observe. ``Enum`` columns are excluded by *type*:
+    ``sa.Enum`` subclasses ``sa.String``, and ``Legibility`` is a ``str``
+    enum, so both would otherwise be swept in and neither can hold free text.
+    ``JSON`` columns are walked separately -- a ``String`` walk is
     structurally blind to them, which is exactly how ``modifiers`` stored a
     whole PAN while every scalar text column was covered.
 
-    ``receipt.date`` and ``receipt.time`` are not seeded with a PAN: both are
-    parsed into typed (``Date``/``Time``) columns today, never passed through as
-    free text, so neither is a plausible source for a future *String* column --
-    a PAN there would just fail to parse and vanish, testing nothing.
+    **Every ``str``/``str | None`` field reachable from ``ReceiptExtraction``
+    is seeded, found by walking the pydantic model classes programmatically
+    rather than trusting a by-eye list a second time.** A first version of
+    this fixture missed one: ``Totals.tax_breakdown[].label`` is live,
+    model-instructed text (the extraction prompt's TAX section tells the
+    model to transcribe a printed tax breakdown verbatim) and reachable
+    through ``Totals`` exactly like every field seeded below -- but nothing
+    here had ever put a PAN there, so a throwaway column sourced from it,
+    unredacted, stayed GREEN the same way the ``tax_id`` one first did (see
+    the task report for both RED transcripts). ``receipt.date`` and
+    ``receipt.time`` are seeded too, even though both are parsed into typed
+    (``Date``/``Time``) columns today and neither currently reaches any
+    *String* column -- measured harmless (:func:`_parse_iso_date` /
+    :func:`_parse_iso_time` simply fail to parse a PAN and return ``None``,
+    nothing else changes) -- so that a *future* column reading either field
+    as raw text, bypassing the parse step entirely, would still be caught.
+
+    The only fields left unseeded are ``card_last4`` (above) and the two
+    ``list[str]`` fields, ``meta.ambiguous_fields``/``meta.unreadable_regions``:
+    neither is a scalar ``str``, so neither maps onto one column the way
+    every other field here does, and a future column sourced from one of
+    them is a distinct design question -- how to join a list into text --
+    that this walk's seed-and-check mechanism does not model.
+
     ``currency``'s ``String(3)`` bound is not enforced here: measured, SQLite
     stores the redacted-but-still-overlong value rather than rejecting it (the
     design doc's own documented, out-of-scope gap); this test does not depend
@@ -710,9 +733,9 @@ def test_every_text_column_save_extraction_writes_is_redacted(engine: sa.Engine)
         ),
         receipt=ReceiptMeta(
             number=f"NUMBER {pan}",
-            date="2026-07-27",
+            date=f"DATE {pan}",
             date_raw=f"DATE RAW {pan}",
-            time="14:30",
+            time=f"TIME {pan}",
             currency=f"CUR {pan}",
             cashier=f"CASHIER {pan}",
             terminal=f"TERMINAL {pan}",
@@ -729,7 +752,17 @@ def test_every_text_column_save_extraction_writes_is_redacted(engine: sa.Engine)
                 modifiers=[Modifier(label=f"MODIFIER {pan}", amount=Decimal("-1.00"))],
             ),
         ],
-        totals=Totals(total=Decimal("1.00")),
+        totals=Totals(
+            total=Decimal("1.00"),
+            tax_breakdown=[
+                TaxBand(
+                    label=f"TAX BAND {pan}",
+                    base=Decimal("100.00"),
+                    rate=Decimal("0.12"),
+                    amount=Decimal("12.00"),
+                )
+            ],
+        ),
         payment=Payment(method=f"METHOD {pan}", card_last4="1111"),
         meta=ExtractionMeta(notes=f"NOTES {pan}"),
     )

@@ -110,9 +110,16 @@ indistinguishable from an unseparated PAN by shape, and routing it through
 redaction turned it into invalid hex, breaking `phash_distance` and that
 receipt's dedupe identity. The guarantee on the covered side is
 `test_every_text_column_save_extraction_writes_is_redacted`, which walks
-`Receipt.__table__` and `LineItem.__table__` rather than naming columns, so an
-extraction-sourced column added later fails loudly instead of leaking
-silently; the guarantee on the excluded side is
+`Receipt.__table__` and `LineItem.__table__` rather than naming columns and
+seeds a PAN into every scalar `str`/`str | None` field reachable from
+`ReceiptExtraction` — enumerated by walking the pydantic model classes
+programmatically, not by eye, after a by-eye pass already missed
+`Totals.tax_breakdown[].label` once — so an extraction-sourced column added
+later fails loudly instead of leaking silently. **One named exception:**
+`card_last4` carries its own stronger guarantee (`_last4`) and is excluded
+from this walk by design, not merely unseeded, so a *second* column also
+sourced from `payment.card_last4` would not be covered by this particular
+test. The guarantee on the excluded side is
 `test_save_extraction_never_corrupts_an_all_digit_image_phash`.
 
 **Review reasons are redacted at the sink.** `enqueue_review` runs `reason`
