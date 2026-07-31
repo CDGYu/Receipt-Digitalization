@@ -132,7 +132,7 @@ _PAN_RE = re.compile(
     r"""
     (?<!\d)(?<!\d\.)                                # not mid-number, not a decimal fraction
     (?:
-        \d{4}(?:[ .\-_/,]\d{4}){2}[ .\-_/,]\d{1,4}  # 4-4-4-N (Visa, Mastercard, ...)
+        \d{4}(?:[ .\-_/,]\d{4})+(?:[ .\-_/,]\d{1,7})?  # 4-4-4-... any number of groups
       | \d{4}[ .\-_/,]\d{6}[ .\-_/,]\d{5}           # 4-6-5 (Amex)
       | \d{13,19}(?!\.\d)                           # unseparated, and not an integer part
     )
@@ -141,13 +141,64 @@ _PAN_RE = re.compile(
     re.VERBOSE,
 )
 
+#: A trailing decimal fraction: one or two digits after a period, at the end.
+_AMOUNT_TAIL_RE = re.compile(r"\.\d{1,2}$")
+
+
+def _mask_all_but_last_four(text: str) -> str:
+    """Stars for every digit of ``text`` but the last four, separators dropped."""
+    digits = re.sub(r"\D", "", text)
+    return "*" * (len(digits) - 4) + digits[-4:]
+
 
 def _mask_pan(match: re.Match[str]) -> str:
-    """Replace a matched PAN with a mask that keeps only the last four digits."""
-    digits = re.sub(r"\D", "", match.group(0))
-    if not _PAN_MIN_DIGITS <= len(digits) <= _PAN_MAX_DIGITS:
-        return match.group(0)
-    return "*" * (len(digits) - 4) + digits[-4:]
+    """Decide what a matched run is, then mask it. Never fails open.
+
+    The pattern deliberately over-matches: it cannot see a digit *count*, and
+    every question worth asking about a card number is a question about counts.
+    So it matches the longest plausible run and this function resolves it.
+
+    The rules, in the order they must be applied:
+
+    1. **A trailing ``.NN`` is an amount** when the text before it already holds
+       a whole PAN. Checked first, or ``4111 1111 1111 1111.99`` masks eighteen
+       digits and the amount is destroyed. The length check is not optional
+       either: without it ``4111.1111.1111.1`` -- a 13-digit card number whose
+       last group is a single digit -- stops being masked.
+    2. **13-19 digits is a PAN.** Mask all but the last four.
+    3. **Under 13 digits is not a PAN.** Return it untouched.
+    4. **Over 19 digits is not a PAN either**, but it may *contain* one: mask
+       the longest 13-19 digit prefix that ends on a group boundary and leave
+       the rest. Returning the whole run untouched here -- which is what this
+       function used to do -- is what leaked the card numbers in cases (a) and
+       (b): a pattern that under-matched leaked everything it failed to cover.
+    """
+    text = match.group(0)
+    tail = _AMOUNT_TAIL_RE.search(text)
+    if tail is not None:
+        head = text[: tail.start()]
+        if _PAN_MIN_DIGITS <= len(re.sub(r"\D", "", head)) <= _PAN_MAX_DIGITS:
+            return _mask_all_but_last_four(head) + tail.group(0)
+
+    digits = re.sub(r"\D", "", text)
+    if _PAN_MIN_DIGITS <= len(digits) <= _PAN_MAX_DIGITS:
+        return _mask_all_but_last_four(text)
+    if len(digits) < _PAN_MIN_DIGITS:
+        return text
+
+    for length in range(_PAN_MAX_DIGITS, _PAN_MIN_DIGITS - 1, -1):
+        seen = 0
+        for index, char in enumerate(text):
+            if not char.isdigit():
+                continue
+            seen += 1
+            if seen < length:
+                continue
+            head, rest = text[: index + 1], text[index + 1 :]
+            if not rest or not rest[0].isdigit():
+                return _mask_all_but_last_four(head) + rest
+            break
+    return text
 
 
 def _redact_number(value: int | float, text: str) -> Any:

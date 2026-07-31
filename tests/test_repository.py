@@ -799,6 +799,62 @@ def test_redact_pan_masks_a_pan_that_runs_straight_into_an_amount() -> None:
 
 
 @pytest.mark.parametrize(
+    ("printed", "expected"),
+    [
+        # (a) A four-group PAN with a 5+ digit tail was stored WHOLE, because
+        #     the trailing group was \d{1,4} and the match simply did not cover
+        #     the run. 17, 18 and 19 digits in the clear -- the worst leak in
+        #     the module, and the only one its comments did not record.
+        ("4111 1111 1111 11111", "*************1111"),
+        ("4111 1111 1111 111111", "**************1111"),
+        ("4111 1111 1111 1111111", "***************1111"),
+        ("4111-1111-1111-11111", "*************1111"),
+        ("4111.1111.1111.11111", "*************1111"),
+        # (b) More than four groups left seven digits clear.
+        ("4111 1111 1111 1111 111", "***************1111"),
+        ("4111-1111-1111-1111-111", "***************1111"),
+    ],
+    ids=["4x5", "4x6", "4x7", "4x5-hyphen", "4x5-dot", "five-groups", "five-hyphen"],
+)
+def test_redact_pan_masks_a_separated_run_longer_than_four_full_groups(
+    printed: str, expected: str
+) -> None:
+    """The two residuals the Phase 5 whole-branch review surfaced.
+
+    Both had one root cause: ``_mask_pan`` returned the match unchanged when the
+    digit total fell outside 13-19, so a pattern that under-matched leaked
+    everything it failed to cover.
+    """
+    assert redact_pan(f"CARD {printed} OK") == f"CARD {expected} OK"
+
+
+def test_redact_pan_keeps_an_amount_that_follows_a_card_number() -> None:
+    """A trailing ``.NN`` is an amount when a whole PAN precedes it.
+
+    The greedy pattern deliberately over-matches and swallows the amount; the
+    decision is made in ``_mask_pan``, where the digit count is visible. A
+    *lexical* guard cannot do this job: it also blocks ``4111.1111.1111.1``, a
+    13-digit PAN whose last group is one digit -- measured, and a committed
+    expectation of this module.
+    """
+    assert redact_pan("CARD 4111 1111 1111 1111.99") == "CARD ************1111.99"
+    assert redact_pan("CARD 4111.1111.1111.1111.99") == "CARD ************1111.99"
+    assert redact_pan("CARD 4111.1111.1111.1 OK") == "CARD *********1111 OK"
+    assert redact_pan("SUBTOTAL 1234567890123.45") == "SUBTOTAL 1234567890123.45"
+
+
+def test_redact_pan_masks_the_leading_card_number_of_an_over_long_run() -> None:
+    """Over 19 digits is not a PAN, so the leading valid window is masked.
+
+    Kept and documented rather than widened a third time: a 24-digit run is not
+    a card number, and every previous widening of this pattern produced a
+    surprise. ADR-0018.
+    """
+    assert redact_pan("4111 1111 1111 1111 9999 9999") == "************1111 9999 9999"
+    assert redact_pan("4111.1111.1111.1111.1111") == "************1111.1111"
+
+
+@pytest.mark.parametrize(
     "text",
     [
         "TOTAL 1234.56",
