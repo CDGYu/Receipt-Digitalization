@@ -1241,6 +1241,31 @@ def test_redact_pan_masks_a_numeric_pan_but_not_a_small_int() -> None:
     assert redact_pan(True) is True
 
 
+@pytest.mark.parametrize(
+    "tax_id",
+    [
+        "221 193 789 09013",   # eval/golden/labels/r001.json, Metro Oil Subic
+        "774-423-646-00011",   # eval/golden/labels/r002.json, Summit Fuel OPC
+        "205-741-640-162",     # eval/golden/labels/r003.json, Serv Central
+        "103-969-951-00000",   # r002's notes: RJ Printing Press, the printer TIN
+    ],
+)
+def test_redact_pan_is_silent_on_the_merchant_tax_ids_this_corpus_prints(tax_id: str) -> None:
+    """The false positive that would cost the most, pinned to real documents.
+
+    These are Philippine BIR ``VAT Reg. TIN`` values, printed 3-3-3-N, and three
+    of the four hold **fourteen** digits -- inside the 13-19 window a PAN
+    occupies. They are silent only because ``_PAN_RE`` requires 4-4-4-N or
+    4-6-5 grouping. **The grouping requirement is what protects them**, so a
+    future widening to "any run of 13+ digits" would mask every merchant
+    fingerprint in the corpus. ``save_extraction_run`` passes the whole
+    extraction payload through ``redact_pan``, so ``merchant.tax_id`` reaches
+    this rule even though it is not a correctable field.
+    """
+    assert redact_pan(tax_id) == tax_id
+    assert redact_pan(f"VAT Reg. TIN {tax_id}") == f"VAT Reg. TIN {tax_id}"
+
+
 # --------------------------------------------------------------------------- #
 # query_receipts
 # --------------------------------------------------------------------------- #
