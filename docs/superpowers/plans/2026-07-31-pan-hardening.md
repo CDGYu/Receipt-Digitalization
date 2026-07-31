@@ -630,9 +630,19 @@ def test_every_text_column_save_extraction_writes_is_redacted(engine: sa.Engine)
 > `image_key` and any column `save_extraction` fills from `job` will not contain
 > the PAN, so they pass trivially — the test asserts *absence of the PAN*, not
 > that every column was touched. Check what `Receipt.__table__.columns` actually
-> yields before trusting the filter; if `currency` is `String(3)` the extraction
-> cannot carry a PAN there and `_bounded_optional_text` raises first, which is
-> correct and documented in the Phase 5 ledger.
+> yields before trusting the filter.
+>
+> **Correction (measured 2026-07-31):** an earlier draft of this note claimed
+> `currency` was protected because `_bounded_optional_text` "raises first". That
+> is false on this path. `_bounded_optional_text` is wired only into
+> `_RECEIPT_FIELDS`, the **correction** path; `save_extraction` writes
+> `currency=receipt_meta.currency` directly, and `ReceiptMeta.currency` is an
+> unconstrained `str | None`. A 16-digit PAN in `currency` therefore reaches a
+> `String(3)` column unguarded — SQLite stores it, Postgres raises `DataError`.
+> That is a **separate pre-existing defect of the same shape as leak (d)** — a
+> guard the human path has and the machine path lacks — and it is **out of scope
+> here**: it is recorded in the ledger, not fixed by this task. For the purposes
+> of this test, do not special-case `currency`; let the walk cover it.
 
 - [ ] **Step 2: Run it and confirm it passes**
 
