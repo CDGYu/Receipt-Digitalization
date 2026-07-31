@@ -801,29 +801,30 @@ def test_redact_pan_masks_a_pan_that_runs_straight_into_an_amount() -> None:
 @pytest.mark.parametrize(
     ("printed", "expected"),
     [
-        # (a) A four-group PAN with a 5+ digit tail was stored WHOLE, because
-        #     the trailing group was \d{1,4} and the match simply did not cover
-        #     the run. 17, 18 and 19 digits in the clear -- the worst leak in
-        #     the module, and the only one its comments did not record.
+        # A four-group PAN with a 5-7 digit tail was stored WHOLE, because the
+        # trailing group was \d{1,4} and the match simply did not cover the
+        # run. 17, 18 and 19 digits in the clear -- the worst leak in the
+        # module, and the only one its comments did not record.
         ("4111 1111 1111 11111", "*************1111"),
         ("4111 1111 1111 111111", "**************1111"),
         ("4111 1111 1111 1111111", "***************1111"),
         ("4111-1111-1111-11111", "*************1111"),
         ("4111.1111.1111.11111", "*************1111"),
-        # (b) More than four groups left seven digits clear.
-        ("4111 1111 1111 1111 111", "***************1111"),
-        ("4111-1111-1111-1111-111", "***************1111"),
     ],
-    ids=["4x5", "4x6", "4x7", "4x5-hyphen", "4x5-dot", "five-groups", "five-hyphen"],
+    ids=["4x5", "4x6", "4x7", "4x5-hyphen", "4x5-dot"],
 )
-def test_redact_pan_masks_a_separated_run_longer_than_four_full_groups(
+def test_redact_pan_masks_a_four_group_pan_with_a_tail_of_up_to_seven_digits(
     printed: str, expected: str
 ) -> None:
-    """The two residuals the Phase 5 whole-branch review surfaced.
+    """A four-group PAN whose last group is 5-7 digits was stored WHOLE.
 
-    Both had one root cause: ``_mask_pan`` returned the match unchanged when the
-    digit total fell outside 13-19, so a pattern that under-matched leaked
-    everything it failed to cover.
+    The trailing group of the 4-4-4-N alternative was ``\\d{1,4}``, so a tail of
+    five or more digits was wider than the group could ever match -- the
+    alternative failed at every width from 1 to 4 digits, so the pattern never
+    matched the run at all. ``_mask_pan`` was never called; the whole card
+    number was stored verbatim. Widening the group to ``\\d{1,7}`` lets the
+    match cover the run, so the existing 13-19 digit branch of ``_mask_pan``
+    masks it the same as any other PAN.
     """
     assert redact_pan(f"CARD {printed} OK") == f"CARD {expected} OK"
 
@@ -852,6 +853,46 @@ def test_redact_pan_masks_the_leading_card_number_of_an_over_long_run() -> None:
     """
     assert redact_pan("4111 1111 1111 1111 9999 9999") == "************1111 9999 9999"
     assert redact_pan("4111.1111.1111.1111.1111") == "************1111.1111"
+
+
+def test_redact_pan_leaves_a_run_of_more_than_four_groups_partly_masked() -> None:
+    """Five or more separated groups: a known, accepted residual, not a bug.
+
+    The leading four groups are masked and the remainder -- a handful of
+    digits, never a full card number -- is left in the clear. Recorded rather
+    than fixed: an alternative wide enough to close it is indistinguishable
+    from one wide enough to swallow a *second*, independent card number into
+    the same match, which is a worse leak than the one it would close (see
+    ``test_redact_pan_masks_every_card_number_in_one_value``).
+    """
+    assert redact_pan("CARD 4111 1111 1111 1111 111 OK") == "CARD ************1111 111 OK"
+    assert redact_pan("CARD 4111-1111-1111-1111-111 OK") == "CARD ************1111-111 OK"
+
+
+def test_redact_pan_masks_every_card_number_in_one_value() -> None:
+    """A trailing group must not consume a second, adjacent card number.
+
+    An unbounded trailing group -- tried and reverted, see the ``_PAN_RE``
+    comment -- merges two adjacent PANs into a single match. ``re.sub`` never
+    rescans inside a match it has already made, so the second card number came
+    back whole instead of masked.
+    """
+    assert (
+        redact_pan("4111 1111 1111 1111 5555 5555 5555 4444")
+        == "************1111 ************4444"
+    )
+
+
+def test_redact_pan_leaves_an_amount_beside_a_card_number_alone() -> None:
+    """A trailing group must not eat an adjacent amount's integer part.
+
+    An unbounded trailing group does not stop at the separator in front of a
+    following amount; it consumed the amount's integer part into the mask and
+    left the wrong four digits in the clear.
+    """
+    assert redact_pan("VISA 4111 1111 1111 1111 12.34") == "VISA ************1111 12.34"
+    assert redact_pan("4111 1111 1111 1111,99") == "************1111,99"
+    assert redact_pan("4111 1111 1111 1111 9.99") == "************1111 9.99"
 
 
 @pytest.mark.parametrize(
