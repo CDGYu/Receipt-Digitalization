@@ -23,6 +23,7 @@ Accepted; supersede it with a new ADR rather than editing history.
 | [0015](0015-review-ui-same-origin-and-app-prefix.md) | The review UI is served same-origin under `/app` | Accepted |
 | [0016](0016-review-next-resumes-the-callers-task.md) | `GET /review/next` resumes the caller's own in-progress task | Accepted |
 | [0017](0017-two-suites-and-the-gate-runner.md) | Two test suites, and `scripts/verify.py` is what "passing" means | Accepted |
+| [0018](0018-pan-masking-policy.md) | The PAN masking policy | Accepted |
 
 Read **0001** first: it is the invariant everything else defers to. **0007** is
 the one to read before touching anything that writes card data or money.

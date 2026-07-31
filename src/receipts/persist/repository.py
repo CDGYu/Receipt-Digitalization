@@ -95,9 +95,12 @@ _PAN_MAX_DIGITS = 19
 #: consistent. Three design choices keep it from firing on things that merely
 #: look numeric:
 #:
-#:   * every group in a separated shape is 4-6 digits wide, so a run of small
-#:     separated numbers -- ``"2 18.00 3 20.00 ..."`` -- matches nothing, and
-#:     :func:`_mask_pan` re-checks the total digit count either way;
+#:   * every group in a separated shape is 4-6 digits wide, except the
+#:     4-4-4-N alternative's own trailing group (widened to 1-7, below), so a
+#:     run of small separated numbers -- ``"2 18.00 3 20.00 ..."`` -- still
+#:     matches nothing: it has no run of three consecutive 4-digit groups for
+#:     that trailing group to even follow, and :func:`_mask_pan` re-checks the
+#:     total digit count either way;
 #:   * ``(?<!\d)`` refuses a match that starts mid-number, and ``(?<!\d\.)``
 #:     refuses one that starts just after a *decimal point*, so the fraction of
 #:     ``0.4111111111111111`` is not mistaken for a card number. A period that is
@@ -165,7 +168,7 @@ _PAN_MAX_DIGITS = 19
 #: closed by ``\d{1,7}`` alone. The choice not to close (b) was the user's
 #: ruling (2026-07-31), made with both routes above and their measured costs
 #: disclosed, not a conclusion this code reached on its own. Recorded in
-#: ``docs/superpowers/specs/2026-07-31-pan-hardening-design.md`` section 2.1.
+#: ADR-0018 (``docs/adr/0018-pan-masking-policy.md``).
 _PAN_RE = re.compile(
     r"""
     (?<!\d)(?<!\d\.)                                # not mid-number, not a decimal fraction

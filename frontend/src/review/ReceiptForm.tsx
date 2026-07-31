@@ -32,33 +32,41 @@ import type { FieldMap } from './patch'
  *
  * Every text control here sends exactly what was typed. **It is not what gets
  * stored.** `_plan_change` runs `redact_pan` over every coerced text value, so
- * a 13-19 digit card number -- written as one run, or in the four-group or
- * Amex grouping with any mix of space, dot, hyphen, underscore, slash or comma
- * between the groups -- is masked before it reaches the column, and the
- * `corrections` row records only the masked form, so the original is not
- * recoverable from the audit trail either.
+ * a card number in any spelling the table below records is masked before it
+ * reaches the column, and the `corrections` row records only the masked form,
+ * so the original is not recoverable from the audit trail either. One spelling
+ * is deliberately NOT fully masked: a run of MORE than four separated groups
+ * keeps everything after its leading four groups in the clear -- never a full
+ * card number on its own. Accepted by ruling rather than closed, because every
+ * measured attempt to close it leaked something worse (ADR-0018).
  *
- * **The separator list in that sentence is measured, not assumed.** An earlier
- * version of this table held the first two rows below and nothing else, and
- * the claim above it was written as if it covered every spelling; at the time,
- * every row from the third onwards stored the card number whole. Re-measured
- * through the real `PATCH` route on `receipt.date_raw`, one fresh receipt per
- * row, reading the value back with `GET /receipts/{id}`:
+ * **What is masked is exactly the table below, and nothing is generalised from
+ * it.** This claim has been wrong twice. The first version was measured on the
+ * unseparated form alone and generalised to every separator; at the time, a
+ * PAN separated by anything but a space or a hyphen was stored whole. The
+ * second was measured on four-group forms with a 1-4 digit tail and
+ * generalised to "13-19 digits"; at the time, `4111 1111 1111 11111` and
+ * every longer tail was stored whole. Both were found by executing the code,
+ * not by reading it. `tests/test_repository.py` is the binding measurement.
+ * Re-measured through the real `PATCH` route on `receipt.date_raw`, one fresh
+ * receipt per row, reading the value back with `GET /receipts/{id}`:
  *
- *     sent '4111111111111111'      -> read '************1111'
- *     sent '4111 1111 1111 1111'   -> read '************1111'   (separators lost)
- *     sent '4111-1111-1111-1111'   -> read '************1111'
- *     sent '4111.1111.1111.1111'   -> read '************1111'
- *     sent '4111_1111_1111_1111'   -> read '************1111'
- *     sent '4111/1111/1111/1111'   -> read '************1111'
- *     sent '4111,1111,1111,1111'   -> read '************1111'
- *     sent '4111 1111-1111.1111'   -> read '************1111'   (mixed)
- *     sent '378282246310005'       -> read '***********0005'
- *     sent '3782.822463.10005'     -> read '***********0005'
- *     sent '411111111111'          -> read '411111111111'       (12 digits, kept)
- *     sent '1,000.00'              -> read '1,000.00'
- *     sent '  2026-07-30  '        -> read '  2026-07-30  '     (padding kept)
- *     sent '\t1L/O7/2O26 ~'        -> read '\t1L/O7/2O26 ~'     (tab kept)
+ *     sent '4111111111111111'        -> read '************1111'
+ *     sent '4111 1111 1111 1111'     -> read '************1111'   (separators lost)
+ *     sent '4111-1111-1111-1111'     -> read '************1111'
+ *     sent '4111.1111.1111.1111'     -> read '************1111'
+ *     sent '4111_1111_1111_1111'     -> read '************1111'
+ *     sent '4111/1111/1111/1111'     -> read '************1111'
+ *     sent '4111,1111,1111,1111'     -> read '************1111'
+ *     sent '4111 1111-1111.1111'     -> read '************1111'   (mixed)
+ *     sent '378282246310005'         -> read '***********0005'
+ *     sent '3782.822463.10005'       -> read '***********0005'
+ *     sent '411111111111'            -> read '411111111111'       (12 digits, kept)
+ *     sent '1,000.00'                -> read '1,000.00'
+ *     sent '  2026-07-30  '          -> read '  2026-07-30  '     (padding kept)
+ *     sent '\t1L/O7/2O26 ~'          -> read '\t1L/O7/2O26 ~'     (tab kept)
+ *     sent '4111 1111 1111 11111'    -> read '*************1111'      (4-4-4-5, leak (a), now closed)
+ *     sent '4111 1111 1111 1111 111' -> read '************1111 111'   (5 groups, leak (b), accepted -- ADR-0018)
  *
  * `payment.method` reads back identically for every row above; the two paths
  * were measured separately rather than one being inferred from the other.
