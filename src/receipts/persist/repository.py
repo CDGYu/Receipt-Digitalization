@@ -82,8 +82,11 @@ __all__ = [
 _PAN_MIN_DIGITS = 13
 _PAN_MAX_DIGITS = 19
 
-#: Matches a PAN in the three shapes a model or a reviewer actually writes:
-#: unseparated, the usual 4-4-4-N grouping, and Amex's 4-6-5.
+#: Matches a PAN in the shapes a model or a reviewer actually writes:
+#: unseparated, and seven separated groupings, each of a fixed shape and each
+#: carried by its own alternative in the pattern below. The alternation *is*
+#: the claim: "this masks a card however it is written" is false, and the list
+#: of shapes is what is true, which is why it lives next to the pattern.
 #:
 #: **The separator is any of space, dot, hyphen, underscore, slash or comma, in
 #: any mix.** The class held spaces and hyphens alone until each of the other
@@ -100,9 +103,11 @@ _PAN_MAX_DIGITS = 19
 #:     run of small separated numbers -- ``"2 18.00 3 20.00 ..."`` -- still
 #:     matches nothing: it has no run of three consecutive 4-digit groups for
 #:     that trailing group to even follow, and :func:`_mask_pan` re-checks the
-#:     total digit count either way. The pattern recognises only these two
-#:     canonical groupings -- 4-4-4-N and 4-6-5 -- so a run grouped any other
-#:     way does not match at all and is not masked;
+#:     total digit count either way. The pattern recognises only the groupings
+#:     enumerated in the alternation below -- one alternative per shape, each
+#:     named in its comment column -- so a run grouped any other way does not
+#:     match at all and is not masked. Which groupings are still uncovered is
+#:     listed in ADR-0020;
 #:   * ``(?<!\d)`` refuses a match that starts mid-number, and ``(?<!\d\.)``
 #:     refuses one that starts just after a *decimal point*, so the fraction of
 #:     ``0.4111111111111111`` is not mistaken for a card number. A period that is
@@ -112,11 +117,11 @@ _PAN_MAX_DIGITS = 19
 #:   * ``(?!\.\d)`` refuses a match that continues into a decimal fraction, so
 #:     ``1234567890123.45`` stays a number. **It sits on the unseparated
 #:     alternative alone**, which is the only one that can be read as a single
-#:     number. Left on all three, as it was while the separator class was
-#:     widened, ``4111 1111 1111 1111.99`` matched one group *late* and stored
-#:     ``4111 **********1199`` -- the leading group in the clear and the amount
-#:     destroyed. Scoped here it stores ``************1111.99``. Both forms
-#:     measured; neither reasoned about.
+#:     number. Left on the separated alternatives as well, as it was while the
+#:     separator class was widened, ``4111 1111 1111 1111.99`` matched one
+#:     group *late* and stored ``4111 **********1199`` -- the leading group in
+#:     the clear and the amount destroyed. Scoped here it stores
+#:     ``************1111.99``. Both forms measured; neither reasoned about.
 #:
 #: Two false positives are accepted, because a rule that must never miss a PAN
 #: cannot also never fire on something else: a 13-19 digit all-numeric
@@ -165,27 +170,80 @@ _PAN_MAX_DIGITS = 19
 #: adversarial input, measured at about 1715ms for a 40KB run of digits,
 #: against about 4ms for the pattern above on the same input. Neither route
 #: was taken: what leak (b) leaves in the clear is never masked *as part of*
-#: the leading match -- when the remainder itself happens to be shaped as a
-#: recognised 4-4-4-N or 4-6-5 run, it gets its own separate match instead
+#: the leading match -- when the remainder itself happens to be shaped as any
+#: grouping in the alternation below, it gets its own separate match instead
 #: (:func:`test_redact_pan_masks_every_card_number_in_one_value`). It is only
-#: when the remainder is grouped outside those two canonical shapes -- the
+#: when the remainder is grouped outside every shape in that alternation -- the
 #: positional clause above already says nothing outside them matches at all
 #: -- that it stays whole, and it can then be an entire, undetected card
-#: number: measured, ``redact_pan('4111 1111 1111 1111 41111 1111 1111
-#: 2345')`` returns ``'************1111 41111 1111 1111 2345'``, a full
-#: 17-digit PAN in 5-4-4-4 grouping, untouched. And leak (a), the actual
-#: invariant violation, is already closed by ``\d{1,7}`` alone. The choice
-#: not to close (b) was the user's
+#: number. The example this passage used to give stopped being one when the
+#: shapes below were added: re-measured, ``redact_pan('4111 1111 1111 1111
+#: 41111 1111 1111 2345')`` now returns
+#: ``'************1111 *************2345'`` -- 5-4-4-4 is covered, so the
+#: remainder gets a match of its own. A remainder in a grouping that is *not*
+#: covered still demonstrates it: measured, ``redact_pan('4111 1111 1111 1111
+#: 41111 11111 1111 2345')`` returns
+#: ``'************1111 41111 11111 1111 2345'``, a full 18-digit PAN in
+#: 5-5-4-4 grouping, untouched. The rest of the residual is listed in ADR-0020.
+#: And leak (a), the actual invariant violation, is already closed by
+#: ``\d{1,7}`` alone. The choice not to close (b) was the user's
 #: ruling (2026-07-31), made with both routes above and their measured costs
 #: disclosed, not a conclusion this code reached on its own. Recorded in
 #: ADR-0018 (``docs/adr/0018-pan-masking-policy.md``).
+#:
+#: Five further groupings were added after that ruling, each as its own
+#: fixed-shape alternative: Diners' 4-6-4, Maestro and legacy Visa's 4-4-5, and
+#: the 5-4-4-4, 6-4-4-4 and 4-5-4-4 forms a hand-filled slip produces. Each
+#: matched neither separated alternative before, so the whole card number was
+#: stored in the clear -- leak (a)'s invariant violation in a different
+#: spelling. The separator class gained ``{1,2}`` in the same change: it matched
+#: exactly one character, so a second space between groups defeated every
+#: separated alternative on its own, and that is the likeliest spelling in a
+#: hand-filled corpus. Capped at two rather than left open, because ``+`` also
+#: fires on amount columns aligned with three or more spaces -- measured.
+#:
+#: Three properties of that change are load-bearing, and one apparent property
+#: is not:
+#:
+#:   * **every alternative has a fixed digit total inside 13-19** -- the totals
+#:     sit in the pattern's own comment column -- so :func:`_mask_pan`'s length
+#:     check stays unreachable from this pattern by construction, which is the
+#:     property its docstring rests on;
+#:   * **no alternative can begin a match at a three-digit group.** Every card
+#:     grouping here opens with at least four digits, and every merchant
+#:     ``VAT Reg. TIN`` this corpus prints opens with three -- that asymmetry,
+#:     not the handful of TIN samples, is what keeps the fourteen-digit ones
+#:     silent;
+#:   * **coverage and cross-boundary risk move together.** A shape wide enough
+#:     to cover a new grouping is also wide enough to tile across the gap
+#:     between two adjacent card numbers, and ``re.sub`` never rescans inside a
+#:     match it has already made, so the second card comes back whole. Fixed
+#:     shapes are what stop that, so adding one here is never a local change:
+#:     re-run the two-instance check -- two cards inside one input -- for the
+#:     new shape against every shape already covered;
+#:   * **alternation order is not load-bearing.** Placing 4-6-4 ahead of 4-6-5
+#:     does not truncate an Amex number: the trailing ``(?!\d)`` rejects the
+#:     truncated match and the engine backtracks into the longer alternative.
+#:     Orderings were measured and produce identical output on every covered
+#:     shape. The committed order is for readability -- do not preserve it out
+#:     of superstition.
+#:
+#: What is still stored whole after all that -- the residual this change
+#: reduced without closing, and the two measured routes to closing it that were
+#: priced and refused -- is recorded in ADR-0020
+#: (``docs/adr/0020-pan-grouping-coverage.md``).
 _PAN_RE = re.compile(
     r"""
-    (?<!\d)(?<!\d\.)                                # not mid-number, not a decimal fraction
+    (?<!\d)(?<!\d\.)                                     # not mid-number, not a decimal fraction
     (?:
-        \d{4}(?:[ .\-_/,]\d{4}){2}[ .\-_/,]\d{1,7}  # 4-4-4-N (Visa, Mastercard, ...)
-      | \d{4}[ .\-_/,]\d{6}[ .\-_/,]\d{5}           # 4-6-5 (Amex)
-      | \d{13,19}(?!\.\d)                           # unseparated, and not an integer part
+        \d{4}(?:[ .\-_/,]{1,2}\d{4}){2}[ .\-_/,]{1,2}\d{1,7}  # 4-4-4-N  13-19  Visa, Mastercard
+      | \d{4}[ .\-_/,]{1,2}\d{6}[ .\-_/,]{1,2}\d{5}           # 4-6-5    15     Amex
+      | \d{4}[ .\-_/,]{1,2}\d{6}[ .\-_/,]{1,2}\d{4}           # 4-6-4    14     Diners Club
+      | \d{4}[ .\-_/,]{1,2}\d{4}[ .\-_/,]{1,2}\d{5}           # 4-4-5    13     Maestro, legacy Visa
+      | \d{5}(?:[ .\-_/,]{1,2}\d{4}){3}                       # 5-4-4-4  17
+      | \d{6}(?:[ .\-_/,]{1,2}\d{4}){3}                       # 6-4-4-4  18
+      | \d{4}[ .\-_/,]{1,2}\d{5}(?:[ .\-_/,]{1,2}\d{4}){2}    # 4-5-4-4  17
+      | \d{13,19}(?!\.\d)                                     # unseparated, and not an integer part
     )
     (?!\d)
     """,

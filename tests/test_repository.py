@@ -1388,6 +1388,117 @@ def test_redact_pan_is_silent_on_the_merchant_tax_ids_this_corpus_prints(tax_id:
     assert redact_pan(f"VAT Reg. TIN {tax_id}") == f"VAT Reg. TIN {tax_id}"
 
 
+#: Groupings a card is printed or written in that are NOT 4-4-4-N or 4-6-5.
+#: Each stored a whole card number in the clear until ADR-0020. The shapes are
+#: real products -- Diners Club prints 4-6-4, Maestro and legacy Visa print
+#: 4-4-5 -- and the 5- and 6-lead forms are what a hand-filled slip produces,
+#: which is what this corpus is.
+_NON_CANONICAL_GROUPINGS = [
+    ("3055", "930902", "5904"),
+    ("6759", "4111", "00005"),
+    ("41111", "1111", "1111", "2345"),
+    ("411111", "1111", "1111", "2345"),
+    ("4111", "11111", "1111", "2345"),
+]
+_NON_CANONICAL_IDS = ["diners-4-6-4", "maestro-4-4-5", "5-4-4-4", "6-4-4-4", "4-5-4-4"]
+
+
+@pytest.mark.parametrize("separator", _SEPARATORS, ids=_SEPARATOR_IDS)
+@pytest.mark.parametrize("groups", _NON_CANONICAL_GROUPINGS, ids=_NON_CANONICAL_IDS)
+def test_redact_pan_masks_a_card_grouped_outside_the_two_canonical_shapes(
+    groups: tuple[str, ...], separator: str
+) -> None:
+    """A card grouped outside 4-4-4-N and 4-6-5 used to be stored WHOLE.
+
+    Not a partial mask and not a near miss: the pattern matched no part of the
+    run, so ``_mask_pan`` was never called and ``save_extraction`` copied the
+    card number into the column verbatim -- the same invariant violation as
+    leak (a). Measured before the fix: ``redact_pan('41111 1111 1111 2345')``
+    returned its input unchanged.
+    """
+    printed = separator.join(groups)
+    expected = _masked("".join(groups))
+
+    assert redact_pan(f"CARD {printed} OK") == f"CARD {expected} OK"
+
+
+@pytest.mark.parametrize(
+    "printed",
+    [
+        "4111  1111  1111  1111",
+        "4111--1111--1111--1111",
+        "4111..1111..1111..1111",
+        "3782  822463  10005",
+        "3055  930902  5904",
+        "4111 1111  1111 1111",
+    ],
+    ids=["double-space", "double-hyphen", "double-dot", "amex", "diners", "mixed-width"],
+)
+def test_redact_pan_masks_a_card_whose_groups_are_separated_by_two_characters(
+    printed: str,
+) -> None:
+    """One separator character was the whole class, so a second space stored the
+    card whole.
+
+    ``[ .\\-_/,]`` matches exactly one character, so every separated
+    alternative failed on ``'4111  1111  1111  1111'`` -- the likeliest
+    spelling in a hand-written corpus, and this corpus is hand-filled. The
+    class is capped at two rather than left open: ``+`` additionally fires on
+    amount columns aligned with three or more spaces (ADR-0020).
+    """
+    expected = _masked("".join(ch for ch in printed if ch.isdigit()))
+
+    assert redact_pan(f"CARD {printed} OK") == f"CARD {expected} OK"
+
+
+@pytest.mark.parametrize(
+    ("printed", "expected"),
+    [
+        (
+            "3055 930902 5904 and 3056 930902 5905",
+            "**********5904 and **********5905",
+        ),
+        (
+            "41111 1111 1111 2345 / 51111 1111 1111 6789",
+            "*************2345 / *************6789",
+        ),
+        (
+            "4111 1111 1111 1111 then 3055 930902 5904",
+            "************1111 then **********5904",
+        ),
+        (
+            "3055 930902 5904 then 4111 1111 1111 1111",
+            "**********5904 then ************1111",
+        ),
+        (
+            "6759 4111 00005 6760 4111 00006",
+            "*********0005 *********0006",
+        ),
+        (
+            "4111  1111  1111  1111  5555  5555  5555  4444",
+            "************1111  ************4444",
+        ),
+    ],
+    ids=["two-diners", "two-5-lead", "canonical-then-diners",
+         "diners-then-canonical", "two-maestro", "two-double-space"],
+)
+def test_redact_pan_masks_both_cards_when_a_new_grouping_appears_twice(
+    printed: str, expected: str
+) -> None:
+    """Two instances of what the guard guards, inside one input.
+
+    The alternatives added for ADR-0020 are fixed shapes precisely so they
+    cannot tile across the gap between two adjacent card numbers. A
+    generalised alternative was measured doing exactly that: on two Amex
+    numbers it matched a 4-6-5-4 span of nineteen digits -- inside the accepted
+    range, so ``_mask_pan`` accepted it -- and because ``re.sub`` never rescans
+    inside a match it has already made, eleven digits of the second card
+    survived in the clear. Coverage and cross-boundary risk move together, so
+    any shape added here is re-checked against this test (ADR-0020).
+    """
+    assert redact_pan(printed) == expected
+
+
 # --------------------------------------------------------------------------- #
 # query_receipts
 # --------------------------------------------------------------------------- #
