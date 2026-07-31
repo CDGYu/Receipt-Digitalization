@@ -162,8 +162,10 @@ _PAN_MAX_DIGITS = 19
 #: was taken: the remainder leak (b) leaves in the clear is not a full card
 #: number -- it is what is left over *after* the leading four groups are
 #: already masked -- and leak (a), the actual invariant violation, is already
-#: closed by ``\d{1,7}`` alone. The choice not to close (b) was made on that
-#: basis, not for lack of a fix.
+#: closed by ``\d{1,7}`` alone. The choice not to close (b) was the user's
+#: ruling (2026-07-31), made with both routes above and their measured costs
+#: disclosed, not a conclusion this code reached on its own. Recorded in
+#: ``docs/superpowers/specs/2026-07-31-pan-hardening-design.md`` section 2.1.
 _PAN_RE = re.compile(
     r"""
     (?<!\d)(?<!\d\.)                                # not mid-number, not a decimal fraction
