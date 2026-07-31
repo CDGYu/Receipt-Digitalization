@@ -3,34 +3,114 @@
 Durable working memory for cross-session continuity. Read this first, then
 `docs/NEXT_SESSION_PROMPT.md` for the task list and the reading order. The
 continuity protocol itself — what lives where, and why this snapshot must be
-verified rather than trusted — is **ADR-0019**.
-Last updated: **2026-07-31**, at `main @ 7deb3fb`.
+verified rather than trusted — is **ADR-0019**, extended by **ADR-0021** for the
+case that applies right now: a session that ended with a branch part-built.
+Last updated: **2026-07-31**, at `main @ 1d9f3e3` with
+`feat/pan-grouping @ a883df6` **in flight**.
 
 ## Snapshot
 
-- **`main` @ `7deb3fb`, pushed — `origin/main` is identical. THE PAN HARDENING
-  MILESTONE IS COMPLETE AND MERGED** (2026-07-31, true fast-forward from
-  `ce98345`). `feat/pan-hardening` is kept at its merge point and pushed;
-  merged branches and SDD workspaces are never cleaned up.
-- **864 Python tests + 170 Vitest**, ruff clean, typecheck clean, build clean —
-  `python scripts/verify.py` all five gates PASS, re-measured 2026-07-31 at
-  `7deb3fb` (pytest count read from junitxml: 864/0/0/0).
+- **`main` @ `1d9f3e3`.** `origin/main` is `7deb3fb`, so **main is one commit
+  ahead and UNPUSHED**. That commit is docs only (MEMORY.md,
+  NEXT_SESSION_PROMPT.md, ADR-0019, ADR README), so the *code* on `main` is
+  identical to `7deb3fb`. **Pushing `main` needs the user's say-so.**
+- **BRANCH IN FLIGHT: `feat/pan-grouping` @ `a883df6`**, four commits ahead of
+  `main`, **pushed**. Two of its four planned tasks are done and independently
+  re-verified; **Tasks 3 and 4 are not started.** Detail below under "PAN
+  grouping".
+- **The PAN hardening milestone is complete and merged** (2026-07-31, true
+  fast-forward from `ce98345` to `7deb3fb`). `feat/pan-hardening` is kept at its
+  merge point and pushed; merged branches and SDD workspaces are never cleaned up.
+- **914 Python tests + 170 Vitest** on `feat/pan-grouping`, ruff clean, typecheck
+  clean, build clean — `python scripts/verify.py` all five gates PASS,
+  re-measured by the controller at `a883df6` (pytest count read from junitxml:
+  914/0/0/0). On `main` the count is **864**.
 - **Phases 0–5 complete, plus PAN hardening.** Phase 3 is complete except
   **P3.T6 calibration** (blocked on ISSUE-001).
 - Dev interpreter **Python 3.14.4**. Node **v22.22.2** / npm **10.9.7**.
-- Plan of record: `IMPLEMENTATION_PLAN.md`. The PAN milestone ledger — every
-  measurement, the user's rulings, and the follow-ups list — is
-  `.superpowers/sdd/2026-07-31-pan-hardening/progress.md`; Phase 5's is
-  `.superpowers/sdd/2026-07-29-review-ui/progress.md`. **`.superpowers/` is
-  gitignored, so nothing in it is findable by searching the tracked tree —
-  open ledgers by path.**
+- Plan of record: `IMPLEMENTATION_PLAN.md`. Ledgers:
+  `.superpowers/sdd/2026-07-31-pan-grouping/progress.md` (current, in flight),
+  `.superpowers/sdd/2026-07-31-pan-hardening/progress.md`,
+  `.superpowers/sdd/2026-07-29-review-ui/progress.md` (Phase 5's parked items).
+  **`.superpowers/` is gitignored, so nothing in it is findable by searching the
+  tracked tree — open ledgers by path.**
+- **The repo is PUBLIC.** Verified 2026-07-31 via the GitHub API
+  (`visibility = public`). It used to be private and this file said so; that was
+  corrected in this session. See "Environment / provider" for what that exposes.
+
+## PAN grouping — the branch in flight
+
+`feat/pan-grouping @ a883df6`, off `main @ 1d9f3e3`, pushed. Design:
+`docs/superpowers/specs/2026-07-31-pan-grouping-design.md`. Plan:
+`docs/superpowers/plans/2026-07-31-pan-grouping.md`. Decision: **ADR-0020**,
+which supersedes ADR-0018 **on the detector shape only**. Ledger:
+`.superpowers/sdd/2026-07-31-pan-grouping/progress.md`.
+
+**The defect.** A card grouped outside `4-4-4-N` and `4-6-5` matched neither
+separated alternative, so `save_extraction` stored it **entirely in the clear** —
+the same invariant violation as leak (a). Diners prints `4-6-4`, Maestro and
+legacy Visa print `4-4-5`, and a hand-filled slip produces `5-4-4-4`, `6-4-4-4`
+and `4-5-4-4`. A doubled separator defeated every separated alternative on its
+own, because `[ .\-_/,]` matched exactly one character.
+
+**Shipped in Tasks 1–2:** five fixed-shape alternatives plus a `{1,2}` separator
+cap. Each new alternative has a **fixed** digit total inside 13–19 (14, 13, 17,
+18, 17), so `_mask_pan`'s length check stays unreachable **by construction**.
+
+| task | commit | state |
+|---|---|---|
+| 1 — detector, behavioural tests, falsified prose | `348b509` | done, controller re-verified |
+| 2 — structural guards, worked-example pin, residual pin, `_mask_pan` docstring | `a883df6` | done, controller re-verified |
+| 3 — `ReceiptForm.tsx` claim, re-measured through the real `PATCH` route | — | **not started** |
+| 4 — ADR-0007's unqualified "a hash" bullet | — | **not started** |
+
+**What the controller re-verified itself** (not taken from the implementers'
+reports): the committed regex body is character-identical to the candidate
+measured before the design; both measured outputs quoted in the new comment
+reproduce; all six defect cases mask with ≤4 digits clear; all five corpus TINs
+and all five doubled spellings silent; 0 of 32,760 lead-3 inputs start a match;
+0 out-of-range matches over 262,080 inputs; 0 of 324 two-instance pairs leak;
+the four accepted leak-(b) cases unchanged; 0 of the 56 real golden-label
+strings fire; both mutations reproduce exactly (63 violations / 36,521
+violations) and each trips exactly one guard.
+
+**The residual is real and deliberate.** Against the plausible band — every group
+4–7 digits, totalling 13–19, 97 shapes — this went from 7 compliant / 90 storing
+a whole card to **15 compliant / 76 storing a whole card**. Groupings including
+`4-4-6`, `4-5-4`, `5-4-4`, `6-6-4` and `5-5-4-4` **still store a card in the
+clear**, and are pinned by `test_redact_pan_still_stores_some_groupings_whole`
+so the gap reads as a decision. **This did not close the class.** Any claim that
+it did is false.
+
+**The load-bearing lesson (ADR-0020): coverage and cross-boundary risk move
+together.** A generalised alternative was built, passed the committed battery,
+and covered 80 of 97 shapes — and **leaked a full second card**: on two adjacent
+Amex numbers it matched a `4-6-5-4` span of 19 digits, which is *inside* range so
+`_mask_pan` accepted it, and `re.sub` never rescans inside a match, so eleven
+digits of the second card survived. **Any shape added to `_PAN_RE` requires the
+two-instance check, every time.** An earlier form of the same generalisation
+failed **13 committed battery tests** by silently dropping 13- and 15-digit
+`4-4-4-N` cards — caught only because the battery replayed was the project's own.
+
+**Alternation order is NOT load-bearing**, measured against expectation: `4-6-4`
+ahead of `4-6-5` does not truncate Amex, because the trailing `(?!\d)` rejects the
+truncated match. Do not preserve the committed order out of superstition.
+
+**Three plan-versus-reality defects were found during execution, all the
+controller's, all caught by implementers who read the code first:** the plan's
+pattern snippet broke the `E501` lint gate as written; it named three falsified
+prose passages where there were **five**; and it claimed
+`from receipts.persist.repository import _PAN_RE` already existed in the test
+module — it did not, no test file imported that module at all. **Assume a fourth
+exists in Tasks 3–4.**
 
 ## How to run
 
 - **There are two test suites.**
-  - `python -m pytest` — **864**, offline and **Node-free** (proven by running
-    with the nodejs directory stripped from `PATH`). `pyproject` sets
-    `pythonpath=["src","."]`, `testpaths=["tests"]`.
+  - `python -m pytest` — **914** on `feat/pan-grouping`, **864** on `main`;
+    offline and **Node-free** (proven by running with the nodejs directory
+    stripped from `PATH`). `pyproject` sets `pythonpath=["src","."]`,
+    `testpaths=["tests"]`.
   - **Vitest, in `frontend/`** — **170**. `npm test`.
 - **`npm test` does NOT type-check.** A TypeScript error ships green through it.
   **That trap fired three times in one milestone.** Run `npm run typecheck` too.
@@ -75,12 +155,23 @@ persisted** (ADR-0018 is the measured policy). Nothing is silently dropped —
 every receipt reaches a terminal state. **A machine run never overwrites a
 `reviewed` row.** Excel is output only; the DB is the source of truth.
 
-**PAN (ADR-0018):** the group-shape requirement in `_PAN_RE` is load-bearing —
-three of the four real corpus TINs are **14 digits**, inside the 13–19 PAN
-window, silent only because they print `3-3-3-N`. **Never relax the grouping
-toward "any run of 13+ digits."** Any `_PAN_RE` change replays the committed
-battery in `tests/test_repository.py` in **both** directions and tests **two
-instances of what it guards in one input**.
+**PAN (ADR-0018, then ADR-0020 on the detector shape):** the group-shape
+requirement in `_PAN_RE` is load-bearing — three of the four real corpus TINs are
+**14 digits**, inside the 13–19 PAN window, silent only because they print
+`3-3-3-N`. What actually protects them is the asymmetry that **every alternative
+opens with a group of at least four digits while every corpus TIN opens with
+three**; that is now pinned across the whole shape space by
+`test_pan_re_never_starts_a_match_at_a_three_digit_group`, not merely by the four
+samples. **Never relax the grouping toward "any run of 13+ digits."**
+
+Any `_PAN_RE` change must: replay the **committed** battery in
+`tests/test_repository.py` in **both** directions (a generalisation that looked
+tighter silently dropped 13- and 15-digit cards and only the committed battery
+showed it); test **two instances of what it guards in one input** (a
+generalisation that passed everything else leaked a full second Amex by tiling
+across the boundary — **coverage and cross-boundary risk move together**); and
+keep `test_every_pan_re_match_holds_between_thirteen_and_nineteen_digits` green,
+which is what keeps `_mask_pan`'s length-reject branch unreachable.
 
 **Frontend (ADR-0015):** money is a string end to end; **`<input type="number">`
 and `valueAsNumber` are banned**; the browser stays same-origin so **no
@@ -139,6 +230,20 @@ moves.
   the same session as a merge, rulings are promoted out of the gitignored
   ledger into the tracked tree, and the next session verifies the stamp against
   the repo rather than trusting it.
+- **Every session end refreshes the handoff, not just a milestone close**
+  (2026-07-31, **ADR-0021**). The trigger is the session ending. Mid-flight the
+  stamp names **both** positions (`main @ sha` and `branch @ sha, N ahead,
+  pushed/unpushed`), per-task state records *who verified it*, the branch is
+  pushed before the session ends, and plan defects found during execution are
+  promoted into the tracked tree rather than left in the gitignored ledger.
+- **PAN grouping (2026-07-31, ADR-0020): Option A — enumerate the five named
+  groupings, cap the separator at two characters, and document the residual as a
+  number.** Chosen over generalising, after the generalisation was measured
+  leaking a full second card on two adjacent Amex numbers. Closing the plausible
+  band properly — a shape table with a per-entry two-instance gate, or a
+  candidate-then-validate scan loop (priced in ADR-0018 at O(n²), ~1715 ms on
+  40 KB) — is **a separate scoped decision the user has not been asked to make
+  yet.**
 
 ## Still needing a user decision
 
@@ -231,25 +336,34 @@ positives, the two-instances rule), a dated ADR-0007 correction, and
 
 **`docs/NEXT_SESSION_PROMPT.md` carries the full ordered task list.** Headlines:
 
-1. **PAN follow-up (HIGH):** cards grouped outside the two canonical shapes
-   (5-4-4-4, 6-4-4-4, 4-5-4-4, Diners 4-6-4, Maestro 4-4-5, double-space
-   separators) store **whole** — pre-existing, measured, with a
-   reviewer-measured candidate fix (enumerate groupings; 0 TIN regressions;
-   never relax to "any 13+ run"). Fold in: pin ADR-0018's worked example;
-   qualify ADR-0007's unqualified "a hash" bullet.
-2. **Bound the machine-path `currency` write** — `save_extraction` writes an
+0. **FINISH `feat/pan-grouping` FIRST.** Tasks 3 and 4 of
+   `docs/superpowers/plans/2026-07-31-pan-grouping.md`, then the whole-branch
+   review, one consolidated fix wave, one scoped re-review, fast-forward merge,
+   and the handoff refresh in the same session. Task 3 re-measures
+   `ReceiptForm.tsx`'s redaction table through the real `PATCH` route; Task 4
+   qualifies ADR-0007's "a hash" bullet.
+1. **Bound the machine-path `currency` write** — `save_extraction` writes an
    unconstrained `str` into `String(3)`; Postgres raises `DataError` (leak-(d)
-   shape: the human path is guarded, the machine path is not).
-3. **Fix the intermittent test's fixtures** — diagnosed as a thread race
+   shape: the human path is guarded by `_bounded_optional_text`, the machine path
+   is not). **Reproduced this session:** `ReceiptMeta.currency` is `str | None`
+   with no constraints, `Receipt.currency` is `String(3)`, the human path raises
+   `ValueError: currency holds at most 3 characters, got 16`, and
+   `repository.py:464` passes the value through unguarded.
+2. **Fix the intermittent test's fixtures** — diagnosed as a thread race
    (identical blobs → dedupe `REJECTED` under load), **not** ordering;
-   pytest-randomly is not installed.
-4. Phase 5 follow-ups: the five design §5 error-recovery behaviours (including
+   pytest-randomly is not installed (pytest11 entry points re-verified this
+   session: `anyio`, `superclaude`). `_job` → `_png_bytes()` returns a
+   byte-identical uniform 900×1400 PNG on every call — that is the premise, and
+   it was confirmed by reading the fixture. **Independently corroborated this
+   session:** Task 2's implementer hit this failure once, unprompted, and two
+   later full runs were clean.
+3. Phase 5 follow-ups: the five design §5 error-recovery behaviours (including
    **no logout control**), a read route for `corrections`, a real ASGI entry
    point, an admin release for a claimed task.
-5. **Phase 6** — merchants & few-shot. **Phase 7** — self-consistency wired into
+4. **Phase 6** — merchants & few-shot. **Phase 7** — self-consistency wired into
    the pipeline, gated on `triage.is_handwritten`. **Phase 8** — calibration and
    eval-harness honesty.
-6. **ISSUE-001 last.**
+5. **ISSUE-001 last.**
 
 ## Environment / provider (user's `.env`, gitignored)
 
@@ -269,8 +383,20 @@ positives, the two-instances rule), a dated ADR-0007 correction, and
 - **Security:** a commented-out Gemini key was once echoed in output → **rotate it
   before use.** Never echo `.env` secret values.
 - **Git:** default branch `main`; `origin` → `CDGYu/Receipt-Digitalization`,
-  **private**. Push `feat/*` freely; **ask before `main`**. Everything in sync
-  at the stamp above.
+  **PUBLIC** (verified 2026-07-31 via the GitHub API; this file said "private"
+  until then). Push `feat/*` freely; **ask before `main`**. `main` is currently
+  **one docs commit ahead of `origin/main` and unpushed**;
+  `feat/pan-grouping` is pushed.
+- **What the public repo exposes — surfaced to the user, no ruling yet.** Nothing
+  secret leaked: `.env` was never committed anywhere in history, no image file is
+  tracked anywhere, and `var/`, `.kiro/`, `.github/`, `.superpowers/` and
+  `eval/golden/images/` have **zero** tracked entries. But
+  `eval/golden/labels/r00*.json` **are** tracked and world-readable, carrying real
+  third-party business identities: `METRO OIL SUBIC, INC.` / `221 193 789 09013`,
+  `SUMMIT FUEL OPC` / `774-423-646-00011`, `SERV CENTRAL, INC.` /
+  `205-741-640-162`, plus street addresses. Those are the user's supplier records
+  **and** the exact values ADR-0018's and ADR-0020's silent-case tests pin, so
+  scrubbing them is not free. **Awaiting the user's decision.**
 - **Gitignored and untracked:** `.kiro/` (steering still auto-loads from disk),
   `.github/workflows/` (**Actions does not run**), `.superpowers/` (the SDD
   ledgers — invisible to anything searching the tracked tree), and **`var/`**,
@@ -352,10 +478,18 @@ precision claim as measured.**
   13–19 digit modifier amount. A reviewer confirming a 13–19-digit
   `receipt.number` sees it masked and a spurious `corrections` row minted —
   inherent to the policy, the old "two sides should agree" item is **closed**.
-- The PAN grouping gap, the `currency` bound, and the intermittent's fixture
-  race are **tasks 1–3 in the prompt**, not minors — listed there.
-- `_persist_failure` never writes `image_phash`, so a failed receipt keeps `""`
-  and can never serve as a dedupe **original** (address with Phase 6 dedupe).
+- **The PAN grouping gap is now PARTLY closed** — see "PAN grouping" above for
+  what shipped and what the residual is. The `currency` bound and the
+  intermittent's fixture race are **tasks 1–2 in the prompt**, not minors.
+- **`image_phash` on a failed receipt — corrected 2026-07-31.** This entry used
+  to say "`_persist_failure` never writes `image_phash`." That is **false as
+  stated**: `_persist_failure` does pass `image_phash=phash` in its *insert*
+  branch. What is true is narrower — its *update* branch never touches the
+  column, and the normal ingest→process flow always takes the update branch
+  because `create_pending_receipt` already made the row (writing `""`
+  deliberately, and documenting why). So a receipt that fails after ingest keeps
+  `""` and can never serve as a dedupe **original**. The consequence stands; the
+  mechanism previously named did not. Address with Phase 6 dedupe.
 - An auto-approving reprocess closes a review task a reviewer had already claimed.
 - **No login rate limiting**, and each attempt costs a full scrypt derivation
   (~16 MB, ~57 ms) — `POST /auth/login` is an unauthenticated CPU/memory amplifier
@@ -437,10 +571,13 @@ with an entry point gets run from outside the repository.
 - `docs/NEXT_SESSION_PROMPT.md` — the ordered task list and reading order.
 - `IMPLEMENTATION_PLAN.md` · `README.md` (§5 design decisions) · `VLM_AND_DATA.md`
 - **`docs/KNOWN_ISSUES.md`** — ISSUE-001 with its diagnosis and resume steps.
-- **`docs/adr/` — 0001–0019**; see `docs/adr/README.md`. Read **0001** first;
-  **0018** before touching `_PAN_RE`/`redact_pan` (it supersedes 0007 on the
-  masking rule); **0017** before believing a green test run; **0019** for how
-  cross-session state works.
+- **`docs/adr/` — 0001–0021**; see `docs/adr/README.md`. Read **0001** first;
+  **0018 then 0020** before touching `_PAN_RE`/`redact_pan` (0018 supersedes 0007
+  on the masking rule, and 0020 supersedes 0018 on the detector *shape* and is
+  the current record of which groupings are covered and what residual is
+  accepted); **0017** before believing a green test run; **0019 + 0021** for how
+  cross-session state works, 0021 being the one that governs the branch currently
+  in flight.
 - `docs/superpowers/specs/` and `docs/superpowers/plans/` — per-milestone design
   and plan documents, including `2026-07-31-pan-hardening-design.md` and its
   plan.

@@ -207,11 +207,18 @@ ADR-0018 calls load-bearing.
 
 ### 4.3 Match surface and reject-branch reachability
 
-| pattern | shapes matched | added vs shipped | matches outside 13–19 digits |
+| pattern | shapes matched | added vs shipped | distinct (shape, digit-count) pairs outside 13–19 |
 |---|---|---|---|
 | shipped | 8 | — | 0 |
 | enumerated + `{1,2}` | 13 | +5 | **0** |
 | generalised form 2 | 420 | +412 | 211 |
+
+The last column counts distinct `(shape, digit-count)` pairs whose whole-run
+match falls outside the window, not individual matches — the denominator is the
+shape space, not the input set. Counting *matches* over the same sweep gives
+36,521 for the generalised form and 0 for the enumeration; both numbers describe
+the same fact and neither contradicts the other. The number that matters is the
+zero: for the enumeration the branch is not reachable at all.
 
 The five added shapes are exactly `(4,4,5)`, `(4,6,4)`, `(5,4,4,4)`,
 `(6,4,4,4)`, `(4,5,4,4)`. Each new alternative has a **fixed** digit total —
