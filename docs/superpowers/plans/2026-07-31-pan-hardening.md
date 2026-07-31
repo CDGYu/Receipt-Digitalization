@@ -797,9 +797,13 @@ comment should say what was measured, not generalise from it:
 
 ```
  * stored.** `_plan_change` runs `redact_pan` over every coerced text value, so
- * a card number is masked before it reaches the column, and the `corrections`
- * row records only the masked form, so the original is not recoverable from
- * the audit trail either.
+ * a card number in any spelling the table below records is masked before it
+ * reaches the column, and the `corrections` row records only the masked form,
+ * so the original is not recoverable from the audit trail either. One spelling
+ * is deliberately NOT fully masked: a run of MORE than four separated groups
+ * keeps everything after its leading four groups in the clear -- never a full
+ * card number on its own. Accepted by ruling rather than closed, because every
+ * measured attempt to close it leaked something worse (ADR-0018).
  *
  * **What is masked is exactly the table below, and nothing is generalised from
  * it.** This claim has been wrong twice. The first version was measured on the
@@ -811,10 +815,14 @@ comment should say what was measured, not generalise from it:
  * not by reading it. `tests/test_repository.py` is the binding measurement.
 ```
 
-Keep the existing measured table below it. **Do not add a digit count or a test
-count to this comment** — a number that can change without its sentence
-changing does not go in a comment. One citation in this repo drifted
-`61 → 81 → 94 → 101`, once inside the commit documenting the drift.
+Keep the existing measured table below it, and **extend the table** with the
+rows this branch changed, re-measured through the real `PATCH` route the way
+the existing rows were (one fresh receipt per row, read back with
+`GET /receipts/{id}`): a 4-4-4-5 spelling now masks; a five-group spelling
+stores `'************1111 111'`. **Do not add a digit count or a test count to
+this comment** — a number that can change without its sentence changing does
+not go in a comment. One citation in this repo drifted `61 → 81 → 94 → 101`,
+once inside the commit documenting the drift.
 
 - [ ] **Step 3: Fix ADR-0007 with a dated correction**
 
@@ -826,49 +834,88 @@ own dated correction:
 
 **"separators being any mix of spaces and hyphens" (above) is stale.** The class
 has been `[ .\-_/,]` — space, period, hyphen, underscore, slash, comma — since
-the Phase 5 fix wave. Two further defects were found after this ADR was written
-and are fixed in ADR-0018: a four-group run with a 5+ digit tail was stored
-whole, and `save_extraction` redacted two of its text columns while copying the
-rest verbatim. **ADR-0018 supersedes this ADR's description of the masking
-rule.** Everything here about money integrity and bounded text still stands.
+the Phase 5 fix wave. Three further defects were found after this ADR was
+written and are addressed in ADR-0018: a four-group run with a 5–7 digit tail
+was stored **whole** (fixed); `save_extraction` redacted two of its text columns
+while copying the rest verbatim (fixed); and the "silent on … a 16-character
+hash" consequence above is true only of a hash containing at least one
+non-digit — an **all-digit** hash is indistinguishable from an unseparated PAN
+and will mask, which is why `save_extraction` keeps system-minted values such
+as `image_phash` out of the redaction pass entirely. One documented residual is
+**accepted by user ruling** rather than fixed: a separated run of more than
+four groups keeps its remainder in the clear. **ADR-0018 supersedes this ADR's
+description of the masking rule.** Everything here about money integrity and
+bounded text still stands.
 ```
 
 - [ ] **Step 4: Write ADR-0018**
 
 Create `docs/adr/0018-pan-masking-policy.md`. Match the house format — read
-`docs/adr/0016-review-next-resumes-the-callers-task.md` for the shape first. It
-must record, because each is a decision someone will otherwise re-litigate:
+`docs/adr/0016-review-next-resumes-the-callers-task.md` for the shape first.
+**The authoritative source is the design doc's §2.1
+(`docs/superpowers/specs/2026-07-31-pan-hardening-design.md`) — the ruling that
+replaced the original greedy design. Do not describe the greedy design as
+current anywhere.** The ADR must record, because each is a decision someone
+will otherwise re-litigate:
 
-1. **The detector over-matches on purpose**, and every ambiguity is resolved in
-   `_mask_pan`, because a regex cannot see a digit count.
-2. **`_mask_pan` never fails open.** The four rules in order, and that returning
-   an over-long match unchanged is what leaked cases (a) and (b).
+1. **The whole detector change is one character:** the 4-4-4-N alternative's
+   trailing group `\d{1,4}` → `\d{1,7}`, closing leak (a) — a four-group PAN
+   with a 5–7 digit tail stored whole, 17–19 digits in the clear, the invariant
+   violation. `_mask_pan` is unchanged.
+2. **Leak (b) — more than four groups leaving the remainder clear — is ACCEPTED
+   by user ruling (2026-07-31), not fixed.** Record both measured routes that
+   were on the table and why each was refused: a greedy alternative swallowed a
+   *second, adjacent card number* into one match (`re.sub` never rescans inside
+   a match) and ate an adjacent amount's integer part; a scan loop controlling
+   its own resume position closed (b) with neither regression but is O(n²) —
+   ~1715 ms on a 40 KB adversarial run against ~4 ms. Seven digits of remainder
+   is not a card number. Pinned by
+   `test_redact_pan_leaves_a_run_of_more_than_four_groups_partly_masked`.
 3. **The group-shape requirement is load-bearing** — the four corpus TINs, why
-   they are 13–19 digits, and that relaxing the grouping masks every merchant
-   fingerprint. Name `test_redact_pan_is_silent_on_the_merchant_tax_ids_this_corpus_prints`
-   as the guard.
+   they sit inside the 13–19 window, and that relaxing the grouping masks every
+   merchant fingerprint. Name
+   `test_redact_pan_is_silent_on_the_merchant_tax_ids_this_corpus_prints` as
+   the guard.
 4. **`(?!\.\d)` stays on the unseparated alternative alone**, with the measured
    consequence of moving it (`4111 **********1199`).
-5. **Redaction at the write boundary is default-on**, and the column-walking test
-   is the guarantee.
-6. **The accepted residuals:** a run over 19 digits keeps its tail in the clear
-   (12 digits on `4111 1111 1111 1111 9999 9999`); a 13–19 digit all-numeric
-   identifier masks; two column-scale amounts in one free-text value mask.
-7. **The rule for the next person:** widen nothing without replaying the
-   committed battery in both directions. Both prior widenings surprised, and a
-   hand-picked 34-case battery still missed `4111.1111.1111.1`.
+5. **`_mask_pan`'s length check is currently unreachable from `_PAN_RE`** —
+   every alternative is bounded to 13–19 digits by construction — and is kept
+   anyway as defence in depth on the hardest invariant.
+6. **Redaction at the write boundary is default-on for extraction-sourced
+   values only.** System-minted values (`image_key`, `image_phash`, `status`,
+   `confidence`, `merchant_id`) never pass through the PAN heuristic: an
+   all-digit `image_phash` — the legal dHash of a uniform image — is
+   indistinguishable from an unseparated 16-digit PAN, and masking it produces
+   invalid hex that breaks `phash_distance` and destroys the receipt's dedupe
+   identity. The column-walking test is the guarantee on the covered side;
+   `test_save_extraction_never_corrupts_an_all_digit_image_phash` on the
+   excluded side.
+7. **The accepted false positives:** a 13–19 digit all-numeric identifier
+   masks; two column-scale amounts in one free-text value mask; an all-digit
+   16-character hash masks *if it reaches `redact_pan`* — which is why system
+   values must not.
+8. **The rule for the next person:** widen nothing without replaying the
+   committed battery in both directions, and always test the guard with **two
+   instances of what it guards in one input** — every battery in this task's
+   history held one card number per case, and that blind spot let a full PAN
+   through a green suite twice. A hand-picked 34-case battery also missed
+   `4111.1111.1111.1`.
 
 - [ ] **Step 5: Index it**
 
 Add the ADR-0018 row to `docs/adr/README.md`, matching the existing row format
 exactly.
 
-- [ ] **Step 6: Update the `_PAN_RE` docstring**
+- [ ] **Step 6: Re-point the `_PAN_RE` comment at ADR-0018**
 
-`repository.py:124-130` describes the partial leak as recorded-not-fixed. Both
-leaks are fixed now, so that paragraph is stale. Replace it with what the code
-does — the greedy run, the decision order, and the over-19 residual — and point
-at ADR-0018 rather than restating it.
+The `_PAN_RE` comment block was already rewritten during Task 2's fix rounds —
+it now records the widening, both measured routes, and the attributed ruling.
+**Do not rewrite it.** Two small edits only: (1) the ruling sentence points at
+`docs/superpowers/specs/2026-07-31-pan-hardening-design.md` section 2.1 because
+ADR-0018 did not exist yet — re-point it to ADR-0018 now that it does (find it
+with `grep -n "2026-07-31-pan-hardening-design" src/receipts/persist/repository.py`);
+(2) read the block end to end against the shipped behaviour and fix any
+sentence a measurement falsifies — expected: none, it was re-reviewed twice.
 
 - [ ] **Step 7: Verify every claim you just wrote**
 
