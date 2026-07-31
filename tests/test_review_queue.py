@@ -166,6 +166,45 @@ def test_enqueue_review_keeps_the_more_urgent_priority(engine: sa.Engine) -> Non
         assert task.reason == "urgent: total is missing"
 
 
+def test_enqueue_review_redacts_a_pan_inside_the_reason(engine: sa.Engine) -> None:
+    """§18 at the sink: ``reason`` is built from exception text elsewhere
+    (``save_extraction``'s human-owned-status guard quotes ``merchant.name``
+    raw; ``_bounded_optional_text`` quotes an overlong value raw), so patching
+    every producer would miss the next one. Redacting once, here, covers all
+    of them -- present and future. Exercises both branches: the insert (a
+    fresh task) and the idempotent update (an existing task's reason
+    refreshed) go through the same redaction, since it runs once before either
+    branch reads ``reason``.
+    """
+    pan_reason = (
+        "persist: ValueError: receipt 11111111-1111-1111-1111-111111111111 has "
+        "already been reviewed by a human (status reviewed) and a machine run "
+        "must not overwrite it; this run produced status=needs_review, "
+        "total=Decimal('12.34'), merchant='SUPERMART 4111111111111111'"
+    )
+    expected = pan_reason.replace("4111111111111111", "************1111")
+
+    with Session(engine) as session:
+        receipt = _receipt(session)
+
+        task = enqueue_review(session, receipt.id, pan_reason, 2)
+        assert task.reason == expected
+        assert "4111111111111111" not in task.reason
+
+        # Idempotent-update branch: same receipt, a more urgent priority so
+        # the more-urgent-wins rule actually refreshes ``reason``, and a
+        # second, different PAN so the update path -- not a stale value left
+        # over from the insert -- is what is actually under test.
+        second_reason = pan_reason.replace("SUPERMART", "OTHER MART CO")
+        updated = enqueue_review(session, receipt.id, second_reason, 0)
+
+        assert updated.id == task.id
+        assert updated.reason == second_reason.replace(
+            "4111111111111111", "************1111"
+        )
+        session.commit()
+
+
 def test_enqueue_review_reopens_a_closed_task(engine: sa.Engine) -> None:
     with Session(engine) as session:
         receipt = _receipt(session)

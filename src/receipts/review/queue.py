@@ -39,6 +39,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..persist.models import Receipt, ReviewState, ReviewTask
+from ..persist.repository import redact_pan
 
 __all__ = [
     "QueueStats",
@@ -172,6 +173,11 @@ def enqueue_review(
     routing decision could ever demote. ``0`` is the most urgent real priority
     (§12). Flushes; does not commit.
     """
+    # §18 at the sink: reasons are built from exception text, and exception text
+    # interpolates raw model values (save_extraction's human-owned guard quotes
+    # merchant.name; _bounded_optional_text quotes the overlong value). Redacting
+    # here covers every producer, present and future.
+    reason = redact_pan(reason)
     if priority < 0:
         raise ValueError(
             f"review priority must be >= 0, got {priority}; "
