@@ -6,12 +6,16 @@ continuity protocol itself — what lives where, and why this snapshot must be
 verified rather than trusted — is **ADR-0019**, extended by **ADR-0021** for the
 case that applies right now: a session that ended with a branch part-built.
 Last updated: **2026-07-31**, at `main @ 1d9f3e3` with **`feat/pan-grouping` in
-flight**, its last *code* commit `a883df6` and one docs commit on top of that
-carrying this refresh. A stamp cannot name the commit that writes it, so compare
-against `git log` and expect the tip to be one docs-only commit ahead of
-`a883df6`; if it is further ahead, or ahead by anything touching `src/`,
-`tests/` or `frontend/`, this file is stale and the branch moved after it was
-written.
+flight, its last *code* commit `a883df6`**, plus docs-only commits on top
+carrying this refresh. A stamp cannot name the commit that writes it, so the
+check is not a commit count — counts rot — but this:
+
+```
+git log --oneline a883df6..feat/pan-grouping -- src tests frontend
+```
+
+**Empty means this file is current.** Any output means the branch moved after it
+was written and you are reading something stale.
 
 ## Snapshot
 
