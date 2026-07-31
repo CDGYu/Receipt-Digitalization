@@ -598,6 +598,44 @@ def test_review_complete_requires_authentication(app, task_id):
     assert keyed.post(f"/review/{task_id}/complete").status_code == 401
 
 
+def test_a_skipped_receipt_stays_recoverable(
+    reviewer_client, session_factory, receipt_id, task_id
+) -> None:
+    """The three properties the review UI's "Skip this receipt" button spends.
+
+    Skip **completes** the held task, leaving the receipt ``needs_review`` with
+    a ``DONE`` task. That is survivable only because of the asymmetry measured
+    during the Phase 5 review:
+
+        IN_PROGRESS --enqueue_review--> in_progress   claimable by another: False
+        DONE        --enqueue_review--> open          claimable by another: True
+
+    So skip converts the one genuinely unrecoverable queue state into a
+    recoverable one. All three properties below are true today and **none would
+    go red if they stopped being** -- which is the entire reason this test
+    exists.
+    """
+    assert reviewer_client.post(f"/review/{task_id}/complete").status_code == 200
+
+    # (i) still listed as needing review
+    listed = reviewer_client.get("/receipts", params={"status": "needs_review"})
+    assert listed.status_code == 200
+    assert str(receipt_id) in [item["id"] for item in listed.json()["items"]]
+
+    # (ii) still PATCH-able to `reviewed` -- the route never consults ReviewTask,
+    #      so even a patch that changes nothing drives the status.
+    patched = reviewer_client.patch(f"/receipts/{receipt_id}", json={})
+    assert patched.status_code == 200
+    assert patched.json()["status"] == "reviewed"
+
+    # (iii) still re-openable, and re-opened OPEN -- claimable by someone else,
+    #       not just by alice.
+    with session_factory() as session:
+        task = enqueue_review(session, receipt_id, reason="reopened", priority=2)
+        session.commit()
+        assert task.state is ReviewState.OPEN
+
+
 def test_export_is_admin_only(reviewer_client, admin_client):
     assert reviewer_client.get("/export/xlsx").status_code == 403
     assert admin_client.get("/export/xlsx").status_code == 200
