@@ -503,10 +503,16 @@ construction, add:
     # stored whole card numbers while ``merchant_name_raw`` and
     # ``payment_method`` were masked, so the machine leaked what a reviewer
     # could not. Money is ``Decimal`` and dates are ``date``/``time``, so the
-    # ``str`` gate leaves them structurally out of reach -- the same gate
-    # :func:`_plan_change` uses, which is what makes the two sides agree.
+    # gate leaves them structurally out of reach. The gate is ``type(...) is
+    # str``, not ``isinstance``: ``Legibility`` and ``ReceiptStatus`` are
+    # *str-enums*, and ``redact_pan`` hands a str subclass back as plain
+    # ``str`` -- measured: ``redact_pan(ReceiptStatus.NEEDS_REVIEW)`` returns
+    # ``'needs_review'``, and although the value-based Enum columns bind it,
+    # the instance attribute then holds a plain string until the next refresh.
+    # Every value the correction path coerces is an exact ``str``, so the two
+    # sides still agree.
     fields = {
-        key: redact_pan(value) if isinstance(value, str) else value
+        key: redact_pan(value) if type(value) is str else value
         for key, value in fields.items()
     }
     # ``card_last4`` keeps the *stronger* guarantee, applied after: four digits
