@@ -634,6 +634,90 @@ def test_save_extraction_redacts_a_pan_inside_a_line_item_modifier(engine: sa.En
         assert modifiers[0]["amount"] == "-1.00"  # money untouched
 
 
+def test_every_text_column_save_extraction_writes_is_redacted(engine: sa.Engine) -> None:
+    """The guarantee, enumerated from the table rather than from memory.
+
+    The redaction column list was hand-maintained and was found short twice. A
+    column added later must fail *here* rather than leak silently, so this walks
+    ``Receipt.__table__`` and ``LineItem.__table__`` instead of naming columns.
+
+    ``card_last4`` is excluded because it carries a stronger guarantee
+    (:func:`_last4`, four digits at most). ``Enum`` columns are excluded by
+    *type*: ``sa.Enum`` subclasses ``sa.String``, and ``Legibility`` is a
+    ``str`` enum, so both would otherwise be swept in and neither can hold free
+    text. ``JSON`` columns are walked separately -- a ``String`` walk is
+    structurally blind to them, which is exactly how ``modifiers`` stored a
+    whole PAN while every scalar text column was covered.
+    """
+    pan = "4111111111111111"
+
+    def text_columns(table: sa.Table, *, exclude: frozenset[str] = frozenset()) -> list[str]:
+        return [
+            column.name
+            for column in table.columns
+            if isinstance(column.type, sa.String)
+            and not isinstance(column.type, sa.Enum)
+            and column.name not in exclude
+        ]
+
+    receipt_text = text_columns(Receipt.__table__, exclude=frozenset({"card_last4"}))
+    item_text = text_columns(LineItem.__table__)
+    item_json = [c.name for c in LineItem.__table__.columns if isinstance(c.type, sa.JSON)]
+    # The walk is the guarantee, so a filter that quietly matched nothing would
+    # make this test pass forever. Measured contents on 2026-07-31:
+    # receipts -> merchant_name_raw, receipt_number, date_raw, currency,
+    # payment_method, image_key, processed_image_key, image_phash;
+    # line_items -> description_raw, sku, unit; JSON -> modifiers, bbox.
+    assert {"receipt_number", "date_raw", "merchant_name_raw"} <= set(receipt_text)
+    assert {"description_raw", "sku", "unit"} <= set(item_text)
+    assert "modifiers" in item_json
+
+    job = _job()
+    with Session(engine) as session:
+        receipt = save_extraction(
+            session,
+            job,
+            ReceiptExtraction(
+                merchant=ExtractedMerchant(name=pan),
+                receipt=ReceiptMeta(number=pan, date_raw=pan),
+                payment=Payment(method=pan),
+                line_items=[
+                    ExtractedLineItem(
+                        position=1,
+                        description_raw=pan,
+                        sku=pan,
+                        unit=pan,
+                        modifiers=[Modifier(label=f"PROMO CARD {pan}")],
+                    )
+                ],
+            ),
+            ValidationReport(),
+            Decimal("0.5"),
+            ReceiptStatus.NEEDS_REVIEW,
+        )
+        session.commit()
+
+        leaked = [
+            name
+            for name in receipt_text
+            if isinstance(getattr(receipt, name, None), str)
+            and pan in getattr(receipt, name)
+        ]
+        item = receipt.line_items[0]
+        leaked += [
+            f"line_items.{name}"
+            for name in item_text
+            if isinstance(getattr(item, name, None), str)
+            and pan in getattr(item, name)
+        ]
+        leaked += [
+            f"line_items.{name}"
+            for name in item_json
+            if pan in json.dumps(getattr(item, name, None) or [])
+        ]
+        assert leaked == [], f"columns storing a full PAN: {leaked}"
+
+
 def test_empty_reasons_and_missing_reasons_are_different(engine: sa.Engine) -> None:
     job = ReceiptJob(id=uuid.uuid4(), image_key="k", source="upload",
                      original_filename="r.jpg", content_type="image/jpeg")
