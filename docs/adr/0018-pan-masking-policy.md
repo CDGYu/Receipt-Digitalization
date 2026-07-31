@@ -123,11 +123,20 @@ through `redact_pan` on entry. Exception text interpolates raw model values —
 sink covers every producer of a review reason, present and future, without
 requiring each call site to remember to.
 
-**The accepted false positives.** A value masks whenever it contains a
-maximal run of 13+ consecutive digits — not "whenever it looks like a card,"
-which is a stronger claim than the regex actually enforces. Four concrete
-shapes are accepted rather than fought, because a rule that must never miss a
-real PAN cannot also never fire on something else:
+**The accepted false positives.** `_PAN_RE` masks by two independent routes,
+and "13+ consecutive digits" characterizes only one of them. A *separated*
+value masks when it is grouped exactly `4-4-4-N` or `4-6-5`, regardless of how
+short any single run between separators is — measured, `4111 1111 1111 1111`
+masks even though no run between its spaces is longer than 4. An *unseparated*
+value masks when it holds a maximal run of 13-19 consecutive digits, capped —
+measured, `41111111111111111111` (a 20-digit run) does **not** mask, because
+the unseparated alternative is bounded `\d{13,19}` and no 13-19-digit span
+inside a run that long can satisfy both boundary lookarounds at once. Grouping
+decides the first route; run length decides the second — not "whenever it
+looks like a card," which is a stronger claim than the regex actually
+enforces either way. Four concrete false positives are accepted across these
+two routes rather than fought, because a rule that must never miss a real PAN
+cannot also never fire on something else:
 
 - a 13–19 digit all-numeric identifier that is not a card number, indistinguishable
   from one by inspection;

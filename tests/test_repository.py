@@ -635,11 +635,25 @@ def test_save_extraction_redacts_a_pan_inside_a_line_item_modifier(engine: sa.En
 
 
 def test_every_text_column_save_extraction_writes_is_redacted(engine: sa.Engine) -> None:
-    """The guarantee, enumerated from the table rather than from memory.
+    """The guarantee, enumerated from the table AND proven end to end.
 
     The redaction column list was hand-maintained and was found short twice. A
     column added later must fail *here* rather than leak silently, so this walks
-    ``Receipt.__table__`` and ``LineItem.__table__`` instead of naming columns.
+    ``Receipt.__table__`` and ``LineItem.__table__`` instead of naming columns --
+    then actually calls :func:`save_extraction` and checks every discovered
+    column's stored *value*, not merely that the column exists.
+
+    **The walk alone used to look complete and still miss a leak.** An earlier
+    version of this test checked column names only, never seeding a PAN and
+    checking a value, and stayed GREEN when a throwaway column fed from
+    ``extraction.merchant.tax_id`` was added unredacted -- because nothing here
+    had ever put a PAN in ``tax_id``. The walk would have found the new column;
+    it had nothing to catch it with. The fixture below seeds a PAN into every
+    ``str``-typed extraction field a future column could plausibly be sourced
+    from, not only the fields already wired to one today, so a new column is
+    caught regardless of which field feeds it. Proven by temporarily adding
+    exactly that throwaway column and confirming this test fails, naming it --
+    see the task report.
 
     ``card_last4`` is excluded because it carries a stronger guarantee
     (:func:`_last4`, four digits at most). ``Enum`` columns are excluded by
@@ -648,6 +662,15 @@ def test_every_text_column_save_extraction_writes_is_redacted(engine: sa.Engine)
     text. ``JSON`` columns are walked separately -- a ``String`` walk is
     structurally blind to them, which is exactly how ``modifiers`` stored a
     whole PAN while every scalar text column was covered.
+
+    ``receipt.date`` and ``receipt.time`` are not seeded with a PAN: both are
+    parsed into typed (``Date``/``Time``) columns today, never passed through as
+    free text, so neither is a plausible source for a future *String* column --
+    a PAN there would just fail to parse and vanish, testing nothing.
+    ``currency``'s ``String(3)`` bound is not enforced here: measured, SQLite
+    stores the redacted-but-still-overlong value rather than rejecting it (the
+    design doc's own documented, out-of-scope gap); this test does not depend
+    on that bound.
     """
     pan = "4111111111111111"
 
@@ -671,6 +694,71 @@ def test_every_text_column_save_extraction_writes_is_redacted(engine: sa.Engine)
     assert {"receipt_number", "date_raw", "merchant_name_raw"} <= set(receipt_text)
     assert {"description_raw", "sku", "unit"} <= set(item_text)
     assert "modifiers" in item_json
+
+    # Every str-typed field on Merchant, ReceiptMeta, Payment, ExtractionMeta,
+    # LineItem and Modifier that could plausibly feed a future column -- not
+    # only the fields already wired to one. Surrounding text differs per field
+    # so a failure names its own source instead of a bare, anonymous PAN.
+    job = _job()
+    extraction = ReceiptExtraction(
+        merchant=ExtractedMerchant(
+            name=f"MERCHANT {pan}",
+            branch=f"BRANCH {pan}",
+            address=f"ADDRESS {pan}",
+            tax_id=f"TAX ID {pan}",
+            phone=f"PHONE {pan}",
+        ),
+        receipt=ReceiptMeta(
+            number=f"NUMBER {pan}",
+            date="2026-07-27",
+            date_raw=f"DATE RAW {pan}",
+            time="14:30",
+            currency=f"CUR {pan}",
+            cashier=f"CASHIER {pan}",
+            terminal=f"TERMINAL {pan}",
+        ),
+        line_items=[
+            ExtractedLineItem(
+                position=0,
+                description_raw=f"DESC {pan}",
+                sku=f"SKU {pan}",
+                unit=f"UNIT {pan}",
+                qty=Decimal("1"),
+                unit_price=Decimal("1.00"),
+                line_total=Decimal("1.00"),
+                modifiers=[Modifier(label=f"MODIFIER {pan}", amount=Decimal("-1.00"))],
+            ),
+        ],
+        totals=Totals(total=Decimal("1.00")),
+        payment=Payment(method=f"METHOD {pan}", card_last4="1111"),
+        meta=ExtractionMeta(notes=f"NOTES {pan}"),
+    )
+
+    with Session(engine) as session:
+        receipt = save_extraction(
+            session,
+            job,
+            extraction,
+            ValidationReport(),
+            Decimal("0.5"),
+            ReceiptStatus.NEEDS_REVIEW,
+        )
+        session.commit()
+
+        for column in receipt_text:
+            value = getattr(receipt, column)
+            assert value is None or pan not in value, (
+                f"receipts.{column} still holds the raw PAN: {value!r}"
+            )
+        for item in receipt.line_items:
+            for column in item_text:
+                value = getattr(item, column)
+                assert value is None or pan not in value, (
+                    f"line_items.{column} still holds the raw PAN: {value!r}"
+                )
+            for column in item_json:
+                dumped = json.dumps(getattr(item, column))
+                assert pan not in dumped, f"line_items.{column} still holds the raw PAN: {dumped!r}"
 
     job = _job()
     with Session(engine) as session:

@@ -36,9 +36,11 @@ import type { FieldMap } from './patch'
  * reaches the column, and the `corrections` row records only the masked form,
  * so the original is not recoverable from the audit trail either. One spelling
  * is deliberately NOT fully masked: a run of MORE than four separated groups
- * keeps everything after its leading four groups in the clear -- never a full
- * card number on its own. Accepted by ruling rather than closed, because every
- * measured attempt to close it leaked something worse (ADR-0018).
+ * keeps everything after its leading four groups in the clear -- and when that
+ * remainder is grouped outside the two shapes this masks (4-4-4-N, 4-6-5), it
+ * can be an entire, undetected card number, not merely a short leftover tail.
+ * Accepted by ruling rather than closed, because every measured attempt to
+ * close it leaked something worse (ADR-0018).
  *
  * **What is masked is exactly the table below, and nothing is generalised from
  * it.** This claim has been wrong twice. The first version was measured on the

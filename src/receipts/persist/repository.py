@@ -164,10 +164,18 @@ _PAN_MAX_DIGITS = 19
 #: closes leak (b) without either regression -- but it is O(n^2) on
 #: adversarial input, measured at about 1715ms for a 40KB run of digits,
 #: against about 4ms for the pattern above on the same input. Neither route
-#: was taken: the remainder leak (b) leaves in the clear is not a full card
-#: number -- it is what is left over *after* the leading four groups are
-#: already masked -- and leak (a), the actual invariant violation, is already
-#: closed by ``\d{1,7}`` alone. The choice not to close (b) was the user's
+#: was taken: what leak (b) leaves in the clear is never masked *as part of*
+#: the leading match -- when the remainder itself happens to be shaped as a
+#: recognised 4-4-4-N or 4-6-5 run, it gets its own separate match instead
+#: (:func:`test_redact_pan_masks_every_card_number_in_one_value`). It is only
+#: when the remainder is grouped outside those two canonical shapes -- the
+#: positional clause above already says nothing outside them matches at all
+#: -- that it stays whole, and it can then be an entire, undetected card
+#: number: measured, ``redact_pan('4111 1111 1111 1111 41111 1111 1111
+#: 2345')`` returns ``'************1111 41111 1111 1111 2345'``, a full
+#: 17-digit PAN in 5-4-4-4 grouping, untouched. And leak (a), the actual
+#: invariant violation, is already closed by ``\d{1,7}`` alone. The choice
+#: not to close (b) was the user's
 #: ruling (2026-07-31), made with both routes above and their measured costs
 #: disclosed, not a conclusion this code reached on its own. Recorded in
 #: ADR-0018 (``docs/adr/0018-pan-masking-policy.md``).
