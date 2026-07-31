@@ -1196,9 +1196,10 @@ def test_redact_pan_masks_a_hex_hash_whenever_a_digit_run_reaches_thirteen() -> 
     was still wrong: a letter only protects a hash if it breaks *every* run of
     13+ digits, not merely if it is present somewhere. Measured 2026-07-31:
     over 200,000 random 16-char hex strings (seeded), 929 masked -- 0.46%,
-    roughly 1 in 200 -- not the ~1-in-18,000 an "all-digit-only" reading would
-    suggest. (An exact combinatorial check for 16 independent hex characters
-    agrees: 0.472%.) These two are the fixed regression cases; the rate itself
+    roughly 1 in 200 -- not the ~1-in-1,845 an "all-digit-only" reading would
+    suggest (`(10/16)**16`, since 10 of the 16 hex characters are digits).
+    (An exact combinatorial check for 16 independent hex characters agrees:
+    0.472%.) These two are the fixed regression cases; the rate itself
     is not re-measured on every run.
     """
     # The one letter is present but late (position 14): the leading 13 digits

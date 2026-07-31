@@ -100,7 +100,9 @@ _PAN_MAX_DIGITS = 19
 #:     run of small separated numbers -- ``"2 18.00 3 20.00 ..."`` -- still
 #:     matches nothing: it has no run of three consecutive 4-digit groups for
 #:     that trailing group to even follow, and :func:`_mask_pan` re-checks the
-#:     total digit count either way;
+#:     total digit count either way. The pattern recognises only these two
+#:     canonical groupings -- 4-4-4-N and 4-6-5 -- so a run grouped any other
+#:     way does not match at all and is not masked;
 #:   * ``(?<!\d)`` refuses a match that starts mid-number, and ``(?<!\d\.)``
 #:     refuses one that starts just after a *decimal point*, so the fraction of
 #:     ``0.4111111111111111`` is not mistaken for a card number. A period that is
@@ -240,8 +242,9 @@ def redact_pan(value: Any) -> Any:
     battery pins. So **no** hex hash is safe to route through this function,
     not merely an all-digit one: measured over 200,000 random 16-character hex
     strings (2026-07-31, seeded), 929 masked -- 0.46%, roughly **1 in 200** --
-    not the ~1-in-18,000 an "all-digit-only" reading would suggest. (An exact
-    combinatorial check agrees: 0.472% for 16 independent hex characters.) The
+    not the ~1-in-1,845 an "all-digit-only" reading would suggest (10 of the 16
+    hex characters are digits, so ``(10/16)**16``). (An exact combinatorial
+    check agrees: 0.472% for 16 independent hex characters.) The
     concrete case actually hit in production is still the all-digit one:
     measured, ``compute_phash`` of a perfectly uniform image is
     ``"0000000000000000"``, which this function turns into

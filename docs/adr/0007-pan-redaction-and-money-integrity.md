@@ -55,10 +55,14 @@ has been `[ .\-_/,]` — space, period, hyphen, underscore, slash, comma — sin
 the Phase 5 fix wave. Three further defects were found after this ADR was
 written and are addressed in ADR-0018: a four-group run with a 5–7 digit tail
 was stored **whole** (fixed); `save_extraction` redacted two of its text columns
-while copying the rest verbatim (fixed); and the "silent on … a 16-character
-hash" consequence above is false as stated — a value masks whenever it contains
-a run of **13+ consecutive digits**, which roughly 1 in 200 random 16-character
-hex hashes do (measured 2026-07-31), so **no hash may be routed through
+while copying the rest verbatim (fixed); and the Consequences section below
+overgeneralizes when it lists "a hash" alongside money and `card_last4` as
+something `redact_pan` must stay silent on
+(`test_redact_pan_is_silent_on_money_hashes_and_last4` — whose own hash cases
+are short digit runs and still pass): a value masks whenever it contains a run
+of **13+ consecutive digits**, which roughly 1 in 200 random 16-character hex
+hashes do (measured 2026-07-31), so "never fires on a hash" is not an
+enforceable property of this function — **no hash may be routed through
 `redact_pan` at all**; `save_extraction` keeps system-minted values such as
 `image_phash` out of the redaction pass entirely. One documented residual is
 **accepted by user ruling** rather than fixed: a separated run of more than

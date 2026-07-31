@@ -46,10 +46,15 @@ canonical case the pinned test asserts, `'CARD 4111 1111 1111 1111 111 OK'` →
 `111` is left over, however long a given remainder happens to be — the pinned
 test also covers an 8-digit and a 4-digit leftover (`9999 9999`, `.1111`).
 That is what the design doc counts as **seven** digits left visible outside
-the asterisks in its canonical repro — four of them the compliant last-four
-reveal, three the actual leak — a hardening gap, not an invariant violation
-like leak (a)'s 17–19 digits in the clear. Two routes to closing it were
-measured, and both were refused:
+the asterisks in its canonical repro: seven consecutive card digits visible
+where a compliant mask would show four — three in excess, under either
+reading of the run. When the run is a single 19-digit card, the four digits
+standing in the last-four position are mid-card digits, not the card's own
+tail — measured, `redact_pan('4111 1111 1111 2345 678')` →
+`'************2345 678'`: the visible `2345` is digits 13–16 of the run, not
+its true last four (`5678`). Still a hardening gap, not an invariant
+violation like leak (a)'s 17–19 digits in the clear. Two routes to closing it
+were measured, and both were refused:
 
 - **A greedy trailing group,** unbounded instead of capped at 7, closes (b)
   but leaks worse: `re.sub` never rescans inside a match it has already made,
@@ -127,12 +132,13 @@ real PAN cannot also never fire on something else:
 - a 13–19 digit all-numeric identifier that is not a card number, indistinguishable
   from one by inspection;
 - two column-scale amounts side by side in one free-text value (`1000.0000
-  2000.0000` is four dot-separated groups of four digits — a dotted PAN's
-  shape exactly);
+  2000.0000` is four groups of four digits joined by dot, space, dot — a
+  dotted PAN's shape exactly);
 - roughly **1 in 200** random 16-character hex hashes (measured 2026-07-31) —
-  not the ~1-in-18,000 an "all-digit-only" reading would suggest, because a
-  single non-digit character only protects a hash if it falls early enough to
-  break every run of 13. This is why **no** hash is routed through
+  not the ~1-in-1,845 an "all-digit-only" reading would suggest (`(10/16)**16`,
+  since 10 of the 16 hex characters are digits), because a single non-digit
+  character only protects a hash if it falls early enough to break every run
+  of 13. This is why **no** hash is routed through
   `redact_pan`, not merely no all-digit one — `image_phash` is excluded
   structurally, per the redaction-boundary decision above, rather than by
   asking this function to tell a coincidence apart from a card number;
