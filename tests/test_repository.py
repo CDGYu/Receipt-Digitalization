@@ -20,8 +20,10 @@ The load-bearing behaviours pinned down below:
 
 from __future__ import annotations
 
+import itertools
 import json
 import math
+import re
 import uuid
 from datetime import date, time
 from decimal import Decimal
@@ -64,6 +66,7 @@ from receipts.persist import (
     save_findings,
 )
 from receipts.persist.models import Base
+from receipts.persist.repository import _PAN_MAX_DIGITS, _PAN_MIN_DIGITS, _PAN_RE
 from receipts.persist.session import make_engine, make_session_factory
 from receipts.score.confidence import ReceiptStatus
 from receipts.validate.report import Finding, Severity, ValidationReport
@@ -1377,15 +1380,26 @@ def test_redact_pan_is_silent_on_the_merchant_tax_ids_this_corpus_prints(tax_id:
 
     These are Philippine BIR ``VAT Reg. TIN`` values, printed 3-3-3-N, and three
     of the four hold **fourteen** digits -- inside the 13-19 window a PAN
-    occupies. They are silent only because ``_PAN_RE`` requires 4-4-4-N or
-    4-6-5 grouping. **The grouping requirement is what protects them**, so a
-    future widening to "any run of 13+ digits" would mask every merchant
-    fingerprint in the corpus. ``save_extraction_run`` passes the whole
-    extraction payload through ``redact_pan``, so ``merchant.tax_id`` reaches
-    this rule even though it is not a correctable field.
+    occupies. What keeps them silent is not that ``_PAN_RE`` covers only a
+    couple of groupings -- that list has grown, and will grow again -- but an
+    asymmetry every entry in it obeys: **each alternative opens with a group of
+    at least four digits, and every corpus TIN opens with three.** A widening
+    to "any run of 13+ digits", or to any shape that can begin a match at a
+    three-digit group, would mask every merchant fingerprint in the corpus.
+    ``test_pan_re_never_starts_a_match_at_a_three_digit_group`` pins that
+    asymmetry across the whole group-shape space; these four pin it against the
+    real documents, which is what says the property was chosen to fit the
+    corpus rather than the corpus assumed to fit the property.
+    ``save_extraction_run`` passes the whole extraction payload through
+    ``redact_pan``, so ``merchant.tax_id`` reaches this rule even though it is
+    not a correctable field.
     """
     assert redact_pan(tax_id) == tax_id
     assert redact_pan(f"VAT Reg. TIN {tax_id}") == f"VAT Reg. TIN {tax_id}"
+    # The separator class accepts two characters as of ADR-0020, so the doubled
+    # spelling of a TIN is a new way for this false positive to appear.
+    doubled = tax_id.replace(" ", "  ").replace("-", "--")
+    assert redact_pan(doubled) == doubled
 
 
 #: Groupings a card is printed or written in that are NOT 4-4-4-N or 4-6-5.
@@ -1497,6 +1511,116 @@ def test_redact_pan_masks_both_cards_when_a_new_grouping_appears_twice(
     any shape added here is re-checked against this test (ADR-0020).
     """
     assert redact_pan(printed) == expected
+
+
+#: Every group shape a separated digit run can take, for the two structural
+#: guards below: 2 to 5 groups, each 1 to 8 digits. Built once because both
+#: guards sweep it.
+_ALL_SHAPES = [
+    shape
+    for count in (2, 3, 4, 5)
+    for shape in itertools.product(range(1, 9), repeat=count)
+]
+
+#: The single and doubled separators the pattern accepts.
+_SWEEP_SEPARATORS = [*_SEPARATORS, "  "]
+
+
+def _printed(shape: tuple[int, ...], separator: str) -> str:
+    """``(4, 6, 4)`` and ``' '`` -> ``'1111 111111 1111'``."""
+    return separator.join("1" * width for width in shape)
+
+
+def test_pan_re_never_starts_a_match_at_a_three_digit_group() -> None:
+    """The corpus-TIN guarantee, pinned across the shape space not the samples.
+
+    Three of the four real merchant ``VAT Reg. TIN`` values on this corpus hold
+    **fourteen** digits -- inside the 13-19 window a PAN occupies -- and are
+    silent only because they print 3-3-3-N. What actually protects them is an
+    asymmetry: every real card grouping opens with a group of at least four
+    digits, and every corpus TIN opens with three.
+
+    Pinning the four samples would survive a widening that happened to miss
+    those four. This pins the property instead: no alternative may begin a
+    match at a three-digit group, whatever follows it. ``match`` rather than
+    ``search`` because a canonical card embedded later in a longer run is a
+    legitimate hit -- ``search`` would report that hit and fail this test for a
+    correct reason, making the test wrong rather than the pattern. What must
+    never happen is a match *starting* at the 3-digit group.
+    """
+    for shape in _ALL_SHAPES:
+        if shape[0] != 3:
+            continue
+        for separator in _SWEEP_SEPARATORS:
+            text = _printed(shape, separator)
+            assert _PAN_RE.match(text) is None, (shape, separator, text)
+
+
+def test_every_pan_re_match_holds_between_thirteen_and_nineteen_digits() -> None:
+    """``_mask_pan``'s length check stays unreachable from ``_PAN_RE``.
+
+    ``_mask_pan`` returns its match unchanged when the digit count falls outside
+    13-19, and ``re.sub`` never rescans inside a match it has already made -- so
+    a match that is rejected for length is a span nothing will look at again.
+    Every alternative is bounded so that cannot happen: 4-4-4-N is what makes
+    the window 13-19 at all, since it spans exactly that, and every other
+    separated alternative is a fixed shape with a fixed total inside it -- each
+    total sits in the pattern's own comment column, which is why this docstring
+    does not copy them here. The unseparated form is ``\\d{13,19}`` outright.
+
+    That arithmetic is a claim about the pattern, so it is checked against the
+    pattern rather than restated. ADR-0018 keeps the guard anyway, as defence in
+    depth for whatever alternative is added next -- this test is what tells the
+    person adding it that they have made the guard reachable.
+    """
+    for shape in _ALL_SHAPES:
+        for separator in _SWEEP_SEPARATORS:
+            text = _printed(shape, separator)
+            for match in _PAN_RE.finditer(text):
+                digits = re.sub(r"\D", "", match.group(0))
+                assert _PAN_MIN_DIGITS <= len(digits) <= _PAN_MAX_DIGITS, (
+                    shape,
+                    separator,
+                    match.group(0),
+                    len(digits),
+                )
+
+
+def test_redact_pan_leaves_mid_card_digits_where_the_last_four_belong() -> None:
+    """ADR-0018's worked example, pinned.
+
+    When leak (b)'s run is a single 19-digit card, the four digits standing in
+    the last-four position are digits 13-16 of the run, not the card's own tail:
+    the visible ``2345`` here is not ``5678``. The leak-(b) cases already pinned
+    use uniform digits and cannot tell those two readings apart, so this is the
+    one case that binds the ADR's prose to behaviour.
+    """
+    assert redact_pan("4111 1111 1111 2345 678") == "************2345 678"
+
+
+@pytest.mark.parametrize(
+    "printed",
+    [
+        "4111 1111 111111",
+        "4111 11111 1111",
+        "41111 1111 1111",
+        "411111 111111 1111",
+        "41111 11111 1111 1111",
+    ],
+    ids=["4-4-6", "4-5-4", "5-4-4", "6-6-4", "5-5-4-4"],
+)
+def test_redact_pan_still_stores_some_groupings_whole(printed: str) -> None:
+    """The residual ADR-0020 accepted, pinned so it is a decision not an oversight.
+
+    ADR-0020 added five shapes; it did not close the class. These groupings are
+    still stored entirely in the clear. They are not fixed here because the two
+    measured routes to covering them cost more than they buy: a generalised
+    alternative leaks a full second card when two are adjacent, and a
+    candidate-then-validate scan loop was priced at O(n^2). If a later change
+    closes one of these, this test fails -- which is the point. Update it and
+    ADR-0020 together.
+    """
+    assert redact_pan(f"CARD {printed} OK") == f"CARD {printed} OK"
 
 
 # --------------------------------------------------------------------------- #

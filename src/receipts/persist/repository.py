@@ -255,13 +255,23 @@ def _mask_pan(match: re.Match[str]) -> str:
     """Replace a matched PAN with a mask that keeps only the last four digits.
 
     The length check below cannot currently be false for a ``_PAN_RE`` match:
-    every alternative is bounded to 13-19 digits by construction (4-4-4-N tops
-    out at 4+4+4+7=19 and bottoms out at 4+4+4+1=13, Amex is fixed at
-    4+6+5=15, the unseparated form is ``\\d{13,19}`` outright), so the
+    every separated alternative is bounded to 13-19 digits by construction and
+    carries its own digit total in that pattern's comment column, and the
+    unseparated form is ``\\d{13,19}`` outright -- so the
     ``return match.group(0)`` below is unreachable from :data:`_PAN_RE` today.
-    It stays anyway, as defence in depth for whatever alternative gets added
-    next -- removing a guard on this invariant to satisfy today's coverage
-    would be the wrong trade.
+
+    This docstring deliberately does **not** re-list those totals. It used to,
+    and the list went stale the moment alternatives were added beside the ones
+    it named: a second copy of a table that already sits directly above the
+    pattern is a defect waiting for the next widening. The arithmetic is
+    checked against the pattern instead, by
+    ``test_every_pan_re_match_holds_between_thirteen_and_nineteen_digits``,
+    which sweeps the group-shape space and fails the moment an added
+    alternative can produce a match outside the window.
+
+    The branch stays anyway, as defence in depth for whatever alternative gets
+    added next -- removing a guard on this invariant to satisfy today's
+    coverage would be the wrong trade.
     """
     digits = re.sub(r"\D", "", match.group(0))
     if not _PAN_MIN_DIGITS <= len(digits) <= _PAN_MAX_DIGITS:
