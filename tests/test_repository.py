@@ -35,6 +35,7 @@ from receipts.extract.clients.base import VLMResponse
 from receipts.extract.schema import (
     ExtractionMeta,
     Legibility,
+    Modifier,
     Payment,
     ReceiptExtraction,
     ReceiptMeta,
@@ -594,6 +595,45 @@ def test_save_extraction_never_corrupts_an_all_digit_image_phash(engine: sa.Engi
         assert receipt.image_phash == "0000000000000000"
 
 
+def test_save_extraction_redacts_a_pan_inside_a_line_item_modifier(engine: sa.Engine) -> None:
+    """``Modifier.label`` is model text and the prompts route item-level promo
+    lines into it, so a card line printed beneath an item lands here. The JSON
+    column is invisible to any ``String``-typed column walk, which is how it
+    stayed unredacted while every scalar text column was covered.
+    """
+    job = _job()
+    with Session(engine) as session:
+        receipt = save_extraction(
+            session,
+            job,
+            ReceiptExtraction(
+                line_items=[
+                    ExtractedLineItem(
+                        position=1,
+                        description_raw="widget",
+                        qty=Decimal("1"),
+                        unit_price=Decimal("1.00"),
+                        line_total=Decimal("1.00"),
+                        modifiers=[
+                            Modifier(
+                                label="PROMO CARD 4111111111111111",
+                                amount=Decimal("-1.00"),
+                            )
+                        ],
+                    )
+                ],
+            ),
+            ValidationReport(),
+            Decimal("0.5"),
+            ReceiptStatus.NEEDS_REVIEW,
+        )
+        session.commit()
+
+        modifiers = receipt.line_items[0].modifiers
+        assert modifiers[0]["label"] == "PROMO CARD ************1111"
+        assert modifiers[0]["amount"] == "-1.00"  # money untouched
+
+
 def test_empty_reasons_and_missing_reasons_are_different(engine: sa.Engine) -> None:
     job = ReceiptJob(id=uuid.uuid4(), image_key="k", source="upload",
                      original_filename="r.jpg", content_type="image/jpeg")
@@ -1065,6 +1105,28 @@ def test_redact_pan_is_silent_on_money_hashes_and_last4() -> None:
         "2 18.00 3 20.00 4 25.00 5 30.00",
     ):
         assert redact_pan(value) == value
+
+
+def test_redact_pan_masks_a_hex_hash_whenever_a_digit_run_reaches_thirteen() -> None:
+    """The docstring's round-1 claim ("untouched when it contains a letter")
+    was still wrong: a letter only protects a hash if it breaks *every* run of
+    13+ digits, not merely if it is present somewhere. Measured 2026-07-31:
+    over 200,000 random 16-char hex strings (seeded), 929 masked -- 0.46%,
+    roughly 1 in 200 -- not the ~1-in-18,000 an "all-digit-only" reading would
+    suggest. (An exact combinatorial check for 16 independent hex characters
+    agrees: 0.472%.) These two are the fixed regression cases; the rate itself
+    is not re-measured on every run.
+    """
+    # The one letter is present but late (position 14): the leading 13 digits
+    # alone are enough.
+    assert redact_pan("1234567890123abc") == "*********0123abc"
+    # The one letter is present and first: the trailing 15 digits alone are
+    # enough.
+    assert redact_pan("a123456789012345") == "a***********2345"
+    # Contrast: PHASH's one digit run (the leading 10) falls short of 13, so
+    # it stays silent -- the letter's mere presence was never what protected
+    # it.
+    assert redact_pan(PHASH) == PHASH
 
 
 def test_redact_pan_walks_containers_and_never_mutates_its_input() -> None:

@@ -225,19 +225,29 @@ def redact_pan(value: Any) -> Any:
     :data:`_PAN_MIN_DIGITS` digits, fail the separator grouping, or sit behind a
     decimal point.
 
-    **A hex hash is untouched only when it contains at least one non-digit** --
-    the letter breaks the run so ``\\d{13,19}`` cannot match through it
-    (``"0123456789abcdef"`` is silent, and is what the test battery pins). An
-    **all-digit** hash is sixteen decimal digits and is indistinguishable from
-    an unseparated PAN by inspection, so it *will* be masked: measured,
-    ``compute_phash`` of a perfectly uniform image is ``"0000000000000000"``,
-    which this function turns into ``"************0000"`` -- not valid hex.
-    That is exactly why :func:`save_extraction` keeps system-minted values such
-    as ``image_phash`` out of this function's reach entirely, rather than
-    asking this function to tell a coincidence apart from a card number. The
-    false positives it does accept are listed on :data:`_PAN_RE`; both are
-    cases nothing can tell apart from a card number by inspection, and §18 is
-    not a rule that may miss.
+    **A hash masks whenever it contains a maximal run of 13+ consecutive
+    digits -- not merely when it is all-digit.** A single non-digit character
+    only protects a hash if it falls early enough to break *every* run of 13:
+    measured, ``redact_pan("1234567890123abc")`` (the one letter at position
+    14) still returns ``"*********0123abc"``, and ``redact_pan("a123456789012345")``
+    (the one letter first) still returns ``"a***********2345"``, because the
+    trailing 15 digits alone are enough either way. ``"0123456789abcdef"`` is
+    silent only because its one digit run (the leading 10) falls short of 13 --
+    not because it contains a letter at all; that string is what the test
+    battery pins. So **no** hex hash is safe to route through this function,
+    not merely an all-digit one: measured over 200,000 random 16-character hex
+    strings (2026-07-31, seeded), 929 masked -- 0.46%, roughly **1 in 200** --
+    not the ~1-in-18,000 an "all-digit-only" reading would suggest. (An exact
+    combinatorial check agrees: 0.472% for 16 independent hex characters.) The
+    concrete case actually hit in production is still the all-digit one:
+    measured, ``compute_phash`` of a perfectly uniform image is
+    ``"0000000000000000"``, which this function turns into
+    ``"************0000"`` -- not valid hex. That is exactly why
+    :func:`save_extraction` keeps system-minted values such as ``image_phash``
+    out of this function's reach entirely, rather than asking this function to
+    tell a coincidence apart from a card number. The false positives it does
+    accept are listed on :data:`_PAN_RE`; both are cases nothing can tell apart
+    from a card number by inspection, and §18 is not a rule that may miss.
     """
     if isinstance(value, str):
         return _PAN_RE.sub(_mask_pan, value)
@@ -578,14 +588,34 @@ def _build_line_items(extraction: ReceiptExtraction) -> list[LineItem]:
         LineItem(
             position=index if use_list_order else item.position,
             # §18: a PAN the model read off the card line can land in any of
-            # these three free-text fields, not just the receipt-level ones.
+            # these four free-text fields, not just the receipt-level ones --
+            # including inside the JSON ``modifiers`` column below:
+            # ``Modifier.label`` is model text too, and ``prompts.py:73-74``
+            # routes an item-level promo/discount line into it, which is leak
+            # (d)'s threat model one field over. A ``String``-typed-column walk
+            # (:func:`test_every_text_column_save_extraction_writes_is_redacted`)
+            # cannot see inside a JSON column, which is how this stayed
+            # unredacted while every scalar text column was covered.
             description_raw=redact_pan(item.description_raw),
             sku=redact_pan(item.sku),
             qty=item.qty,
             unit=redact_pan(item.unit),
             unit_price=item.unit_price,
             line_total=item.line_total,
-            modifiers=[modifier.model_dump(mode="json") for modifier in item.modifiers],
+            # ``redact_pan`` recurses into lists and dicts, so wrapping the
+            # dumped list once is enough to reach every ``Modifier.label`` in
+            # it. **Accepted false positive, arriving via serialisation:**
+            # ``model_dump(mode="json")`` turns ``Modifier.amount`` (a
+            # ``Decimal``) into a string, so a *whole-number* amount of exactly
+            # 13-19 digits would mask -- the already-accepted "13-19 digit
+            # all-numeric identifier" false positive from :data:`_PAN_RE`,
+            # arriving through a new door. A quadrillion-scale modifier amount
+            # is not a real value, and an amount with any fractional part
+            # (``"-1.00"``, ``"4111111111111111.00"``) is protected by
+            # ``(?!\.\d)`` -- measured.
+            modifiers=redact_pan(
+                [modifier.model_dump(mode="json") for modifier in item.modifiers]
+            ),
             bbox=list(item.bbox) if item.bbox is not None else None,
         )
         for index, item in enumerate(extraction.line_items)
