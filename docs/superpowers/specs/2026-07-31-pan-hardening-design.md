@@ -114,13 +114,58 @@ available for Phase 6.
 
 | # | Decision | Rationale |
 |---|---|---|
-| **C1** | **`_mask_pan` stops failing open.** 13–19 digits → mask; **>19 digits → mask the longest valid PAN-shaped prefix and leave the remainder** | Fail-open is the single root cause of both (a) and (b). Masking the prefix preserves today's behaviour on over-long runs instead of changing two things at once. |
-| **C2** | **The `4-4-4-N` alternative becomes a greedy run**, with **no lexical fraction guard**. A trailing `.NN` is resolved as an *amount* inside `_mask_pan`, by digit count | Greedy alone closes (a) and (b) but **eats the amount** in `'4111 1111 1111 1111.99'`. A lexical guard cannot fix it: it also blocks `'4111.1111.1111.1'`, a legitimate 13-digit PAN whose tail is one digit, which is a **committed** expectation. The two are distinguishable only by the digit count — which a regex cannot see. Same root cause as C1. |
+| **C1** | **Leak (a) is closed by widening one group: `\d{1,4}` → `\d{1,7}` in the `4-4-4-N` alternative.** Nothing else in `_PAN_RE` changes, and `_mask_pan` is not touched | A 5–7 digit tail is still a 13–19 digit PAN; the narrower group simply failed to cover the run, so the whole card number was stored. **Superseded C1/C2 below — see the ruling.** |
+| **C2** | **Leak (b) is NOT closed. It is accepted, pinned by a test, and documented** | **User ruling, 2026-07-31.** (a) leaves 17–19 digits in the clear — a full PAN, an invariant violation. (b) leaves seven — a hardening gap. Both routes to closing (b) were measured and both cost more than (b) is worth: see the ruling below. |
 | **C3** | **The group-shape requirement is kept and documented as load-bearing** | §1.2. It protects the corpus TINs. |
 | **C4** | **`save_extraction` redacts by default**, over every `str` in its `fields` dict, rather than by an enumerated column list | The list has now been found short twice. Default-on makes a *new* column safe without anyone remembering. |
 | **C5** | **A test enumerates the text columns from `__table__.c`** and asserts each is redacted | Makes C4 enforceable: a new column fails RED rather than leaking silently. This is the guarantee, not the code. |
 | **C6** | **The `>19`-digit residual is kept and documented, not fixed** | `'4111 1111 1111 1111 9999 9999'` leaves 12 clear. A 24-digit run is not a PAN. Widening a third time to chase it is exactly the move that has surprised twice. |
 | **C7** | **ADR-0018 records the measured policy**; ADR-0007 gets a dated correction | The policy is now four interacting rules with non-obvious reasons. It has to be readable by whoever widens this next, in the tracked tree. |
+
+### 2.1 The ruling that replaced C1 and C2 (2026-07-31)
+
+**This section supersedes the original C1 and C2, which are preserved in git
+history. They were implemented, reviewed, and reverted.** What follows is what
+the implementation actually does, and it is the version ADR-0018 must record.
+
+The original design made the `4-4-4-N` alternative *greedy* and moved every
+ambiguity into `_mask_pan`. It shipped, and the task review found two
+regressions by execution:
+
+```
+'4111 1111 1111 1111 5555 5555 5555 4444'
+   before  '************1111 ************4444'
+   greedy  '************1111 5555 5555 5555 4444'   <- a SECOND FULL PAN, whole
+'VISA 4111 1111 1111 1111 12.34'
+   before  'VISA ************1111 12.34'
+   greedy  'VISA **************1112.34'             <- amount destroyed
+```
+
+A greedy alternative swallows an adjacent card number, or an adjacent amount's
+integer part, into **one** match — and `re.sub` resumes *after* that match, so
+nothing rescans what was consumed. No committed test covered two card numbers in
+one value, so the battery could not have caught it.
+
+Two repairs were measured rather than argued:
+
+| | closes (a) | closes (b) | regressions | 8000 groups |
+|---|---|---|---|---|
+| greedy + scan loop controlling its own resume position | yes | yes | none | **1715 ms** |
+| **widen the trailing group only, `\d{1,4}` → `\d{1,7}`** | **yes** | no | **none** | **3.9 ms** |
+
+**The user ruled for the second.** The reasoning is the distinction the original
+design blurred: **leak (a) is an invariant violation — a full 17–19 digit card
+number stored in the clear — and leak (b) is not.** Seven digits is a hardening
+gap. The minimal change restores "a full PAN is never persisted" completely, in
+one character, with zero regressions across 35 measured cases; the alternative
+puts a new scanner into the most safety-critical function in the codebase, one
+that had by then surprised on three consecutive widenings.
+
+**Consequence:** leak (b) is now pinned by
+`test_redact_pan_leaves_a_run_of_more_than_four_groups_partly_masked`, which
+asserts `'CARD 4111 1111 1111 1111 111 OK'` → `'CARD ************1111 111 OK'`.
+An undocumented gap became a bound expectation. That is the deliverable, not a
+consolation.
 
 ---
 
@@ -133,44 +178,42 @@ SEP = [ .\-_/,]
 
 (?<!\d)(?<!\d\.)
 (?:
-    \d{4}(?: SEP \d{4} )+ (?: SEP \d{1,7} )?   # greedy 4-4-4-... run
-  | \d{4} SEP \d{6} SEP \d{5}                  # Amex 4-6-5, unchanged
-  | \d{13,19}(?!\.\d)                          # unseparated, unchanged
+    \d{4}(?: SEP \d{4} ){2} SEP \d{1,7}   # 4-4-4-N   <- the ONLY change: {1,4} -> {1,7}
+  | \d{4} SEP \d{6} SEP \d{5}             # Amex 4-6-5, unchanged
+  | \d{13,19}(?!\.\d)                     # unseparated, unchanged
 )
 (?!\d)
 ```
 
-Only the first alternative changes: `(?:SEP\d{4}){2}SEP\d{1,4}` becomes
-`(?:SEP\d{4})+(?:SEP\d{1,7})?`. The lookbehinds, the Amex and unseparated
-alternatives, and the trailing `(?!\d)` are untouched — including the
-`(?!\.\d)` that ADR-0007 and the Phase 5 fix wave scoped onto the unseparated
-alternative *alone*, which must not be relocated again.
+**One character changes.** The lookbehinds, the `{2}` repetition, the Amex and
+unseparated alternatives, the `(?!\.\d)` that ADR-0007 and the Phase 5 fix wave
+scoped onto the unseparated alternative *alone*, and the trailing `(?!\d)` are
+all byte-identical to what shipped in Phase 5.
 
-**The regex deliberately over-matches.** It will swallow a trailing amount in
-`4111 1111 1111 1111.99`. That is resolved in §3.2, not here, for the reason in
-C2.
+**The `{2}` repetition is load-bearing and easy to mistake for incidental.** It
+pins the run at exactly four groups, which is why an adjacent amount survives:
+
+```
+_PAN_RE.search('4111.1111.1111.1111.99')  ->  '4111.1111.1111.1111'   (16 digits)
+```
+
+The `.99` is excluded **even though `.` is a valid separator** — the fourth
+group is the last one the pattern can express, so a fifth is outside the match.
+It is *not* because the tail cannot cross a period; `redact_pan('4111.1111.1111.1')`
+masks a dot-separated PAN whose final group is a single digit. That distinction
+was measured after two different explanations of it turned out to be wrong.
 
 ### 3.2 The decision function
 
-`_mask_pan` stops being a length check that fails open and becomes the place
-every ambiguity is resolved, because it is the only place the digit count is
-visible. In order:
+`_mask_pan` is **unchanged**. It masks all but the last four digits when the
+total is 13–19, and returns the match untouched otherwise.
 
-1. **Amount tail.** If the match ends in `.` followed by one or two digits, and
-   the text *before* that tail holds 13–19 digits, the tail is an amount: mask
-   the head and re-append the tail verbatim.
-2. `13–19` digits → mask all but the last four.
-3. `< 13` digits → return the text unchanged (not a PAN).
-4. `> 19` digits → find the longest `13 ≤ n ≤ 19` digit prefix that ends on a
-   group boundary (the next character is not a digit); mask that prefix, leave
-   the remainder. If no such prefix exists, return unchanged.
-
-Rule 1 must be tested *before* rule 2 or `4111 1111 1111 1111.99` masks 18
-digits and destroys the amount. Rule 1 must also check the head's length, or
-`4111.1111.1111.1` — a 13-digit PAN whose last group is one digit, and a
-**committed** expectation — stops being masked. The prefix search in rule 4 is a
-bounded loop over at most seven candidate lengths. The function stays pure and
-string-in/string-out.
+That length check is currently **unreachable from `_PAN_RE`**: every alternative
+is bounded to at most nineteen digits — `4+4+4+7 = 19`, Amex `4+6+5 = 15`,
+unseparated `13–19`. It is kept anyway, deliberately. It is defence in depth on
+the project's hardest invariant, it costs nothing, and removing a guard to
+satisfy a coverage argument is the wrong trade on this function. Any future
+alternative that can match a longer run will need it.
 
 ### 3.3 The redaction boundary
 
@@ -215,7 +258,10 @@ pattern; `PROPOSED` is the §3 design.
 | `4111 1111 1111 11111` | **whole** | `*************1111` |
 | `4111 1111 1111 111111` | **whole** | `**************1111` |
 | `4111 1111 1111 1111111` | **whole** | `***************1111` |
-| `4111 1111 1111 1111 111` | `************1111 111` | `***************1111` |
+| `4111 1111 1111 1111 111` | `************1111 111` | unchanged — **leak (b), accepted (§2.1)** |
+| `4111 1111 1111 1111 5555 5555 5555 4444` | `…1111 ************4444` | unchanged — **both cards masked** |
+| `VISA 4111 1111 1111 1111 12.34` | `VISA ************1111 12.34` | unchanged — **amount intact** |
+| `4111 1111 1111 1111,99` | `************1111,99` | unchanged |
 | `4111 1111 1111 1111.99` | `************1111.99` | `************1111.99` |
 | `4111.1111.1111.1111.99` | `************1111.99` | `************1111.99` |
 | `CARD 3782 822463 10005 OK` | `CARD ***********0005 OK` | unchanged |
@@ -243,7 +289,7 @@ pattern; `PROPOSED` is the §3 design.
   values, the label-period cases and the accepted false positive were replayed
   against the proposed design before this plan was written.
 
-### 4.4 Two measurements that lied, recorded deliberately
+### 4.4 Three measurements that lied, recorded deliberately
 
 **The metric that scored data destruction as progress.** The first prototype
 used "digits left in the clear" as its score. It ranked
@@ -260,10 +306,26 @@ hand-picked cases in both directions. Replaying the **committed** battery from
 `tests/test_repository.py` then broke exactly one expectation:
 `'CARD 4111.1111.1111.1 OK'`, a 13-digit dotted PAN whose final group is a
 single digit, which `FRAC` refuses. A guard that blocks `.99` in a 16-digit run
-must not block `.1` in a 13-digit one, and nothing lexical can tell them apart —
-hence C2. **A battery I wrote agreed with me; the battery the project already
-had did not.** Replaying the committed expectations is a required step in §6,
-not an optional check.
+must not block `.1` in a 13-digit one, and nothing lexical can tell them apart.
+**A battery I wrote agreed with me; the battery the project already had did
+not.** Replaying the committed expectations is a required step in §6, not an
+optional check.
+
+**The battery that had no case for the thing it was guarding.** The greedy
+design then shipped, and both the implementer's suite and my own independent
+probe passed it green. The task review found a **full second card number stored
+in the clear** within minutes, because it tried something neither of us had:
+*two* card numbers in one value. Every case in every battery to that point —
+mine, the plan's, and the project's committed one — held exactly one PAN. A
+`grep` of `tests/test_repository.py` for a second PAN in any test returned
+nothing.
+
+The lesson is not "write more cases." It is that **a guard against a class of
+value must be tested with more than one instance of that class in the same
+input**, because the failure mode of a scanner is what happens at the boundary
+*between* two hits. The same blind spot hid the amount regression: every amount
+case had the amount attached to the PAN by a period, never separated from it by
+a space with its own integer part.
 
 ---
 
@@ -271,7 +333,7 @@ not an optional check.
 
 | # | Deliverable | Files |
 |---|---|---|
-| **D1** | The detector fix — C1, C2, C3 | `src/receipts/persist/repository.py` |
+| **D1** | The detector fix — C1, C3, and the pinned residual from §2.1 | `src/receipts/persist/repository.py`, `tests/test_repository.py` |
 | **D2** | Redact-by-default at the writer — C4, C5 | `src/receipts/persist/repository.py`, `tests/test_repository.py` |
 | **D3** | The three false sentences + ADR-0018 | `frontend/src/review/ReceiptForm.tsx`, `docs/adr/0007-pan-redaction-and-money-integrity.md`, `docs/adr/0018-pan-masking-policy.md`, `docs/adr/README.md`, `repository.py` docstring |
 | **D4** | The corpus-TIN silence battery | `tests/test_repository.py` |
@@ -305,9 +367,13 @@ label file each came from.
   column is the expected RED output, so the revert's result is predicted in
   advance rather than accepted after the fact.
 - **The silent cases assert the absence of breakage**, which a RED run cannot
-  prove. Each guarantee is therefore reverted **separately**: the `FRAC` guard
-  alone, the group-shape requirement alone, and the 13–19 length window alone.
-  One variable per mutation, or the result names the wrong cause.
+  prove. Each guarantee is therefore reverted **separately**: the group-shape
+  requirement alone, and the 13–19 length window alone. One variable per
+  mutation, or the result names the wrong cause.
+- **Every guard must be tested with two instances of what it guards in one
+  input.** §4.4's third lesson: a single-PAN battery cannot see what a scanner
+  does at the boundary between two hits, and that blind spot let a full card
+  number through a green suite twice.
 - **D5's three properties are likewise reverted one at a time** — the test must
   go red for the right reason three times, not once.
 - **D2's column-enumeration test (C5)** is proven by adding a throwaway
@@ -329,14 +395,24 @@ the repository, per the environment lesson.
 | **A third widening surprise** | §4 is the battery, in both directions, and it ships as the test. C6 refuses to widen further for the over-long residual. |
 | **Masking a merchant TIN** | §1.2's four spellings are committed silent cases (D4). C3 documents *why* the group-shape requirement cannot be relaxed casually. |
 | **D2 changes stored values** | Expected and intended, but it is a behaviour change: existing fixtures carrying long digit runs may move, and that is a test-fixture update, not a defect to suppress. |
-| **`_mask_pan`'s prefix search is new logic on the hardest invariant** | It is pure, bounded to seven iterations, and every branch is covered by §4.1's over-long rows. |
-| **Prose drifting again** | Per the project's rule, no number goes in a comment if it can change without its sentence changing. The `ReceiptForm.tsx` claim is bound by the table it introduces rather than generalised from it. |
+| **New logic in the hardest invariant** | **Realised, then eliminated.** The original design added a decision function and it leaked a second card number. `_mask_pan` is now untouched and `_PAN_RE` differs from Phase 5 by one character. The residual risk of this task is now as small as a change to this function can be. |
+| **Prose drifting again** | **Realised twice inside this task.** The revert left three comments describing a design that no longer existed, and both my explanation and a reviewer's of *why* an adjacent amount survives were wrong until measured. Rule enforced: a sentence about mechanism is a claim requiring a command, and no number goes in a comment if it can change without its sentence changing. |
 
 ---
 
 ## 8. Out of scope
 
+- **Leak (b)** — a separated run of more than four groups leaving the remainder
+  in the clear. Accepted by user ruling (§2.1), pinned by a test, and recorded
+  in ADR-0018. Seven digits is not a card number.
 - The `>19`-digit residual (C6) — documented, not fixed.
+- **`save_extraction` writing `currency` into a `String(3)` column with no length
+  guard.** `_bounded_optional_text` is wired only into `_RECEIPT_FIELDS`, the
+  correction path, and `ReceiptMeta.currency` is an unconstrained `str | None`,
+  so SQLite stores an overlong value and Postgres raises `DataError`. Found
+  while pre-flighting D2; it is **leak (d)'s exact shape** — a guard the human
+  path has and the machine path lacks — and ADR-0007 documents the failure mode
+  while fixing only the reviewer's side. Recorded, not fixed here.
 - Login rate limiting, the `corrections` read route, the ASGI entry point, the
   admin release for a claimed task, and the five design §5 error-recovery rows.
   Each is its own named piece of work in the Phase 5 ledger.
