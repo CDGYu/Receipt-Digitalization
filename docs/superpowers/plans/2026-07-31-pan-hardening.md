@@ -592,21 +592,32 @@ def test_every_text_column_save_extraction_writes_is_redacted(engine: sa.Engine)
     (:func:`_last4`, four digits at most). ``Enum`` columns are excluded by
     *type*: ``sa.Enum`` subclasses ``sa.String``, and ``Legibility`` is a
     ``str`` enum, so both would otherwise be swept in and neither can hold free
-    text.
+    text. ``JSON`` columns are walked separately -- a ``String`` walk is
+    structurally blind to them, which is exactly how ``modifiers`` stored a
+    whole PAN while every scalar text column was covered.
     """
     pan = "4111111111111111"
-    text_columns = [
-        column.name
-        for column in Receipt.__table__.columns
-        if isinstance(column.type, sa.String)
-        and not isinstance(column.type, sa.Enum)
-        and column.name != "card_last4"
-    ]
+
+    def text_columns(table: sa.Table, *, exclude: frozenset[str] = frozenset()) -> list[str]:
+        return [
+            column.name
+            for column in table.columns
+            if isinstance(column.type, sa.String)
+            and not isinstance(column.type, sa.Enum)
+            and column.name not in exclude
+        ]
+
+    receipt_text = text_columns(Receipt.__table__, exclude=frozenset({"card_last4"}))
+    item_text = text_columns(LineItem.__table__)
+    item_json = [c.name for c in LineItem.__table__.columns if isinstance(c.type, sa.JSON)]
     # The walk is the guarantee, so a filter that quietly matched nothing would
-    # make this test pass forever. These are the measured contents on
-    # 2026-07-31: merchant_name_raw, receipt_number, date_raw, currency,
-    # payment_method, image_key, processed_image_key, image_phash.
-    assert {"receipt_number", "date_raw", "merchant_name_raw"} <= set(text_columns)
+    # make this test pass forever. Measured contents on 2026-07-31:
+    # receipts -> merchant_name_raw, receipt_number, date_raw, currency,
+    # payment_method, image_key, processed_image_key, image_phash;
+    # line_items -> description_raw, sku, unit; JSON -> modifiers, bbox.
+    assert {"receipt_number", "date_raw", "merchant_name_raw"} <= set(receipt_text)
+    assert {"description_raw", "sku", "unit"} <= set(item_text)
+    assert "modifiers" in item_json
 
     job = _job()
     with Session(engine) as session:
@@ -617,6 +628,15 @@ def test_every_text_column_save_extraction_writes_is_redacted(engine: sa.Engine)
                 merchant=ExtractedMerchant(name=pan),
                 receipt=ReceiptMeta(number=pan, date_raw=pan),
                 payment=Payment(method=pan),
+                line_items=[
+                    ExtractedLineItem(
+                        position=1,
+                        description_raw=pan,
+                        sku=pan,
+                        unit=pan,
+                        modifiers=[Modifier(label=f"PROMO CARD {pan}")],
+                    )
+                ],
             ),
             ValidationReport(),
             Decimal("0.5"),
@@ -626,12 +646,27 @@ def test_every_text_column_save_extraction_writes_is_redacted(engine: sa.Engine)
 
         leaked = [
             name
-            for name in text_columns
+            for name in receipt_text
             if isinstance(getattr(receipt, name, None), str)
             and pan in getattr(receipt, name)
         ]
+        item = receipt.line_items[0]
+        leaked += [
+            f"line_items.{name}"
+            for name in item_text
+            if isinstance(getattr(item, name, None), str)
+            and pan in getattr(item, name)
+        ]
+        leaked += [
+            f"line_items.{name}"
+            for name in item_json
+            if pan in json.dumps(getattr(item, name, None) or [])
+        ]
         assert leaked == [], f"columns storing a full PAN: {leaked}"
 ```
+
+Check `Modifier`'s real constructor at `src/receipts/extract/schema.py:53` and
+whether `json` is already imported in the test module before writing this.
 
 > `image_key` and any column `save_extraction` fills from `job` will not contain
 > the PAN, so they pass trivially — the test asserts *absence of the PAN*, not
@@ -655,15 +690,19 @@ def test_every_text_column_save_extraction_writes_is_redacted(engine: sa.Engine)
 Run: `python -m pytest tests/test_repository.py::test_every_text_column_save_extraction_writes_is_redacted -v`
 Expected: **PASS** — Task 3 already made it true.
 
-- [ ] **Step 3: Prove the test can fail, then undo the proof**
+- [ ] **Step 3: Prove the test can fail, then undo the proof — once per guarantee**
 
 This asserts the absence of breakage, so a passing run proves nothing on its
-own. Temporarily remove the `fields = {…redact_pan…}` block added in Task 3.
+own, and it binds TWO distinct guarantees, so two separate single-variable
+reverts:
 
-Run: `python -m pytest tests/test_repository.py::test_every_text_column_save_extraction_writes_is_redacted -v`
-Expected: **FAIL**, listing `receipt_number` and `date_raw` by name.
-
-Restore the block. Run: `git diff src/ --exit-code` — must print nothing.
+1. Temporarily remove the `fields = {…redact_pan…}` comprehension added in
+   Task 3. Expected: **FAIL** listing at minimum `receipt_number` and
+   `date_raw`. Restore; `git diff src/ --exit-code` must print nothing.
+2. Temporarily remove the `redact_pan(...)` wrap around the dumped modifiers in
+   `_build_line_items` (Task 3 fix round 2). Expected: **FAIL** listing
+   `line_items.modifiers` — proving the JSON walk is live, not decorative.
+   Restore; `git diff src/ --exit-code` must print nothing.
 
 - [ ] **Step 4: Prove it catches a *new* column**
 
@@ -838,10 +877,11 @@ the Phase 5 fix wave. Three further defects were found after this ADR was
 written and are addressed in ADR-0018: a four-group run with a 5–7 digit tail
 was stored **whole** (fixed); `save_extraction` redacted two of its text columns
 while copying the rest verbatim (fixed); and the "silent on … a 16-character
-hash" consequence above is true only of a hash containing at least one
-non-digit — an **all-digit** hash is indistinguishable from an unseparated PAN
-and will mask, which is why `save_extraction` keeps system-minted values such
-as `image_phash` out of the redaction pass entirely. One documented residual is
+hash" consequence above is false as stated — a value masks whenever it contains
+a run of **13+ consecutive digits**, which roughly 1 in 200 random 16-character
+hex hashes do (measured 2026-07-31), so **no hash may be routed through
+`redact_pan` at all**; `save_extraction` keeps system-minted values such as
+`image_phash` out of the redaction pass entirely. One documented residual is
 **accepted by user ruling** rather than fixed: a separated run of more than
 four groups keeps its remainder in the clear. **ADR-0018 supersedes this ADR's
 description of the masking rule.** Everything here about money integrity and
@@ -882,19 +922,31 @@ will otherwise re-litigate:
    every alternative is bounded to 13–19 digits by construction — and is kept
    anyway as defence in depth on the hardest invariant.
 6. **Redaction at the write boundary is default-on for extraction-sourced
-   values only.** System-minted values (`image_key`, `image_phash`, `status`,
-   `confidence`, `merchant_id`) never pass through the PAN heuristic: an
-   all-digit `image_phash` — the legal dHash of a uniform image — is
-   indistinguishable from an unseparated 16-digit PAN, and masking it produces
-   invalid hex that breaks `phash_distance` and destroys the receipt's dedupe
-   identity. The column-walking test is the guarantee on the covered side;
+   values only — scalar text columns AND the `modifiers` JSON** (`Modifier.label`
+   is model text and the prompts route item-level promo lines into it; a JSON
+   column is invisible to a String-typed column walk, which is how it stayed
+   unredacted while every scalar was covered). System-minted values
+   (`image_key`, `image_phash`, `status`, `confidence`, `merchant_id`) never
+   pass through the PAN heuristic: an all-digit `image_phash` — the legal dHash
+   of a uniform image — was masked into invalid hex, breaking `phash_distance`
+   and the receipt's dedupe identity. The two-table column walk is the
+   guarantee on the covered side;
    `test_save_extraction_never_corrupts_an_all_digit_image_phash` on the
    excluded side.
-7. **The accepted false positives:** a 13–19 digit all-numeric identifier
-   masks; two column-scale amounts in one free-text value mask; an all-digit
-   16-character hash masks *if it reaches `redact_pan`* — which is why system
-   values must not.
-8. **The rule for the next person:** widen nothing without replaying the
+7. **Review reasons are redacted at the sink.** Exception text interpolates raw
+   model values (`save_extraction`'s human-owned guard quotes `merchant.name`;
+   `_bounded_optional_text` quotes the overlong value), and the pipeline
+   persists `str(failure)` into `review_tasks.reason`. `enqueue_review` redacts
+   `reason` on entry, covering every producer, present and future.
+8. **The accepted false positives:** a value masks whenever it contains a run
+   of 13+ consecutive digits. Concretely: a 13–19 digit all-numeric identifier;
+   two column-scale amounts in one free-text value; roughly 1 in 200 random
+   16-character hex hashes (measured 2026-07-31) — which is why NO hash is
+   routed through `redact_pan`, not merely no all-digit one; and a whole-number
+   13–19 digit modifier `amount` serialized to string by `model_dump` (a
+   quadrillion-scale modifier amount is not a real value; anything with a
+   fractional part is protected by `(?!\.\d)`).
+9. **The rule for the next person:** widen nothing without replaying the
    committed battery in both directions, and always test the guard with **two
    instances of what it guards in one input** — every battery in this task's
    history held one card number per case, and that blind spot let a full PAN
