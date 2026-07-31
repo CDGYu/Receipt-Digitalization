@@ -84,8 +84,12 @@ finished and merged.** See task 0.
 - **`main` @ `1d9f3e3`.** `origin/main` is `7deb3fb`, so **`main` is one commit
   ahead and UNPUSHED**. That commit is docs only, so the *code* on `main` is
   identical to `7deb3fb`. **Ask me before pushing `main`.**
-- **`feat/pan-grouping` @ `a883df6`, four commits ahead of `main`, PUSHED.**
-  This is where the work is.
+- **`feat/pan-grouping`, PUSHED.** Its last *code* commit is `a883df6` (four
+  commits ahead of `main`), with one docs-only commit on top carrying the
+  handoff refresh — a stamp cannot name the commit that writes it. Expect the
+  tip to be exactly one docs commit past `a883df6`. **If it is further ahead, or
+  ahead by anything touching `src/`, `tests/` or `frontend/`, this prompt is
+  stale and the branch moved after it was written.** This is where the work is.
 
 **Phases 0–5 are complete, plus PAN hardening (merged).** The PAN grouping
 milestone is **half-built on the branch**:

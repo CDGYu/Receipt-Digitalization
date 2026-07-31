@@ -47,6 +47,13 @@ detector change.
    "where we are" line is ambiguous the moment a branch exists, and this project
    has already lost a whole milestone to an ambiguous stamp.
 
+   **A stamp cannot name the commit that writes it**, so the branch sha it names
+   is the last *code* commit, and the stamp says how many docs commits are
+   expected on top. That turns the self-reference from a silent off-by-one into a
+   checkable statement: a tip further ahead than the stamp allows, or ahead by
+   anything touching source or tests, means the document is stale rather than
+   merely self-referential.
+
 3. **Per-task state is recorded as done/verified, not as done.** For each
    completed task: its commit, that the controller re-ran the gates
    independently, and the measured result. "Task 2 complete" invites a fresh

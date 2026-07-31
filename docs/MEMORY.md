@@ -5,8 +5,13 @@ Durable working memory for cross-session continuity. Read this first, then
 continuity protocol itself — what lives where, and why this snapshot must be
 verified rather than trusted — is **ADR-0019**, extended by **ADR-0021** for the
 case that applies right now: a session that ended with a branch part-built.
-Last updated: **2026-07-31**, at `main @ 1d9f3e3` with
-`feat/pan-grouping @ a883df6` **in flight**.
+Last updated: **2026-07-31**, at `main @ 1d9f3e3` with **`feat/pan-grouping` in
+flight**, its last *code* commit `a883df6` and one docs commit on top of that
+carrying this refresh. A stamp cannot name the commit that writes it, so compare
+against `git log` and expect the tip to be one docs-only commit ahead of
+`a883df6`; if it is further ahead, or ahead by anything touching `src/`,
+`tests/` or `frontend/`, this file is stale and the branch moved after it was
+written.
 
 ## Snapshot
 
