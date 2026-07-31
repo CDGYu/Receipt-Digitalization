@@ -415,10 +415,10 @@ def save_extraction(
 
     fields: dict[str, Any] = dict(
         merchant_id=merchant_id,
-        # §18: a PAN the model read off the card line and put in a free-text
-        # field must not reach a column either. ``redact_pan`` keeps the last
-        # four and is silent on everything that merely looks numeric.
-        merchant_name_raw=redact_pan(extraction.merchant.name),
+        # §18: redacted below, in the blanket pass over every ``str`` value in
+        # this dict -- see the comment on that block for why an enumerated
+        # per-field wrapper here is no longer the guard.
+        merchant_name_raw=extraction.merchant.name,
         receipt_number=receipt_meta.number,
         txn_date=txn_date,
         txn_time=_parse_iso_time(receipt_meta.time),
@@ -430,7 +430,7 @@ def save_extraction(
         total=extraction.totals.total,
         tender_amount=extraction.totals.tender,
         change_amount=extraction.totals.change,
-        payment_method=redact_pan(extraction.payment.method),
+        payment_method=extraction.payment.method,
         card_last4=_last4(extraction.payment.card_last4),
         is_handwritten=extraction.meta.is_handwritten,
         legibility=extraction.meta.legibility,
@@ -440,6 +440,27 @@ def save_extraction(
         image_phash=image_phash,
         receipt_is_inconsistent=extraction.meta.receipt_is_inconsistent,
     )
+
+    # §18: redaction is default-on rather than an enumerated column list. That
+    # list has been found short twice -- ``receipt_number`` and ``date_raw``
+    # stored whole card numbers while ``merchant_name_raw`` and
+    # ``payment_method`` were masked, so the machine leaked what a reviewer
+    # could not. Money is ``Decimal`` and dates are ``date``/``time``, so the
+    # gate leaves them structurally out of reach. The gate is ``type(...) is
+    # str``, not ``isinstance``: ``Legibility`` and ``ReceiptStatus`` are
+    # *str-enums*, and ``redact_pan`` hands a str subclass back as plain
+    # ``str`` -- measured: ``redact_pan(ReceiptStatus.NEEDS_REVIEW)`` returns
+    # ``'needs_review'``, and although the value-based Enum columns bind it,
+    # the instance attribute then holds a plain string until the next refresh.
+    # Every value the correction path coerces is an exact ``str``, so the two
+    # sides still agree.
+    fields = {
+        key: redact_pan(value) if type(value) is str else value
+        for key, value in fields.items()
+    }
+    # ``card_last4`` keeps the *stronger* guarantee, applied after: four digits
+    # at most, not "all but the last four".
+    fields["card_last4"] = _last4(extraction.payment.card_last4)
 
     existing = session.get(Receipt, job.id)
     if existing is None:
@@ -519,10 +540,12 @@ def _build_line_items(extraction: ReceiptExtraction) -> list[LineItem]:
     return [
         LineItem(
             position=index if use_list_order else item.position,
-            description_raw=item.description_raw,
-            sku=item.sku,
+            # §18: a PAN the model read off the card line can land in any of
+            # these three free-text fields, not just the receipt-level ones.
+            description_raw=redact_pan(item.description_raw),
+            sku=redact_pan(item.sku),
             qty=item.qty,
-            unit=item.unit,
+            unit=redact_pan(item.unit),
             unit_price=item.unit_price,
             line_total=item.line_total,
             modifiers=[modifier.model_dump(mode="json") for modifier in item.modifiers],

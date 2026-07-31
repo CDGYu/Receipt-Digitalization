@@ -523,6 +523,53 @@ def test_save_extraction_redacts_a_pan_the_model_put_in_free_text(engine: sa.Eng
         assert receipt.card_last4 == "1111"
 
 
+def test_save_extraction_redacts_every_text_column_not_just_two(engine: sa.Engine) -> None:
+    """§18 on the machine side, for the columns nobody enumerated.
+
+    ``merchant_name_raw`` and ``payment_method`` were redacted; ``receipt_number``,
+    ``date_raw``, ``currency`` and every line-item text field were copied
+    verbatim. So a model that read the card line into the receipt number stored
+    a full card number in the plainest spelling there is -- while a reviewer
+    typing the same string got it masked, because ``_plan_change`` redacts every
+    coerced text value. The two sides now agree.
+    """
+    job = _job()
+    with Session(engine) as session:
+        receipt = save_extraction(
+            session,
+            job,
+            ReceiptExtraction(
+                merchant=ExtractedMerchant(name="M"),
+                receipt=ReceiptMeta(
+                    number="4111111111111111",
+                    date_raw="CARD 4111-1111-1111-1111",
+                ),
+                line_items=[
+                    ExtractedLineItem(
+                        position=1,
+                        description_raw="CARD 4111 1111 1111 1111",
+                        sku="378282246310005",
+                        unit="4111.1111.1111.1111",
+                        qty=Decimal("1"),
+                        unit_price=Decimal("1.00"),
+                        line_total=Decimal("1.00"),
+                    )
+                ],
+            ),
+            ValidationReport(),
+            Decimal("0.5"),
+            ReceiptStatus.NEEDS_REVIEW,
+        )
+        session.commit()
+
+        assert receipt.receipt_number == "************1111"
+        assert receipt.date_raw == "CARD ************1111"
+        item = receipt.line_items[0]
+        assert item.description_raw == "CARD ************1111"
+        assert item.sku == "***********0005"
+        assert item.unit == "************1111"
+
+
 def test_empty_reasons_and_missing_reasons_are_different(engine: sa.Engine) -> None:
     job = ReceiptJob(id=uuid.uuid4(), image_key="k", source="upload",
                      original_filename="r.jpg", content_type="image/jpeg")
