@@ -754,7 +754,7 @@ these are real documents, and the plan is quoting a measurement taken on
         "221 193 789 09013",   # eval/golden/labels/r001.json, Metro Oil Subic
         "774-423-646-00011",   # eval/golden/labels/r002.json, Summit Fuel OPC
         "205-741-640-162",     # eval/golden/labels/r003.json, Serv Central
-        "103-969-951-00000",   # r001's notes: RJ Printing Press, the printer TIN
+        "103-969-951-00000",   # r002's notes: RJ Printing Press, the printer TIN
     ],
 )
 def test_redact_pan_is_silent_on_the_merchant_tax_ids_this_corpus_prints(tax_id: str) -> None:

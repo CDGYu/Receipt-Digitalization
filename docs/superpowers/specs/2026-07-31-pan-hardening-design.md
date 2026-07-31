@@ -91,7 +91,7 @@ promoted it from an inconsistency to the most severe defect on the list.
 '221 193 789 09013'   14 digits   (eval/golden/labels, r001)
 '774-423-646-00011'   14 digits   (r002)
 '205-741-640-162'     12 digits   (r003)
-'103-969-951-00000'   14 digits   (the printer TIN in r001's notes)
+'103-969-951-00000'   14 digits   (the printer TIN in r002's notes)
 ```
 
 Fourteen digits sits squarely inside the 13–19 PAN range. These are silent today
