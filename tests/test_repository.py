@@ -830,13 +830,22 @@ def test_redact_pan_masks_a_four_group_pan_with_a_tail_of_up_to_seven_digits(
 
 
 def test_redact_pan_keeps_an_amount_that_follows_a_card_number() -> None:
-    """A trailing ``.NN`` is an amount when a whole PAN precedes it.
+    """A trailing amount is never absorbed into the PAN's mask.
 
-    The greedy pattern deliberately over-matches and swallows the amount; the
-    decision is made in ``_mask_pan``, where the digit count is visible. A
-    *lexical* guard cannot do this job: it also blocks ``4111.1111.1111.1``, a
-    13-digit PAN whose last group is one digit -- measured, and a committed
-    expectation of this module.
+    Measured with ``_PAN_RE.search`` directly, not assumed: the 4-4-4-N
+    alternative has room for exactly four groups -- three of exactly four
+    digits, then one final ``\\d{1,7}`` run -- and nothing in the pattern
+    repeats that tail, so there is no way for it to consume a fifth chunk.
+    It is not that a *dot* is special-cased: ``_PAN_RE.search`` on
+    ``'4111 1111 1111 1111.99'``, ``'...1111-99'``, ``'...1111 99'`` and
+    ``'...1111,99'`` all stop at the same 16 digits regardless of which
+    separator introduces the trailing number, because ``\\d{1,7}`` only
+    matches digit characters and stops at the first non-digit it meets,
+    whatever that character is. Dots are crossed three times over, not
+    blocked, by the very same alternative in ``4111.1111.1111.1`` below -- a
+    13-digit PAN whose last group is one digit. The unseparated alternative
+    is guarded differently, by an explicit ``(?!\\.\\d)``, which is why
+    ``1234567890123.45`` is untouched.
     """
     assert redact_pan("CARD 4111 1111 1111 1111.99") == "CARD ************1111.99"
     assert redact_pan("CARD 4111.1111.1111.1111.99") == "CARD ************1111.99"
@@ -844,29 +853,27 @@ def test_redact_pan_keeps_an_amount_that_follows_a_card_number() -> None:
     assert redact_pan("SUBTOTAL 1234567890123.45") == "SUBTOTAL 1234567890123.45"
 
 
-def test_redact_pan_masks_the_leading_card_number_of_an_over_long_run() -> None:
-    """Over 19 digits is not a PAN, so the leading valid window is masked.
-
-    Kept and documented rather than widened a third time: a 24-digit run is not
-    a card number, and every previous widening of this pattern produced a
-    surprise. ADR-0018.
-    """
-    assert redact_pan("4111 1111 1111 1111 9999 9999") == "************1111 9999 9999"
-    assert redact_pan("4111.1111.1111.1111.1111") == "************1111.1111"
-
-
 def test_redact_pan_leaves_a_run_of_more_than_four_groups_partly_masked() -> None:
     """Five or more separated groups: a known, accepted residual, not a bug.
 
-    The leading four groups are masked and the remainder -- a handful of
-    digits, never a full card number -- is left in the clear. Recorded rather
-    than fixed: an alternative wide enough to close it is indistinguishable
-    from one wide enough to swallow a *second*, independent card number into
-    the same match, which is a worse leak than the one it would close (see
+    The leading four groups are masked and the remainder -- never a full card
+    number -- is left in the clear, however long that remainder is. It is the
+    same mechanism whether the remainder is a short, ungrouped tail (``111``)
+    or, as in the last two cases here, long enough on its own to total more
+    than 19 digits or to look like more 4-digit groups: the 4-4-4-N
+    alternative has no repetition after its final group, so it never has
+    syntactic room for a fifth chunk, and ``_mask_pan``'s own 13-19 digit
+    bound is not what stops it (see its docstring -- that check cannot fire
+    from a ``_PAN_RE`` match at all). Recorded rather than fixed: an
+    alternative wide enough to close it is indistinguishable from one wide
+    enough to swallow a *second*, independent card number into the same
+    match, which is a worse leak than the one it would close (see
     ``test_redact_pan_masks_every_card_number_in_one_value``).
     """
     assert redact_pan("CARD 4111 1111 1111 1111 111 OK") == "CARD ************1111 111 OK"
     assert redact_pan("CARD 4111-1111-1111-1111-111 OK") == "CARD ************1111-111 OK"
+    assert redact_pan("4111 1111 1111 1111 9999 9999") == "************1111 9999 9999"
+    assert redact_pan("4111.1111.1111.1111.1111") == "************1111.1111"
 
 
 def test_redact_pan_masks_every_card_number_in_one_value() -> None:

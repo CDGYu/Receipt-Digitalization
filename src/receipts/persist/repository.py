@@ -147,10 +147,23 @@ _PAN_MAX_DIGITS = 19
 #: separator in front of a following group or an amount, because that
 #: separator is not a digit. Measured against the commit before this change:
 #: the widening changes the outcome on exactly 3 of 35 hand-checked cases, all
-#: three leak (a), and costs about 3.9ms over 8000 groups. Leak (b) -- more
-#: than four groups leaving the remainder in the clear, described above -- is
-#: left in place: closing it costs exactly the regressions this paragraph
-#: describes.
+#: three leak (a), and costs about 3.9ms over 8000 groups.
+#:
+#: Leak (b) -- more than four groups leaving the remainder in the clear,
+#: described above -- is left in place, and not for lack of a way to close it.
+#: Widening the same alternative to admit a fifth group is what caused this
+#: round's two regressions, by the mechanism above. A second route exists:
+#: have the scanner control its own resume position after each match instead
+#: of trusting the greedy alternative's own end, so a match that turns out to
+#: swallow too much can be re-examined rather than trusted outright. That
+#: closes leak (b) without either regression -- but it is O(n^2) on
+#: adversarial input, measured at about 1715ms for a 40KB run of digits,
+#: against about 4ms for the pattern above on the same input. Neither route
+#: was taken: the remainder leak (b) leaves in the clear is not a full card
+#: number -- it is what is left over *after* the leading four groups are
+#: already masked -- and leak (a), the actual invariant violation, is already
+#: closed by ``\d{1,7}`` alone. The choice not to close (b) was made on that
+#: basis, not for lack of a fix.
 _PAN_RE = re.compile(
     r"""
     (?<!\d)(?<!\d\.)                                # not mid-number, not a decimal fraction
@@ -166,7 +179,17 @@ _PAN_RE = re.compile(
 
 
 def _mask_pan(match: re.Match[str]) -> str:
-    """Replace a matched PAN with a mask that keeps only the last four digits."""
+    """Replace a matched PAN with a mask that keeps only the last four digits.
+
+    The length check below cannot currently be false for a ``_PAN_RE`` match:
+    every alternative is bounded to 13-19 digits by construction (4-4-4-N tops
+    out at 4+4+4+7=19 and bottoms out at 4+4+4+1=13, Amex is fixed at
+    4+6+5=15, the unseparated form is ``\\d{13,19}`` outright), so the
+    ``return match.group(0)`` below is unreachable from :data:`_PAN_RE` today.
+    It stays anyway, as defence in depth for whatever alternative gets added
+    next -- removing a guard on this invariant to satisfy today's coverage
+    would be the wrong trade.
+    """
     digits = re.sub(r"\D", "", match.group(0))
     if not _PAN_MIN_DIGITS <= len(digits) <= _PAN_MAX_DIGITS:
         return match.group(0)
