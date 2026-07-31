@@ -570,6 +570,30 @@ def test_save_extraction_redacts_every_text_column_not_just_two(engine: sa.Engin
         assert item.unit == "************1111"
 
 
+def test_save_extraction_never_corrupts_an_all_digit_image_phash(engine: sa.Engine) -> None:
+    """A uniform image's dHash is sixteen zeros -- sixteen all-digit
+    characters, which is exactly the shape of an unseparated 16-digit
+    PAN. The redaction pass must never see it: a masked phash is invalid
+    hex, ``phash_distance`` raises on it, and the receipt's dedupe
+    identity is destroyed permanently. Found by the full suite, not by
+    the PAN battery -- no battery case was an all-digit hash.
+    """
+    job = _job()
+    with Session(engine) as session:
+        receipt = save_extraction(
+            session,
+            job,
+            ReceiptExtraction(),
+            ValidationReport(),
+            Decimal("0.5"),
+            ReceiptStatus.NEEDS_REVIEW,
+            image_phash="0000000000000000",
+        )
+        session.commit()
+
+        assert receipt.image_phash == "0000000000000000"
+
+
 def test_empty_reasons_and_missing_reasons_are_different(engine: sa.Engine) -> None:
     job = ReceiptJob(id=uuid.uuid4(), image_key="k", source="upload",
                      original_filename="r.jpg", content_type="image/jpeg")

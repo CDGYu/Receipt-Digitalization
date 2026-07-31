@@ -220,12 +220,24 @@ def redact_pan(value: Any) -> Any:
     through unchanged.
 
     What it deliberately does *not* touch: money (``1234.56``, and any ``float``
-    with a fractional part), a 4-digit ``card_last4``, a 16-character hash,
-    dates written with either a hyphen or a slash, and phone-style numbers --
-    all are shorter than :data:`_PAN_MIN_DIGITS` digits, fail the separator
-    grouping, or sit behind a decimal point. The false positives it does accept
-    are listed on :data:`_PAN_RE`; both are cases nothing can tell apart from a
-    card number by inspection, and §18 is not a rule that may miss.
+    with a fractional part), a 4-digit ``card_last4``, dates written with either
+    a hyphen or a slash, and phone-style numbers -- all are shorter than
+    :data:`_PAN_MIN_DIGITS` digits, fail the separator grouping, or sit behind a
+    decimal point.
+
+    **A hex hash is untouched only when it contains at least one non-digit** --
+    the letter breaks the run so ``\\d{13,19}`` cannot match through it
+    (``"0123456789abcdef"`` is silent, and is what the test battery pins). An
+    **all-digit** hash is sixteen decimal digits and is indistinguishable from
+    an unseparated PAN by inspection, so it *will* be masked: measured,
+    ``compute_phash`` of a perfectly uniform image is ``"0000000000000000"``,
+    which this function turns into ``"************0000"`` -- not valid hex.
+    That is exactly why :func:`save_extraction` keeps system-minted values such
+    as ``image_phash`` out of this function's reach entirely, rather than
+    asking this function to tell a coincidence apart from a card number. The
+    false positives it does accept are listed on :data:`_PAN_RE`; both are
+    cases nothing can tell apart from a card number by inspection, and §18 is
+    not a rule that may miss.
     """
     if isinstance(value, str):
         return _PAN_RE.sub(_mask_pan, value)
@@ -413,8 +425,10 @@ def save_extraction(
         # Nothing is silently dropped: an unparseable date is kept verbatim.
         date_raw = receipt_meta.date
 
+    # -- everything below, down to the blanket pass, is the MODEL's text (or
+    # derived directly from it) -- what §18 distrusts, and the only material
+    # that pass needs to see. --
     fields: dict[str, Any] = dict(
-        merchant_id=merchant_id,
         # §18: redacted below, in the blanket pass over every ``str`` value in
         # this dict -- see the comment on that block for why an enumerated
         # per-field wrapper here is no longer the guard.
@@ -431,13 +445,8 @@ def save_extraction(
         tender_amount=extraction.totals.tender,
         change_amount=extraction.totals.change,
         payment_method=extraction.payment.method,
-        card_last4=_last4(extraction.payment.card_last4),
         is_handwritten=extraction.meta.is_handwritten,
         legibility=extraction.meta.legibility,
-        confidence=confidence,
-        status=status,
-        image_key=job.image_key,
-        image_phash=image_phash,
         receipt_is_inconsistent=extraction.meta.receipt_is_inconsistent,
     )
 
@@ -461,6 +470,34 @@ def save_extraction(
     # ``card_last4`` keeps the *stronger* guarantee, applied after: four digits
     # at most, not "all but the last four".
     fields["card_last4"] = _last4(extraction.payment.card_last4)
+
+    # §18, round 2: ``image_phash`` used to be in the dict above, and reaching
+    # the blanket pass corrupted it. ``compute_phash`` dHashes a *uniform*
+    # image (no local brightness gradient anywhere -- e.g. a blank scan) to
+    # sixteen zero bits, ``"0000000000000000"``: sixteen all-digit characters,
+    # indistinguishable from an unseparated PAN under ``_PAN_RE``. The blanket
+    # pass masked it to ``"************0000"``, which is not valid hex, and
+    # ``phash_distance``'s ``int(x, 16)`` raised on it -- corrupting that row's
+    # dedupe identity permanently and, in the reproduced case, letting a
+    # receipt that should have been caught as a duplicate-of-a-duplicate
+    # (ADR-0013) fall through uncaught instead. None of the five values below
+    # originates in the model's text, so none belongs in front of a heuristic
+    # built to catch what a model or a reviewer typed -- and a hash is exactly
+    # the kind of value that heuristic cannot be taught to recognise without
+    # also weakening it (a card number is itself valid hex). The split is
+    # structural rather than a name-exclusion list on purpose: an
+    # extraction-sourced column added to the ``dict(...)`` above is redacted by
+    # default, and a system-minted column added below is exempt by default --
+    # get a future column's placement wrong and
+    # ``test_save_extraction_never_corrupts_an_all_digit_image_phash`` (or the
+    # PAN battery) fails loudly rather than leaking or corrupting silently.
+    fields.update(
+        merchant_id=merchant_id,
+        confidence=confidence,
+        status=status,
+        image_key=job.image_key,
+        image_phash=image_phash,
+    )
 
     existing = session.get(Receipt, job.id)
     if existing is None:
