@@ -4,8 +4,10 @@ Paste the block between the `---` markers as the first message of the next
 session, and **fill in the "Today's goal" line** — it is the one thing the
 prompt cannot infer, and a placeholder left in place costs a round trip.
 
-Last refreshed: **2026-07-31**, at `main @ cd464d5`. **Phase 5 is complete and
-merged.** 844 Python + 170 Vitest, all gates green, everything pushed.
+Last refreshed: **2026-07-31**, at `main @ 7deb3fb`. **The PAN hardening
+milestone is complete and merged.** 864 Python + 170 Vitest, all five gates
+green (`scripts/verify.py`), `main` and `feat/pan-hardening` both pushed and
+identical to their origin refs.
 
 ---
 
@@ -15,22 +17,27 @@ where the last session left off.
 
 **Read these first, then confirm the state back to me — and verify the snapshot
 below against the repo rather than trusting it.** It has been stale at the start
-of several sessions.
+of several sessions, once by a whole milestone; ADR-0019 now makes the refresh
+part of closing a milestone, and makes this verification step permanent.
 
 ## Reading order
 
 1. **`docs/MEMORY.md`** — current state, decisions already made, what is built,
    the environment, blockers, deferred and parked items.
-2. **`.superpowers/sdd/2026-07-29-review-ui/progress.md`** — the Phase 5 ledger.
-   It carries every measurement, adjudication and parked ruling from that
-   milestone, and the full scope of the next task. **Note: `.superpowers/` is
+2. **`.superpowers/sdd/2026-07-31-pan-hardening/progress.md`** — the PAN
+   milestone ledger: every measurement, the user's rulings, and the
+   **FOLLOW-UPS section at the end**, which is the source of tasks 1–3 below.
+   The Phase 5 ledger (`.superpowers/sdd/2026-07-29-review-ui/progress.md`)
+   still holds the parked items behind task 4. **Note: `.superpowers/` is
    gitignored, so nothing in it is findable by searching the tracked tree — you
    must open it by path.**
-3. **`docs/adr/README.md`, then the ADRs it indexes (0001–0017).** Mandatory
+3. **`docs/adr/README.md`, then the ADRs it indexes (0001–0019).** Mandatory
    before touching the matching area:
    - **0001** `Decimal` money path — anything touching money.
-   - **0007** PAN redaction + money integrity — anything writing card data.
-     **Read this with the PAN task below.**
+   - **0018** the PAN masking policy — **anything touching `_PAN_RE`,
+     `_mask_pan`, or `redact_pan`. Read it with task 1 below.** It supersedes
+     0007 on the masking rule; 0007 still governs money integrity and bounded
+     text, and carries a dated correction.
    - **0006** repository conventions (injected session, **caller commits**,
      `ValueError` boundary) — anything writing to the DB.
    - **0011** terminal-state contract + VLM concurrency/cost guards.
@@ -45,6 +52,8 @@ of several sessions.
      anything touching `review/queue.py` or the claim lifecycle.
    - **0017** two test suites and `scripts/verify.py` — **read before believing
      a green test run.**
+   - **0019** session continuity — where state lives, the promotion rule, and
+     why this snapshot must be verified rather than trusted.
    - **0002** provider abstraction · **0008** review-queue concurrency.
 4. **`.kiro/steering/receipt-system.md`** — the always-on load-bearing rules.
    Still auto-loads and is on disk, but **gitignored and untracked**.
@@ -57,36 +66,50 @@ of several sessions.
    API, §14.10 the CLI), §15 milestones, §16 eval, §17 config, §18 traps
    (**PAN handling**), §19 DoD.
 8. Design docs, only if touching what they cover:
+   `docs/superpowers/specs/2026-07-31-pan-hardening-design.md` (§1.2 the TIN
+   constraint, §2.1 the ruling, §4 the measured battery),
    `docs/superpowers/specs/2026-07-29-review-ui-design.md`,
    `docs/superpowers/specs/2026-07-29-cli-design.md`,
    `docs/superpowers/specs/2026-07-28-review-api-design.md`.
 
 ## Where we are
 
-**`main` @ `cd464d5`. Phase 5 (the review UI) merged 2026-07-31** as a true
-fast-forward from `5e4d708`. `feat/review-ui` is kept at its merge point
-(`28f6c7a`), per the project convention that merged branches and SDD workspaces
-are not cleaned up.
+**`main` @ `7deb3fb`, pushed — `origin/main` is identical. The PAN hardening
+milestone merged 2026-07-31** as a true fast-forward from `ce98345`;
+`feat/pan-hardening` is kept at its merge point and pushed, per the convention
+that merged branches and SDD workspaces are never cleaned up.
 
-**Phases 0–5 are complete.** Foundations; the offline modules; the online wiring
-(config → client factory → preprocess → triage → extract+repair → normalize →
-score → route → eval); persistence (8 tables, migrations, repository, review
-queue, 4-sheet XLSX); `process_receipt` + the RQ worker + the VLM guards; the
-review API with session auth, roles and a machine upload key; the operator CLI;
-and now the **review UI** — login, the review screen, editing across all 17
-correctable paths, a strictly sequential `PATCH → complete → next`, a Playwright
-acceptance test, and `scripts/verify.py`.
+**Phases 0–5 are complete, plus PAN hardening.** What that milestone shipped:
+the detector's four-group alternative widened its trailing group `\d{1,4}` →
+`\d{1,7}` — **one character, closing leak (a)**: a four-group PAN with a 5–7
+digit tail (17–19 digits) is no longer stored whole. **Leak (b)** — more than
+four groups leaves the remainder in the clear — **is accepted by the user's
+ruling, not fixed**, and is pinned by test; both measured routes to closing it
+were refused (the greedy rewrite swallowed a second adjacent card whole and ate
+amounts; the scan loop was O(n²)). Redaction is now **default-on for every
+extraction-sourced value `save_extraction` stores** — every scalar text column
+plus the `modifiers` JSON — while system-minted values (`image_key`,
+`image_phash`, `status`, `confidence`, `merchant_id`) are excluded
+structurally, because masking an all-digit `image_phash` broke dedupe. Review
+reasons are redacted at the sink (`enqueue_review`). The four corpus TINs are
+pinned as silent cases; a two-table column walk with a fully-seeded fixture
+(all 22 reachable extraction text fields) makes a new text column fail RED;
+ADR-0018 records the policy and ADR-0007 carries a dated correction.
 
-### Running it — this changed in Phase 5
+### Running it
 
-- **There are two test suites.** `python -m pytest` (**844**, offline and
-  Node-free — proven by running it with `node` stripped from `PATH`) and
-  **Vitest in `frontend/`** (**170**).
+- **There are two test suites.** `python -m pytest` (**864**, offline and
+  Node-free) and **Vitest in `frontend/`** (**170**).
 - **`npm test` does NOT type-check.** A TypeScript error ships green through it.
   That trap fired three times in one milestone. Run `npm run typecheck` too.
 - **`python scripts/verify.py` is the gate runner** — pytest, ruff, typecheck,
   vitest, build. It fails loudly naming the gate, and when `npm` is absent it
   prints a per-gate `SKIPPED` and still gates the Python half. **ADR-0017.**
+- **Piped pytest output can lose its final summary line in this environment.**
+  The old "PowerShell clips it" attribution is unproven (a globally-installed
+  `superclaude` pytest plugin is suspected, but stripping it did not reproduce
+  the clipping). The workaround stands regardless: use `--junitxml` and read
+  the counts from the XML.
 - Lint is `python -m ruff check .` — bare `ruff` is not on PATH.
 - CLI: `python -m receipts.cli <command>` — the console script needs the
   interpreter's `Scripts`/`bin` on `PATH`, which it is not on this machine.
@@ -97,7 +120,7 @@ acceptance test, and `scripts/verify.py`.
 ### Git
 
 - Default branch is **`main`**. Remote `origin` → `CDGYu/Receipt-Digitalization`,
-  **private**.
+  **private**. Everything is pushed and in sync as of the stamp above.
 - **Pushing `feat/*` branches is authorised.** **Ask before pushing `main`.**
 - **`.kiro/` and `.github/workflows/` are gitignored and untracked.** GitHub
   Actions does not run; `scripts/verify.py` is the substitute, and **nothing
@@ -116,6 +139,12 @@ entry point; structured output via tool-use; few-shot images first, target
 receipt last; consistency runs never cached; `python -m pytest` stays **offline
 and Node-free**.
 
+**PAN (ADR-0018):** the group-shape requirement in `_PAN_RE` is load-bearing —
+three of the four real corpus TINs are 14 digits, inside the PAN window, and
+are silent **only** because of the grouping. **Never relax it toward "any run
+of 13+ digits."** Any change to `_PAN_RE` replays the committed battery in both
+directions and tests **two instances of what it guards in one input**.
+
 **Frontend (ADR-0015):** money is a string end to end and
 **`<input type="number">` and `valueAsNumber` are banned**; the browser stays
 same-origin so **no `CORSMiddleware` is ever added**; SPA pages live under
@@ -123,34 +152,53 @@ same-origin so **no `CORSMiddleware` is ever added**; SPA pages live under
 
 ## The work, in order
 
-### 1. PAN hardening — the next task, already scoped
+### 1. PAN follow-up: the non-canonical grouping class — HIGH, already measured
 
-**Read the ledger's "NEXT TASK" section and ADR-0007 before touching
-`_PAN_RE`.** It has produced a surprise on **both** of its last two widenings.
+The final whole-branch review found (pre-existing, never covered by any
+battery): **a card grouped outside the two canonical shapes matches neither
+alternative and is stored entirely in the clear** — 5-4-4-4, 6-4-4-4, 4-5-4-4,
+Diners-style 4-6-4, Maestro 4-4-5. Measured: `'41111 1111 1111 2345'` (17
+digits) → unchanged. Same class as leak (a). The **double-space separator**
+(`'4111  1111  1111  1111'`) also stores whole — the likeliest spelling in a
+handwritten corpus. Read the ledger's final-review entry and ADR-0018 first —
+this regex has surprised on **three consecutive widenings**.
 
-- **(a) Undocumented total leak.** A four-group PAN with a 5+ digit tail is
-  stored **whole**: `'4111 1111 1111 11111'` (17), `'…111111'` (18),
-  `'…1111111'` (19). The trailing group is `\d{1,4}`
-  (`src/receipts/persist/repository.py`). Pre-existing and byte-identical under
-  the old pattern. **Strictly worse than (b), and the only one the code's own
-  comments do not record.**
-- **(b) Documented partial leak.** More than four groups leaves seven digits
-  clear: `'4111 1111 1111 1111 111'` → `'************1111 111'`. **The obvious
-  fix is measured worse** — a fifth alternative lets
-  `'4111 1111 1111 1111 9999 9999'` and `'4111.1111.1111.1111.1111'` through
-  **whole**, because the long run is consumed and `_mask_pan` then rejects it
-  for length. Any fix must be measured in **both** directions.
-- **(c) A false sentence to fix in the same pass.** `ReceiptForm.tsx` asserts
-  that a 13–19 digit PAN in four-group form with any of the six separators is
-  masked. Falsified by (a). Bound it by the table it introduces, the way
-  `serializers.py` already does.
-- Also file alongside: a regression test binding the three recoverability
-  properties the review UI's "Skip this receipt" button spends — a skipped
-  receipt is still listed by `GET /receipts?status=needs_review`, still
-  `PATCH`-able to `reviewed`, and still re-openable by `enqueue_review`. All
-  three are true today; **none would go red if they stopped being.**
+- The reviewer **measured a candidate fix** (enumerate the additional
+  groupings as alternatives): 0 TIN regressions across all six TINs, 5/5 class
+  members masked, 18 controls unchanged, both-instances cases masked, no ReDoS
+  (7.1 ms @ 8000 groups). **Key insight: the TIN constraint blocks "any 13+
+  digit run", NOT enumerating further specific groupings** — every real card
+  grouping starts with a ≥4 group; every corpus TIN is 3-3-3-N.
+- Fold into the same pass (both one-liners from the same ledger): pin
+  ADR-0018's worked example `'4111 1111 1111 2345 678'` in the battery — the
+  uniform-digit pinned cases cannot distinguish "matched region's last four"
+  from "true card last four" — and qualify ADR-0007's Consequences bullet that
+  still says "a hash" unqualified (dated-correction rules, ADR immutability).
 
-### 2. Phase 5 follow-ups, each a named piece of work
+### 2. Bound the machine-path `currency` write
+
+`save_extraction` writes `currency=receipt_meta.currency` **directly** into a
+`String(3)` column; `ReceiptMeta.currency` is an unconstrained `str | None`.
+SQLite stores an over-long value silently; Postgres raises `DataError` — a
+receipt-killing exception on the machine path. Same shape as leak (d): a guard
+the human path has (`_bounded_optional_text`, wired only into
+`_RECEIPT_FIELDS`) that the machine path lacks. Wire the bound into
+`save_extraction`. Found during Task 3 pre-flight; recorded in the ledger.
+
+### 3. Fix the intermittent test's fixtures — the diagnosis is done, stop re-deriving it
+
+`tests/test_cli_pipeline.py::test_inline_one_failing_receipt_does_not_abandon_the_others`
+is **NOT** flaky-by-ordering. **pytest-randomly is not installed** (pytest11
+entry points on this machine: `anyio`, `superclaude` — re-verified 2026-07-31;
+the old hypothesis in earlier handoffs is falsified). It is a **load-sensitive
+thread race in the test's own fixtures**: three identical blobs + identical
+extraction → whichever receipt commits first makes another a dedupe duplicate
+→ `REJECTED` where the test expects `AUTO_APPROVED`. Reproduced 11/12 under six
+CPU burners in isolation on the branch, 6/6 on `main` — pre-existing and
+branch-neutral. **Fix: distinct blobs per receipt in the fixture.** Do not
+chase test ordering.
+
+### 4. Phase 5 follow-ups, each a named piece of work
 
 - **The five design §5 error-recovery behaviours that never shipped** — no
   logout control anywhere, no return-to-receipt after a 401, no inline
@@ -168,17 +216,14 @@ same-origin so **no `CORSMiddleware` is ever added**; SPA pages live under
   purpose.
 - **An admin release for a claimed task** (`IN_PROGRESS` → `OPEN`). There is no
   inverse of a claim anywhere in the system.
-- **The intermittent test.**
-  `tests/test_cli_pipeline.py::test_inline_one_failing_receipt_does_not_abandon_the_others`
-  failed twice in full runs and has not reproduced in ~20 since. **Test the
-  hypothesis first:** this repo uses `pytest-randomly`, so order varies per run.
-- Smaller parked items are listed in the ledger with rulings: `ReviewScreen.tsx`
-  citing `queue.py:198-199` for writes at `:289-290`; no UI route reaching a
-  skipped receipt; 405 responses under `/app` carrying no `Allow` header; two
-  tabs of one reviewer silently overwriting each other; `ReviewScreen.tsx` past
-  its size ceiling; `preventDefault()` firing on screens with no approve action.
+- Smaller parked items are listed in the Phase 5 ledger with rulings:
+  `ReviewScreen.tsx` citing `queue.py:198-199` for writes at `:289-290`; no UI
+  route reaching a skipped receipt; 405 responses under `/app` carrying no
+  `Allow` header; two tabs of one reviewer silently overwriting each other;
+  `ReviewScreen.tsx` past its size ceiling; `preventDefault()` firing on
+  screens with no approve action.
 
-### 3. Phase 6 — merchants & few-shot (P6.T1)
+### 5. Phase 6 — merchants & few-shot (P6.T1)
 
 `merchants/{fingerprint,registry}.py`; inject verified few-shot examples with
 **images first, target receipt last**; hints always end with "trust the image".
@@ -191,7 +236,7 @@ receipt keeps `""` and can never serve as a dedupe **original**); and increment
 `Merchant.receipt_count`, which nothing writes today. Merchant `VAT Reg. TIN` is
 the strongest fingerprint on this corpus.
 
-### 4. Phase 7 — self-consistency (P7.T1)
+### 6. Phase 7 — self-consistency (P7.T1)
 
 Wire `run_consistency` (defined at `extract/extractor.py:295`, never called from
 `pipeline.py`) into the pipeline for handwritten / low-legibility receipts, and
@@ -199,7 +244,7 @@ feed disputed fields into scoring. **Gate on `triage.is_handwritten`, never on
 `document_type`** — this corpus is `INVOICE` + `MIXED`. Consistency runs are
 never cached.
 
-### 5. Phase 8 — calibration & eval-harness honesty
+### 7. Phase 8 — calibration & eval-harness honesty
 
 - **P3.T6 / P8.T1** — sweep the confidence threshold to hold auto-approval
   precision ≥99%, then fit the penalty weights from data into
@@ -213,7 +258,7 @@ never cached.
   committed schema, and `calibration_curve`. Also consider excluding `meta.*`
   from `field_accuracy`'s denominator.
 
-### 6. Still open from earlier phases
+### 8. Still open from earlier phases
 
 - **P2.T2 — R060/R061 OCR grounding (DECISION NEEDED):** the two grounding rules
   need a raw text layer nothing produces. Options: have the model return the
@@ -231,19 +276,25 @@ never cached.
 - **Blank pre-printed template rows** must not become line items (a sibling of
   R052) — Metro Oil's form pre-prints six fuel rows with one filled in.
 
-### 7. Parked, with rulings (see the ledgers)
+### 9. Parked, with rulings (see the ledgers)
 
-`apply_corrections` redacts **any** coerced text while `save_extraction` redacts
-only two columns — the two sides should agree, and the review UI now makes this
-reachable by a human. An auto-approving reprocess closes a review task a
-reviewer had already claimed. **No login rate limiting**, and each attempt costs
-a full scrypt derivation (~16 MB, ~57 ms), so `POST /auth/login` is an
-unauthenticated CPU/memory amplifier as well as an enumeration surface.
-`receipts eval`/`calibrate` still traceback without the `pipeline` extra while
-the other six commands degrade cleanly. Reprocessing a `reviewed` receipt
-records **no** `extraction_runs` — the transaction rolls back.
+The old "the two redaction sides should agree" item is **closed** — that was
+PAN hardening. What remains parked: ADR-0018's **accepted false positives**
+(a 13–19 digit all-numeric identifier; two column-scale amounts in one
+free-text value; ~1-in-200 random 16-char hex hashes, which is why **no hash
+is ever routed through `redact_pan`**; a whole-number 13–19 digit modifier
+amount) — a reviewer confirming a 13–19-digit `receipt.number` will see it
+masked and a spurious `corrections` row minted, inherent to the policy. An
+auto-approving reprocess closes a review task a reviewer had already claimed.
+**No login rate limiting**, and each attempt costs a full scrypt derivation
+(~16 MB, ~57 ms), so `POST /auth/login` is an unauthenticated CPU/memory
+amplifier as well as an enumeration surface. `receipts eval`/`calibrate` still
+traceback without the `pipeline` extra while the other six commands degrade
+cleanly. Reprocessing a `reviewed` receipt records **no** `extraction_runs` —
+the transaction rolls back. The `superclaude` stdout-clipping attribution is
+**unproven** — re-measure before writing it anywhere as fact.
 
-### 8. LAST — ISSUE-001, deferred by the user until the system is built
+### 10. LAST — ISSUE-001, deferred by the user until the system is built
 
 **Run the first real baseline.** Read `docs/KNOWN_ISSUES.md`; do not re-derive.
 The smoke run proved the pipeline works end to end and that the safety machinery
@@ -264,12 +315,14 @@ briefed to read the real signatures first, work TDD, keep both suites green +
 diff yourself, re-run the gates **independently**, then a task review, then
 commit and append to the ledger. At the end of a milestone: a whole-branch review
 on the strongest model, **one** consolidated fix wave, one scoped re-review, then
-fast-forward merge. Merged branches and SDD workspaces are **kept**.
+fast-forward merge — **and refresh `docs/MEMORY.md` + this prompt in the same
+session (ADR-0019).** Merged branches and SDD workspaces are **kept**.
 
 **Probe before dispatching.** Phase 5's plan was wrong about existing code
-**eleven times** — including an acceptance test that would have failed against a
-correct system, and a field set that did not match reality. The plan's prose is
-reliable; its claims about existing APIs are not.
+**eleven times**; the PAN plan repeated the pattern (a wrong enum name, a
+missing required argument, two false "this path is protected" claims, a
+mis-attributed TIN). The plan's prose is reliable; its claims about existing
+APIs are not.
 
 ## Review standards this project learned the hard way — hold all of them
 
@@ -292,6 +345,14 @@ reliable; its claims about existing APIs are not.
    arithmetic at all.
 8. **A stub that does not reflect the write is a fixture bug that lies dormant
    until something reads the reply.**
+9. **Test a guard with two instances of what it guards in one input.** A
+   scanner's failure mode lives at the boundary *between* two hits; a
+   single-instance battery is blind to it by construction. That blind spot let
+   a full second PAN through a green suite twice.
+10. **A battery you write agrees with you.** Replay the *committed* battery in
+    both directions before trusting a change — a 34-case hand-picked battery,
+    passed in both directions, still missed a case the committed suite already
+    had.
 
 And the environment lesson: **a green suite is not evidence that installed
 software works.** Anything with an entry point gets run from outside the
@@ -306,5 +367,6 @@ repository as part of verification.
    untracked, so nothing runs the frontend gates remotely. If yes, the workflow
    should call `scripts/verify.py` rather than re-listing the gates.
 
-**Today's goal:** <FILL THIS IN — e.g. "PAN hardening", "the design §5 error
-recovery rows", "start Phase 6", or "I've rotated the key — do ISSUE-001.">
+**Today's goal:** <FILL THIS IN — e.g. "the PAN grouping follow-up", "the
+design §5 error rows", "fix the intermittent's fixtures", "start Phase 6", or
+"I've rotated the key — do ISSUE-001.">
