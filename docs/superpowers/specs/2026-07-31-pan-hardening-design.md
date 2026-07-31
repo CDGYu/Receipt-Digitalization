@@ -115,7 +115,7 @@ available for Phase 6.
 | # | Decision | Rationale |
 |---|---|---|
 | **C1** | **`_mask_pan` stops failing open.** 13–19 digits → mask; **>19 digits → mask the longest valid PAN-shaped prefix and leave the remainder** | Fail-open is the single root cause of both (a) and (b). Masking the prefix preserves today's behaviour on over-long runs instead of changing two things at once. |
-| **C2** | **The `4-4-4-N` alternative becomes a greedy run**, guarded by `(?!\.\d{1,2}(?!\d))` before each separator | Greedy alone closes (a) and (b) but **eats the amount** in `'4111 1111 1111 1111.99'`. The guard refuses a group reached via `.` with 1–2 digits — a decimal fraction, not a PAN group. |
+| **C2** | **The `4-4-4-N` alternative becomes a greedy run**, with **no lexical fraction guard**. A trailing `.NN` is resolved as an *amount* inside `_mask_pan`, by digit count | Greedy alone closes (a) and (b) but **eats the amount** in `'4111 1111 1111 1111.99'`. A lexical guard cannot fix it: it also blocks `'4111.1111.1111.1'`, a legitimate 13-digit PAN whose tail is one digit, which is a **committed** expectation. The two are distinguishable only by the digit count — which a regex cannot see. Same root cause as C1. |
 | **C3** | **The group-shape requirement is kept and documented as load-bearing** | §1.2. It protects the corpus TINs. |
 | **C4** | **`save_extraction` redacts by default**, over every `str` in its `fields` dict, rather than by an enumerated column list | The list has now been found short twice. Default-on makes a *new* column safe without anyone remembering. |
 | **C5** | **A test enumerates the text columns from `__table__.c`** and asserts each is redacted | Makes C4 enforceable: a new column fails RED rather than leaking silently. This is the guarantee, not the code. |
@@ -129,36 +129,48 @@ available for Phase 6.
 ### 3.1 The detector
 
 ```
-SEP  = [ .\-_/,]
-FRAC = (?!\.\d{1,2}(?!\d))          # a '.'-reached group of 1-2 digits is a fraction
+SEP = [ .\-_/,]
 
 (?<!\d)(?<!\d\.)
 (?:
-    \d{4}(?: FRAC SEP \d{4} )+ (?: FRAC SEP \d{1,7} )?   # greedy 4-4-4-... run
-  | \d{4} SEP \d{6} SEP \d{5}                            # Amex 4-6-5, unchanged
-  | \d{13,19}(?!\.\d)                                    # unseparated, unchanged
+    \d{4}(?: SEP \d{4} )+ (?: SEP \d{1,7} )?   # greedy 4-4-4-... run
+  | \d{4} SEP \d{6} SEP \d{5}                  # Amex 4-6-5, unchanged
+  | \d{13,19}(?!\.\d)                          # unseparated, unchanged
 )
 (?!\d)
 ```
 
-Only the first alternative changes. The lookbehinds, the Amex and unseparated
+Only the first alternative changes: `(?:SEP\d{4}){2}SEP\d{1,4}` becomes
+`(?:SEP\d{4})+(?:SEP\d{1,7})?`. The lookbehinds, the Amex and unseparated
 alternatives, and the trailing `(?!\d)` are untouched — including the
 `(?!\.\d)` that ADR-0007 and the Phase 5 fix wave scoped onto the unseparated
 alternative *alone*, which must not be relocated again.
 
+**The regex deliberately over-matches.** It will swallow a trailing amount in
+`4111 1111 1111 1111.99`. That is resolved in §3.2, not here, for the reason in
+C2.
+
 ### 3.2 The decision function
 
-`_mask_pan` becomes total over its input rather than returning the match
-unchanged when the length check fails:
+`_mask_pan` stops being a length check that fails open and becomes the place
+every ambiguity is resolved, because it is the only place the digit count is
+visible. In order:
 
-- `< 13` digits → return the text unchanged (not a PAN).
-- `13–19` digits → mask all but the last four.
-- `> 19` digits → find the longest `13 ≤ n ≤ 19` prefix that ends on a
-  group boundary (the next character is not a digit); mask that prefix, leave
-  the remainder. If no such prefix exists, return unchanged.
+1. **Amount tail.** If the match ends in `.` followed by one or two digits, and
+   the text *before* that tail holds 13–19 digits, the tail is an amount: mask
+   the head and re-append the tail verbatim.
+2. `13–19` digits → mask all but the last four.
+3. `< 13` digits → return the text unchanged (not a PAN).
+4. `> 19` digits → find the longest `13 ≤ n ≤ 19` digit prefix that ends on a
+   group boundary (the next character is not a digit); mask that prefix, leave
+   the remainder. If no such prefix exists, return unchanged.
 
-The prefix search is a bounded loop over at most seven candidate lengths. It is
-pure, and its inputs are a string — it stays as testable as the current function.
+Rule 1 must be tested *before* rule 2 or `4111 1111 1111 1111.99` masks 18
+digits and destroys the amount. Rule 1 must also check the head's length, or
+`4111.1111.1111.1` — a 13-digit PAN whose last group is one digit, and a
+**committed** expectation — stops being masked. The prefix search in rule 4 is a
+bounded loop over at most seven candidate lengths. The function stays pure and
+string-in/string-out.
 
 ### 3.3 The redaction boundary
 
@@ -225,16 +237,33 @@ pattern; `PROPOSED` is the §3 design.
 - **Regressions (masked by CURRENT, not by PROPOSED): none.**
 - **New false fires (silent under CURRENT, firing under PROPOSED): none.**
 - **Amounts destroyed: none.**
+- **Committed expectations in `tests/test_repository.py` broken: none** — all 24
+  separator×grouping combinations, all four unseparated lengths, all seven
+  disagreeing-separator spellings, the amount cases, the seventeen silent
+  values, the label-period cases and the accepted false positive were replayed
+  against the proposed design before this plan was written.
 
-### 4.4 A measurement that lied, recorded deliberately
+### 4.4 Two measurements that lied, recorded deliberately
 
-The first prototype used "digits left in the clear" as its score. It ranked
+**The metric that scored data destruction as progress.** The first prototype
+used "digits left in the clear" as its score. It ranked
 `'4111 1111 1111 1111.99' -> '**************1199'` as an **improvement** — 4
 clear digits instead of 6 — while that output has silently eaten the `.99`
 amount into the mask. The metric could not see money destruction because it was
-never asked about money. `FRAC` (C2) exists because of that failure, and the
-lesson generalises: **a masking change must be scored on what it destroys as
-well as on what it leaks.** Both columns are in §4.1 for that reason.
+never asked about money. The lesson generalises: **a masking change must be
+scored on what it destroys as well as on what it leaks.** Both columns are in
+§4.1 for that reason.
+
+**The hand-picked battery that missed a committed case.** The fix for the above
+was a lexical guard, `FRAC = (?!\.\d{1,2}(?!\d))`, and it passed all 34
+hand-picked cases in both directions. Replaying the **committed** battery from
+`tests/test_repository.py` then broke exactly one expectation:
+`'CARD 4111.1111.1111.1 OK'`, a 13-digit dotted PAN whose final group is a
+single digit, which `FRAC` refuses. A guard that blocks `.99` in a 16-digit run
+must not block `.1` in a 13-digit one, and nothing lexical can tell them apart —
+hence C2. **A battery I wrote agreed with me; the battery the project already
+had did not.** Replaying the committed expectations is a required step in §6,
+not an optional check.
 
 ---
 
