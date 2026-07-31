@@ -25,11 +25,14 @@ Accepted; supersede it with a new ADR rather than editing history.
 | [0017](0017-two-suites-and-the-gate-runner.md) | Two test suites, and `scripts/verify.py` is what "passing" means | Accepted |
 | [0018](0018-pan-masking-policy.md) | The PAN masking policy | Accepted |
 | [0019](0019-session-continuity-and-handoff.md) | Session continuity: the handoff pair, the ledgers, and where rulings must live | Accepted |
+| [0020](0020-pan-grouping-coverage.md) | PAN detector: which groupings are covered, and why not more | Accepted |
 
 Read **0001** first: it is the invariant everything else defers to. **0007** is
-the one to read before touching anything that writes card data or money.
-**0017** is the one to read before believing a green test run — `npm test` does
-not type-check, and that trap fired three times in one milestone.
+the one to read before touching anything that writes card data or money, and
+**0018** then **0020** before touching `_PAN_RE` — 0020 is the current record of
+which card groupings the detector covers, and of the residual it deliberately
+leaves. **0017** is the one to read before believing a green test run — `npm
+test` does not type-check, and that trap fired three times in one milestone.
 
 Primary sources these build on: `RECEIPT_SYSTEM_SPEC.md` (build spec),
 `README.md` (§5 design decisions), `VLM_AND_DATA.md`, and the always-on
