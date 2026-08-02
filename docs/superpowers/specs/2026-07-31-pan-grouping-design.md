@@ -143,9 +143,21 @@ amount columns aligned with three or more spaces — measured,
 `'1500   2000   2500   3000'` masks under `+` and stays silent under `{1,2}`.
 Four 4-digit amounts side by side already mask when single-spaced
 (`'1500 2000 2500 3000'` fires at the baseline), so this false-positive class is
-pre-existing and accepted; `{1,2}` extends it to one more spelling, `+` extends
-it to every gutter width a printed form might use. `{1,2}` is the spelling the
-finding named, and it is where this stops.
+pre-existing and accepted; `+` extends it to every gutter width a printed form
+might use.
+
+`{1,2}` extends it by **36 two-character spellings, 30 of them mixed** — `', '`,
+`'. '`, `'- '`, `'./'` and the rest — for **42 accepted spellings in all**, 6
+single and 36 double. Measured 2026-08-02: all 36 fire on a grouped 16-digit run
+and all 36 are silent at the one-character baseline, so
+`redact_pan('PO 4500, 4501, 4502, 4503 RECEIVED')` returns
+`'PO ************4503 RECEIVED'` where the baseline returns its input. The
+doubled spelling is what the finding named; it is not what the cap admits.
+Where this stops is 42 spellings, and narrowing the cap to the doubled six alone
+is a separate scoped decision.
+*(Corrected 2026-08-02: this paragraph read "`{1,2}` extends it to one more
+spelling", understating the surface by a factor of 36 — see ADR-0020's
+Correction. The decision to cap at two rather than use `+` is unchanged.)*
 
 ### 2.3 Alternation order is immaterial, measured
 
@@ -254,7 +266,18 @@ The change must never leave *more* card digits in the clear than the baseline.
   **0 fire**.
 - 29 hand-built silent controls: 1 fires, `'0000000000000000'` — the all-zero
   dHash, which the baseline also masks and which `save_extraction` excludes
-  from redaction structurally. **No new false-positive class.**
+  from redaction structurally. **No new false-positive class — but the class's
+  surface is wider than this sweep could see.** Not one of the 29 controls
+  contains two adjacent separator-class characters at all, mixed or doubled
+  (checked 2026-08-02), so none of them exercises the 36 two-character
+  spellings `{1,2}` opens; a sweep whose inputs all use single separators
+  cannot report on the change that widened them. The class is still the
+  pre-existing side-by-side-column-amounts one — `'PO 4500, 4501, 4502, 4503
+  RECEIVED'` masks under `{1,2}` and is silent at the baseline — and what grew
+  is how many spellings reach it (§2.2).
+  *(Corrected 2026-08-02: the bullet ended "**No new false-positive class.**"
+  unqualified. The class claim survives; the coverage claim behind it did not —
+  see ADR-0020's Correction.)*
 - Random 16-character hex: 0.465%, unchanged from the baseline, reproducing
   ADR-0018's own measured ~1-in-200.
 

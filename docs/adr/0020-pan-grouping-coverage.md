@@ -143,6 +143,50 @@ decision starts from a measurement instead of an impression.
   re-checks that no leading-three-digit shape matches. All three are pinned by
   tests; the third is new here.
 
+## Correction (2026-08-02)
+
+**The Decision understates what the `{1,2}` cap costs.** "The cap extends it by
+one spelling instead of by every gutter width" reads as one added spelling — the
+doubled one it was adopted for. `[ .\-_/,]{1,2}` accepts **42 separator
+spellings**: the 6 single characters and all **36** two-character combinations of
+them, **30 of those mixed** (`', '`, `'. '`, `'- '`, `'./'`, …). Measured
+2026-08-02: all 36 two-character spellings fire on a grouped 16-digit run, and
+all 36 are silent under the one-character class — so each is surface this cap
+opened, not a re-spelling of the doubled one.
+
+It reaches ordinary receipt text. Measured, against a baseline that is silent on
+the same input: `redact_pan('PO 4500, 4501, 4502, 4503 RECEIVED')` returns
+`'PO ************4503 RECEIVED'`.
+
+**The false-positive class is unchanged; its surface is not.** This is still the
+pre-existing side-by-side-column-amounts case the Decision accepted — four
+4-digit amounts in one value, indistinguishable from a grouped card by
+inspection — and it is still reachable only through *free text*, because
+`_coerce_money` returns a `Decimal` and `_plan_change` redacts only `str`. What
+grew is how many spellings reach it. It is now pinned by
+`test_column_amounts_separated_by_two_characters_are_the_cost_of_the_cap`, so it
+reads as a decision rather than an oversight, and the `_PAN_RE` comment names the
+real class instead of "a second space between groups."
+
+**Whether to narrow the separator — to the doubled spellings alone rather than
+any two characters — is a separate scoped decision, raised to the user and not
+decided here.** The pattern is unchanged by this correction. `+` is still refused
+for the reason the Decision gives.
+
+**The References below name a battery that does not exist.**
+`tests/test_repository.py` contains no `MUST_MASK` or `MUST_STAY_SILENT`
+identifier — `git grep -n MUST_MASK tests/` exits 1. Those names come from
+`docs/superpowers/specs/2026-07-31-pan-hardening-design.md`, which proposed the
+two-table shape; the battery was committed under different names. The real
+identifiers are `_SEPARATORS`, `_GROUPINGS` and `_NON_CANONICAL_GROUPINGS`, plus
+the tests around them — `test_redact_pan_masks_a_separated_pan_however_it_is_punctuated`,
+`test_redact_pan_stays_silent_on_text_the_widened_separators_could_have_swept`,
+`test_redact_pan_masks_a_card_grouped_outside_the_two_canonical_shapes`,
+`test_redact_pan_still_stores_some_groupings_whole`, and the two structural
+guards `test_pan_re_never_starts_a_match_at_a_three_digit_group` and
+`test_every_pan_re_match_holds_between_thirteen_and_nineteen_digits`. ADR-0018's
+References carry the same wrong names and are left as written, per immutability.
+
 ## References
 
 SPEC §18; ADR-0018 (superseded on the detector shape only); ADR-0007 (money

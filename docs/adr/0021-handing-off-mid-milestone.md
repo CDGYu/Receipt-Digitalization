@@ -98,6 +98,37 @@ detector change.
   flattens the two loses the only signal that says which claims were checked
   twice.
 
+## Correction (2026-08-02)
+
+**Decision 2's freshness command is blind to docs-only commits, which is most of
+what a handoff session writes.** `-- src tests frontend` filters to code, but the
+stamp makes claims about docs tasks too — the ADRs, the design doc, the plan.
+Measured on this branch: the stamp named `a883df6` as the last code commit, and
+`git log --oneline a883df6..71e42a1 -- src tests frontend` returned only
+`b3f5dbd`, silently missing `71e42a1` — an ADR-only commit that landed after the
+document was written. The test came back "fresh enough" for a document that was
+already stale.
+
+**The path filter widens to include `docs`, minus the handoff pair itself:**
+
+```
+git log --oneline <code-sha>..<branch> -- src tests frontend docs \
+  ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
+```
+
+`docs` is in because an ADR, design or plan edit is movement the stamp can be
+wrong about. The pair is out for the reason decision 2 already gives: a stamp
+cannot name the commit that writes it, so the refresh commit must not trip its
+own check. Git's exclude pathspec beats the inclusion, so a commit touching
+*only* the pair is invisible to the command however the paths are ordered —
+verified.
+
+Verified 2026-08-02 over `a883df6..71e42a1`: the widened command lists `71e42a1`
+and `b3f5dbd`, which the narrow one missed and found respectively. `061425f`,
+`caf4eb7` and `9623583` also appear, and correctly — each touched
+`docs/adr/0021-handing-off-mid-milestone.md` alongside the pair, and each is
+invisible to the command when its pair paths are the only ones offered.
+
 ## References
 
 ADR-0019 (the handoff pair, the promotion rule, and the kickoff verification
