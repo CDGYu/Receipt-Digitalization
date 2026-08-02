@@ -82,10 +82,11 @@ Consequences, checked against the code:
   `enqueue_review` redacts `reason` at the sink, and ADR-0018 records
   `_bounded_optional_text`'s message as exactly the kind of text that pass
   exists for.
-- The coercer also strips whitespace and maps `""` to `None`
-  (via `_coerce_optional_text`) — on the live path this is a no-op (ISO codes
-  carry no padding); on direct calls it is a strict improvement over storing
-  padded text verbatim.
+- The coercer changes nothing else: `_coerce_optional_text` is exactly
+  `None if value is None else str(value)` (`repository.py:1049-1050`) — no
+  stripping, no empty-string mapping — so for a `str | None` input the only
+  behavioural addition is the length check. (An earlier draft of this section
+  claimed stripping; falsified by reading the function.)
 
 ### 1.4 What must not change
 
