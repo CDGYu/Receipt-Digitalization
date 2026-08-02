@@ -202,6 +202,21 @@ _PAN_MAX_DIGITS = 19
 #: hand-filled corpus. Capped at two rather than left open, because ``+`` also
 #: fires on amount columns aligned with three or more spaces -- measured.
 #:
+#: **What ``{1,2}`` admits is not "a second space": it is one or two characters
+#: from the class, in any combination.** 42 separator spellings -- the 6 single
+#: characters and all 36 two-character pairs of them, 30 of those mixed
+#: (``', '``, ``'. '``, ``'- '``, ``'./'``, ...). Measured 2026-08-02: all 36
+#: two-character spellings fire on a grouped 16-digit run, and all 36 were
+#: silent under the one-character class, so every one of them is surface this
+#: cap opened. It shows up on ordinary receipt text --
+#: ``redact_pan('PO 4500, 4501, 4502, 4503 RECEIVED')`` returns
+#: ``'PO ************4503 RECEIVED'``, where the one-character class was
+#: silent. That is the pre-existing side-by-side-column-amounts false positive
+#: with a wider surface rather than a new class, and it is pinned by
+#: ``test_column_amounts_separated_by_two_characters_are_the_cost_of_the_cap``.
+#: Recorded in ADR-0020's Correction (2026-08-02); narrowing the cap to the
+#: doubled spellings alone is a separate scoped decision, not a cleanup.
+#:
 #: Three properties of that change are load-bearing, and one apparent property
 #: is not:
 #:

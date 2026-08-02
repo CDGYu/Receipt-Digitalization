@@ -11,8 +11,12 @@ The load-bearing behaviours pinned down below:
   * an unparseable or missing date leaves ``txn_date`` NULL and keeps the raw
     string -- the repository never invents a date;
   * a full card number (PAN) never reaches ``extraction_runs.raw_response``
-    (spec §18), while money, hashes, and a 4-digit ``card_last4`` are left
-    exactly as they were -- the silent case matters as much as the firing one;
+    (spec §18), while money, a 4-digit ``card_last4``, and any hash whose
+    longest digit run stays under thirteen are left exactly as they were -- the
+    silent case matters as much as the firing one. A hash is not silent by
+    being a hash: one whose digit run *reaches* thirteen masks, which is
+    ``test_redact_pan_masks_a_hex_hash_whenever_a_digit_run_reaches_thirteen``
+    and is why no hash may be routed through ``redact_pan`` at all (ADR-0007);
   * ``apply_corrections`` is transactional: one ``corrections`` row per changed
     field path, zero rows for a no-op, and nothing at all when a path in the
     patch cannot be mapped.
@@ -1269,6 +1273,40 @@ def test_two_column_scale_amounts_side_by_side_are_the_cost_of_the_dot_separator
     assert redact_pan("1000.0000 2000.0000") == "************0000"
 
 
+@pytest.mark.parametrize(
+    ("printed", "expected"),
+    [
+        ("PO 4500, 4501, 4502, 4503 RECEIVED", "PO ************4503 RECEIVED"),
+        ("ITEMS 1001. 1002. 1003. 1004", "ITEMS ************1004"),
+    ],
+    ids=["comma-space", "dot-space"],
+)
+def test_column_amounts_separated_by_two_characters_are_the_cost_of_the_cap(
+    printed: str, expected: str
+) -> None:
+    """The accepted false-positive surface of the ``{1,2}`` cap, pinned.
+
+    ``{1,2}`` was adopted for the doubled spelling -- a second space between
+    groups -- but what it admits is *one or two characters from the class, in
+    any combination*: 42 spellings, of which 36 are two-character and 30 of
+    those mixed. Every one of the 36 fires where the one-character class was
+    silent, so these are not the doubled spelling wearing a different glyph;
+    they are surface the cap opened. Both cases here are ordinary receipt text,
+    and both are stored whole at the one-character class.
+
+    The class is still the pre-existing one ADR-0020's Decision accepted --
+    side-by-side column amounts, indistinguishable from a grouped card by
+    inspection, and reachable only through a *free-text* value because
+    ``_coerce_money`` returns a ``Decimal`` and :func:`_plan_change` redacts
+    only ``str``. What grew is how many spellings reach it. Recorded here so it
+    reads as a decision rather than an oversight (ADR-0020, Correction
+    2026-08-02); narrowing the cap to the doubled spellings alone is a queued
+    scoped decision, so a change that makes these two stay silent should update
+    this test and the ADR together.
+    """
+    assert redact_pan(printed) == expected
+
+
 def test_redact_pan_redacts_dict_keys_as_well_as_values() -> None:
     assert redact_pan({"4111111111111111": "x"}) == {"************1111": "x"}
     assert redact_pan({"CARD NO.4111111111111111": {"nested 4111111111111111": 1}}) == {
@@ -1522,8 +1560,25 @@ _ALL_SHAPES = [
     for shape in itertools.product(range(1, 9), repeat=count)
 ]
 
-#: The single and doubled separators the pattern accepts.
-_SWEEP_SEPARATORS = [*_SEPARATORS, "  "]
+#: Every separator spelling the ``{1,2}`` cap accepts: the 6 single characters
+#: and all 36 two-character combinations of them, 30 of those mixed. The lead-3
+#: guard sweeps all 42 -- the TIN guarantee is the one that must hold at every
+#: spelling, and it is cheap enough to.
+_ALL_SEPARATOR_SPELLINGS = [
+    *_SEPARATORS,
+    *("".join(pair) for pair in itertools.product(_SEPARATORS, repeat=2)),
+]
+
+#: The subset the digit-range guard sweeps: the 6 singles, the 6 doubled
+#: spellings, and four mixed pairs. Its docstring records why it is a subset.
+_SWEEP_SEPARATORS = [
+    *_SEPARATORS,
+    *(separator * 2 for separator in _SEPARATORS),
+    ", ",
+    ". ",
+    " -",
+    "./",
+]
 
 
 def _printed(shape: tuple[int, ...], separator: str) -> str:
@@ -1547,11 +1602,18 @@ def test_pan_re_never_starts_a_match_at_a_three_digit_group() -> None:
     legitimate hit -- ``search`` would report that hit and fail this test for a
     correct reason, making the test wrong rather than the pattern. What must
     never happen is a match *starting* at the 3-digit group.
+
+    Swept across **all 42 separator spellings** ``{1,2}`` accepts, not the 7
+    this once used. The cap admits one or two characters from the class in any
+    combination, so a TIN transcribed with a mixed separator -- ``', '``,
+    ``'. '`` -- is a spelling the pattern sees and a partial sweep does not
+    (ADR-0020, Correction 2026-08-02). Measured at 42: ~0.3 s, which this
+    guarantee is worth paying in full.
     """
     for shape in _ALL_SHAPES:
         if shape[0] != 3:
             continue
-        for separator in _SWEEP_SEPARATORS:
+        for separator in _ALL_SEPARATOR_SPELLINGS:
             text = _printed(shape, separator)
             assert _PAN_RE.match(text) is None, (shape, separator, text)
 
@@ -1572,6 +1634,19 @@ def test_every_pan_re_match_holds_between_thirteen_and_nineteen_digits() -> None
     pattern rather than restated. ADR-0018 keeps the guard anyway, as defence in
     depth for whatever alternative is added next -- this test is what tells the
     person adding it that they have made the guard reachable.
+
+    **Swept over a subset of the 42 separator spellings, deliberately.** This
+    guard runs ``finditer`` over the whole shape space rather than ``match``
+    over the leading-3 slice, so it costs about 30x what its neighbour does:
+    measured, all 42 spellings take ~4.8 s against ~0.3 s for the lead-3 guard
+    at 42, and the whole suite is not worth that. The subset is the 6 singles,
+    the 6 doubled spellings, and four mixed pairs (``', '``, ``'. '``,
+    ``' -'``, ``'./'``) chosen to cover a separator's width changing mid-run in
+    both directions. What the width of a separator can change here is where a
+    match *starts and ends*, not how many digits an alternative admits -- every
+    alternative's digit total is fixed by its own quantifiers -- so a spelling
+    left out is not a hole this guard was ever the one to close. The lead-3
+    guard, whose guarantee does turn on the spelling, sweeps all 42.
     """
     for shape in _ALL_SHAPES:
         for separator in _SWEEP_SEPARATORS:
