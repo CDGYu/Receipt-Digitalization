@@ -44,7 +44,11 @@ The load-bearing behaviours pinned down below (ADR-0013):
 
 from __future__ import annotations
 
+import hashlib
+import inspect
 import io
+import itertools
+import random
 import threading
 import uuid
 from decimal import Decimal as D
@@ -55,7 +59,7 @@ import pytest
 pytest.importorskip("PIL")
 pytest.importorskip("pillow_heif")
 
-from PIL import Image  # noqa: E402
+from PIL import Image, ImageDraw  # noqa: E402
 from sqlalchemy import select  # noqa: E402
 
 from config.settings import Settings  # noqa: E402
@@ -78,10 +82,15 @@ from receipts.extract.schema import (  # noqa: E402
     TriageResult,
 )
 from receipts.extract.schema import LineItem as ExtractedLineItem  # noqa: E402
+from receipts.ingest.dedupe import compute_phash, phash_distance  # noqa: E402
 from receipts.ingest.ingest import ReceiptJob  # noqa: E402
 from receipts.ingest.storage import LocalStorage, make_image_key  # noqa: E402
 from receipts.persist.models import Base, Receipt, ReviewState, ReviewTask  # noqa: E402
-from receipts.persist.repository import create_pending_receipt, save_extraction  # noqa: E402
+from receipts.persist.repository import (  # noqa: E402
+    create_pending_receipt,
+    find_duplicate_by_phash,
+    save_extraction,
+)
 from receipts.persist.session import make_engine, make_session_factory  # noqa: E402
 from receipts.score.confidence import ReceiptStatus  # noqa: E402
 from receipts.validate.report import ValidationReport  # noqa: E402
@@ -121,16 +130,43 @@ def settings() -> Settings:
 # --------------------------------------------------------------------------- #
 
 
-def _png_bytes() -> bytes:
+#: Seeds for the default-distinct fixture images, one per call.
+_PNG_SEEDS = itertools.count()
+
+
+def _png_bytes(seed: int | None = None) -> bytes:
+    """A deterministic PNG with enough structure to carry a distinctive dHash.
+
+    A flat image is useless here: every uniform bitmap hashes to the same 64
+    zero bits (dHash keys on gradient direction, not shade), so byte-identical
+    fixture blobs made concurrent receipts race into dedupe's near-duplicate
+    window -- this module's diagnosed intermittent failure. Mirrors the
+    seeded-rectangles fixture in ``tests/test_process_receipt.py``, adding a
+    per-call default so every job gets a distinct image unless a test passes
+    ``seed`` for reproducible bytes -- or hands one blob to two jobs via
+    ``_job(storage, data)``, the sibling module's override, which is how the
+    two tests that need a real dedupe match ask for byte-identical images.
+    """
+    rng = random.Random(next(_PNG_SEEDS) if seed is None else seed)
+    image = Image.new("RGB", (900, 1400), (240, 240, 240))
+    draw = ImageDraw.Draw(image)
+    for _ in range(24):
+        left = rng.randrange(0, 780)
+        top = rng.randrange(0, 1280)
+        shade = rng.randrange(0, 200)
+        draw.rectangle(
+            [left, top, left + rng.randrange(20, 120), top + rng.randrange(20, 120)],
+            fill=(shade, shade, shade),
+        )
     buffer = io.BytesIO()
-    Image.new("RGB", (900, 1400), (240, 240, 240)).save(buffer, format="PNG")
+    image.save(buffer, format="PNG")
     return buffer.getvalue()
 
 
-def _job(storage: LocalStorage) -> ReceiptJob:
+def _job(storage: LocalStorage, data: bytes | None = None) -> ReceiptJob:
     receipt_id = uuid.uuid4()
     key = make_image_key(receipt_id, "original")
-    storage.put(key, _png_bytes(), "image/png")
+    storage.put(key, _png_bytes() if data is None else data, "image/png")
     return ReceiptJob(
         id=receipt_id,
         image_key=key,
@@ -275,9 +311,9 @@ class _Cancelled(BaseException):
     """
 
 
-def _pending_receipt(session_factory, storage) -> uuid.UUID:
+def _pending_receipt(session_factory, storage, *, data: bytes | None = None) -> uuid.UUID:
     """A stored blob plus its ``pending`` row -- what `receipts ingest` leaves behind."""
-    job = _job(storage)
+    job = _job(storage, data)
     with session_factory() as session:
         create_pending_receipt(session, job)
         session.commit()
@@ -748,8 +784,15 @@ def test_a_receipt_whose_run_failed_is_never_matched_as_a_dedupe_original(
     merge is not -- but it is undocumented behaviour with a real cost, and
     nothing pinned it. `reprocess` is the command that hits it routinely,
     because re-running a receipt that failed is what it is for.
+
+    Both receipts are handed one byte-identical blob explicitly, because the
+    fixture is distinct-by-default now: identical bytes are what make the
+    empty-`image_phash` skip the only thing standing between the second
+    receipt and a duplicate match. Without them this test is vacuously green
+    -- it would pass even with the skip deleted (measured).
     """
-    failed_id = _pending_receipt(session_factory, storage)
+    blob = _png_bytes(seed=0)
+    failed_id = _pending_receipt(session_factory, storage, data=blob)
     _reprocess(session_factory, _BrokenStorage(storage.root), settings, failed_id, script=[])
 
     with session_factory() as session:
@@ -759,7 +802,7 @@ def test_a_receipt_whose_run_failed_is_never_matched_as_a_dedupe_original(
         assert failed_row.image_phash == ""
 
     # A second receipt carrying an identical image, processed normally.
-    second_id = _pending_receipt(session_factory, storage)
+    second_id = _pending_receipt(session_factory, storage, data=blob)
     code = _reprocess(session_factory, storage, settings, second_id)
 
     with session_factory() as session:
@@ -790,11 +833,18 @@ def test_reprocessing_a_duplicate_linked_original_never_empties_it(
     and `repository.find_duplicate_by_phash` drops candidates whose
     `duplicate_of` is the receipt being run. This test pins the guarantee they
     jointly provide, which is the thing an operator actually depends on.
+
+    The copy is handed the original's exact bytes explicitly, because the
+    fixture is distinct-by-default now: the byte-identical second image is
+    this test's premise -- it is what makes the copy a dedupe duplicate at
+    all, and so what lets it run with an empty client script, dedupe having
+    short-circuited extraction before the VLM is ever called.
     """
-    original_id = _pending_receipt(session_factory, storage)
+    blob = _png_bytes(seed=0)
+    original_id = _pending_receipt(session_factory, storage, data=blob)
     assert _reprocess(session_factory, storage, settings, original_id) == EXIT_OK
 
-    copy_id = _pending_receipt(session_factory, storage)
+    copy_id = _pending_receipt(session_factory, storage, data=blob)
     assert _reprocess(session_factory, storage, settings, copy_id, script=[]) == EXIT_OK
 
     with session_factory() as session:
@@ -858,3 +908,26 @@ def test_reprocess_skips_dedupe_for_a_receipt_that_already_holds_its_own_extract
     assert row.status is ReceiptStatus.AUTO_APPROVED
     assert row.duplicate_of is None
     assert row.total == D("224.00")
+
+
+def test_fixture_images_are_distinct_beyond_the_dedupe_threshold() -> None:
+    """The premise of every multi-receipt test in this module, pinned.
+
+    Byte-identical fixture blobs share a sha256 AND a dHash -- a uniform
+    bitmap hashes to the same 64 zero bits at any shade -- so receipts
+    processed concurrently race into ``find_duplicate_by_phash``'s
+    near-duplicate window, and whichever commits first makes the others
+    ``REJECTED`` duplicates. That race is this module's diagnosed
+    intermittent failure, and distinct bytes alone are not enough: dedupe is
+    perceptual, so the images must sit pairwise beyond the threshold, which
+    is read off the real function rather than restated here.
+    """
+    threshold = inspect.signature(find_duplicate_by_phash).parameters["threshold"].default
+    blobs = [_png_bytes(seed=seed) for seed in range(12)]
+
+    assert len({hashlib.sha256(blob).digest() for blob in blobs}) == len(blobs)
+
+    hashes = [compute_phash(Image.open(io.BytesIO(blob))) for blob in blobs]
+    for i, first in enumerate(hashes):
+        for j, second in enumerate(hashes[i + 1 :], start=i + 1):
+            assert phash_distance(first, second) > threshold, (i, j, first, second)

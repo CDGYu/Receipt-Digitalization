@@ -181,6 +181,23 @@ Shape of the change (the plan will fix exact code):
   way to request identical bytes for that caller alone; the default stays
   distinct. If no such caller exists, the counter alone is the change.
 
+**Note (2026-08-02, found during implementation).** The conditional above
+fired: the plan had resolved it the other way ("no caller needs it, so none is
+added"), and that resolution is what was wrong. Two callers depend on
+byte-identical images, both *transitively* through `_pending_receipt` rather
+than by calling `_job` directly, which is why a check of `_job`'s direct
+callers missed them.
+`test_reprocessing_a_duplicate_linked_original_never_empties_it` breaks
+outright under distinct images — the copy it builds is meant to *be* a dedupe
+duplicate, which is what lets it run with an empty client script, dedupe
+having short-circuited extraction before the VLM is called.
+`test_a_receipt_whose_run_failed_is_never_matched_as_a_dedupe_original` is
+worse: it stays green while going vacuous, since with distinct images the
+second receipt would not match even if the empty-`image_phash` skip were
+deleted. Both now pass one shared blob explicitly through `_job`'s
+sibling-style `data=` override (`tests/test_process_receipt.py:155-158`); the
+per-call default stays distinct.
+
 ### 2.3 Tests
 
 1. **The deterministic pin (RED against the current fixture):** the images the
