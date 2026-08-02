@@ -193,10 +193,15 @@ duplicate, which is what lets it run with an empty client script, dedupe
 having short-circuited extraction before the VLM is called.
 `test_a_receipt_whose_run_failed_is_never_matched_as_a_dedupe_original` is
 worse: it stays green while going vacuous, since with distinct images the
-second receipt would not match even if the empty-`image_phash` skip were
-deleted. Both now pass one shared blob explicitly through `_job`'s
-sibling-style `data=` override (`tests/test_process_receipt.py:155-158`); the
-per-call default stays distinct.
+second receipt would not match even if the failed run *had* stored its hash
+— which is the mutation that test exists to catch. (Measured in review: with
+that mutation applied, the shared blob is matched, while distinct blobs sit
+31 bits apart and go unmatched. Deleting the empty-`image_phash` skip is
+*not* the discriminating mutation — `phash_distance` raises on `""`.)
+
+Both now pass one shared blob explicitly through `_job`'s sibling-style
+`data=` override (`tests/test_process_receipt.py:155-158`); the per-call
+default stays distinct.
 
 ### 2.3 Tests
 

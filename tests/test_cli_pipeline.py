@@ -786,10 +786,12 @@ def test_a_receipt_whose_run_failed_is_never_matched_as_a_dedupe_original(
     because re-running a receipt that failed is what it is for.
 
     Both receipts are handed one byte-identical blob explicitly, because the
-    fixture is distinct-by-default now: identical bytes are what make the
-    empty-`image_phash` skip the only thing standing between the second
-    receipt and a duplicate match. Without them this test is vacuously green
-    -- it would pass even with the skip deleted (measured).
+    fixture is distinct-by-default now and byte-identity is what gives this
+    test teeth. Without it the second receipt could not match the failed one
+    even if the failed run *had* stored a hash, so the test would certify
+    nothing. With it, that mutation is exactly what this test refuses:
+    measured in review, a failed row carrying its own hash is matched under
+    the shared blob and unmatched (31 bits away) under distinct ones.
     """
     blob = _png_bytes(seed=0)
     failed_id = _pending_receipt(session_factory, storage, data=blob)
