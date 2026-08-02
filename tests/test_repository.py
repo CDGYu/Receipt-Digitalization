@@ -642,6 +642,47 @@ def test_save_extraction_redacts_a_pan_inside_a_line_item_modifier(engine: sa.En
         assert modifiers[0]["amount"] == "-1.00"  # money untouched
 
 
+def test_save_extraction_bounds_the_machine_path_currency(engine: sa.Engine) -> None:
+    """The machine path holds the same bound the human path has, for the same column.
+
+    ``Receipt.currency`` is length-bounded and the human path already coerces
+    through ``_bounded_optional_text("currency")``; the machine path used to
+    write the model's text verbatim. The backends disagree about overlong
+    text -- Postgres raises ``DataError`` mid-transaction, SQLite stores it
+    silently -- so the unbounded write was a receipt-killing exception that
+    development could not see. Letters on purpose: an all-digit over-long
+    value would be PAN-shaped and masked by the redaction pass, which is a
+    different guarantee than the bound pinned here.
+    """
+    extraction = _extraction()
+    extraction.receipt.currency = "PESO PHILIPPINES"
+
+    with Session(engine) as session:
+        with pytest.raises(ValueError, match="currency"):
+            _save(session, extraction=extraction)
+
+
+def test_save_extraction_still_stores_a_null_currency(engine: sa.Engine) -> None:
+    """The bound rejects only overlong text: a null passes through untouched.
+
+    (The 3-character green path is already pinned by
+    ``test_save_extraction_persists_receipt_and_line_items``, which stores
+    ``"USD"``.)
+    """
+    job = _job()
+    nulled = _extraction()
+    nulled.receipt.currency = None
+
+    with Session(engine) as session:
+        _save(session, job=job, extraction=nulled)
+        session.commit()
+
+    with Session(engine) as session:
+        got = get_receipt(session, job.id)
+        assert got is not None
+        assert got.currency is None
+
+
 def test_every_text_column_save_extraction_writes_is_redacted(engine: sa.Engine) -> None:
     """The guarantee, enumerated from the table AND proven end to end.
 
@@ -697,10 +738,19 @@ def test_every_text_column_save_extraction_writes_is_redacted(engine: sa.Engine)
     them is a distinct design question -- how to join a list into text --
     that this walk's seed-and-check mechanism does not model.
 
-    ``currency``'s ``String(3)`` bound is not enforced here: measured, SQLite
-    stores the redacted-but-still-overlong value rather than rejecting it (the
-    design doc's own documented, out-of-scope gap); this test does not depend
-    on that bound.
+    ``currency`` is the **second** named structural exclusion, added by user
+    ruling 2026-08-02 for the same reason ``card_last4`` is the first: it
+    carries a guarantee stronger than redaction. ``save_extraction`` bounds it
+    to the column's own length through ``_bounded_optional_text("currency")``
+    -- the very coercer the human correction path uses, shared so the two
+    cannot drift -- and a value that fits ``String(3)`` cannot contain a
+    13-digit PAN at all. So it is excluded from the walk itself rather than
+    merely unseeded, and it is seeded below with a bounded code: an over-long
+    seed raises ``ValueError`` from the bound before any assertion here could
+    run, which is how the collision was found (see the design doc's §1.5
+    note). The same honest cost applies as for ``card_last4``: a *second*
+    column also sourced from ``receipt.currency`` would not be covered by this
+    walk.
     """
     pan = "4111111111111111"
 
@@ -713,13 +763,16 @@ def test_every_text_column_save_extraction_writes_is_redacted(engine: sa.Engine)
             and column.name not in exclude
         ]
 
-    receipt_text = text_columns(Receipt.__table__, exclude=frozenset({"card_last4"}))
+    receipt_text = text_columns(
+        Receipt.__table__, exclude=frozenset({"card_last4", "currency"})
+    )
     item_text = text_columns(LineItem.__table__)
     item_json = [c.name for c in LineItem.__table__.columns if isinstance(c.type, sa.JSON)]
     # The walk is the guarantee, so a filter that quietly matched nothing would
-    # make this test pass forever. Measured contents on 2026-07-31:
-    # receipts -> merchant_name_raw, receipt_number, date_raw, currency,
-    # payment_method, image_key, processed_image_key, image_phash;
+    # make this test pass forever. Measured contents on 2026-08-02, after
+    # ``currency`` joined ``card_last4`` as a named exclusion:
+    # receipts -> merchant_name_raw, receipt_number, date_raw, payment_method,
+    # image_key, processed_image_key, image_phash;
     # line_items -> description_raw, sku, unit; JSON -> modifiers, bbox.
     assert {"receipt_number", "date_raw", "merchant_name_raw"} <= set(receipt_text)
     assert {"description_raw", "sku", "unit"} <= set(item_text)
@@ -743,7 +796,7 @@ def test_every_text_column_save_extraction_writes_is_redacted(engine: sa.Engine)
             date=f"DATE {pan}",
             date_raw=f"DATE RAW {pan}",
             time=f"TIME {pan}",
-            currency=f"CUR {pan}",
+            currency="USD",  # bounded to String(3); excluded above, see docstring
             cashier=f"CASHIER {pan}",
             terminal=f"TERMINAL {pan}",
         ),

@@ -95,6 +95,16 @@ Consequences, checked against the code:
   ≤3-char value cannot be lengthened by masking.
 - `_bounded_optional_text` itself is untouched — it already does the job.
 - No behaviour change on the live pipeline path (§1.2), pinned by test.
+- **One thing does change (user ruling, 2026-08-02): the §18 column walk's
+  seeding contract for `currency`.** `test_every_text_column_save_extraction_writes_is_redacted`
+  seeded a PAN through `receipt.currency`, which the bound now rejects, so
+  `currency` becomes that walk's **second** named structural exclusion
+  alongside `card_last4` and is seeded with a bounded (≤3-character) code
+  instead. The rationale is `card_last4`'s exactly: a value that fits
+  `String(3)` cannot contain a 13-digit PAN, so the bound is the stronger
+  guarantee. Cost, stated as ADR-0018 states `card_last4`'s: a future second
+  column sourced from `receipt.currency` would not be covered by that walk.
+  Recorded as a dated correction in ADR-0018.
 
 ### 1.5 Tests
 
@@ -110,6 +120,23 @@ Consequences, checked against the code:
    ends with the receipt persisted, `currency` `None` (normalize refused it),
    and a terminal status — proving the bound is unreachable from
    `process_receipt` and the pipeline behaviour did not move.
+
+**Note (2026-08-02, found during implementation).** §1.2 reasoned that what
+remains exposed is "direct callers (tests, future code)" saving an
+un-normalized extraction. That class had a **live instance already in the
+suite**, which this design did not check for:
+`test_every_text_column_save_extraction_writes_is_redacted` calls
+`save_extraction` directly with an un-normalized extraction and deliberately
+seeds a PAN into every `str`-typed field, `receipt.currency` included — so the
+bound raised on it and the test went RED, the sole failure in the suite. It was
+the correct RED for the wrong test: the bound working exactly as designed, on a
+caller the design had reasoned about abstractly without grepping for it. Fixed
+per §1.4's ruling bullet (second named exclusion, bounded seed, docstring
+rationale rewritten); that test's docstring had itself recorded the unbounded
+currency as an out-of-scope gap it "does not depend on", which this change
+retires. Lesson for the next design in this repo: when a change tightens a
+contract at a public boundary, enumerate the boundary's existing callers in the
+test suite, not only in `src/`.
 
 ---
 

@@ -163,6 +163,38 @@ cannot also never fire on something else:
   modifier amount is not a real value, and anything with a fractional part
   (`"4111111111111111.00"`) is already protected by `(?!\.\d)`.
 
+## Correction (2026-08-02)
+
+**"One named exception" (above) is stale: the walk now has two.** `currency`
+joins `card_last4` as a named structural exclusion from
+`test_every_text_column_save_extraction_writes_is_redacted`, by user ruling
+(2026-08-02), for exactly the pattern `card_last4` already set — the column
+carries a guarantee stronger than redaction, so it is excluded from the walk
+itself rather than merely left unseeded. `save_extraction` now bounds its
+`currency` write to the column's own length through the same
+`_bounded_optional_text("currency")` coercer the human correction path uses,
+built once and shared so the machine and human paths cannot drift for the same
+column; a value that fits `String(3)` cannot contain a PAN at all, since a PAN
+is at minimum thirteen digits. The bound is therefore the stronger guarantee,
+and it is what closes the asymmetry this ADR's Context section named between
+what a machine writes and what a reviewer writes.
+
+**The same caveat carries over.** As with `card_last4`, a *second* column also
+sourced from `receipt.currency` would not be covered by this particular walk.
+It would not leak silently either — the bound raises before such a column could
+be written — but that is a tripwire, not a leak check, and it fires whether or
+not the new column is redacted.
+
+This correction was prompted by the walk itself: it seeds a PAN through
+`receipt.currency` and calls `save_extraction` directly with an un-normalized
+extraction, so adding the bound broke it. That is the "direct callers (tests,
+future code)" exposure class the design doc named, with a live instance already
+in the suite. See
+`docs/superpowers/specs/2026-08-02-currency-bound-and-fixture-race-design.md`
+(§1.3 the ruling and its rationale, §1.4 what the reconciliation changed, §1.5
+the collision note). Nothing about `_PAN_RE`, `_mask_pan`, `redact_pan`, or the
+review-reason sink changed.
+
 ## Consequences
 
 - **`docs/adr/0007-pan-redaction-and-money-integrity.md` is corrected, not

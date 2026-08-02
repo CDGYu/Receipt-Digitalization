@@ -544,7 +544,7 @@ def save_extraction(
         txn_date=txn_date,
         txn_time=_parse_iso_time(receipt_meta.time),
         date_raw=date_raw,
-        currency=receipt_meta.currency,
+        currency=_CURRENCY_BOUND(receipt_meta.currency),
         subtotal=extraction.totals.subtotal,
         tax_total=extraction.totals.tax,
         discount_total=extraction.totals.discount,
@@ -1072,6 +1072,12 @@ def _bounded_optional_text(column_name: str) -> Callable[[Any], str | None]:
     return coerce
 
 
+#: The machine path's bound for the one length-limited column model text
+#: reaches. Built once and shared with ``_RECEIPT_FIELDS`` below, so the
+#: human and machine paths cannot drift for the same column.
+_CURRENCY_BOUND = _bounded_optional_text("currency")
+
+
 def _coerce_money(value: Any) -> Decimal | None:
     """A ``Numeric`` column value, as a **finite** ``Decimal``.
 
@@ -1171,7 +1177,7 @@ _RECEIPT_FIELDS: dict[str, tuple[str, Callable[[Any], Any]]] = {
     "receipt.date": ("txn_date", _coerce_date),
     "receipt.date_raw": ("date_raw", _coerce_optional_text),
     "receipt.time": ("txn_time", _coerce_time),
-    "receipt.currency": ("currency", _bounded_optional_text("currency")),
+    "receipt.currency": ("currency", _CURRENCY_BOUND),
     "totals.subtotal": ("subtotal", _coerce_money),
     "totals.tax": ("tax_total", _coerce_money),
     "totals.discount": ("discount_total", _coerce_money),

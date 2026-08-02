@@ -300,6 +300,30 @@ def test_clean_receipt_is_persisted_and_auto_approved(session_factory, storage, 
         assert session.scalars(select(ReviewTask)).all() == []
 
 
+def test_a_garbage_currency_never_reaches_the_bounded_column(
+    session_factory, storage, settings
+):
+    """The machine-path bound is unreachable from the pipeline, by construction.
+
+    ``normalize`` replaces ``receipt.currency`` with a whitelisted ISO code or
+    ``None`` before anything is saved, so a model emitting free text there
+    ends as a persisted receipt with a null currency (these hermetic settings
+    carry no ``default_currency``, so nothing is resolved in its place) --
+    never as a ``ValueError`` from ``save_extraction``'s bound.
+    """
+    bad = _good()
+    bad.receipt.currency = "PESO PHILIPPINES"
+    job = _job(storage)
+
+    result = _run(job, _Client([_triage(), bad]), session_factory, storage, settings)
+
+    assert result.failed_stage is None
+    with session_factory() as session:
+        receipt = session.get(Receipt, job.id)
+        assert receipt is not None
+        assert receipt.currency is None
+
+
 def test_every_model_call_gets_an_audit_row(session_factory, storage, settings):
     job = _job(storage)
     client = _Client([_triage(), _good()])
