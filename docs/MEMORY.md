@@ -6,13 +6,15 @@ continuity protocol itself — what lives where, and why this snapshot must be
 verified rather than trusted — is **ADR-0019**, extended by **ADR-0021** (whose
 2026-08-02 dated correction widened the freshness check after a docs-only task
 proved invisible to it).
-Last updated: **2026-08-02**, at **`main @ 0d6cea2` (last code commit), pushed
-and in sync with `origin/main`**, with this refresh as a docs-only commit on
-top. **No branch is in flight.** A stamp cannot name the commit that writes it,
-so the check is not a commit count — counts rot — but this:
+Last updated: **2026-08-02 (second refresh, session end)**, at
+**`main @ b81ba34`** (last code commit `0d6cea2`, pushed, in sync) with
+**`feat/currency-bound-and-fixture-race` IN FLIGHT, its last *code* commit
+`9efeffb`, pushed**, this refresh riding on top as a docs-only commit. A stamp
+cannot name the commit that writes it, so the check is not a commit count —
+counts rot — but this:
 
 ```
-git log --oneline 0d6cea2..main -- src tests frontend docs ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
+git log --oneline 9efeffb..feat/currency-bound-and-fixture-race -- src tests frontend docs ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
 ```
 
 **Empty means this file is current.** Any output means the tree moved after it
@@ -20,8 +22,16 @@ was written and you are reading something stale.
 
 ## Snapshot
 
-- **`main` @ `0d6cea2`, pushed, in sync with `origin/main`** (plus this docs
-  refresh on top). **No branch in flight.**
+- **`main` @ `b81ba34`, pushed, in sync with `origin/main`.** pytest on
+  `main`: **916**.
+- **BRANCH IN FLIGHT: `feat/currency-bound-and-fixture-race` @ `9efeffb`**,
+  five commits ahead of `main`, **pushed**. Both implementation tasks are
+  DONE and task-reviewed; **the close is not started** (whole-branch review →
+  one fix wave → one scoped re-review → ff-merge → refresh). Gates at
+  `9efeffb`, controller-run: `verify.py` all five PASS, pytest **920/0/0/0**
+  junitxml, Vitest 170, outside-repo import OK. Detail below under "Currency
+  bound & fixture race". **The `main`-push authorization of 2026-08-02 was
+  one-time and consumed — ask again at this branch's merge.**
 - **The PAN grouping milestone is complete and merged** (2026-08-02, true
   fast-forward `1d9f3e3` → `0d6cea2`; twelve branch commits: design/ADR/plan,
   four tasks, three handoff-docs commits, a three-commit fix wave).
@@ -43,6 +53,49 @@ was written and you are reading something stale.
   tracked tree — open ledgers by path.**
 - **The repo is PUBLIC.** Verified 2026-07-31 via the GitHub API. See
   "Environment / provider" for what that exposes.
+
+## Currency bound & fixture race — the branch in flight
+
+`feat/currency-bound-and-fixture-race @ 9efeffb`, off `main @ b81ba34`,
+pushed. Design + plan: `docs/superpowers/{specs,plans}/2026-08-02-currency-bound-and-fixture-race*`
+(the design carries three dated correction notes added during execution).
+Ledger: `.superpowers/sdd/2026-08-02-currency-bound-and-fixture-race/progress.md`.
+Commits: `a71c902` design · `9a36d42` plan · `ce4bf9e` Task 1 · `022b4fa`
+Task 2 · `9efeffb` fix round 1 (prose-only, proven by AST identity).
+
+**Task 1 (done, reviewed clean, 3 minors deferred):** `save_extraction` runs
+`currency` through `_CURRENCY_BOUND = _bounded_optional_text("currency")` —
+one instance shared with `_RECEIPT_FIELDS` — raising `ValueError` on
+over-long text (ADR-0006; implements ADR-0007's bounded-text decision on the
+machine path). Live pipeline unreachable by construction (normalize
+whitelists; failure/duplicate paths save empty extractions), pinned. **User
+ruling:** the §18 walk's second named structural exclusion — `currency`
+joins `card_last4`, seeded ≤3 chars, because a `String(3)` value cannot hold
+a 13-digit PAN; recorded as ADR-0018's dated correction (2026-08-02).
+
+**Task 2 (done, reviewed clean after 1 fix round, 1 minor deferred):**
+`tests/test_cli_pipeline.py`'s fixture draws seeded random rectangles per
+call (uniform bitmaps all share the all-zero dHash — the diagnosed race into
+dedupe's 5-bit window). Pinned pairwise (min 21 / max 44 bits, threshold
+read via `inspect.signature`). Two transitive callers that DEPEND on
+byte-identical images pass one shared blob via `_job`'s sibling-style
+`data=` override; their docstrings name the discriminating mutation (a
+failed run storing its hash — the empty-phash filter guards a *crash*, not a
+false match).
+
+**What remains:** the close only — whole-branch review (strongest model,
+range `b81ba34..9efeffb`, five deferred minors to triage — the list is in
+`docs/NEXT_SESSION_PROMPT.md` task 0), ONE fix wave, one scoped re-review,
+ff-merge, refresh this pair, ASK before pushing `main`.
+
+**Plan defects this branch (both the controller's, both caught by
+implementers stopping at their briefs' own stop conditions):** #7 the walk
+collision (→ user ruling above); #8 two *transitive* callers via
+`_pending_receipt` depending on shared bytes — the plan swept only direct
+callers (resolved via the design's own pre-authorized conditional). Plus a
+ninth near-miss now promoted as **review standard 13**: an unmeasured
+"(measured)" mutation-counterfactual survived two authors until review
+executed it and found the mutation raises rather than passes.
 
 ## PAN grouping — complete and merged (2026-08-02)
 
@@ -219,6 +272,12 @@ API path moves.
 - **Finish-the-branch authorization (2026-08-02):** Tasks 3–4, whole-branch
   review, one fix wave, one scoped re-review, ff-merge, handoff refresh in the
   same session — executed in full.
+- **Currency bound (2026-08-02):** over-long machine-path `currency` **raises
+  `ValueError`** via the human path's own coercer (coerce-to-None refused);
+  tasks 1–2 **bundled on one branch**; the spec approved after review.
+- **The §18 walk's second named exclusion (2026-08-02):** `currency`, because
+  the `String(3)` bound is stronger than redaction — the `card_last4`
+  pattern; dated correction in ADR-0018. Chosen over abandoning the bound.
 - **Task 5's CI job was cut** (Phase 5). `scripts/verify.py` replaces it
   (ADR-0017).
 - **Milestone close includes the handoff refresh** (ADR-0019); **every session
@@ -303,21 +362,18 @@ merged" above.
 
 **`docs/NEXT_SESSION_PROMPT.md` carries the full ordered task list.** Headlines:
 
-1. **Bound the machine-path `currency` write** — `save_extraction` writes an
-   unconstrained `str` into `String(3)`; Postgres raises `DataError`
-   (leak-(d) shape: the human path is guarded by `_bounded_optional_text`, the
-   machine path is not). Reproduced by measurement.
-2. **Fix the intermittent test's fixtures** — diagnosed as a thread race
-   (identical blobs → dedupe `REJECTED` under load), **not** ordering.
-   `_job` → `_png_bytes()` returns a byte-identical PNG on every call. Fix:
-   distinct blobs per receipt.
-3. Phase 5 follow-ups: the five design §5 error-recovery behaviours (including
+0. **FINISH `feat/currency-bound-and-fixture-race` FIRST** — the close only:
+   whole-branch review (five deferred minors to triage), one fix wave, one
+   scoped re-review, ff-merge, refresh the pair, ask before pushing `main`.
+   (The branch's two implementation tasks — the currency bound and the
+   fixture race — are DONE and reviewed.)
+1. Phase 5 follow-ups: the five design §5 error-recovery behaviours (including
    **no logout control**), a read route for `corrections`, a real ASGI entry
    point, an admin release for a claimed task.
-4. **Phase 6** — merchants & few-shot. **Phase 7** — self-consistency wired into
+2. **Phase 6** — merchants & few-shot. **Phase 7** — self-consistency wired into
    the pipeline, gated on `triage.is_handwritten`. **Phase 8** — calibration and
    eval-harness honesty.
-5. **ISSUE-001 last.**
+3. **ISSUE-001 last.**
 
 ## Environment / provider (user's `.env`, gitignored)
 
