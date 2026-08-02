@@ -70,11 +70,19 @@ four groups keeps its remainder in the clear. **ADR-0018 supersedes this ADR's
 description of the masking rule.** Everything here about money integrity and
 bounded text still stands.
 
+**2026-08-02: the Consequences bullet below now points here.** It gained a
+short parenthetical, so a reader who lands on it is not left with "a hash"
+unqualified; its original wording is otherwise untouched, per ADR immutability.
+**ADR-0020 supersedes ADR-0018 on the detector's shape** — this correction
+predates ADR-0020 and cites only ADR-0018, which is still the reference for the
+measured rate but no longer for which groupings `_PAN_RE` matches.
+
 ## Consequences
 
 - **The silent-case tests are as important as the firing ones.** A redaction rule
   that fires on money, a hash, a 4-digit last4, a date, or `555-1234` is worse
-  than no rule. Never touch `redact_pan` without keeping
+  than no rule. (**"a hash" there is qualified by the Correction above**, and
+  by ADR-0018 for the measured rate.) Never touch `redact_pan` without keeping
   `test_redact_pan_is_silent_on_money_hashes_and_last4` green.
 - The accepted false positive is a 13–19 digit all-numeric identifier, which is
   indistinguishable from a PAN by inspection.
