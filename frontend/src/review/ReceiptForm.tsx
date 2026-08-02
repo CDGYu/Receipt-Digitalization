@@ -34,14 +34,18 @@ import type { FieldMap } from './patch'
  * stored.** `_plan_change` runs `redact_pan` over every coerced text value, so
  * a card number in any spelling the table below records is masked before it
  * reaches the column, and the `corrections` row records only the masked form,
- * so the original is not recoverable from the audit trail either. One spelling
- * is deliberately NOT fully masked: a run of MORE than four separated groups
- * keeps everything after its leading four groups in the clear -- and when that
- * remainder is itself grouped outside every shape in the alternation, it can be
- * an entire, undetected card number, not merely a short leftover tail. Accepted
- * by ruling rather than closed, because every measured attempt to close it
- * leaked something worse (ADR-0018); which shapes the alternation covers, and
- * which groupings are still stored whole, is ADR-0020.
+ * so the original is not recoverable from the audit trail either. Two distinct
+ * categories are deliberately NOT fully masked, and neither is one spelling.
+ * **(1) Leak (b) is a class:** ANY run of more than four separated groups keeps
+ * everything after its leading four groups in the clear, whatever the groups
+ * are -- and when that remainder is itself grouped outside every shape in the
+ * alternation, it can be an entire, undetected card number, not merely a short
+ * leftover tail. Accepted by ruling rather than closed, because every measured
+ * attempt to close it leaked something worse (ADR-0018). **(2) A card grouped
+ * outside every shape in the alternation is stored whole outright** -- no match
+ * at all, so nothing is masked and nothing is partial. That is the residual
+ * ADR-0020 reduced without closing; which shapes it covers, and which groupings
+ * are still stored whole, is ADR-0020.
  *
  * **What is masked is exactly the table below, and nothing is generalised from
  * it.** This claim has been wrong twice. The first version was measured on the
