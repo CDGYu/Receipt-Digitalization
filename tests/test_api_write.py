@@ -896,3 +896,43 @@ def test_logout_returns_204_with_an_empty_body_and_ends_the_session(
     assert response.content == b""
     after = reviewer_client.get(f"/receipts/{receipt_id}")
     assert after.status_code == 401
+
+
+# The path-quoting family (the five above are the value-quoting family): these
+# messages quote the *field path* the reviewer sent, which is what the
+# classifier's path rule matches on.
+
+
+def test_an_unknown_field_path_is_a_400_naming_the_path(reviewer_client, receipt_id):
+    """``_plan_change`` refuses a path outside ``_RECEIPT_FIELDS`` rather than
+    silently dropping the edit, and names the offending path in the message --
+    the classifier reads that quoted span to blame the right input."""
+    response = reviewer_client.patch(
+        f"/receipts/{receipt_id}", json={"totals.grand_total": "1.00"}
+    )
+    assert response.status_code == 400
+    assert response.json() == {
+        "error": {
+            "message": "cannot apply a correction to unknown field path 'totals.grand_total'"
+        }
+    }
+
+
+def test_a_line_item_position_that_does_not_exist_is_a_400_naming_path_and_receipt(
+    reviewer_client, receipt_id
+):
+    """The other half of the path family: a *known* line-item field at a
+    position this receipt has no item for. The path is quoted, the receipt id
+    and the position are bare -- the classifier's path rule must not assume
+    every interpolated value in this family is quoted.
+    """
+    response = reviewer_client.patch(f"/receipts/{receipt_id}", json={"line_items[9].qty": "1"})
+    assert response.status_code == 400
+    assert response.json() == {
+        "error": {
+            "message": (
+                "cannot apply a correction to 'line_items[9].qty': "
+                f"receipt {receipt_id} has no line item at position 9"
+            )
+        }
+    }
