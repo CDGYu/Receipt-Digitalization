@@ -63,6 +63,7 @@ from .persist.repository import (
     find_duplicate_by_phash,
     get_receipt,
     mark_duplicate,
+    redact_pan,
     save_extraction,
     save_extraction_run,
     save_findings,
@@ -758,7 +759,8 @@ def _persist_failure(
         protecting. The task opened below is what makes the attempt visible
         instead -- its reason carries the stage and what the run produced.
     """
-    reason = _truncate(str(failure), _MAX_REASON_CHARS)
+    redacted = redact_pan(str(failure))
+    reason = _truncate(redacted, _MAX_REASON_CHARS)
     log.warning("Receipt %s failed at stage %r: %s", job.id, failure.stage, failure.cause,
                 exc_info=failure.cause)
 

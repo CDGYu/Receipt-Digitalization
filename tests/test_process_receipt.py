@@ -66,7 +66,13 @@ from receipts.persist.repository import (  # noqa: E402
     create_pending_receipt,
 )
 from receipts.persist.session import make_engine, make_session_factory  # noqa: E402
-from receipts.pipeline import STAGES, ProcessResult, process_batch, process_receipt  # noqa: E402
+from receipts.pipeline import (  # noqa: E402
+    _MAX_REASON_CHARS,
+    STAGES,
+    ProcessResult,
+    process_batch,
+    process_receipt,
+)
 from receipts.score.confidence import ReceiptStatus  # noqa: E402
 from receipts.validate.context import ValidationContext  # noqa: E402
 
@@ -322,6 +328,41 @@ def test_a_garbage_currency_never_reaches_the_bounded_column(
         receipt = session.get(Receipt, job.id)
         assert receipt is not None
         assert receipt.currency is None
+
+
+def test_a_failed_run_never_leaks_raw_model_text_through_its_reason(
+    session_factory, storage, settings
+):
+    """What escapes a failed run is redacted at the carrier, not just the DB sink.
+
+    The reviewed-row guard quotes ``merchant.name`` raw into its
+    ``ValueError`` (that is recorded policy -- the review task should say
+    what the refused run produced), and ``_persist_failure`` used to hand
+    that text to ``ProcessResult.reason`` unredacted -- from where it reached
+    CLI stdout and RQ's result store, while only ``review_tasks.reason`` was
+    covered. Two PANs in one value (review standard 9): a scanner's failure
+    mode lives between two hits.
+    """
+    job = _job(storage)
+    with session_factory() as session:
+        create_pending_receipt(session, job)
+        session.commit()
+    with session_factory() as session:
+        apply_corrections(
+            session, job.id, {"totals": {"total": "999.99"}}, corrected_by="alice"
+        )
+
+    bad = _good()
+    bad.merchant.name = "SUPERMART 4111111111111111 AND 5555555555554444"
+
+    result = _run(job, _Client([_triage(), bad]), session_factory, storage, settings)
+
+    assert result.failed_stage == "persist"
+    assert "************1111" in result.reason
+    assert "************4444" in result.reason
+    assert "4111111111111111" not in result.reason
+    assert "5555555555554444" not in result.reason
+    assert len(result.reason) <= _MAX_REASON_CHARS
 
 
 def test_every_model_call_gets_an_audit_row(session_factory, storage, settings):
