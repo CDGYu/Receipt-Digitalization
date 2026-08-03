@@ -6,13 +6,13 @@ continuity protocol itself — what lives where, and why this snapshot must be
 verified rather than trusted — is **ADR-0019**, extended by **ADR-0021** (whose
 2026-08-02 dated correction widened the freshness check after a docs-only task
 proved invisible to it).
-Last updated: **2026-08-03 (milestone close: currency bound & fixture race
-merged)**, at **`main @ f04aa65`**, no branch in flight, this refresh riding
-on top as a docs-only commit. A stamp cannot name the commit that writes it,
-so the check is not a commit count — counts rot — but this:
+Last updated: **2026-08-03 (second milestone close this date: failure-egress
+redaction merged)**, at **`main @ 1035fd3`**, no branch in flight, this
+refresh riding on top as a docs-only commit. A stamp cannot name the commit
+that writes it, so the check is not a commit count — counts rot — but this:
 
 ```
-git log --oneline f04aa65..main -- src tests frontend docs ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
+git log --oneline 1035fd3..main -- src tests frontend docs ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
 ```
 
 **Empty means this file is current.** Any output means the tree moved after it
@@ -20,32 +20,33 @@ was written and you are reading something stale.
 
 ## Snapshot
 
-- **`main` @ `f04aa65` (refresh `2360e6f` on top), pushed, in sync with
-  `origin/main`** — same-session amendment: the 2026-08-03 push
-  authorization was requested at the close, granted, and consumed by the
-  `b81ba34..2360e6f` push. The standing ask-first rule for `main`
-  continues. pytest on `main`: **920**.
+- **`main` @ `1035fd3`, NOT pushed as of this stamp** — eleven commits ahead
+  of `origin/main @ 3c5a86d` counting this refresh. Pushing `main` awaits a
+  fresh authorization (asked at this close; every prior authorization was
+  one-time and consumed). If it was granted and pushed later the same
+  session, a same-session amendment to this pair records it. pytest on
+  `main`: **926**.
 - **NO branch in flight.** Empty is the signal (ADR-0021).
+- **The failure-egress redaction milestone is complete and merged**
+  (2026-08-03, true fast-forward `3c5a86d` → `1035fd3`; ten branch commits:
+  design, ADR-0022, plan, four task commits, and a three-commit close fix
+  wave). `feat/failure-egress-redaction` is kept at its merge point and
+  pushed; merged branches and SDD workspaces are never cleaned up.
 - **The currency bound & fixture race milestone is complete and merged**
-  (2026-08-03, true fast-forward `b81ba34` → `f04aa65`; nine branch commits:
-  design, plan, two tasks, a prose-only fix round, a mid-branch handoff, and
-  a three-commit close fix wave). `feat/currency-bound-and-fixture-race` is
-  kept at its merge point and pushed; merged branches and SDD workspaces are
-  never cleaned up.
-- **The PAN grouping milestone is complete and merged** (2026-08-02).
-  **The PAN hardening milestone is complete and merged** (2026-07-31).
-- **920 Python tests + 170 Vitest** on `main`, ruff clean, typecheck clean,
-  build clean — `python scripts/verify.py` all five gates PASS, re-measured
-  by the controller at `f04aa65`; outside-repo import of the changed module
-  verified the same session.
-- **Phases 0–5 complete, plus PAN hardening, PAN grouping, and the currency
-  bound.** Phase 3 is complete except **P3.T6 calibration** (blocked on
-  ISSUE-001).
+  (2026-08-03 morning, `b81ba34` → `f04aa65`). **PAN grouping** merged
+  2026-08-02; **PAN hardening** merged 2026-07-31.
+- **926 Python tests + 170 Vitest** on `main`, ruff clean, typecheck clean,
+  build clean — `python scripts/verify.py` all five gates PASS, run by the
+  controller on `main` at `1035fd3` immediately after the merge.
+- **Phases 0–5 complete, plus PAN hardening, PAN grouping, the currency
+  bound, and failure-egress redaction.** Phase 3 is complete except
+  **P3.T6 calibration** (blocked on ISSUE-001).
 - Dev interpreter **Python 3.14.4**. Node **v22.22.2** / npm **10.9.7**.
 - Plan of record: `IMPLEMENTATION_PLAN.md`. Ledgers:
+  `.superpowers/sdd/2026-08-03-failure-egress-redaction/progress.md`
+  (complete — four task entries and "THE CLOSE"),
   `.superpowers/sdd/2026-08-02-currency-bound-and-fixture-race/progress.md`
-  (complete — both tasks, both rulings, and "THE CLOSE (2026-08-03)"),
-  `.superpowers/sdd/2026-07-31-pan-grouping/progress.md`,
+  (complete), `.superpowers/sdd/2026-07-31-pan-grouping/progress.md`,
   `.superpowers/sdd/2026-07-31-pan-hardening/progress.md`,
   `.superpowers/sdd/2026-07-29-review-ui/progress.md` (Phase 5's parked
   items). **`.superpowers/` is gitignored, so nothing in it is findable by
@@ -53,57 +54,70 @@ was written and you are reading something stale.
 - **The repo is PUBLIC.** Verified 2026-07-31 via the GitHub API. See
   "Environment / provider" for what that exposes.
 
+## Failure-egress redaction — complete and merged (2026-08-03)
+
+Design + plan: `docs/superpowers/{specs,plans}/2026-08-03-failure-egress-redaction*`
+(the design carries dated notes: §1.3's missed-sinks note, §6's T3
+exemption). Decision: **ADR-0022** plus its same-day dated correction.
+Ledger: `.superpowers/sdd/2026-08-03-failure-egress-redaction/progress.md`.
+Branch commits: `acaea81` design · `e95215f` ADR-0022 · `e4fcf81` plan ·
+`a9af0a6`/`a0b92ac`/`69e18e4`/`c0ca94b` the four tasks · `50992f5`/`fa25013`/
+`1035fd3` the close fix wave.
+
+**What shipped — four egress guarantees (ADR-0022):** `_persist_failure`
+redacts `str(failure)` BEFORE truncating (the order is measured
+load-bearing and pinned by a PAN-straddles-char-400 test), so
+`ProcessResult.reason` is redacted for CLI stdout, RQ's Redis result store,
+and every future consumer; the failure log renders the traceback via
+`traceback.format_exception`, redacts it as text, and drops `exc_info`
+(full stack fidelity, nothing raw); `make_engine` passes
+`hide_parameters=True` (SQLAlchemy's `[parameters: …]` echo measured
+leaking and measured closed, one factory covers every runtime engine);
+BOTH of `cmd_process`'s failed-job prints (inline `cli.py:865` and the
+enqueue twin `cli.py:826`) print `redact_pan(str(exc))` — the `str()` is
+load-bearing (`redact_pan` passes a bare exception object through
+unchanged). `enqueue_review`'s own sink redaction and all producers stay
+untouched (the sinks-redact policy).
+
+**The close, in numbers.** Whole-branch review on the strongest model:
+0 Critical, **1 Important** (ADR-0022 factually wrong in three places —
+including a residual whose real mechanism the reviewer measured: on a
+`_persist_failure` re-raise the rendered exception chain carries the
+project's own `_StageFailure` raw text as `__context__`, reaching
+`receipts reprocess`'s un-netted **stderr** and RQ's failed registry;
+`hide_parameters` cleans only the SQLAlchemy segment), 3 Minor; all four
+guarantees' revert-proofs re-run at HEAD with G1/G2 independence proven in
+both directions; `_PAN_RE` unmoved proven by blob identity. ONE fix wave
+(`50992f5` enqueue twin + own test · `fa25013` the straddle pin ·
+`1035fd3` ADR correction + design notes), one scoped re-review: **all four
+findings ADDRESSED**, residuals adjudicated at the breaker (see deferred
+list). Gates re-verified independently at every step; verify.py all five
+PASS on `main` post-merge.
+
+**Plan defects this milestone (#9, #10 — both the controller's sink map):**
+#9 the enqueue loop's twin print (found by the Task-4 implementer,
+exposure sharpened by two reviewers: only broker text reachable today —
+fixed anyway under ADR-0022's standing rule, Route A); #10 `receipts
+reprocess`'s un-netted re-raise rendering the raw `_StageFailure` chain to
+stderr (found by the whole-branch review by execution; accepted residual
+with mechanism recorded in ADR-0022's dated correction).
+
 ## Currency bound & fixture race — complete and merged (2026-08-03)
 
-Design + plan: `docs/superpowers/{specs,plans}/2026-08-02-currency-bound-and-fixture-race*`
-(the design carries dated correction notes in §1.4, §1.5, §2.2, and the
-close's §1.3/§2.2 qualifications). Ledger:
-`.superpowers/sdd/2026-08-02-currency-bound-and-fixture-race/progress.md`.
-Branch commits: `a71c902` design · `9a36d42` plan · `ce4bf9e` Task 1 ·
-`022b4fa` Task 2 · `9efeffb` fix round 1 · `2a10f0a` mid-branch handoff ·
-`43a79ef`/`22639cd`/`f04aa65` the close's fix wave.
-
-**Task 1.** `save_extraction` runs `currency` through
-`_CURRENCY_BOUND = _bounded_optional_text("currency")` — one instance shared
-with `_RECEIPT_FIELDS`, so machine and human paths cannot drift — raising
-`ValueError` on over-long text (ADR-0006; implements ADR-0007's bounded-text
-decision on the machine path). Live pipeline unreachable by construction
-(normalize whitelists to ISO-or-None; failure/duplicate paths save empty
-extractions), pinned. **User ruling:** the §18 walk's second named structural
-exclusion — `currency` joins `card_last4`, seeded ≤3 chars, because a
-`String(3)` value cannot hold a 13-digit PAN; ADR-0018's dated correction
-records it and (since the close) names the guarantee on the excluded side,
-`test_save_extraction_bounds_the_machine_path_currency`.
-
-**Task 2.** `tests/test_cli_pipeline.py`'s fixture draws seeded random
-rectangles per call (uniform bitmaps all share the all-zero dHash — the
-diagnosed race into dedupe's 5-bit window). Pinned pairwise with the
-threshold read via `inspect.signature`. The two tests that DEPEND on
-byte-identical images pass one shared blob via `_job`'s sibling-style
-`data=` override; their docstrings name the discriminating mutation (a
-failed run storing its hash — the empty-phash filter guards a *crash*, not a
-false match).
-
-**The close, in numbers.** Whole-branch review on the strongest model
-(range `b81ba34..9efeffb`, package regenerated fresh): **0 Critical, 0
-Important, 4 Minor**, every claim reproduced by command — including a probe
-no prior report ran (the narrowed walk proven still non-vacuous by
-neutering `redact_pan`) and both `data=`-override failure modes (loud break
-+ silent vacuity). Five queued minors triaged: **1–3 fix-before-merge, 4–5
-defer**. ONE fix wave (`43a79ef`, `22639cd`, `f04aa65` — six
-prose/fixture-internal fixes; fixture bytes proven identical by sha256 at
-fixed seed, ADR-0018 append-only across the branch). One scoped re-review:
-**all six ADDRESSED, no residuals, no new breakage**. Gates re-verified
-independently at every step; verify.py all five PASS on `main` post-merge.
-
-**Plan defects this branch (both the controller's, both caught by
-implementers stopping at their briefs' own stop conditions):** #7 the walk
-collision (→ user ruling above); #8 two *transitive* callers via
-`_pending_receipt` depending on shared bytes — the plan swept only direct
-callers. Plus review standard 13's origin: an unmeasured "(measured)"
-counterfactual survived two authors until review executed it — and the
-close's fix round then stripped a volatile "31 bits" from the *reworded*
-docstring (standard 5, inside the sentence written to satisfy standard 13).
+Design/plan: `docs/superpowers/{specs,plans}/2026-08-02-currency-bound-and-fixture-race*`.
+Ledger: `.superpowers/sdd/2026-08-02-currency-bound-and-fixture-race/progress.md`.
+**Task 1:** `save_extraction` bounds `currency` through the shared
+`_CURRENCY_BOUND = _bounded_optional_text("currency")` (ValueError,
+ADR-0006/0007); the §18 walk's second named structural exclusion (user
+ruling; ADR-0018 dated correction names the guarantee test
+`test_save_extraction_bounds_the_machine_path_currency`). **Task 2:**
+`tests/test_cli_pipeline.py` draws seeded random rectangles per call (the
+uniform-PNG all-zero-dHash dedupe race is dead); the two
+byte-identity-dependent tests pass one shared blob via `_job`'s `data=`
+override. Close: 0 Critical / 0 Important / 4 Minor; five queued minors
+triaged (1–3 fixed, 4–5 deferred); fix wave `43a79ef`/`22639cd`/`f04aa65`;
+re-review all six ADDRESSED. Plan defects #7 (walk collision → user
+ruling) and #8 (transitive `_job` callers); review standard 13 promoted.
 
 ## PAN grouping — complete and merged (2026-08-02)
 
@@ -118,47 +132,30 @@ Decision: **ADR-0020** plus its **2026-08-02 dated correction**. Ledger:
 characters. Each fixed-shape alternative has a digit total inside 13–19, so
 `_mask_pan`'s length check stays unreachable by construction. Two structural
 guards pin the load-bearing properties over the shape space (no match starts at
-a 3-digit group — the corpus-TIN guarantee, now swept across **all 42**
-separator spellings; every match holds 13–19 digits). The worked example, the
-residual, and the `{1,2}` false-positive surface are all pinned by named tests.
-Tasks 3–4 re-measured the two falsified prose sites: `ReceiptForm.tsx`'s table
-(through the real `PATCH` route, one fresh receipt per row, controls agreeing
-first; `payment.method` measured separately for all eight spellings) and
-ADR-0007's "a hash" bullet (in-bullet pointer + dated line).
+a 3-digit group — the corpus-TIN guarantee, swept across **all 42** separator
+spellings; every match holds 13–19 digits). The worked example, the residual,
+and the `{1,2}` false-positive surface are all pinned by named tests.
 
 **The residual is real and deliberate.** Against the plausible band (97
 shapes): **15 compliant / 76 storing a whole card**, pinned by
 `test_redact_pan_still_stores_some_groupings_whole`. **This did not close the
 class.** Any claim that it did is false.
 
-**The `{1,2}` cap's real cost — found by the whole-branch review, corrected by
-dated appendix:** the cap admits **36 two-character spellings, 30 of them
-mixed** (`', '`, `'. '`, `'./'`, …), every one firing where the baseline was
-silent — measured, `'PO 4500, 4501, 4502, 4503 RECEIVED'` →
-`'PO ************4503 RECEIVED'`. The false-positive *class* (column-scale
-amounts side by side) is pre-existing; the surface widened, and it is pinned by
+**The `{1,2}` cap's real cost:** 36 two-character spellings, 30 mixed, every
+one firing where the baseline was silent — pinned by
 `test_column_amounts_separated_by_two_characters_are_the_cost_of_the_cap`.
 **Narrowing the separator is a queued user decision**, raised alongside the
 residual decision.
 
 **The load-bearing lesson (ADR-0020): coverage and cross-boundary risk move
-together.** A generalised alternative covered 80 of 97 shapes and leaked a full
-second card by tiling across two adjacent Amex numbers; an earlier form failed
-13 committed battery tests. **Any shape added to `_PAN_RE` requires the
-two-instance check, every time.** The whole-branch review re-ran it over
-**146,410** two-instance inputs: zero leaks, zero regressions. Alternation
-order is NOT load-bearing (measured; the trailing `(?!\d)` rejects truncated
-matches).
-
-**Six plan-versus-reality defects that milestone, all the controller's, all
-caught by implementers or probes reading the artefacts first** — see the
-ledger; the pattern continued at two on the currency-bound branch and is why
-probe-first briefing stays mandatory.
+together.** A generalised alternative covered 80 of 97 shapes and leaked a
+full second card by tiling across two adjacent Amex numbers. **Any shape
+added to `_PAN_RE` requires the two-instance check, every time.**
 
 ## How to run
 
 - **There are two test suites.**
-  - `python -m pytest` — **920** on `main`; offline and **Node-free**.
+  - `python -m pytest` — **926** on `main`; offline and **Node-free**.
     `pyproject` sets `pythonpath=["src","."]`, `testpaths=["tests"]`.
   - **Vitest, in `frontend/`** — **170**. `npm test`.
 - **`npm test` does NOT type-check.** Run `npm run typecheck` too. **That trap
@@ -204,10 +201,12 @@ cents-bounded (`rel=0.0002`, floor scales with line count). Repair keeps the
 unparseable → re-extract; never alter numbers to force arithmetic. Structured
 output via tool-use. Few-shot images first, target last. Consistency runs are
 never cached. Merchant hints end with "trust the image." **A full PAN is never
-persisted** (ADR-0018 is the measured policy; ADR-0020 the detector shape).
-Nothing is silently dropped — every receipt reaches a terminal state. **A
-machine run never overwrites a `reviewed` row.** Excel is output only; the DB is
-the source of truth.
+persisted** (ADR-0018 the measured policy; ADR-0020 the detector shape;
+**ADR-0022 the egress rule: failure text goes through `redact_pan` at every
+place it leaves the process — a new log site, an API field, a queue payload
+extends the inventory**). Nothing is silently dropped — every receipt reaches
+a terminal state. **A machine run never overwrites a `reviewed` row.** Excel is
+output only; the DB is the source of truth.
 
 **PAN (ADR-0018, then ADR-0020 + its 2026-08-02 correction):** the group-shape
 requirement in `_PAN_RE` is load-bearing — three of the four real corpus TINs
@@ -215,14 +214,14 @@ are **14 digits**, inside the 13–19 PAN window, silent only because they print
 `3-3-3-N`. What protects them is the asymmetry that **every alternative opens
 with a group of at least four digits while every corpus TIN opens with three**;
 pinned across the whole shape space by
-`test_pan_re_never_starts_a_match_at_a_three_digit_group`, which now sweeps all
+`test_pan_re_never_starts_a_match_at_a_three_digit_group`, which sweeps all
 42 separator spellings. **Never relax the grouping toward "any run of 13+
 digits."**
 
 Any `_PAN_RE` change must: replay the **committed** battery in
 `tests/test_repository.py` in **both** directions; test **two instances of what
-it guards in one input** (coverage and cross-boundary risk move together); and
-keep `test_every_pan_re_match_holds_between_thirteen_and_nineteen_digits`
+it guards in one input**; and keep
+`test_every_pan_re_match_holds_between_thirteen_and_nineteen_digits`
 green. The 42/36/30 separator-surface counts quoted in prose are **unpinned** —
 pinning `len(_ALL_SEPARATOR_SPELLINGS) == 42` is a queued one-liner.
 
@@ -247,8 +246,9 @@ API path moves.
   endpoint was considered and deferred.
 - **Push policy (2026-07-30): pushing `feat/*` branches is authorised. Ask
   before pushing `main`.** Every `main` push authorization is one-time (the
-  2026-08-02 one covered the PAN grouping merge; the 2026-08-03 one covered
-  the currency-bound merge and is consumed).
+  2026-08-02 one covered the PAN grouping merge; the first 2026-08-03 one
+  covered the currency-bound merge; a fresh one was requested at the
+  failure-egress close).
 - **`GET /review/next` resumes the caller's own in-progress task** (2026-07-30,
   ADR-0016).
 - **`receipt.date_raw` is editable** (2026-07-31), as plain text.
@@ -259,17 +259,19 @@ API path moves.
   alternative priced (O(n²), ~1715 ms on 40 KB) and refused.
 - **PAN grouping (2026-07-31, ADR-0020): Option A — enumerate the five named
   groupings, cap the separator at two characters, document the residual as a
-  number.** Chosen after the generalisation was measured leaking a full second
-  card. Closing the plausible band properly is **a separate scoped decision the
-  user has not been asked to make yet** — as is **narrowing the `{1,2}`
-  separator** now that its real surface (36 spellings, 30 mixed) is measured
-  and pinned (2026-08-02).
+  number.** Closing the plausible band properly is **a separate scoped
+  decision the user has not been asked to make yet** — as is **narrowing the
+  `{1,2}` separator** (36 spellings, 30 mixed, measured and pinned).
 - **Currency bound (2026-08-02):** over-long machine-path `currency` **raises
-  `ValueError`** via the human path's own coercer (coerce-to-None refused);
-  tasks 1–2 **bundled on one branch**; the spec approved after review.
-- **The §18 walk's second named exclusion (2026-08-02):** `currency`, because
-  the `String(3)` bound is stronger than redaction — the `card_last4`
-  pattern; dated correction in ADR-0018. Chosen over abandoning the bound.
+  `ValueError`** via the human path's own coercer; the §18 walk's second
+  named exclusion is `currency` (dated correction in ADR-0018).
+- **Failure-egress redaction (2026-08-03, ADR-0022):** the FULL egress class
+  closed in one branch; the failure log's traceback **rendered and redacted**
+  (not dropped, not raw); the enqueue twin print fixed under the standing
+  rule (Route A at the close); the reprocess/stderr raw-chain exposure is an
+  **accepted residual with its mechanism recorded** (ADR-0022's dated
+  correction — closing it would need producer-side redaction or a rendering
+  net in `main`/the worker, both priced, neither taken).
 - **Task 5's CI job was cut** (Phase 5). `scripts/verify.py` replaces it
   (ADR-0017).
 - **Milestone close includes the handoff refresh** (ADR-0019); **every session
@@ -340,21 +342,22 @@ in-progress task** (ADR-0016).
 **PAN hardening (2026-07-31, merged).** `_PAN_RE`'s four-group tail widened
 `\d{1,4}` → `\d{1,7}` (leak (a) closed; leak (b) accepted and pinned;
 ADR-0018). `save_extraction` redacts **every** extraction-sourced value it
-stores via a `type(value) is str` gate; system-minted values (`image_key`,
-`image_phash`, `status`, `confidence`, `merchant_id`) are structurally
+stores via a `type(value) is str` gate; system-minted values are structurally
 excluded. `card_last4` keeps the stronger `_last4` guarantee. `enqueue_review`
-redacts `reason` at the sink. Guards: a two-table column walk with a fixture
-seeding **all 22 reachable extraction text fields**; the four corpus TINs
-pinned silent; the skip-recoverability triple pinned.
+redacts `reason` at the sink. Guards: a two-table column walk seeding all
+reachable extraction text fields; the four corpus TINs pinned silent.
 
-**PAN grouping (2026-08-02, merged).** See "PAN grouping — complete and
-merged" above.
+**PAN grouping (2026-08-02, merged).** See its section above.
 
 **Currency bound & fixture race (2026-08-03, merged).** See its section
 above: the machine-path `currency` bound through the shared coercer
-(ADR-0018's second named walk exclusion, guarantee test named in the ADR),
-and the CLI test module's structurally distinct fixture images with the
-explicit `data=` override for the two byte-identity-dependent tests.
+(ADR-0018's second named walk exclusion), and the CLI test module's
+structurally distinct fixture images with the `data=` override.
+
+**Failure-egress redaction (2026-08-03, merged).** See its section above:
+the four ADR-0022 guarantees — carrier redact-before-truncate, the
+rendered-and-redacted failure log, `hide_parameters=True`, both failed-job
+prints — pinned by six named tests including the straddle pin.
 
 ## Remaining work
 
@@ -366,8 +369,7 @@ explicit `data=` override for the two byte-identity-dependent tests.
 2. **Phase 6** — merchants & few-shot. **Phase 7** — self-consistency wired into
    the pipeline, gated on `triage.is_handwritten`. **Phase 8** — calibration and
    eval-harness honesty.
-3. Still open from earlier phases — including the **unredacted failure-reason
-   path** the 2026-08-03 whole-branch review surfaced (see the deferred list).
+3. Still open from earlier phases (see the prompt's §5).
 4. **ISSUE-001 last.**
 
 ## Environment / provider (user's `.env`, gitignored)
@@ -389,25 +391,23 @@ explicit `data=` override for the two byte-identity-dependent tests.
   it before use.** Never echo `.env` secret values.
 - **Git:** default branch `main`; `origin` → `CDGYu/Receipt-Digitalization`,
   **PUBLIC**. Push `feat/*` freely; **ask before `main`**.
-  `feat/currency-bound-and-fixture-race` is pushed at `f04aa65`; `main` is
-  pushed and in sync at `2360e6f` (see Snapshot's same-session amendment).
+  `feat/failure-egress-redaction` is pushed at `1035fd3`; **`main` is
+  local-only past `3c5a86d` as of this stamp** (see Snapshot).
 - **What the public repo exposes — surfaced to the user, no ruling yet.**
-  Nothing secret leaked: `.env` never committed, no image file tracked,
-  `var/`, `.kiro/`, `.github/`, `.superpowers/` and `eval/golden/images/` have
-  zero tracked entries. But `eval/golden/labels/r00*.json` **are** tracked and
-  world-readable, carrying real third-party business identities (Metro Oil
-  Subic / Summit Fuel OPC / Serv Central names, TINs, addresses) — also the
-  exact values the PAN silent-case tests pin, so scrubbing is not free.
-  **Awaiting the user's decision.**
+  Nothing secret leaked: `.env` never committed, no image file tracked. But
+  `eval/golden/labels/r00*.json` **are** tracked and world-readable, carrying
+  real third-party business identities (also the exact values the PAN
+  silent-case tests pin, so scrubbing is not free). **Awaiting the user's
+  decision.**
 - **Gitignored and untracked:** `.kiro/` (steering still auto-loads from disk),
   `.github/workflows/` (**Actions does not run**), `.superpowers/` (the SDD
   ledgers), and **`var/`**, where `STORAGE_ROOT` defaults to `var/blobs` and
   writes **real receipt images**. Never stage one.
 - **Harness notes:** the `developer-kit` plugin's
   `prevent-destructive-commands.py` hook used to block `git add`/`git commit`;
-  fixed 2026-07-28, **a plugin update will overwrite this**. On 2026-08-02 the
-  same hook falsely blocked `rm -f var/<file>.py` with a self-contradictory
-  "outside working directory" message — PowerShell `Remove-Item` works.
+  fixed 2026-07-28, **a plugin update will overwrite this**. It also falsely
+  blocks `rm` under the repo and read-only `git grep` whose *pattern* names a
+  sensitive file — PowerShell `Remove-Item` works, rephrase patterns.
   `developer-kit-typescript`'s `ts-file-validator.py` complains about
   PascalCase `.tsx` — PostToolUse, cannot block, ignore. **The Grep tool
   mangles `/` in content output** — see "How to run". Subagents may report
@@ -456,44 +456,41 @@ measured.**
 
 ## Deferred follow-ups / known minors (non-blocking)
 
-- **Unredacted failure-reason path (2026-08-03, found by the whole-branch
-  review; PRE-EXISTING and live-reachable, not introduced by any recent
-  branch):** the reviewed-row guard (`repository.py:613-618`) interpolates
-  raw `merchant.name` into its `ValueError`; that text reaches
-  `pipeline.py:761`'s `log.warning` (with `exc_info`) and the CLI's stdout
-  (`cli.py:857`, `:960`) via `ProcessResult.reason` **unredacted**. Only
-  `review_tasks.reason` is redacted at a sink (ADR-0018), and
-  `enqueue_review`'s redaction is a local rebinding that never reaches the
-  caller — measured at the close. A candidate small hardening branch of the
-  currency-bound shape.
+- **The failure-egress residual (ADR-0022 + its dated correction):** on a
+  `_persist_failure` re-raise, the rendered exception chain carries
+  `_StageFailure`'s raw producer text as `__context__` to `receipts
+  reprocess`'s stderr and RQ's failed registry; `hide_parameters` cleans only
+  the SQLAlchemy segment. **Accepted with mechanism recorded**; closing it
+  needs producer-side redaction (policy reversal) or a rendering net in
+  `main`/the worker — both priced, neither taken.
+- **Parked at the failure-egress close (bundle with the next legitimate edit
+  of the file named):** the straddle test's one-character margin — add
+  `assert result.failed_stage == "persist"` as its prefix anchor
+  (`tests/test_process_receipt.py`); ADR-0022 nowhere names
+  `test_the_reason_bound_never_bisects_a_pan_into_the_clear` (append-only
+  consequence; the design and ledger carry it); the milestone's 12 remaining
+  task minors live in its ledger with the triage verdicts.
 - **PAN — the accepted residue (ADR-0018 + ADR-0020 + its correction):**
   leak (b)'s remainder-in-the-clear (user ruling); the grouping residual
-  (15/76, user ruling, closure queued as a decision); the `{1,2}` separator
-  surface (36 spellings, pinned; narrowing queued as a decision); four accepted
-  false positives (13–19 digit identifiers; side-by-side column amounts;
-  ~1-in-200 16-hex hashes — **no hash is ever routed through `redact_pan`**;
-  whole-number 13–19 digit modifier amounts).
+  (15/76, closure queued as a decision); the `{1,2}` separator surface
+  (36 spellings, pinned; narrowing queued); four accepted false positives
+  (13–19 digit identifiers; side-by-side column amounts; ~1-in-200 16-hex
+  hashes — **no hash is ever routed through `redact_pan`**; whole-number
+  13–19 digit modifier amounts) — a class that now also renders masked in
+  operator diagnostics via the failed-job prints (priced in ADR-0022).
 - **Parked at the PAN grouping close (bundle with the next legitimate edit of
   `tests/test_repository.py`):** the range-guard docstring's "about 30x"
-  multiplier (measured 19.6x); the mixed-pairs rationale saying "width changing
-  mid-run" (the sweep joins every gap with one spelling — they cover
-  heterogeneous two-character gaps); pin `len(_ALL_SEPARATOR_SPELLINGS) == 42`;
-  the module docstring's "reaches thirteen" (exact only within the 16-hex
-  domain); ADR-0018's References naming the nonexistent `MUST_MASK` battery
-  (0020's correction discloses the real identifiers).
-- **Parked at the currency-bound close (2026-08-03):** `_PNG_SEEDS` starts at
-  0, overlapping the explicit `seed=0` blob (measured harmless — neither
-  seed-0 test makes a default call, DBs are per-test; worth a comment on the
-  next legitimate edit of `tests/test_cli_pipeline.py`); design §2.2 keeps
-  the crash-guard conclusion with only a terse mechanism (the upstream fact
-  lives in `find_duplicate_by_phash`'s docstring); the plan's self-review
-  note still resolves §2.2's conditional the falsified way (plans don't
-  self-amend — design §2.2's dated note is the record).
-- **`image_phash` on a failed receipt — corrected 2026-07-31.**
-  `_persist_failure`'s *insert* branch does write it; the *update* branch never
-  touches the column, and the normal ingest→process flow always takes the
-  update branch, so a receipt that fails after ingest keeps `""` and can never
-  serve as a dedupe **original**. Address with Phase 6 dedupe.
+  (measured 19.6x); the mixed-pairs "width changing mid-run" rationale;
+  pin `len(_ALL_SEPARATOR_SPELLINGS) == 42`; the module docstring's "reaches
+  thirteen" 16-hex nuance; ADR-0018's References naming the nonexistent
+  `MUST_MASK` battery.
+- **Parked at the currency-bound close:** `_PNG_SEEDS` starts at 0,
+  overlapping the explicit `seed=0` blob (measured harmless; worth a comment
+  on the next `tests/test_cli_pipeline.py` edit); design §2.2's terse
+  mechanism; the plan's self-review note (plans don't self-amend).
+- **`image_phash` on a failed receipt** — `_persist_failure`'s update branch
+  never touches the column, so a post-ingest failure keeps `""` and can never
+  serve as a dedupe original. Address with Phase 6 dedupe.
 - An auto-approving reprocess closes a review task a reviewer had already
   claimed.
 - **No login rate limiting**, and each attempt costs a full scrypt derivation
@@ -519,8 +516,9 @@ measured.**
 - XLSX `write_only` streaming above 5000 rows is deferred.
 - ruff sorts `from alembic import command` as first-party in tests — don't
   "fix" that import order.
-- Phase 5's own minors are in its ledger with rulings; the PAN milestones' and
-  the currency-bound milestone's are in theirs.
+- Phase 5's own minors are in its ledger with rulings; each PAN milestone's,
+  the currency-bound milestone's, and the failure-egress milestone's are in
+  theirs.
 
 ## Workflow & conventions
 
@@ -528,16 +526,18 @@ measured.**
   per task, briefed to read the real signatures first, work TDD, keep **both**
   suites green + ruff clean, and stage only its own files. The controller
   reviews the diff, re-runs the gates **independently**, then dispatches a task
-  review, then commits and appends to the ledger.
+  review, then appends to the ledger.
 - **Per milestone**: a feature branch; at the end a whole-branch review on the
   strongest model, **one** consolidated fix wave, one scoped re-review, then a
   fast-forward merge — **then the handoff refresh in the same session
   (ADR-0019)**. Branches and SDD workspaces are **kept**.
-- **Probe before dispatching.** Phase 5's plan was wrong about existing code
-  **eleven times**; PAN hardening five; PAN grouping six plus one in a
-  controller dispatch prompt; the currency-bound branch two (#7, #8), both
-  caught by implementers' stop conditions. The plan's prose is reliable; its
-  claims about existing artefacts are not.
+- **Probe before dispatching — and sweep transitively.** Plan-defect count by
+  milestone: Phase 5 eleven; PAN hardening five; PAN grouping six (+1 in a
+  controller dispatch prompt); currency bound two (#7, #8); failure-egress
+  two (#9 the enqueue twin print, #10 the reprocess/stderr chain — both the
+  controller's sink map, found by an implementer's stop condition and by the
+  whole-branch review executing the escape path). The plan's prose is
+  reliable; its claims about existing artefacts are not.
 - Conventional commit messages (`feat(scope): …`, `fix: …`, `chore: …`,
   `docs: …`).
 
@@ -561,9 +561,7 @@ measured.**
     both directions before trusting a change.
 11. **Coverage and cross-boundary risk move together** (ADR-0020).
 12. **Adding rows to a prose table also changes every sentence that quantifies
-    over the table** — the falsified sentence is an unchanged line, invisible
-    to `git diff` and every gate. Re-measure or narrow those sentences with the
-    rows.
+    over the table.**
 13. **A prose claim about what a test would do under a mutation needs the same
     revert-proof discipline as an assertion — or it does not carry
     "(measured)".**
@@ -579,10 +577,11 @@ with an entry point gets run from outside the repository.
 - `docs/NEXT_SESSION_PROMPT.md` — the ordered task list and reading order.
 - `IMPLEMENTATION_PLAN.md` · `README.md` (§5 design decisions) · `VLM_AND_DATA.md`
 - **`docs/KNOWN_ISSUES.md`** — ISSUE-001 with its diagnosis and resume steps.
-- **`docs/adr/` — 0001–0021**; see `docs/adr/README.md`. Read **0001** first;
-  **0018 then 0020 (with its 2026-08-02 correction)** before touching
-  `_PAN_RE`/`redact_pan`; **0017** before believing a green test run;
-  **0019 + 0021 (with its correction)** for how cross-session state works.
+- **`docs/adr/` — 0001–0022**; see `docs/adr/README.md`. Read **0001** first;
+  **0018 then 0020 (with corrections)** before touching `_PAN_RE`/`redact_pan`;
+  **0022** before touching any failure-text egress; **0017** before believing
+  a green test run; **0019 + 0021 (with its correction)** for how
+  cross-session state works.
 - `docs/superpowers/specs/` and `docs/superpowers/plans/` — per-milestone design
   and plan documents.
 - `.superpowers/sdd/<plan-name>/progress.md` — per-milestone ledgers.
