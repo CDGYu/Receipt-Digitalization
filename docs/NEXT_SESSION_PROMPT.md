@@ -12,8 +12,8 @@ verification step is permanent.
 **No branch is in flight.** Two milestones were closed and merged on
 2026-08-03 in one session: the currency bound & fixture race
 (`b81ba34 → f04aa65`), then failure-egress redaction (`3c5a86d → 1035fd3`,
-ADR-0022). The one loose end is whether `main` may be pushed — **Blocked #1
-below; do not push without the answer.**
+ADR-0022), and `main` was pushed the same session under a fresh one-time
+authorization — nothing is pending anywhere.
 
 ## Reading order
 
@@ -65,12 +65,11 @@ below; do not push without the answer.**
 
   **Empty means this prompt is current.** Any output means the tree moved
   after it was written.
-- **`main` is NOT pushed as of this stamp** — eleven commits ahead of
-  `origin/main @ 3c5a86d` counting this refresh. A fresh one-time
-  authorization was requested at the failure-egress close. If it was granted
-  and the push happened later that same session, a same-session amendment to
-  this pair records it — trust the amendment, then `git status -sb`, over
-  this line.
+- **`main` is pushed and in sync with `origin/main`** (same-session
+  amendment: the failure-egress close's one-time authorization was granted
+  and consumed by the `3c5a86d..0708fd4` push). The standing rule
+  continues: pushing `feat/*` is authorised; every `main` push needs a
+  fresh ask.
 - Gates at `1035fd3`, controller-run on `main` post-merge:
   `python scripts/verify.py` **all five PASS**; pytest **926/0/0/0**; Vitest
   **170**; outside-repo imports OK (pipeline, session, cli — plus both
@@ -254,9 +253,9 @@ entry points from outside the repository.
 
 ## Blocked on me (the user) — surface these, do not guess
 
-1. **May `main` be pushed?** Asked at the 2026-08-03 failure-egress close
-   (both merged milestones are local-only until then). Every prior
-   authorization was one-time.
+1. *(resolved 2026-08-03: the `main` push was authorized and completed the
+   same session as the failure-egress merge — kept here so the numbering
+   below stays stable; every future `main` push needs a fresh ask.)*
 2. **Do the public golden labels need scrubbing?** (Real third-party names,
    TINs, addresses — also the values the PAN silent-case tests pin.)
 3. **A hosted tool-capable provider + freshly rotated key** (ISSUE-001 → all

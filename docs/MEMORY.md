@@ -20,12 +20,11 @@ was written and you are reading something stale.
 
 ## Snapshot
 
-- **`main` @ `1035fd3`, NOT pushed as of this stamp** — eleven commits ahead
-  of `origin/main @ 3c5a86d` counting this refresh. Pushing `main` awaits a
-  fresh authorization (asked at this close; every prior authorization was
-  one-time and consumed). If it was granted and pushed later the same
-  session, a same-session amendment to this pair records it. pytest on
-  `main`: **926**.
+- **`main` @ `1035fd3` (refresh `0708fd4` on top), pushed, in sync with
+  `origin/main`** — same-session amendment: the second 2026-08-03 push
+  authorization was requested at the failure-egress close, granted, and
+  consumed by the `3c5a86d..0708fd4` push. The standing ask-first rule for
+  `main` continues. pytest on `main`: **926**.
 - **NO branch in flight.** Empty is the signal (ADR-0021).
 - **The failure-egress redaction milestone is complete and merged**
   (2026-08-03, true fast-forward `3c5a86d` → `1035fd3`; ten branch commits:
@@ -246,9 +245,8 @@ API path moves.
   endpoint was considered and deferred.
 - **Push policy (2026-07-30): pushing `feat/*` branches is authorised. Ask
   before pushing `main`.** Every `main` push authorization is one-time (the
-  2026-08-02 one covered the PAN grouping merge; the first 2026-08-03 one
-  covered the currency-bound merge; a fresh one was requested at the
-  failure-egress close).
+  2026-08-02 one covered the PAN grouping merge; the two 2026-08-03 ones
+  covered the currency-bound and failure-egress merges; all consumed).
 - **`GET /review/next` resumes the caller's own in-progress task** (2026-07-30,
   ADR-0016).
 - **`receipt.date_raw` is editable** (2026-07-31), as plain text.
@@ -391,8 +389,8 @@ prints — pinned by six named tests including the straddle pin.
   it before use.** Never echo `.env` secret values.
 - **Git:** default branch `main`; `origin` → `CDGYu/Receipt-Digitalization`,
   **PUBLIC**. Push `feat/*` freely; **ask before `main`**.
-  `feat/failure-egress-redaction` is pushed at `1035fd3`; **`main` is
-  local-only past `3c5a86d` as of this stamp** (see Snapshot).
+  `feat/failure-egress-redaction` is pushed at `1035fd3`; `main` is pushed
+  and in sync at `0708fd4` (see Snapshot's same-session amendment).
 - **What the public repo exposes — surfaced to the user, no ruling yet.**
   Nothing secret leaked: `.env` never committed, no image file tracked. But
   `eval/golden/labels/r00*.json` **are** tracked and world-readable, carrying
