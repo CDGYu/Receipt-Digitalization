@@ -276,3 +276,95 @@ describe('LineItemsTable', () => {
     expect(rows[0].style.background).toBe('')
   })
 })
+
+describe('inline field errors', () => {
+  // The whole seventeen-path map plus the two rows' cells, so a path the test
+  // does not name is still a rendered control that must stay clean.
+  const FIELDS: FieldMap = fieldsFromReceipt(RECEIPT)
+
+  it('renders the server message beside the matched field, linked by aria-describedby', () => {
+    render(
+      <ReceiptForm
+        fields={FIELDS}
+        onChange={() => {}}
+        errors={{ 'totals.total': "not a decimal amount: 'abc'" }}
+      />,
+    )
+    const input = screen.getByLabelText('Total') as HTMLInputElement
+    const describedBy = input.getAttribute('aria-describedby')
+    expect(describedBy).not.toBeNull()
+    const description = document.getElementById(describedBy!)
+    expect(description?.textContent).toBe("not a decimal amount: 'abc'")
+    expect(description?.getAttribute('role')).toBe('alert')
+  })
+
+  it('renders no describedby and no alert for untouched fields', () => {
+    render(
+      <ReceiptForm
+        fields={FIELDS}
+        onChange={() => {}}
+        errors={{ 'totals.total': "not a decimal amount: 'abc'" }}
+      />,
+    )
+    const clean = screen.getByLabelText('Subtotal') as HTMLInputElement
+    expect(clean.getAttribute('aria-describedby')).toBeNull()
+  })
+
+  it('a text field carries its error the same way', () => {
+    render(
+      <ReceiptForm
+        fields={FIELDS}
+        onChange={() => {}}
+        errors={{ 'receipt.currency': "currency holds at most 3 characters, got 5 ('EUROS')" }}
+      />,
+    )
+    const input = screen.getByLabelText('Currency') as HTMLInputElement
+    const describedBy = input.getAttribute('aria-describedby')
+    expect(document.getElementById(describedBy!)?.textContent).toContain('at most 3 characters')
+  })
+
+  it('lands a line-item money error on the addressed cell and nowhere else', () => {
+    render(
+      <LineItemsTable
+        items={ITEMS}
+        fields={FIELDS}
+        onChange={() => {}}
+        errors={{ 'line_items[1].line_total': "not a decimal amount: 'abc'" }}
+      />,
+    )
+    const blamed = screen.getByLabelText('Line total 1') as HTMLInputElement
+    const describedBy = blamed.getAttribute('aria-describedby')
+    expect(describedBy).not.toBeNull()
+    const description = document.getElementById(describedBy!)
+    expect(description?.textContent).toBe("not a decimal amount: 'abc'")
+    expect(description?.getAttribute('role')).toBe('alert')
+    // The same column one row up, and the same row one column across: a slot
+    // keyed by anything looser than the full dotted path would light these too.
+    expect(
+      (screen.getByLabelText('Line total 0') as HTMLInputElement).getAttribute('aria-describedby'),
+    ).toBeNull()
+    expect(
+      (screen.getByLabelText('Unit price 1') as HTMLInputElement).getAttribute('aria-describedby'),
+    ).toBeNull()
+  })
+
+  it('gives a line-item text cell the same slot, though nothing can fill it today', () => {
+    // `_coerce_text`/`_coerce_optional_text` never raise, so `description_raw`
+    // cannot produce a 400 as the server stands. The slot is uniform anyway:
+    // `classifyFailure` matches on any path that was sent, and a hit with
+    // nowhere to land would render the message nowhere at all.
+    render(
+      <LineItemsTable
+        items={ITEMS}
+        fields={FIELDS}
+        onChange={() => {}}
+        errors={{ 'line_items[0].description_raw': 'refused' }}
+      />,
+    )
+    const blamed = screen.getByLabelText('Description 0') as HTMLInputElement
+    const describedBy = blamed.getAttribute('aria-describedby')
+    expect(describedBy).not.toBeNull()
+    expect(document.getElementById(describedBy!)?.textContent).toBe('refused')
+    expect((screen.getByLabelText('SKU 0') as HTMLInputElement).getAttribute('aria-describedby')).toBeNull()
+  })
+})

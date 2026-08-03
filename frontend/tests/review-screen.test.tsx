@@ -1271,3 +1271,30 @@ describe('terminal submit and load states', () => {
     expect(chain(fetchMock).filter((call) => call === 'POST /review/t1/complete')).toHaveLength(2)
   })
 })
+
+describe('a refused field, beside the field', () => {
+  it('a value-quoting 400 lands beside the field that sent it, and the summary stays', async () => {
+    const fetchMock = stubApi({
+      '/review/next': [200, { task: TASK, receipt: SUMMARY }],
+      'GET /receipts/a1': [200, RECEIPT],
+      'PATCH /receipts/a1': [400, { error: { message: "not a decimal amount: 'abc'" } }],
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    render(
+      <StrictMode>
+        <ReviewScreen />
+      </StrictMode>,
+    )
+    const total = await screen.findByLabelText('Total')
+    await userEvent.clear(total)
+    await userEvent.type(total, 'abc')
+    await userEvent.keyboard('{Control>}{Enter}{/Control}')
+
+    // The summary alert (unchanged behaviour) ...
+    await screen.findByText("Not saved: not a decimal amount: 'abc'")
+    // ... and the inline slot, on the input that sent 'abc'.
+    const described = (total as HTMLInputElement).getAttribute('aria-describedby')
+    expect(described).not.toBeNull()
+    expect(document.getElementById(described!)?.textContent).toBe("not a decimal amount: 'abc'")
+  })
+})

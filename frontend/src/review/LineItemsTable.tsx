@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { MoneyInput } from './MoneyInput'
 import type { LineItem } from '../api/types'
 import type { FieldMap } from './patch'
@@ -7,6 +7,50 @@ export interface LineItemsTableProps {
   readonly items: LineItem[]
   readonly fields: FieldMap
   readonly onChange: (path: string, value: string | null) => void
+  /** Server messages keyed by the same dotted paths as `fields`. */
+  readonly errors?: Readonly<Record<string, string>>
+}
+
+/** One free-text cell, owning its error id. Extracted for the reason
+ *  `ReceiptForm`'s `TextField` is: `useId` is a hook and the rows render from a
+ *  `.map`.
+ *
+ * The raw string is handed back rather than a coerced `string | null`, because
+ * the three callers do not agree on what an emptied box means -- see
+ * `description_raw` at its call site.
+ *
+ * These cells cannot produce a 400 today (`_coerce_text` and
+ * `_coerce_optional_text` never raise), but the slot is uniform: `matchField`
+ * blames whichever path it matches, and a hit with nowhere to land would render
+ * the server's words nowhere at all. */
+function TextCell({
+  label,
+  value,
+  error,
+  onChange,
+}: {
+  readonly label: string
+  readonly value: string | null
+  readonly error: string | undefined
+  readonly onChange: (raw: string) => void
+}) {
+  const errorId = useId()
+  return (
+    <>
+      <input
+        type="text"
+        aria-label={label}
+        value={value ?? ''}
+        aria-describedby={error !== undefined ? errorId : undefined}
+        onChange={(e) => onChange(e.target.value)}
+      />
+      {error !== undefined ? (
+        <p role="alert" id={errorId}>
+          {error}
+        </p>
+      ) : null}
+    </>
+  )
 }
 
 /** The six correctable columns of each line item, plus its position.
@@ -40,7 +84,7 @@ export interface LineItemsTableProps {
  * because React's `onFocus` is the bubbling `focusin`, so one handler covers
  * every control in the row.
  */
-export function LineItemsTable({ items, fields, onChange }: LineItemsTableProps) {
+export function LineItemsTable({ items, fields, onChange, errors }: LineItemsTableProps) {
   const [active, setActive] = useState<number | null>(null)
   return (
     <table>
@@ -66,26 +110,24 @@ export function LineItemsTable({ items, fields, onChange }: LineItemsTableProps)
             >
               <td>{item.position}</td>
               <td>
-                <input
-                  type="text"
-                  aria-label={`Description ${item.position}`}
+                <TextCell
+                  label={`Description ${item.position}`}
+                  value={fields[`${at}.description_raw`]}
+                  error={errors?.[`${at}.description_raw`]}
                   // `description_raw` is a required column, and it is the one
                   // text path here that does not report `null` when emptied:
                   // measured, `_coerce_text(None)` is `''` rather than an error,
                   // so `null` and `''` would land on the same column value and
                   // sending the string is the honest one.
-                  value={fields[`${at}.description_raw`] ?? ''}
-                  onChange={(e) => onChange(`${at}.description_raw`, e.target.value)}
+                  onChange={(raw) => onChange(`${at}.description_raw`, raw)}
                 />
               </td>
               <td>
-                <input
-                  type="text"
-                  aria-label={`SKU ${item.position}`}
-                  value={fields[`${at}.sku`] ?? ''}
-                  onChange={(e) =>
-                    onChange(`${at}.sku`, e.target.value === '' ? null : e.target.value)
-                  }
+                <TextCell
+                  label={`SKU ${item.position}`}
+                  value={fields[`${at}.sku`]}
+                  error={errors?.[`${at}.sku`]}
+                  onChange={(raw) => onChange(`${at}.sku`, raw === '' ? null : raw)}
                 />
               </td>
               <td>
@@ -94,23 +136,23 @@ export function LineItemsTable({ items, fields, onChange }: LineItemsTableProps)
                 <MoneyInput
                   label={`Qty ${item.position}`}
                   value={fields[`${at}.qty`]}
+                  error={errors?.[`${at}.qty`]}
                   onChange={(value) => onChange(`${at}.qty`, value)}
                 />
               </td>
               <td>
-                <input
-                  type="text"
-                  aria-label={`Unit ${item.position}`}
-                  value={fields[`${at}.unit`] ?? ''}
-                  onChange={(e) =>
-                    onChange(`${at}.unit`, e.target.value === '' ? null : e.target.value)
-                  }
+                <TextCell
+                  label={`Unit ${item.position}`}
+                  value={fields[`${at}.unit`]}
+                  error={errors?.[`${at}.unit`]}
+                  onChange={(raw) => onChange(`${at}.unit`, raw === '' ? null : raw)}
                 />
               </td>
               <td>
                 <MoneyInput
                   label={`Unit price ${item.position}`}
                   value={fields[`${at}.unit_price`]}
+                  error={errors?.[`${at}.unit_price`]}
                   onChange={(value) => onChange(`${at}.unit_price`, value)}
                 />
               </td>
@@ -118,6 +160,7 @@ export function LineItemsTable({ items, fields, onChange }: LineItemsTableProps)
                 <MoneyInput
                   label={`Line total ${item.position}`}
                   value={fields[`${at}.line_total`]}
+                  error={errors?.[`${at}.line_total`]}
                   onChange={(value) => onChange(`${at}.line_total`, value)}
                 />
               </td>

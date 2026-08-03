@@ -493,6 +493,21 @@ export function ReviewScreen() {
   // Hoisted out of the JSX so the `!== null` narrowing survives into the click
   // handler's closure.
   const openTaskId = submit.kind === 'failed' ? submit.openTaskId : null
+  // At most one entry, ever, and not necessarily the one a reviewer would pick.
+  // `apply_corrections` iterates `sorted(flatten(patch).items())` and raises on
+  // the first failure, so the 400 boundary refuses one field at a time and
+  // chooses it by **sort order**. Measured: a patch carrying both
+  // `totals.total: 'abc'` and `receipt.currency: 'EUROS'` comes back naming
+  // `receipt.currency`, because that path sorts first -- not the field the
+  // reviewer edited first, and not the one highest on the form. So this screen
+  // cannot show every invalid field at once; a reviewer with two bad values
+  // learns about the second only after fixing the first and submitting again.
+  // Serial discovery across retries is the honest behaviour, not a partial
+  // rendering of something richer that is available elsewhere.
+  const fieldErrors =
+    submit.kind === 'failed' && submit.failure.kind === 'field'
+      ? { [submit.failure.path]: submit.failure.message }
+      : undefined
   return (
     <main>
       <h1>{receipt.merchant_name_raw ?? 'Unknown merchant'}</h1>
@@ -501,8 +516,13 @@ export function ReviewScreen() {
       <ImagePane key={receipt.id} receiptId={receipt.id} fetchUrl={fetchImageUrl} />
       <FindingsPanel findings={receipt.findings} />
       <ConfidenceRail confidence={receipt.confidence} reasons={receipt.confidence_reasons} />
-      <ReceiptForm fields={fields} onChange={edit} />
-      <LineItemsTable items={receipt.line_items} fields={fields} onChange={edit} />
+      <ReceiptForm fields={fields} onChange={edit} errors={fieldErrors} />
+      <LineItemsTable
+        items={receipt.line_items}
+        fields={fields}
+        onChange={edit}
+        errors={fieldErrors}
+      />
       {/* Plain, not a second alert, for the reason the failed phase records.
           Suppressed once `openTaskId` is set, because there the sentence is
           simply false: that state is reached only from the `complete` step, so

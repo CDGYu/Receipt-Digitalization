@@ -1,3 +1,4 @@
+import { useId } from 'react'
 import { MoneyInput } from './MoneyInput'
 import type { FieldMap } from './patch'
 
@@ -130,6 +131,45 @@ const LEGIBILITY: readonly string[] = ['good', 'fair', 'poor', 'unreadable']
 export interface ReceiptFormProps {
   readonly fields: FieldMap
   readonly onChange: (path: string, value: string | null) => void
+  /** Server messages keyed by the same dotted paths as `fields`. */
+  readonly errors?: Readonly<Record<string, string>>
+}
+
+/** One free-text control, owning its ids. Extracted because `useId` is a
+ *  hook and the fields render from a `.map`.
+ *
+ *  The error paragraph is a *sibling* of the label, for the reason `MoneyInput`
+ *  records: text nested inside a `<label>` becomes part of the field's name. */
+function TextField({
+  label,
+  value,
+  error,
+  onChange,
+}: {
+  readonly label: string
+  readonly value: string | null
+  readonly error: string | undefined
+  readonly onChange: (value: string | null) => void
+}) {
+  const errorId = useId()
+  return (
+    <>
+      <label>
+        {label}
+        <input
+          type="text"
+          value={value ?? ''}
+          aria-describedby={error !== undefined ? errorId : undefined}
+          onChange={(e) => onChange(e.target.value === '' ? null : e.target.value)}
+        />
+      </label>
+      {error !== undefined ? (
+        <p role="alert" id={errorId}>
+          {error}
+        </p>
+      ) : null}
+    </>
+  )
 }
 
 /** The receipt's own correctable fields: **seventeen controls for the seventeen
@@ -154,19 +194,18 @@ export interface ReceiptFormProps {
  * that is `NULL` today stays `NULL` until the reviewer actually clicks it -- at
  * which point they have made a real edit and it is recorded as one.
  */
-export function ReceiptForm({ fields, onChange }: ReceiptFormProps) {
+export function ReceiptForm({ fields, onChange, errors }: ReceiptFormProps) {
   return (
     <section>
       <h2>Receipt</h2>
       {TEXT_FIELDS.map(([path, label]) => (
-        <label key={path}>
-          {label}
-          <input
-            type="text"
-            value={fields[path] ?? ''}
-            onChange={(e) => onChange(path, e.target.value === '' ? null : e.target.value)}
-          />
-        </label>
+        <TextField
+          key={path}
+          label={label}
+          value={fields[path]}
+          error={errors?.[path]}
+          onChange={(value) => onChange(path, value)}
+        />
       ))}
 
       {MONEY_FIELDS.map(([path, label]) => (
@@ -174,10 +213,15 @@ export function ReceiptForm({ fields, onChange }: ReceiptFormProps) {
           key={path}
           label={label}
           value={fields[path]}
+          error={errors?.[path]}
           onChange={(value) => onChange(path, value)}
         />
       ))}
 
+      {/* No error slot on the three below: `_coerce_legibility` and
+          `_coerce_bool` cannot be reached from a closed option list or a
+          checkbox, so neither control has an invalid state to send
+          (design §1.3/§10). */}
       <label>
         Legibility
         <select
