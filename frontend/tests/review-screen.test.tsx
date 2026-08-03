@@ -1,13 +1,17 @@
 import { StrictMode } from 'react'
-import { cleanup, render, screen, within } from '@testing-library/react'
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ReviewScreen } from '../src/review/ReviewScreen'
+import { clear, restore } from '../src/review/stash'
 import type { Money, ReceiptDetail, ReceiptSummary, ReviewTask } from '../src/api/types'
 
 afterEach(() => {
   cleanup()
   vi.unstubAllGlobals()
+  // Module state outlives a test the way it outlives a 401 -- without this, one
+  // test's unsubmitted edits would restore themselves onto the next test's task.
+  clear()
 })
 
 function jsonResponse(status: number, body: unknown): Response {
@@ -760,5 +764,157 @@ describe('ReviewScreen: what the server actually stored', () => {
 
     expect((await screen.findByRole('alert')).textContent).toMatch(/could not be checked/i)
     expect(screen.getByRole('button', { name: /next receipt/i })).toBeDefined()
+  })
+})
+
+describe('the edit stash across a 401', () => {
+  it('restores unsubmitted edits when ADR-0016 hands the same task back', async () => {
+    // First mount: edit a field, then unmount -- the 401 path unmounts the
+    // screen exactly this way (App swaps to LoginPage).
+    const first = stubApi({
+      '/review/next': [200, { task: TASK, receipt: SUMMARY }],
+      '/receipts/a1': [200, RECEIPT],
+    })
+    vi.stubGlobal('fetch', first)
+    const { unmount } = render(
+      <StrictMode>
+        <ReviewScreen />
+      </StrictMode>,
+    )
+    const total = await screen.findByLabelText('Total')
+    await userEvent.clear(total)
+    await userEvent.type(total, '99.00')
+    unmount()
+
+    // Second mount, fresh claim state: the resume returns the same task and
+    // the same stored receipt; the edit must come back dirty.
+    const second = stubApi({
+      '/review/next': [200, { task: TASK, receipt: SUMMARY }],
+      '/receipts/a1': [200, RECEIPT],
+    })
+    vi.stubGlobal('fetch', second)
+    render(
+      <StrictMode>
+        <ReviewScreen />
+      </StrictMode>,
+    )
+
+    const restored = await screen.findByLabelText('Total')
+    expect((restored as HTMLInputElement).value).toBe('99.00')
+    // The overlay is the dirty diff, not the whole form: Step 5's third mutation
+    // (remembering `phase.fields`) is otherwise indistinguishable from this.
+    expect(restore('t1')).toEqual({ 'totals.total': '99.00' })
+  })
+
+  it('does not restore onto a different task', async () => {
+    const first = stubApi({
+      '/review/next': [200, { task: TASK, receipt: SUMMARY }],
+      '/receipts/a1': [200, RECEIPT],
+    })
+    vi.stubGlobal('fetch', first)
+    const { unmount } = render(
+      <StrictMode>
+        <ReviewScreen />
+      </StrictMode>,
+    )
+    const total = await screen.findByLabelText('Total')
+    await userEvent.clear(total)
+    await userEvent.type(total, '99.00')
+    unmount()
+
+    const otherTask = { ...TASK, id: 't2', receipt_id: 'a1' }
+    const second = stubApi({
+      '/review/next': [200, { task: otherTask, receipt: SUMMARY }],
+      '/receipts/a1': [200, RECEIPT],
+    })
+    vi.stubGlobal('fetch', second)
+    render(
+      <StrictMode>
+        <ReviewScreen />
+      </StrictMode>,
+    )
+
+    const fresh = await screen.findByLabelText('Total')
+    expect((fresh as HTMLInputElement).value).toBe(RECEIPT.totals.total)
+  })
+
+  it('comes back clean after a complete-step 401: the patch landed, so the fresh original already holds the edit', async () => {
+    // PATCH succeeds and returns the receipt WITH the new total; complete 401s.
+    const patched = {
+      ...RECEIPT,
+      totals: { ...RECEIPT.totals, total: '99.0000' as Money },
+    }
+    const first = stubApi({
+      '/review/next': [200, { task: TASK, receipt: SUMMARY }],
+      'GET /receipts/a1': [200, RECEIPT],
+      'PATCH /receipts/a1': [200, patched],
+      '/review/t1/complete': [401, { error: { message: 'session expired' } }],
+      // Stubbed only so `findByRole('alert')` below is unambiguous: an
+      // unstubbed image route makes ImagePane render an alert of its own, and
+      // the query then matches two elements and throws.
+      '/receipts/a1/image': [200, { url: '/receipts/a1/image/blob?variant=original&exp=1&sig=s' }],
+    })
+    vi.stubGlobal('fetch', first)
+    const { unmount } = render(
+      <StrictMode>
+        <ReviewScreen />
+      </StrictMode>,
+    )
+    const total = await screen.findByLabelText('Total')
+    await userEvent.clear(total)
+    await userEvent.type(total, '99.0000')
+    await userEvent.keyboard('{Control>}{Enter}{/Control}')
+    await screen.findByRole('alert')
+    unmount()
+
+    // Re-login: the resume returns the same task; the receipt now stores the
+    // patched value. The overlay overlays equals onto equals: approving again
+    // must send an empty patch, not a spurious re-correction.
+    const second = stubApi({
+      '/review/next': [200, { task: TASK, receipt: SUMMARY }],
+      'GET /receipts/a1': [200, patched],
+      'PATCH /receipts/a1': [200, patched],
+      '/review/t1/complete': [200, { ...TASK, state: 'done' }],
+    })
+    vi.stubGlobal('fetch', second)
+    render(
+      <StrictMode>
+        <ReviewScreen />
+      </StrictMode>,
+    )
+    await screen.findByLabelText('Total')
+    await userEvent.keyboard('{Control>}{Enter}{/Control}')
+    await waitFor(() => {
+      expect(patchBody(second)).toEqual({})
+    })
+  })
+
+  it('a submitted receipt leaves nothing to restore', async () => {
+    const fetchMock = stubApi({
+      '/review/next': [
+        [200, { task: TASK, receipt: SUMMARY }],
+        [200, { task: null }],
+      ],
+      'GET /receipts/a1': [200, RECEIPT],
+      // The reply must agree with what was sent, or `findRewrites` reports a
+      // rewrite, the screen holds on `StoredDifferently` and never advances --
+      // which would fail this test for a reason that has nothing to do with
+      // the stash.
+      'PATCH /receipts/a1': [200, storedTotal('99.00')],
+      '/review/t1/complete': [200, { ...TASK, state: 'done' }],
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    render(
+      <StrictMode>
+        <ReviewScreen />
+      </StrictMode>,
+    )
+    const total = await screen.findByLabelText('Total')
+    await userEvent.clear(total)
+    await userEvent.type(total, '99.00')
+    await userEvent.keyboard('{Control>}{Enter}{/Control}')
+    await screen.findByText('The review queue is empty.')
+
+    expect(restore('t1')).toBeNull()
   })
 })

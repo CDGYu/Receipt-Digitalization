@@ -17,6 +17,7 @@ import { LineItemsTable } from './LineItemsTable'
 import { ReceiptForm } from './ReceiptForm'
 import { buildPatch, fieldsFromReceipt } from './patch'
 import type { FieldMap } from './patch'
+import { clear as clearStash, remember, restore } from './stash'
 
 /** Claim a task, load the receipt behind it, let a reviewer correct it, and
  *  close it.
@@ -197,7 +198,13 @@ export function ReviewScreen() {
       }
       const receipt = await fetchReceipt(task.receipt_id)
       const original = fieldsFromReceipt(receipt)
-      setPhase({ kind: 'claimed', task, receipt, original, fields: { ...original } })
+      // The edits a 401 unmounted, if this is the task they belonged to --
+      // ADR-0016 hands the same task back after re-login, and the overlay
+      // holds only dirty entries, so untouched paths always show the stored
+      // value (design §4.1).
+      const overlay = restore(task.id)
+      const fields = overlay === null ? { ...original } : { ...original, ...overlay }
+      setPhase({ kind: 'claimed', task, receipt, original, fields })
     } catch (caught) {
       // The API's own words when it gave us any, matching `LoginPage`: a 503 from
       // the database handler or a 403 from the queue is worth reading, while a
@@ -254,6 +261,8 @@ export function ReviewScreen() {
       return
     }
     claimed.current = null
+    // This task is closed, so the edits that belonged to it are moot.
+    clearStash()
     await load()
   }
 
@@ -272,6 +281,15 @@ export function ReviewScreen() {
         : current,
     )
   }, [])
+
+  // Mirror the dirty diff into the stash on every committed change. Runs
+  // after render, so it sees the fields React actually kept; idempotent, so
+  // StrictMode's double-invocation is harmless.
+  useEffect(() => {
+    if (phase.kind === 'claimed') {
+      remember(phase.task.id, buildPatch(phase.original, phase.fields))
+    }
+  }, [phase])
 
   async function approve(): Promise<void> {
     if (phase.kind !== 'claimed' || submittedTask.current === phase.task.id) {
@@ -292,6 +310,8 @@ export function ReviewScreen() {
     }
     // The task is closed either way -- the write landed. Only the advance waits.
     claimed.current = null
+    // The edits are on the receipt now; nothing is left to restore.
+    clearStash()
     if (outcome.kind === 'clean') {
       await load()
       return
@@ -321,6 +341,8 @@ export function ReviewScreen() {
       return
     }
     claimed.current = null
+    // The patch had already landed; closing the task ends this receipt.
+    clearStash()
     await load()
   }
 
