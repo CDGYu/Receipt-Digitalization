@@ -9,11 +9,97 @@ of closing a milestone; **ADR-0021 makes it part of ending any session** (its
 2026-08-02 correction widened the freshness check to include `docs`). This
 verification step is permanent.
 
-**No branch is in flight.** Two milestones were closed and merged on
-2026-08-03 in one session: the currency bound & fixture race
-(`b81ba34 → f04aa65`), then failure-egress redaction (`3c5a86d → 1035fd3`,
-ADR-0022), and `main` was pushed the same session under a fresh one-time
-authorization — nothing is pending anywhere.
+**A branch IS in flight: `feat/review-ui-error-recovery`.** Earlier milestones
+(currency bound & fixture race `b81ba34 → f04aa65`; failure-egress redaction
+`3c5a86d → 1035fd3`, ADR-0022) are closed and merged. This one is not.
+
+## THE MILESTONE IN FLIGHT — review-ui error recovery (7 tasks, 5 done)
+
+**Branch:** `feat/review-ui-error-recovery`, pushed through `f7a038b`.
+**Spec:** `docs/superpowers/specs/2026-08-03-review-ui-error-recovery-design.md`
+(NOTE: this file had uncommitted edits by another agent at the 2026-08-03
+session end — reconcile before trusting it).
+**Plan (authoritative task specs, all 7):**
+`docs/superpowers/plans/2026-08-03-review-ui-error-recovery.md` — Task 1 @ 51,
+Task 2 @ 170, Task 3 @ 406, Task 4 @ 572, Task 5 @ 828, Task 6 @ 1020,
+Task 7 @ 1371.
+**Per-task briefs and reports:** `.superpowers/sdd/2026-08-03-review-ui-error-recovery/`
+(gitignored — open by path). Briefs 1-5 and reports 1-5 exist. The briefs are
+verbatim copies of the plan sections, defects included.
+
+| # | Task | State | Commit |
+| --- | --- | --- | --- |
+| 1 | Pin the server message surface | done | `b6f2679`, `a7a3623` |
+| 2 | The failure classifier (`src/review/failure.ts`) | done | `2fc8310`, `43f209c` |
+| 3 | The stash (`src/review/stash.ts`) | done | `f769f79` |
+| 4 | The sign-out control | done | `e473864` |
+| 5 | ReviewScreen keeps edits across a 401 | done | `f7a038b` |
+| 6 | Terminal states — taken/gone/backend-down | **STARTED, WORK LOST** | — |
+| 7 | Inline field errors | not started | — |
+
+**Verify that table against `git log --oneline main..HEAD` before trusting it.**
+
+### Task 6 — start here, and read this first
+
+Task 6 was implemented and taken to 33/36 green, then its **uncommitted work
+was destroyed by a concurrent agent** (ADR-0023). Salvaged and re-derivable:
+
+* **The six tests survive** at
+  `.superpowers/sdd/2026-08-03-review-ui-error-recovery/task-6-tests-SALVAGED.tsx`
+  (141 lines) — append verbatim to `frontend/tests/review-screen.test.tsx`.
+* **The implementation is lost** but is fully specified at plan lines 1161-1348.
+* `task-6-wip.diff` in the same directory is **empty of Task 6** — it was
+  written after the wipe. Do not trust it.
+
+**Three findings that cost hours; do not rediscover them:**
+
+1. **The plan's backend-down `<p role="alert">` breaks six pre-existing tests.**
+   Two `role="alert"` elements in one region make every `getByRole('alert')` in
+   `review-screen.test.tsx` ambiguous ("Found multiple elements"). Task 6's own
+   tests query that sentence **by text**, so render it as a plain `<p>`. This
+   was measured: with the role, 7 tests failed; without it, 3.
+2. **A pre-existing test contradicts Task 6 by design.**
+   `says the receipt was saved but the task is still open when only the close
+   fails` (≈ line 520) stubs `complete → 403` and asserts the `Close task`
+   button. Task 6 turns a 403-on-complete into the terminal `lost` state, which
+   has no `Close task`. Repoint that test at a non-terminal status (500) so it
+   keeps covering the Close-task recovery path, and let Task 6's new 403 test
+   own the terminal behaviour. **This is a deliberate supersession — say so in
+   the commit and the report.**
+3. **Two more pre-existing tests fail for the same reason** and need the same
+   judgement: `lets the reviewer give up on a receipt that never loads` (≈299,
+   503 on the receipt ⇒ backend-down now suppresses Skip) and `says so when the
+   skip itself fails, and leaves the escape on screen` (≈347, `complete → 403`
+   ⇒ `skipHeldTask` now auto-advances instead of showing the failure). Both
+   pin behaviour Task 6 intentionally changes. Decide per test, document each.
+
+So Task 6's real Step 2 expectation is **not** "six fail, everything else
+passes" — it is "five fail (the sixth is the plan's own `(unchanged)` guard),
+and six pre-existing tests need adjudication".
+
+### Task 7 — after 6, never beside it
+
+Plan line 1371. Files: `MoneyInput.tsx`, `ReceiptForm.tsx`, `LineItemsTable.tsx`,
+`ReviewScreen.tsx` (threading only), `receipt-form.test.tsx`,
+`review-screen.test.tsx`. It consumes Task 2's `Failure` `field` kind and
+Task 6's `Submit.failed.failure`.
+
+### Dispatch rule (ADR-0023, learned the hard way)
+
+Tasks 5, 6 and 7 all modify `frontend/src/review/ReviewScreen.tsx` and
+`frontend/tests/review-screen.test.tsx`. **Run them strictly serially**, each
+rebased on the previous commit. Never dispatch two agents onto one file.
+Commit every green step immediately — uncommitted work in this worktree is not
+durable. Restore RED-proof mutations from a byte copy, never `git checkout --`.
+
+### Gate for every task in this milestone
+
+```
+cd frontend && npx vitest run tests/<file> && npm test && npm run typecheck && npm run build
+```
+`npm test` does **not** typecheck; `npm run build` runs `tsc -b` first and is the
+only thing that catches `erasableSyntaxOnly` violations. Baseline at `f7a038b`:
+**18 files / 198 tests green.**
 
 ## Reading order
 
@@ -33,8 +119,16 @@ authorization — nothing is pending anywhere.
    holds Phase 5's parked items. **`.superpowers/` is gitignored — open
    ledgers by path; nothing in them is findable by searching the tracked
    tree.**
-3. **`docs/adr/README.md`, then the ADRs (0001–0022).** Mandatory before
+3. **`docs/adr/README.md`, then the ADRs (0001–0023).** Mandatory before
    touching the matching area. Session-relevant highlights:
+   - **0023 — parallel task agents share one worktree.** Read before
+     dispatching anything in the milestone above: it records the measured loss
+     of Task 6's uncommitted work and the serialisation rule that prevents it.
+   - **0016** — `GET /review/next` resumes the caller's own `IN_PROGRESS` task,
+     which is the whole premise of the stash (Task 3) and Task 5's restore.
+   - **0015** — no `<input type="number">` and no `valueAsNumber` on money;
+     **0001** — money stays a string end to end. `frontend/tests/no-float-in-money-path.test.ts`
+     is the guard, and it walks every file under `frontend/src`.
    - **0022 + its same-day dated correction** — failure text is redacted at
      every process egress; the correction records the two sinks the original
      inventory missed (the enqueue twin print, fixed; the reprocess/stderr
