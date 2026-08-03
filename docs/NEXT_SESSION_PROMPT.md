@@ -33,56 +33,53 @@ verbatim copies of the plan sections, defects included.
 | 2 | The failure classifier (`src/review/failure.ts`) | done | `2fc8310`, `43f209c` |
 | 3 | The stash (`src/review/stash.ts`) | done | `f769f79` |
 | 4 | The sign-out control | done | `e473864` |
-| 5 | ReviewScreen keeps edits across a 401 | done | `f7a038b` |
-| 6 | Terminal states — taken/gone/backend-down | **STARTED, WORK LOST** | — |
-| 7 | Inline field errors | not started | — |
+| 5 | ReviewScreen keeps edits across a 401 | done, then fixed | `f7a038b`, `40b0f16` |
+| 6 | Terminal states — taken/gone/backend-down | done | `83d7ffa` |
+| 7 | Inline field errors | **IN FLIGHT at the 2026-08-03 session end** | — |
 
 **Verify that table against `git log --oneline main..HEAD` before trusting it.**
 
-### Task 6 — start here, and read this first
+### Task 6 — done (`83d7ffa`), with its history worth one paragraph
 
-Task 6 was implemented and taken to 33/36 green, then its **uncommitted work
-was destroyed by a concurrent agent** (ADR-0023). Salvaged and re-derivable:
+Task 6 was implemented once, taken to 33/36 green, and its **uncommitted work
+was then destroyed by a concurrent agent** (the incident behind ADR-0023). Only
+the tests survived, in
+`.superpowers/sdd/2026-08-03-review-ui-error-recovery/task-6-tests-SALVAGED.tsx`;
+they were reused in the commit that landed. Three findings from that lost
+attempt were adopted and are now pinned in the tree — do not reopen them:
 
-* **The six tests survive** at
-  `.superpowers/sdd/2026-08-03-review-ui-error-recovery/task-6-tests-SALVAGED.tsx`
-  (141 lines) — append verbatim to `frontend/tests/review-screen.test.tsx`.
-* **The implementation is lost** but is fully specified at plan lines 1161-1348.
-* `task-6-wip.diff` in the same directory is **empty of Task 6** — it was
-  written after the wipe. Do not trust it.
+1. The backend-down sentence is a **plain `<p>`, not a second `role="alert"`**.
+   Measured: a second alert makes every single-alert query in
+   `review-screen.test.tsx` ambiguous and breaks six pre-existing tests, while
+   Task 6's own tests query it by text. Recorded as a user ruling in design §6.1.
+2. **Three pre-existing tests pinned the contract §6.1/§6.2 replace** and were
+   rewritten to pin the new one, each carrying a supersession note: the
+   403-on-complete close test (now `says what survived a refused close…`), the
+   never-loads test (repointed 503 → 500), and the skip-failure test (now
+   `treats a 403 on the skip as already released…`).
+3. `task-6-wip.diff` in the SDD workspace is **empty of Task 6** — written after
+   the wipe. Ignore it.
 
-**Three findings that cost hours; do not rediscover them:**
+Task 5 also took a follow-up fix, `40b0f16`: the remember-effect kept mirroring
+edits after a task's chain was over (`StoredDifferently`, `lost` — both leave
+the form mounted and editable), which re-armed `hasDirtyEdits`, the sign-out
+gate, for edits no confirmation could recover. Guard is
+`submittedTask.current !== phase.task.id`.
 
-1. **The plan's backend-down `<p role="alert">` breaks six pre-existing tests.**
-   Two `role="alert"` elements in one region make every `getByRole('alert')` in
-   `review-screen.test.tsx` ambiguous ("Found multiple elements"). Task 6's own
-   tests query that sentence **by text**, so render it as a plain `<p>`. This
-   was measured: with the role, 7 tests failed; without it, 3.
-2. **A pre-existing test contradicts Task 6 by design.**
-   `says the receipt was saved but the task is still open when only the close
-   fails` (≈ line 520) stubs `complete → 403` and asserts the `Close task`
-   button. Task 6 turns a 403-on-complete into the terminal `lost` state, which
-   has no `Close task`. Repoint that test at a non-terminal status (500) so it
-   keeps covering the Close-task recovery path, and let Task 6's new 403 test
-   own the terminal behaviour. **This is a deliberate supersession — say so in
-   the commit and the report.**
-3. **Two more pre-existing tests fail for the same reason** and need the same
-   judgement: `lets the reviewer give up on a receipt that never loads` (≈299,
-   503 on the receipt ⇒ backend-down now suppresses Skip) and `says so when the
-   skip itself fails, and leaves the escape on screen` (≈347, `complete → 403`
-   ⇒ `skipHeldTask` now auto-advances instead of showing the failure). Both
-   pin behaviour Task 6 intentionally changes. Decide per test, document each.
+### Task 7 — START HERE, and check the tree first
 
-So Task 6's real Step 2 expectation is **not** "six fail, everything else
-passes" — it is "five fail (the sixth is the plan's own `(unchanged)` guard),
-and six pre-existing tests need adjudication".
-
-### Task 7 — after 6, never beside it
+**It was in flight when the 2026-08-03 session ended** — `ReviewScreen.tsx` had
+uncommitted changes by another agent and `git log` may already carry its commit.
+**Run `git log --oneline main..HEAD` and `git status --short` before writing a
+line**, and if the work is half-done, read it before redoing it.
 
 Plan line 1371. Files: `MoneyInput.tsx`, `ReceiptForm.tsx`, `LineItemsTable.tsx`,
 `ReviewScreen.tsx` (threading only), `receipt-form.test.tsx`,
 `review-screen.test.tsx`. It consumes Task 2's `Failure` `field` kind and
 Task 6's `Submit.failed.failure`.
+
+After Task 7 the milestone is code-complete and needs the whole-branch review
+before `main` (push policy: `feat/*` freely, `main` asks first).
 
 ### Dispatch rule (ADR-0023, learned the hard way)
 
@@ -98,8 +95,10 @@ durable. Restore RED-proof mutations from a byte copy, never `git checkout --`.
 cd frontend && npx vitest run tests/<file> && npm test && npm run typecheck && npm run build
 ```
 `npm test` does **not** typecheck; `npm run build` runs `tsc -b` first and is the
-only thing that catches `erasableSyntaxOnly` violations. Baseline at `f7a038b`:
-**18 files / 198 tests green.**
+only thing that catches `erasableSyntaxOnly` violations. Measured baseline at
+`f7a038b`: **18 files / 198 tests green**; `40b0f16` and `83d7ffa` add tests on
+top of that, so re-measure rather than quoting 198 — and measure on a **clean**
+tree, since a dirty one is somebody's work in progress, not your result.
 
 ## Reading order
 
