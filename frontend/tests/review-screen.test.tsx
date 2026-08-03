@@ -296,14 +296,20 @@ describe('ReviewScreen', () => {
     expect((await screen.findByRole('alert')).textContent).toBe('could not load the review queue')
   })
 
-  it('lets the reviewer give up on a receipt that never loads', async () => {
+  it('lets the reviewer give up on a receipt that never loads, when the database is not what failed', async () => {
+    // Supersedes this row's 503 form: design §6.2 renders a 503 as backend-down
+    // and suppresses Skip there, because Skip's own `completeTask` needs the
+    // same database -- pinned by `a 503 on load is backend-down and does NOT
+    // offer Skip`. The escape itself is unchanged for every other failure, and
+    // that is what this measures, end to end, including the close it spends.
+    //
     // The bug: `claimed.current` is set before `fetchReceipt` and never cleared
     // when it fails, "Try again" re-runs only the failing call, and ADR-0016
     // guarantees a fresh poll hands back *the same task*. A receipt that fails
     // once is a nuisance; a receipt that fails every time took the reviewer out
     // of service, with everything behind it in the queue unreachable.
     const fetchMock = resumingApi({
-      'GET /receipts/a1': [503, { error: { message: 'database unavailable' } }],
+      'GET /receipts/a1': [500, { error: { message: 'the receipt could not be read' } }],
       'GET /receipts/b2': [200, SECOND_RECEIPT],
       '/receipts/b2/image': [200, { url: '/receipts/b2/image/blob?exp=1&sig=s' }],
     })
@@ -311,7 +317,7 @@ describe('ReviewScreen', () => {
     const user = userEvent.setup()
 
     render(<ReviewScreen />)
-    expect((await screen.findByRole('alert')).textContent).toBe('database unavailable')
+    expect((await screen.findByRole('alert')).textContent).toBe('the receipt could not be read')
 
     // "Try again" is not an escape: it re-runs the call that is failing, and it
     // is right not to re-enter `fetchNext`, which is a claiming write.
@@ -344,12 +350,23 @@ describe('ReviewScreen', () => {
     expect(screen.queryByRole('button', { name: /skip this receipt/i })).toBeNull()
   })
 
-  it('says so when the skip itself fails, and leaves the escape on screen', async () => {
-    // Silence here would be the worst of both: the reviewer believes they have
-    // moved on, and the task is still theirs.
+  it('treats a 403 on the skip as already released, and moves on', async () => {
+    // Supersedes `says so when the skip itself fails, and leaves the escape on
+    // screen`: design §6.2 makes a `taken`/`gone` answer to the release mean
+    // the task is not this reviewer's to release -- so it is released, not
+    // re-offered. This is the `taken` half of that branch; `skip's own
+    // completeTask answering 404 …` is the `gone` half. (Its 503 load is gone
+    // too: §6.2 suppresses Skip entirely while the database is down.)
+    //
+    // Silence would still be the worst of both, which is why the screen moves
+    // rather than sitting on an escape it cannot spend: a dead end here left
+    // the reviewer clicking a button that could only ever 403 again.
     const fetchMock = stubApi({
-      '/review/next': [200, { task: TASK, receipt: SUMMARY }],
-      'GET /receipts/a1': [503, { error: { message: 'database unavailable' } }],
+      '/review/next': [
+        [200, { task: TASK, receipt: SUMMARY }],
+        [200, { task: null }],
+      ],
+      'GET /receipts/a1': [404, { error: { message: 'no receipt with id a1' } }],
       'POST /review/t1/complete': [403, { error: { message: 'not your task' } }],
     })
     vi.stubGlobal('fetch', fetchMock)
@@ -359,9 +376,9 @@ describe('ReviewScreen', () => {
     await screen.findByRole('alert')
     await user.click(screen.getByRole('button', { name: /skip this receipt/i }))
 
-    expect((await screen.findByRole('alert')).textContent).toContain('not your task')
-    expect(screen.getByRole('button', { name: /skip this receipt/i })).toBeDefined()
-    expect(callsTo(fetchMock, '/review/next')).toBe(1)
+    expect(await screen.findByText(/review queue is empty/i)).toBeDefined()
+    expect(screen.queryByRole('button', { name: /skip this receipt/i })).toBeNull()
+    expect(callsTo(fetchMock, '/review/next')).toBe(2)
   })
 
   it('loads again when the reviewer asks after a failure', async () => {
@@ -517,10 +534,14 @@ describe('ReviewScreen: editing and approval', () => {
     expect(screen.queryByRole('button', { name: /close task/i })).toBeNull()
   })
 
-  it('says the receipt was saved but the task is still open when only the close fails', async () => {
-    // `apply_corrections` commits inside its own transaction, so a 403 from
-    // `complete` leaves a `reviewed` receipt with an open queue entry. Advancing
-    // here would orphan it silently.
+  it('says what survived a refused close, and its one exit is not a second submit', async () => {
+    // Supersedes `says the receipt was saved but the task is still open when
+    // only the close fails`: design §6.1 replaces that state's `Close task`
+    // retry with the terminal lost state, because a 403/404 on `complete` would
+    // answer a retry identically forever. What has not changed is why the
+    // screen stops: `apply_corrections` commits inside its own transaction, so
+    // the receipt is `reviewed` while the queue entry is out of this reviewer's
+    // hands, and advancing past that silently is the thing being prevented.
     const fetchMock = stubApi({
       ...DRAINING,
       'POST /review/t1/complete': [
@@ -536,13 +557,16 @@ describe('ReviewScreen: editing and approval', () => {
     const alert = await screen.findByRole('alert')
     expect(alert.textContent).toMatch(/saved/i)
     expect(alert.textContent).toContain('only the assignee or an admin may complete this task')
+    // No auto-advance, and no retry that could only fail the same way.
     expect(callsTo(fetchMock, '/review/next')).toBe(1)
+    expect(screen.queryByRole('button', { name: /close task/i })).toBeNull()
 
-    // ...and the offered repair closes the task alone, without patching again.
-    await user.click(screen.getByRole('button', { name: /close task/i }))
+    // The one exit advances and sends nothing: the *second* `complete` reply
+    // stubbed above is the trap -- a re-close would answer 200 and pass unseen.
+    await user.click(within(alert).getByRole('button', { name: /next receipt/i }))
     expect(await screen.findByText(/review queue is empty/i)).toBeDefined()
     expect(chain(fetchMock).filter((call) => call === 'PATCH /receipts/a1')).toHaveLength(1)
-    expect(chain(fetchMock).filter((call) => call === 'POST /review/t1/complete')).toHaveLength(2)
+    expect(chain(fetchMock).filter((call) => call === 'POST /review/t1/complete')).toHaveLength(1)
   })
 
   it('says something on screen when the submit never reaches the API', async () => {
@@ -947,5 +971,147 @@ describe('the edit stash across a 401', () => {
 
     expect(restore('t1')).toBeNull()
     expect(hasDirtyEdits()).toBe(false)
+  })
+})
+
+describe('terminal submit and load states', () => {
+  it('a 403 on complete says what survived and offers only Next receipt', async () => {
+    const fetchMock = stubApi({
+      '/review/next': [
+        [200, { task: TASK, receipt: SUMMARY }],
+        [200, { task: null }],
+      ],
+      'GET /receipts/a1': [200, RECEIPT],
+      'PATCH /receipts/a1': [200, RECEIPT],
+      '/review/t1/complete': [
+        403,
+        { error: { message: 'only the assignee or an admin may complete this task' } },
+      ],
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    render(
+      <StrictMode>
+        <ReviewScreen />
+      </StrictMode>,
+    )
+    await screen.findByLabelText('Total')
+    await userEvent.keyboard('{Control>}{Enter}{/Control}')
+
+    const notice = await screen.findByText('Saved, but this task was taken over by someone else')
+    expect(notice).toBeTruthy()
+    expect(screen.getByText(/only the assignee or an admin/)).toBeTruthy()
+    // No retry affordances -- they would fail identically forever.
+    expect(screen.queryByRole('button', { name: 'Close task' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Approve (⌘↵)' })).toBeNull()
+
+    // The chord is dead here: it must not re-run the chain.
+    const patches = chain(fetchMock).filter((c) => c.startsWith('PATCH')).length
+    await userEvent.keyboard('{Control>}{Enter}{/Control}')
+    expect(chain(fetchMock).filter((c) => c.startsWith('PATCH')).length).toBe(patches)
+
+    // The one exit advances.
+    await userEvent.click(screen.getByRole('button', { name: 'Next receipt' }))
+    await screen.findByText('The review queue is empty.')
+  })
+
+  it('a 404 on complete reads as gone, with the same single exit', async () => {
+    const fetchMock = stubApi({
+      '/review/next': [
+        [200, { task: TASK, receipt: SUMMARY }],
+        [200, { task: null }],
+      ],
+      'GET /receipts/a1': [200, RECEIPT],
+      'PATCH /receipts/a1': [200, RECEIPT],
+      '/review/t1/complete': [404, { error: { message: 'no review task with id t1' } }],
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    render(
+      <StrictMode>
+        <ReviewScreen />
+      </StrictMode>,
+    )
+    await screen.findByLabelText('Total')
+    await userEvent.keyboard('{Control>}{Enter}{/Control}')
+
+    await screen.findByText('Saved, but this task no longer exists')
+    expect(screen.queryByRole('button', { name: 'Close task' })).toBeNull()
+    await userEvent.click(screen.getByRole('button', { name: 'Next receipt' }))
+    await screen.findByText('The review queue is empty.')
+  })
+
+  it('a 503 on submit is a distinct backend-down state that keeps the narrow retry', async () => {
+    const fetchMock = stubApi({
+      '/review/next': [200, { task: TASK, receipt: SUMMARY }],
+      'GET /receipts/a1': [200, RECEIPT],
+      'PATCH /receipts/a1': [503, { error: { message: 'database unavailable' } }],
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    render(
+      <StrictMode>
+        <ReviewScreen />
+      </StrictMode>,
+    )
+    await screen.findByLabelText('Total')
+    await userEvent.keyboard('{Control>}{Enter}{/Control}')
+
+    await screen.findByText('The database is unavailable — nothing can be saved right now.')
+    // The chain can be retried once the database is back: Approve survives.
+    expect(screen.getByRole('button', { name: 'Approve (⌘↵)' })).toBeTruthy()
+  })
+
+  it('a 503 on load is backend-down and does NOT offer Skip', async () => {
+    const fetchMock = stubApi({
+      '/review/next': [200, { task: TASK, receipt: SUMMARY }],
+      'GET /receipts/a1': [503, { error: { message: 'database unavailable' } }],
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    render(
+      <StrictMode>
+        <ReviewScreen />
+      </StrictMode>,
+    )
+
+    await screen.findByText('The database is unavailable — nothing can be saved right now.')
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy()
+    // Skip's completeTask needs the same database; offering it is a false exit.
+    expect(screen.queryByRole('button', { name: 'Skip this receipt' })).toBeNull()
+  })
+
+  it('a receipt-404 with a live task still offers Skip (unchanged)', async () => {
+    const fetchMock = stubApi({
+      '/review/next': [200, { task: TASK, receipt: SUMMARY }],
+      'GET /receipts/a1': [404, { error: { message: 'no receipt with id a1' } }],
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    render(
+      <StrictMode>
+        <ReviewScreen />
+      </StrictMode>,
+    )
+
+    await screen.findByRole('alert')
+    expect(screen.getByRole('button', { name: 'Skip this receipt' })).toBeTruthy()
+  })
+
+  it("skip's own completeTask answering 404 releases and moves on instead of dead-ending", async () => {
+    const fetchMock = stubApi({
+      '/review/next': [
+        [200, { task: TASK, receipt: SUMMARY }],
+        [200, { task: null }],
+      ],
+      'GET /receipts/a1': [404, { error: { message: 'no receipt with id a1' } }],
+      '/review/t1/complete': [404, { error: { message: 'no review task with id t1' } }],
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    render(
+      <StrictMode>
+        <ReviewScreen />
+      </StrictMode>,
+    )
+
+    await screen.findByRole('alert')
+    await userEvent.click(screen.getByRole('button', { name: 'Skip this receipt' }))
+
+    await screen.findByText('The review queue is empty.')
   })
 })

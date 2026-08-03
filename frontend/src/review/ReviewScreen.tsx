@@ -15,6 +15,8 @@ import { FindingsPanel } from './FindingsPanel'
 import { ImagePane } from './ImagePane'
 import { LineItemsTable } from './LineItemsTable'
 import { ReceiptForm } from './ReceiptForm'
+import { classifyFailure } from './failure'
+import type { Failure } from './failure'
 import { buildPatch, fieldsFromReceipt } from './patch'
 import type { FieldMap } from './patch'
 import { clear as clearStash, remember, restore } from './stash'
@@ -95,6 +97,9 @@ type Phase =
        *  read during render is a value React did not schedule the render for,
        *  and the escape below is offered on the strength of it. */
       readonly heldTask: ReviewTask | null
+      /** What kind of failure this is -- backend-down suppresses the Skip
+       *  escape, because Skip's own completeTask needs the same database. */
+      readonly failure: Failure
     }
   | {
       readonly kind: 'claimed'
@@ -122,7 +127,14 @@ type Submit =
       /** Non-null only when the PATCH landed and the close did not: the receipt
        *  is `reviewed` and this task is still open. */
       readonly openTaskId: string | null
+      readonly failure: Failure
     }
+  /** The chain's close was refused in a way no retry can fix: the task was
+   *  taken over (403) or deleted (404). The PATCH landed -- the state says
+   *  what survived -- and the only exit is an explicit advance. No
+   *  auto-advance, for the same measured muscle-memory reason as
+   *  `StoredDifferently`; `submittedTask` stays set so the chord is dead. */
+  | { readonly kind: 'lost'; readonly flavor: 'taken' | 'gone'; readonly message: string }
   /** The chain finished -- receipt saved, task closed -- but the server did not
    *  store what was sent, or the reply could not be checked. Nothing is broken
    *  and nothing can be retried; the screen simply must not advance until the
@@ -152,16 +164,27 @@ function apiMessage(caught: unknown): string {
   return cause instanceof ApiError ? cause.message : 'the review could not be submitted'
 }
 
-function submitFailure(caught: unknown, taskId: string): Submit {
+function submitFailure(caught: unknown, taskId: string, sentPatch: FieldMap): Submit {
+  const cause = caught instanceof SubmitError ? caught.cause : caught
+  const step = caught instanceof SubmitError ? caught.step : null
+  const failure = classifyFailure(cause, {
+    // Only the patch step sends a patch, so only its 400 can belong to a field.
+    sentPatch: step === 'patch' ? sentPatch : undefined,
+    fallback: 'the review could not be submitted',
+  })
+  if (step === 'complete' && (failure.kind === 'taken' || failure.kind === 'gone')) {
+    return { kind: 'lost', flavor: failure.kind, message: failure.message }
+  }
   const message = apiMessage(caught)
-  if (caught instanceof SubmitError && caught.step === 'complete') {
+  if (step === 'complete') {
     return {
       kind: 'failed',
       message: `Saved, but the task is still open: ${message}`,
       openTaskId: taskId,
+      failure,
     }
   }
-  return { kind: 'failed', message: `Not saved: ${message}`, openTaskId: null }
+  return { kind: 'failed', message: `Not saved: ${message}`, openTaskId: null, failure }
 }
 
 export function ReviewScreen() {
@@ -209,10 +232,12 @@ export function ReviewScreen() {
       // The API's own words when it gave us any, matching `LoginPage`: a 503 from
       // the database handler or a 403 from the queue is worth reading, while a
       // `TypeError: Failed to fetch` from a dev server that is not up is not.
+      const failure = classifyFailure(caught, { fallback: 'could not load the review queue' })
       setPhase({
         kind: 'failed',
         message: caught instanceof ApiError ? caught.message : 'could not load the review queue',
         heldTask: claimed.current,
+        failure,
       })
     }
   }, [])
@@ -249,14 +274,22 @@ export function ReviewScreen() {
     try {
       await completeTask(task.id)
     } catch (caught) {
+      const failure = classifyFailure(caught, { fallback: 'the request did not reach the API' })
+      if (failure.kind === 'gone' || failure.kind === 'taken') {
+        // The task is not this reviewer's to release any more -- it was
+        // deleted, or an admin moved it. Nothing is held; move on.
+        claimed.current = null
+        clearStash()
+        await load()
+        return
+      }
       setPhase({
         kind: 'failed',
-        message: `could not release this receipt: ${
-          caught instanceof ApiError ? caught.message : 'the request did not reach the API'
-        }`,
+        message: `could not release this receipt: ${failure.message}`,
         // Still held, so the escape stays on screen. Silence here would leave a
         // reviewer believing they had moved on from a task that is still theirs.
         heldTask: task,
+        failure,
       })
       return
     }
@@ -309,16 +342,24 @@ export function ReviewScreen() {
       return
     }
     const { task, receipt, original, fields } = phase
+    // Hoisted so the send and the classification see the identical object: a
+    // field match reads the paths that actually went up, not a second diff.
+    const sentPatch = buildPatch(original, fields)
     submittedTask.current = task.id
     setSubmit({ kind: 'busy' })
     let outcome: SubmitOutcome
     try {
-      outcome = await submitReview(receipt.id, task.id, buildPatch(original, fields))
+      outcome = await submitReview(receipt.id, task.id, sentPatch)
     } catch (caught) {
-      // Nothing was written, or only the close failed; either way this task can
-      // be submitted again, so the guard is released.
-      submittedTask.current = null
-      setSubmit(submitFailure(caught, task.id))
+      const next = submitFailure(caught, task.id, sentPatch)
+      // A lost task cannot be resubmitted -- the guard stays armed and the
+      // only exit is the explicit advance. Every other failure is retryable:
+      // nothing was written, or only the close failed, and either way this
+      // task can be submitted again.
+      if (next.kind !== 'lost') {
+        submittedTask.current = null
+      }
+      setSubmit(next)
       return
     }
     // The task is closed either way -- the write landed. Only the advance waits.
@@ -345,11 +386,22 @@ export function ReviewScreen() {
     try {
       await completeTask(taskId)
     } catch (caught) {
+      // No `sentPatch`: this call carries no patch at all, so a 400 here cannot
+      // belong to a field.
+      const failure = classifyFailure(caught, { fallback: 'the review could not be submitted' })
+      if (failure.kind === 'taken' || failure.kind === 'gone') {
+        // The same dead end the chain's own close reaches, arrived at by the
+        // narrower button: the guard stays armed and the only exit is the
+        // advance.
+        setSubmit({ kind: 'lost', flavor: failure.kind, message: failure.message })
+        return
+      }
       submittedTask.current = null
       setSubmit({
         kind: 'failed',
         message: `Saved, but the task is still open: ${apiMessage(caught)}`,
         openTaskId: taskId,
+        failure,
       })
       return
     }
@@ -380,13 +432,21 @@ export function ReviewScreen() {
 
   if (phase.kind === 'failed') {
     const held = phase.heldTask
+    const backendDown = phase.failure.kind === 'backend-down'
     return (
       <main>
+        {/* Deliberately NOT a second `role="alert"`. The server's own words
+            below already carry the role and announce beside this sentence, and
+            a second alert in the same region makes every single-alert query in
+            the suite ambiguous -- measured, six pre-existing tests break on it.
+            User ruling, dated in the design doc (§6.1); the sentence is pinned
+            by text instead. */}
+        {backendDown ? <p>The database is unavailable — nothing can be saved right now.</p> : null}
         <p role="alert">{phase.message}</p>
         <button type="button" onClick={() => void load()}>
           Try again
         </button>
-        {held === null ? null : (
+        {held === null || backendDown ? null : (
           <>
             <button type="button" onClick={() => void skipHeldTask(held)}>
               Skip this receipt
@@ -430,8 +490,31 @@ export function ReviewScreen() {
       <ConfidenceRail confidence={receipt.confidence} reasons={receipt.confidence_reasons} />
       <ReceiptForm fields={fields} onChange={edit} />
       <LineItemsTable items={receipt.line_items} fields={fields} onChange={edit} />
+      {/* Plain, not a second alert, for the reason the failed phase records. */}
+      {submit.kind === 'failed' && submit.failure.kind === 'backend-down' ? (
+        <p>The database is unavailable — nothing can be saved right now.</p>
+      ) : null}
       {submit.kind === 'failed' ? <p role="alert">{submit.message}</p> : null}
-      {submit.kind === 'held' ? (
+      {submit.kind === 'lost' ? (
+        <section role="alert">
+          <h2>
+            {submit.flavor === 'taken'
+              ? 'Saved, but this task was taken over by someone else'
+              : 'Saved, but this task no longer exists'}
+          </h2>
+          <p>{submit.message}</p>
+          <button
+            type="button"
+            onClick={() => {
+              claimed.current = null
+              clearStash()
+              void load()
+            }}
+          >
+            Next receipt
+          </button>
+        </section>
+      ) : submit.kind === 'held' ? (
         // `Next receipt` lives **inside** the notice, not in the Approve slot.
         // Two buttons alternating in one slot are the same DOM node to React, so
         // the relabel used to happen under the reviewer's finger: measured, after
