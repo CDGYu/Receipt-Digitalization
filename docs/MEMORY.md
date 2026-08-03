@@ -20,12 +20,11 @@ was written and you are reading something stale.
 
 ## Snapshot
 
-- **`main` @ `f04aa65`, NOT pushed as of this stamp** — ten commits ahead of
-  `origin/main @ b81ba34` counting this refresh. Pushing `main` awaits a
-  fresh authorization (asked at the 2026-08-03 close; the 2026-08-02 one was
-  one-time and consumed). If it was granted and pushed later the same
-  session, a same-session amendment to this pair records it. pytest on
-  `main`: **920**.
+- **`main` @ `f04aa65` (refresh `2360e6f` on top), pushed, in sync with
+  `origin/main`** — same-session amendment: the 2026-08-03 push
+  authorization was requested at the close, granted, and consumed by the
+  `b81ba34..2360e6f` push. The standing ask-first rule for `main`
+  continues. pytest on `main`: **920**.
 - **NO branch in flight.** Empty is the signal (ADR-0021).
 - **The currency bound & fixture race milestone is complete and merged**
   (2026-08-03, true fast-forward `b81ba34` → `f04aa65`; nine branch commits:
@@ -248,8 +247,8 @@ API path moves.
   endpoint was considered and deferred.
 - **Push policy (2026-07-30): pushing `feat/*` branches is authorised. Ask
   before pushing `main`.** Every `main` push authorization is one-time (the
-  2026-08-02 one covered the PAN grouping merge; a fresh one was requested at
-  the 2026-08-03 close).
+  2026-08-02 one covered the PAN grouping merge; the 2026-08-03 one covered
+  the currency-bound merge and is consumed).
 - **`GET /review/next` resumes the caller's own in-progress task** (2026-07-30,
   ADR-0016).
 - **`receipt.date_raw` is editable** (2026-07-31), as plain text.
@@ -390,8 +389,8 @@ explicit `data=` override for the two byte-identity-dependent tests.
   it before use.** Never echo `.env` secret values.
 - **Git:** default branch `main`; `origin` → `CDGYu/Receipt-Digitalization`,
   **PUBLIC**. Push `feat/*` freely; **ask before `main`**.
-  `feat/currency-bound-and-fixture-race` is pushed at `f04aa65`; **`main` is
-  local-only past `b81ba34` as of this stamp** (see Snapshot).
+  `feat/currency-bound-and-fixture-race` is pushed at `f04aa65`; `main` is
+  pushed and in sync at `2360e6f` (see Snapshot's same-session amendment).
 - **What the public repo exposes — surfaced to the user, no ruling yet.**
   Nothing secret leaked: `.env` never committed, no image file tracked,
   `var/`, `.kiro/`, `.github/`, `.superpowers/` and `eval/golden/images/` have

@@ -11,9 +11,9 @@ verification step is permanent.
 
 **No branch is in flight.** The currency bound & fixture race milestone was
 closed and merged on 2026-08-03 (whole-branch review → one fix wave → one
-scoped re-review → true ff-merge → this refresh, all in one session). The one
-loose end is whether `main` may be pushed — **Blocked #1 below; do not push
-without the answer.**
+scoped re-review → true ff-merge → this refresh, all in one session), and
+`main` was pushed the same session under a fresh one-time authorization —
+nothing is pending anywhere.
 
 ## Reading order
 
@@ -59,12 +59,10 @@ without the answer.**
 
   **Empty means this prompt is current.** Any output means the tree moved
   after it was written.
-- **`main` is NOT pushed as of this stamp** — ten commits ahead of
-  `origin/main @ b81ba34` counting this refresh. The 2026-08-02 push
-  authorization was one-time and consumed by the PAN grouping merge; a fresh
-  one was requested at the 2026-08-03 close. If it was granted and the push
-  happened later that same session, a same-session amendment to this pair
-  records it — trust the amendment, then `git status -sb`, over this line.
+- **`main` is pushed and in sync with `origin/main`** (same-session
+  amendment: the 2026-08-03 one-time authorization was granted and consumed
+  by the `b81ba34..2360e6f` push). The standing rule continues: pushing
+  `feat/*` is authorised; every `main` push needs a fresh ask.
 - Gates at `f04aa65`, controller-run: `python scripts/verify.py` **all five
   PASS**; pytest **920/0/0/0**; Vitest **170**; outside-repo import of the
   changed module OK. `feat/currency-bound-and-fixture-race` is merged, kept,
@@ -250,9 +248,9 @@ entry points from outside the repository.
 
 ## Blocked on me (the user) — surface these, do not guess
 
-1. **May `main` be pushed?** Asked at the 2026-08-03 close (the merged
-   currency-bound milestone is local-only until then). Every prior
-   authorization was one-time.
+1. *(resolved 2026-08-03: the `main` push was authorized and completed the
+   same session — kept here so the numbering below stays stable; every
+   future `main` push needs a fresh ask.)*
 2. **Do the public golden labels need scrubbing?** (Real third-party names,
    TINs, addresses — also the values the PAN silent-case tests pin.)
 3. **A hosted tool-capable provider + freshly rotated key** (ISSUE-001 → all
