@@ -1098,6 +1098,33 @@ describe('terminal submit and load states', () => {
     expect(screen.getByRole('button', { name: 'Approve (⌘↵)' })).toBeTruthy()
   })
 
+  it('a 503 on the close does not also claim nothing could be saved', async () => {
+    // Both sentences render in the same place, and on this one path the first
+    // is false: `apply_corrections` commits in its own transaction, so the
+    // PATCH landed before `complete` was ever called. Unsuppressed, the screen
+    // said "The database is unavailable — nothing can be saved right now."
+    // directly above "Saved, but the task is still open: database unavailable",
+    // which is a contradiction a reviewer cannot resolve from the screen.
+    const fetchMock = stubApi({
+      ...DRAINING,
+      'POST /review/t1/complete': [503, { error: { message: 'database unavailable' } }],
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const user = await claimAndEditTheTotal(fetchMock)
+    await user.click(screen.getByRole('button', { name: /approve/i }))
+
+    expect((await screen.findByRole('alert')).textContent).toBe(
+      'Saved, but the task is still open: database unavailable',
+    )
+    expect(
+      screen.queryByText('The database is unavailable — nothing can be saved right now.'),
+    ).toBeNull()
+    // The narrow retry is still right to stay: a 503 is transient, and the only
+    // thing left to do is close the task.
+    expect(screen.getByRole('button', { name: /close task/i })).toBeDefined()
+  })
+
   it('a 503 on load is backend-down and does NOT offer Skip', async () => {
     const fetchMock = stubApi({
       '/review/next': [200, { task: TASK, receipt: SUMMARY }],

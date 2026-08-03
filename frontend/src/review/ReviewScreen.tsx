@@ -503,8 +503,16 @@ export function ReviewScreen() {
       <ConfidenceRail confidence={receipt.confidence} reasons={receipt.confidence_reasons} />
       <ReceiptForm fields={fields} onChange={edit} />
       <LineItemsTable items={receipt.line_items} fields={fields} onChange={edit} />
-      {/* Plain, not a second alert, for the reason the failed phase records. */}
-      {submit.kind === 'failed' && submit.failure.kind === 'backend-down' ? (
+      {/* Plain, not a second alert, for the reason the failed phase records.
+          Suppressed once `openTaskId` is set, because there the sentence is
+          simply false: that state is reached only from the `complete` step, so
+          `apply_corrections` already committed. Unsuppressed, a 503 on the
+          close renders "nothing can be saved right now" directly above "Saved,
+          but the task is still open: database unavailable" -- two
+          contradictory claims about one receipt, and the reviewer has no way
+          to tell which is true. `openTaskId !== null` *is* "the write landed",
+          which is why it is the test. */}
+      {submit.kind === 'failed' && submit.failure.kind === 'backend-down' && openTaskId === null ? (
         <p>The database is unavailable — nothing can be saved right now.</p>
       ) : null}
       {submit.kind === 'failed' ? <p role="alert">{submit.message}</p> : null}
