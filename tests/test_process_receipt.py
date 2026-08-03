@@ -400,6 +400,44 @@ def test_the_failure_log_renders_a_redacted_traceback(
     assert "5555555555554444" not in text
 
 
+def test_the_reason_bound_never_bisects_a_pan_into_the_clear(
+    session_factory, storage, settings
+):
+    """Redaction precedes truncation, so the bound can never cut a PAN open.
+
+    ``_persist_failure`` masks the failure text and only then bounds its
+    length. Composed the other way round, a card number lying across the
+    bound is cut shorter than the length the scanner recognises, stops
+    matching, and its leading digits survive into ``reason`` in the clear --
+    the redaction undone by the very step meant to keep the row small. The
+    merchant name below puts a PAN astride the bound to hold that order down.
+    """
+    job = _job(storage)
+    with session_factory() as session:
+        create_pending_receipt(session, job)
+        session.commit()
+    with session_factory() as session:
+        apply_corrections(
+            session, job.id, {"totals": {"total": "999.99"}}, corrected_by="alice"
+        )
+
+    # Padding sized so the PAN straddles the bound: masked first, its asterisks
+    # land on the kept side; truncated first, the surviving head is too short
+    # to match the scanner and stays raw.
+    bad = _good()
+    bad.merchant.name = "A" * 161 + "5555555555554444"
+
+    result = _run(job, _Client([_triage(), bad]), session_factory, storage, settings)
+
+    # The receipt id is the only other digit source in the reason; dropping it
+    # keeps a random UUID from ever deciding this assertion.
+    scrubbed = result.reason.replace(str(job.id), "")
+    assert "55555555" not in scrubbed
+    # Not vacuous: the mask itself survives on the kept side of the cut.
+    assert "************" in result.reason
+    assert len(result.reason) <= _MAX_REASON_CHARS
+
+
 def test_every_model_call_gets_an_audit_row(session_factory, storage, settings):
     job = _job(storage)
     client = _Client([_triage(), _good()])
