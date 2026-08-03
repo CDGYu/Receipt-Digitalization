@@ -731,12 +731,15 @@ def test_every_text_column_save_extraction_writes_is_redacted(engine: sa.Engine)
     nothing else changes) -- so that a *future* column reading either field
     as raw text, bypassing the parse step entirely, would still be caught.
 
-    The only fields left unseeded are ``card_last4`` (above) and the two
-    ``list[str]`` fields, ``meta.ambiguous_fields``/``meta.unreadable_regions``:
-    neither is a scalar ``str``, so neither maps onto one column the way
-    every other field here does, and a future column sourced from one of
-    them is a distinct design question -- how to join a list into text --
-    that this walk's seed-and-check mechanism does not model.
+    The only fields left without a PAN are the two structural exclusions --
+    ``card_last4`` (above, seeded ``"1111"``) and ``currency`` (below, seeded
+    ``"USD"``), each seeded with a value its own guarantee admits -- and the
+    two ``list[str]`` fields,
+    ``meta.ambiguous_fields``/``meta.unreadable_regions``, which are not
+    seeded at all: neither is a scalar ``str``, so neither maps onto one
+    column the way every other field here does, and a future column sourced
+    from one of them is a distinct design question -- how to join a list into
+    text -- that this walk's seed-and-check mechanism does not model.
 
     ``currency`` is the **second** named structural exclusion, added by user
     ruling 2026-08-02 for the same reason ``card_last4`` is the first: it

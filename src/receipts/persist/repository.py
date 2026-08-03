@@ -1073,8 +1073,10 @@ def _bounded_optional_text(column_name: str) -> Callable[[Any], str | None]:
 
 
 #: The machine path's bound for the one length-limited column model text
-#: reaches. Built once and shared with ``_RECEIPT_FIELDS`` below, so the
-#: human and machine paths cannot drift for the same column.
+#: reaches without a coercer of its own -- ``card_last4`` is ``String(4)`` and
+#: model-sourced too, but arrives through the stronger ``_last4`` guard. Built
+#: once and shared with ``_RECEIPT_FIELDS`` below, so the human and machine
+#: paths cannot drift for the same column.
 _CURRENCY_BOUND = _bounded_optional_text("currency")
 
 

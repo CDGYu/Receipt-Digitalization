@@ -185,6 +185,9 @@ It would not leak silently either — the bound raises before such a column coul
 be written — but that is a tripwire, not a leak check, and it fires whether or
 not the new column is redacted.
 
+The guarantee on the excluded side is
+`test_save_extraction_bounds_the_machine_path_currency`.
+
 This correction was prompted by the walk itself: it seeds a PAN through
 `receipt.currency` and calls `save_extraction` directly with an un-normalized
 extraction, so adding the bound broke it. That is the "direct callers (tests,
