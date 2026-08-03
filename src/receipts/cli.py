@@ -823,7 +823,7 @@ def cmd_process(
             except _UNCONTAINED:
                 raise
             except BaseException as exc:  # noqa: B036 - see _UNCONTAINED
-                print(f"{job.id}  failed  {exc}")
+                print(f"{job.id}  failed  {redact_pan(str(exc))}")
                 failed += 1
                 continue
             print(f"{job.id}  queued")

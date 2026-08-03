@@ -965,3 +965,35 @@ def test_an_uncontained_batch_failure_prints_a_redacted_reason(
     assert "************4444" in out
     assert "4111111111111111" not in out
     assert "5555555555554444" not in out
+
+
+def test_an_enqueue_failure_prints_a_redacted_reason(
+    session_factory, storage, settings, capsys
+):
+    """The enqueue loop's failed-job line is the twin of the inline one.
+
+    ADR-0022's standing rule is that every process egress redacts, and this
+    print is the same ``id  failed  reason`` line reached by the other
+    branch: the broker refused the job rather than the run failing. A broker
+    error can quote what it rejected, so it goes through ``redact_pan`` too.
+    Two PANs in one value (review standard 9).
+    """
+    _pending_receipt(session_factory, storage)
+    recorder = _FakeQueue(
+        fail_on=1,
+        fail_with=RuntimeError(
+            "broker rejected job holding 4111111111111111 and 5555555555554444"
+        ),
+    )
+    args = build_parser().parse_args(["process"])
+
+    code = cmd_process(args, session_factory=session_factory, storage=storage,
+                       settings=settings, queue_factory=lambda: recorder)
+
+    assert code == EXIT_FAILED
+    out = capsys.readouterr().out
+    assert "failed" in out
+    assert "************1111" in out
+    assert "************4444" in out
+    assert "4111111111111111" not in out
+    assert "5555555555554444" not in out
