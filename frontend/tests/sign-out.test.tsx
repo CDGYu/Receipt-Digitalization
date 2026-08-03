@@ -23,13 +23,25 @@ describe('the sign-out control', () => {
   it('signs out on a 204 and clears the stash', async () => {
     setSignedIn(true)
     remember('t1', { 'totals.total': '99.00' })
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(null, { status: 204 })))
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 204 }))
+    vi.stubGlobal('fetch', fetchMock)
     render(<SignOutControl />)
 
     await userEvent.click(screen.getByRole('button', { name: 'Sign out' }))
     // Dirty, so the first click arms the confirm; the discard button completes it.
     await userEvent.click(screen.getByRole('button', { name: 'Discard edits and sign out' }))
 
+    // The client half of a server-pinned contract: `POST /auth/logout` is the
+    // only call that ends the session, and it is the route the Python suite
+    // pins answering 204 with an empty body. Without this the call is asserted
+    // only by its *effects*, and a request to any other path -- or the same
+    // path with the wrong method -- reads identically here. Measured: rewriting
+    // this to `request('/auth/not-a-route', { method: 'GET' })` left the whole
+    // Vitest suite green.
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/auth/logout',
+      expect.objectContaining({ method: 'POST' }),
+    )
     expect(isSignedIn()).toBe(false)
     expect(restore('t1')).toBeNull()
   })
