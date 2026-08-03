@@ -934,3 +934,34 @@ def test_fixture_images_are_distinct_beyond_the_dedupe_threshold() -> None:
     for i, first in enumerate(hashes):
         for j, second in enumerate(hashes[i + 1 :], start=i + 1):
             assert phash_distance(first, second) > threshold, (i, j, first, second)
+
+
+def test_an_uncontained_batch_failure_prints_a_redacted_reason(
+    session_factory, storage, settings, capsys
+):
+    """The inline loop's failed-job line is an egress too (ADR-0022).
+
+    ``run()`` catches everything outside ``_UNCONTAINED`` and the loop
+    prints the exception straight to stdout -- which a service manager
+    journals to disk. A provider error can quote the payload it rejected,
+    so the print goes through ``redact_pan`` like every other egress. Two
+    PANs in one value (review standard 9).
+    """
+    _pending_receipt(session_factory, storage)
+    args = build_parser().parse_args(["process", "--inline"])
+
+    def client_factory():
+        raise RuntimeError(
+            "provider rejected payload holding 4111111111111111 and 5555555555554444"
+        )
+
+    code = cmd_process(args, session_factory=session_factory, storage=storage,
+                       settings=settings, client_factory=client_factory)
+
+    assert code == EXIT_FAILED
+    out = capsys.readouterr().out
+    assert "failed" in out
+    assert "************1111" in out
+    assert "************4444" in out
+    assert "4111111111111111" not in out
+    assert "5555555555554444" not in out

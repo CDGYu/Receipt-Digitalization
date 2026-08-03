@@ -137,7 +137,12 @@ from .extract.clients.factory import make_client
 from .ingest.ingest import ReceiptJob, ingest_file
 from .ingest.storage import LocalStorage, S3Storage, StorageBackend
 from .persist.models import Merchant, Receipt
-from .persist.repository import create_pending_receipt, get_receipt, query_receipts
+from .persist.repository import (
+    create_pending_receipt,
+    get_receipt,
+    query_receipts,
+    redact_pan,
+)
 from .persist.session import make_engine, make_session_factory
 from .persist.users import ROLE_REVIEWER, ROLES, create_user, deactivate, list_users, set_role
 from .score.confidence import ReceiptStatus
@@ -857,7 +862,7 @@ def cmd_process(
             print(f"{result.receipt_id}  {result.status.value}  {result.reason}")
             results.append(result)
         else:
-            print(f"{job.id}  failed  {exc}")
+            print(f"{job.id}  failed  {redact_pan(str(exc))}")
             failed += 1
 
     batch = BatchResult(processed=results)
