@@ -27,6 +27,7 @@ Accepted; supersede it with a new ADR rather than editing history.
 | [0019](0019-session-continuity-and-handoff.md) | Session continuity: the handoff pair, the ledgers, and where rulings must live | Accepted |
 | [0020](0020-pan-grouping-coverage.md) | PAN detector: which groupings are covered, and why not more | Accepted |
 | [0021](0021-handing-off-mid-milestone.md) | Handing off mid-milestone: the unfinished branch needs a record | Accepted |
+| [0022](0022-failure-egress-redaction.md) | Failure text is redacted at every process egress | Accepted |
 
 Read **0001** first: it is the invariant everything else defers to. **0007** is
 the one to read before touching anything that writes card data or money, and
