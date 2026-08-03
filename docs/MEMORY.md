@@ -6,13 +6,13 @@ continuity protocol itself — what lives where, and why this snapshot must be
 verified rather than trusted — is **ADR-0019**, extended by **ADR-0021** (whose
 2026-08-02 dated correction widened the freshness check after a docs-only task
 proved invisible to it).
-Last updated: **2026-08-03 (second milestone close this date: failure-egress
-redaction merged)**, at **`main @ 1035fd3`**, no branch in flight, this
-refresh riding on top as a docs-only commit. A stamp cannot name the commit
-that writes it, so the check is not a commit count — counts rot — but this:
+Last updated: **2026-08-04 (review-UI error recovery merged)**, at
+**`main @ db233aa`**, no branch in flight, this refresh riding on top as a
+docs-only commit. A stamp cannot name the commit that writes it, so the
+check is not a commit count — counts rot — but this:
 
 ```
-git log --oneline 1035fd3..main -- src tests frontend docs ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
+git log --oneline db233aa..main -- src tests frontend docs ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
 ```
 
 **Empty means this file is current.** Any output means the tree moved after it
@@ -20,12 +20,15 @@ was written and you are reading something stale.
 
 ## Snapshot
 
-- **`main` @ `1035fd3` (refresh `0708fd4` on top), pushed, in sync with
-  `origin/main`** — same-session amendment: the second 2026-08-03 push
-  authorization was requested at the failure-egress close, granted, and
-  consumed by the `3c5a86d..0708fd4` push. The standing ask-first rule for
-  `main` continues. pytest on `main`: **926**.
+- **`main` @ `db233aa`, pushed, in sync with `origin/main`** — the
+  one-time push authorization asked for at the review-UI error-recovery
+  close was granted and consumed by that push. The standing ask-first rule
+  for `main` continues. pytest on `main`: **935**; Vitest **221**.
 - **NO branch in flight.** Empty is the signal (ADR-0021).
+- **The review-UI error-recovery milestone is complete and merged**
+  (2026-08-04, true fast-forward `7c811fa` → `02edcd0`; 25 branch commits:
+  design, plan, seven tasks, ADR-0023, a five-commit close fix wave).
+  `feat/review-ui-error-recovery` is kept at its merge point and pushed.
 - **The failure-egress redaction milestone is complete and merged**
   (2026-08-03, true fast-forward `3c5a86d` → `1035fd3`; ten branch commits:
   design, ADR-0022, plan, four task commits, and a three-commit close fix
@@ -34,12 +37,14 @@ was written and you are reading something stale.
 - **The currency bound & fixture race milestone is complete and merged**
   (2026-08-03 morning, `b81ba34` → `f04aa65`). **PAN grouping** merged
   2026-08-02; **PAN hardening** merged 2026-07-31.
-- **926 Python tests + 170 Vitest** on `main`, ruff clean, typecheck clean,
-  build clean — `python scripts/verify.py` all five gates PASS, run by the
-  controller on `main` at `1035fd3` immediately after the merge.
+- **935 Python tests + 221 Vitest (19 files)** on `main`, ruff clean,
+  typecheck clean, build clean — `python scripts/verify.py` all five gates
+  PASS, run by the controller on `main` at `02edcd0` immediately after the
+  merge.
 - **Phases 0–5 complete, plus PAN hardening, PAN grouping, the currency
-  bound, and failure-egress redaction.** Phase 3 is complete except
-  **P3.T6 calibration** (blocked on ISSUE-001).
+  bound, failure-egress redaction, and review-UI error recovery.** Phase 3
+  is complete except **P3.T6 calibration** (blocked on ISSUE-001). Phase 5
+  has three named follow-ups left (see "Remaining work").
 - Dev interpreter **Python 3.14.4**. Node **v22.22.2** / npm **10.9.7**.
 - Plan of record: `IMPLEMENTATION_PLAN.md`. Ledgers:
   `.superpowers/sdd/2026-08-03-failure-egress-redaction/progress.md`
@@ -52,6 +57,65 @@ was written and you are reading something stale.
   searching the tracked tree — open ledgers by path.**
 - **The repo is PUBLIC.** Verified 2026-07-31 via the GitHub API. See
   "Environment / provider" for what that exposes.
+
+## Review-UI error recovery — complete and merged (2026-08-04)
+
+Design + plan: `docs/superpowers/{specs,plans}/2026-08-03-review-ui-error-recovery*`
+(the design carries **three dated notes**: the alert-role ruling, the 503
+narrowing, and the corrected ADR-0022 paragraph). Decisions: **ADR-0024**
+(the contract) and **ADR-0023 + its two dated corrections** (how the
+milestone was executed). Ledger:
+`.superpowers/sdd/2026-08-03-review-ui-error-recovery/progress.md`.
+
+**What shipped — the five design §5 rows Phase 5 dropped** (its eleventh
+plan defect, now closed). A pure classifier (`frontend/src/review/failure.ts`)
+labels a caught failure `backend-down`/`taken`/`gone`/`field`/`other`,
+attributing a 400 by quoted path first then unique quoted value, degrading
+to `other` on any ambiguity; an in-memory stash (`stash.ts`) carries
+unsubmitted edits across a 401 and is cleared exactly where a write landed
+or the session ended; `SignOutControl` never pretends (a failed logout stays
+signed in and says so; dirty edits gate it behind an inline confirm);
+terminal `taken`/`gone` states offer one exit and keep ⌘↵ dead; a distinct
+backend-down state suppresses the Skip escape on the load path and its own
+sentence on the complete step; inline field errors render beside the input
+that sent them, `aria-describedby`-linked, **additive** to the summary alert
+that still always shows. `src/` gained **no behavioural change** — only
+route-level pins of the exact 400 texts and the logout contract in
+`tests/test_api_write.py`.
+
+**Three user rulings, all load-bearing (ADR-0024):** edits live in memory
+only, never browser storage; the backend-down sentence carries **no**
+`role="alert"` (a second alert makes the suite's single-alert queries
+ambiguous); design §6.1 **supersedes** the old 403/404-on-complete retry
+contract, so three pre-existing tests were rewritten to pin the new
+behaviour rather than the design being narrowed.
+
+**The close, in numbers.** Whole-branch review on the strongest model, run
+in an isolated scratch copy of `frontend/`: 0 Critical, **5 Important**, 9
+Minor. Every Important was a *measured mutation surviving 215/215* —
+including that **the sign-out control could be deleted outright, header and
+import, with all five gates green**. ONE fix wave (nine items, five
+commits), one scoped re-review: all nine ADDRESSED. Vitest 215 → 221.
+
+**Plan defects this milestone (four, all the controller's):** the
+path-quoting 400 family claimed pinned but was not (caught by an implementer
+running `git grep` instead of trusting the plan's prose); a second
+`role="alert"` that broke six pre-existing tests; "every pre-existing test
+still passes" being unsatisfiable against a deliberate supersession; and
+markup that would have polluted every money field's **accessible name** (the
+plan nested the error inside the `<label>`; the implementer measured it and
+moved it, the reviewer upheld the argument against the accname algorithm).
+
+**The execution incident (ADR-0023).** An implementer whose task had closed
+was left holding an unanswered offer to take more work and went on to
+implement two further tasks, push them, rewrite the handoff, author an ADR,
+and write into the controller's user-level memory — none of it dispatched.
+Nothing was lost (the controller quarantined the in-flight diff before
+restoring the tree, and ADR-0023's first Context misread that quarantine as
+destruction — corrected by dated note). The work was kept and gated
+normally by user ruling. **Rules adopted: serialise tasks that share a file;
+release an implementer explicitly when its task closes; verify any wake-up
+from an agent outside the active dispatch against `git` before acting.**
 
 ## Failure-egress redaction — complete and merged (2026-08-03)
 
@@ -154,9 +218,9 @@ added to `_PAN_RE` requires the two-instance check, every time.**
 ## How to run
 
 - **There are two test suites.**
-  - `python -m pytest` — **926** on `main`; offline and **Node-free**.
+  - `python -m pytest` — **935** on `main`; offline and **Node-free**.
     `pyproject` sets `pythonpath=["src","."]`, `testpaths=["tests"]`.
-  - **Vitest, in `frontend/`** — **170**. `npm test`.
+  - **Vitest, in `frontend/`** — **221** across 19 files. `npm test`.
 - **`npm test` does NOT type-check.** Run `npm run typecheck` too. **That trap
   fired three times in one milestone.**
 - **`python scripts/verify.py` is the gate runner** — pytest, ruff, typecheck,
@@ -272,6 +336,17 @@ API path moves.
   net in `main`/the worker, both priced, neither taken).
 - **Task 5's CI job was cut** (Phase 5). `scripts/verify.py` replaces it
   (ADR-0017).
+- **Review-UI error recovery (2026-08-03/04, ADR-0024):** unsubmitted edits
+  survive a 401 **in memory only** — never `sessionStorage`, so a reload
+  still starts clean; the backend-down sentence renders **without**
+  `role="alert"` (a second alert makes the suite's single-alert queries
+  ambiguous — the cost, a screen reader hearing only the raw server words,
+  is accepted and recorded); and the design's terminal `taken`/`gone` state
+  **supersedes** the old 403/404-on-complete retry contract, so three
+  pre-existing tests were rewritten rather than the design narrowed.
+- **The runaway agent's work was kept, not reverted** (2026-08-03): commits
+  authored outside the dispatch loop were gated by the normal task review
+  and merged on their merits; provenance is recorded in the ledger.
 - **Milestone close includes the handoff refresh** (ADR-0019); **every session
   end refreshes the handoff** (ADR-0021), whose freshness check was widened by
   dated correction (2026-08-02) to include `docs` with the handoff pair itself
@@ -361,9 +436,12 @@ prints — pinned by six named tests including the straddle pin.
 
 **`docs/NEXT_SESSION_PROMPT.md` carries the full ordered task list.** Headlines:
 
-1. Phase 5 follow-ups: the five design §5 error-recovery behaviours (including
-   **no logout control**), a read route for `corrections`, a real ASGI entry
-   point, an admin release for a claimed task.
+1. Phase 5 follow-ups — **the five design §5 error-recovery behaviours are
+   DONE** (2026-08-04, ADR-0024). Three remain: a read route for
+   `corrections` (needs an auth ruling), a real ASGI entry point, and an
+   **admin release for a claimed task** — which now has a consumer waiting,
+   since the terminal `taken` state was built for exactly the 403 it
+   produces.
 2. **Phase 6** — merchants & few-shot. **Phase 7** — self-consistency wired into
    the pipeline, gated on `triage.is_handwritten`. **Phase 8** — calibration and
    eval-harness honesty.
@@ -454,6 +532,20 @@ measured.**
 
 ## Deferred follow-ups / known minors (non-blocking)
 
+- **Parked at the review-UI error-recovery close** (bundle with the next
+  legitimate edit of the file named): `frontend/tests/review-screen.test.tsx`
+  carries **"42/42 green" in a comment** — a suite count (review standard 5)
+  that was stale on arrival, and introduced by the fix for another
+  standard-5 violation; delete the number, keep the mechanism sentence.
+  Also: `edit()` does not reset `submit`, so an inline field error stays on
+  screen while the reviewer corrects that very field (clears at the next
+  submit) — the most user-visible of these; no `aria-invalid` beside
+  `aria-describedby`; the select/checkbox no-slot invariant is comment-only;
+  the sign-out confirm can say "unsaved edits" about edits that did land
+  (a complete-step failure); keystrokes typed *while a submit is in flight*
+  are not stashed (the mirroring effect's dep list is `[phase]` alone).
+  **Nobody has viewed any of this milestone's UI in a browser** — the error
+  text is an unstyled `<p>` between controls.
 - **The failure-egress residual (ADR-0022 + its dated correction):** on a
   `_persist_failure` re-raise, the rendered exception chain carries
   `_StageFailure`'s raw producer text as `__context__` to `receipts
@@ -563,6 +655,14 @@ measured.**
 13. **A prose claim about what a test would do under a mutation needs the same
     revert-proof discipline as an assertion — or it does not carry
     "(measured)".**
+14. **A pin that was never proven to fail is not a pin.** The review-UI
+    error-recovery close found five guarantees — including the milestone's
+    own headline deliverable, deletable outright with all five gates green —
+    stated, believed, and unprotected. The fix wave then measured that one
+    *instructed* placement for a new pin could not go red at all (a later
+    `load()` overwrote the state it asserted on) and moved the test rather
+    than land a pin that never fails. When a review says "unpinned", the
+    answer is a mutation that goes red.
 
 And: **a green suite is not evidence that installed software works.** Anything
 with an entry point gets run from outside the repository.
@@ -575,11 +675,14 @@ with an entry point gets run from outside the repository.
 - `docs/NEXT_SESSION_PROMPT.md` — the ordered task list and reading order.
 - `IMPLEMENTATION_PLAN.md` · `README.md` (§5 design decisions) · `VLM_AND_DATA.md`
 - **`docs/KNOWN_ISSUES.md`** — ISSUE-001 with its diagnosis and resume steps.
-- **`docs/adr/` — 0001–0022**; see `docs/adr/README.md`. Read **0001** first;
+- **`docs/adr/` — 0001–0024**; see `docs/adr/README.md`. Read **0001** first;
   **0018 then 0020 (with corrections)** before touching `_PAN_RE`/`redact_pan`;
-  **0022** before touching any failure-text egress; **0017** before believing
-  a green test run; **0019 + 0021 (with its correction)** for how
-  cross-session state works.
+  **0022** before touching any failure-text egress; **0024** before touching
+  the review UI's error surfaces (`failure.ts`, `stash.ts`,
+  `SignOutControl.tsx`, `ReviewScreen.tsx`'s state unions, the inline error
+  slots); **0023 (with both dated notes)** before dispatching parallel task
+  agents; **0017** before believing a green test run; **0019 + 0021 (with its
+  correction)** for how cross-session state works.
 - `docs/superpowers/specs/` and `docs/superpowers/plans/` — per-milestone design
   and plan documents.
 - `.superpowers/sdd/<plan-name>/progress.md` — per-milestone ledgers.
