@@ -1391,4 +1391,55 @@ describe('a refused field, beside the field', () => {
     expect(described).not.toBeNull()
     expect(document.getElementById(described!)?.textContent).toBe("not a decimal amount: 'abc'")
   })
+
+  it('a refused line-item value lands in that cell, not only in the summary', async () => {
+    // The same guarantee for the other half of the form. `errors={fieldErrors}`
+    // on `<LineItemsTable>` is what carries the server's words into a row, and
+    // removing that prop left the whole suite green -- the test above pins
+    // `ReceiptForm` only, while a qty or unit-price typo is the likeliest real
+    // 400 a reviewer produces.
+    //
+    // The 400 on this path quotes the VALUE, not the path (`not a decimal
+    // amount: 'abc'`), and `matchField` attributes a value-quoting message by
+    // *unique* sent value -- so qty is the only dirty field, and it is the only
+    // one holding that value.
+    const withItems: ReceiptDetail = {
+      ...RECEIPT,
+      line_items: [
+        {
+          position: 3,
+          description_raw: 'AVOCADO',
+          sku: null,
+          qty: '2.000' as Money,
+          unit: null,
+          unit_price: '3.50' as Money,
+          line_total: '7.00' as Money,
+          modifiers: [],
+          line_confidence: null,
+        },
+      ],
+    }
+    const fetchMock = stubApi({
+      '/review/next': [200, { task: TASK, receipt: SUMMARY }],
+      'GET /receipts/a1': [200, withItems],
+      'PATCH /receipts/a1': [400, { error: { message: "not a decimal amount: 'abc'" } }],
+      '/receipts/a1/image': [200, { url: '/receipts/a1/image/blob?variant=original&exp=1&sig=s' }],
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    render(
+      <StrictMode>
+        <ReviewScreen />
+      </StrictMode>,
+    )
+    const qty = await screen.findByLabelText('Qty 3')
+    await userEvent.clear(qty)
+    await userEvent.type(qty, 'abc')
+    await userEvent.keyboard('{Control>}{Enter}{/Control}')
+
+    await screen.findByText("Not saved: not a decimal amount: 'abc'")
+    expect(patchBody(fetchMock)).toEqual({ 'line_items[3].qty': 'abc' })
+    const described = (qty as HTMLInputElement).getAttribute('aria-describedby')
+    expect(described).not.toBeNull()
+    expect(document.getElementById(described!)?.textContent).toBe("not a decimal amount: 'abc'")
+  })
 })
