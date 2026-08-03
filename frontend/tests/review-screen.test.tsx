@@ -1046,6 +1046,11 @@ describe('terminal submit and load states', () => {
     // The one exit advances.
     await userEvent.click(screen.getByRole('button', { name: 'Next receipt' }))
     await screen.findByText('The review queue is empty.')
+    // Nothing dirty survives the advance. This pins the end state, not the
+    // `clearStash()` in the Next receipt handler specifically: see the report's
+    // M2 note -- once the `lost` state clears the stash on entry, that call is
+    // measurably redundant and deleting it leaves this assertion green.
+    expect(restore('t1')).toBeNull()
   })
 
   it('a 404 on complete reads as gone, with the same single exit', async () => {
@@ -1147,5 +1152,49 @@ describe('terminal submit and load states', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Skip this receipt' }))
 
     await screen.findByText('The review queue is empty.')
+  })
+
+  it('a Close task that finds the task taken lands in the same terminal state', async () => {
+    // `closeTaskOnly`'s own `lost` branch, which nothing reached before. It is
+    // not a hypothetical: a 500 on the chain's `complete` is retryable, and it
+    // is exactly the state that renders `Close task` -- so between that render
+    // and the click, an admin can take the task or delete it. Reaching the dead
+    // end by the narrower button has to read the same as reaching it by the
+    // chain, because it *is* the same dead end.
+    const fetchMock = stubApi({
+      ...DRAINING,
+      'POST /review/t1/complete': [
+        [500, { error: { message: 'the task could not be closed' } }],
+        [403, { error: { message: 'only the assignee or an admin may complete this task' } }],
+      ],
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const user = await claimAndEditTheTotal(fetchMock)
+    await user.click(screen.getByRole('button', { name: /approve/i }))
+
+    // First stop: the PATCH landed, the task is still open, and the narrow
+    // retry is offered -- a 500 is not forever.
+    expect((await screen.findByRole('alert')).textContent).toBe(
+      'Saved, but the task is still open: the task could not be closed',
+    )
+    await user.click(screen.getByRole('button', { name: /close task/i }))
+
+    // Second stop: it is forever now.
+    expect(
+      await screen.findByRole('heading', {
+        name: 'Saved, but this task was taken over by someone else',
+      }),
+    ).toBeDefined()
+    expect(screen.getByText('only the assignee or an admin may complete this task')).toBeDefined()
+    // Neither retry survives: both could only fail identically from here.
+    expect(screen.queryByRole('button', { name: /close task/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: /approve/i })).toBeNull()
+
+    // One exit, and it advances without sending anything more.
+    await user.click(screen.getByRole('button', { name: /next receipt/i }))
+    expect(await screen.findByText(/review queue is empty/i)).toBeDefined()
+    expect(chain(fetchMock).filter((call) => call === 'PATCH /receipts/a1')).toHaveLength(1)
+    expect(chain(fetchMock).filter((call) => call === 'POST /review/t1/complete')).toHaveLength(2)
   })
 })
