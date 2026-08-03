@@ -78,6 +78,53 @@ No control flow moves anywhere: ADR-0011's terminal-state contract,
 ADR-0006's raise convention, `_MAX_REASON_CHARS`, the `STAGES` vocabulary
 and `route()`'s reason strings are all byte-identical.
 
+## Correction (2026-08-03)
+
+The Decision's closing claim — that the sink inventory above "is the complete
+list as of this decision" — was falsified the same day it was written, twice,
+by the whole-branch review. Both misses are recorded here rather than edited
+into the Decision: the inventory was wrong, and an ADR that quietly grew a
+fifth and sixth entry would hide that what failed was the design's sink map,
+not the rule.
+
+**(a) The enqueue loop's twin print.** Guarantee 4 covers `cmd_process`'s
+inline loop. The *enqueue* branch of the same function had its own failed-job
+print — the identical `id  failed  reason` line, reached when the broker
+refuses a job rather than when the run fails — and the design's sink map
+missed it. It is fixed in this branch's closing fix wave and carries its own
+test, `test_an_enqueue_failure_prints_a_redacted_reason`. Measured exposure
+before the fix: jobs on that path come from `_job_from_receipt`, whose fields
+are provenance only — the variant filename `original.jpg` taken off a
+UUID-keyed image key, a placeholder content type, a literal source — so what
+that print could reach was broker error text, not model text. The fix is
+rule-consistency, and robustness against the change `_job_from_receipt`'s own
+docstring invites: whoever adds the real provenance columns feeds them
+straight into that line. It is not a live leak closed.
+
+**(b) `receipts reprocess`'s un-netted re-raise.** `cmd_reprocess` calls
+`process_receipt` with no `try`, so the nothing-could-be-written re-raise that
+`_persist_failure` documents propagates out of the command and the interpreter
+renders the exception *chain* to stderr. The chain's `__context__` is this
+project's own `_StageFailure`, whose message is `"{stage}: {type}: {cause}"` —
+the raw producer text, upstream of every egress that redacts. Measured: the
+reviewed-row guard's raw `merchant.name` quote reaches stderr this way. This
+one is an accepted residual, not a fix in this wave; the mechanism is below.
+
+The Context's "five places" undercounts accordingly — seven with these two.
+
+**The accepted residual, re-attributed.** The Consequences below attribute the
+failed-registry exposure to "an infra exception embedding model text by some
+other route". That is the wrong mechanism. The ordinary route is this
+project's own exception chain: `hide_parameters` cleans the SQLAlchemy segment
+of a rendered chain and nothing else, and never touches the `_StageFailure`
+message sitting in that chain's `__context__`. The residual is still accepted,
+now with its mechanism stated rather than guessed. Closing it needs one of two
+things this branch does not do: producer-side redaction, which reverses the
+sinks-redact rule this ADR exists to record, or a rendering net in `main` and
+the worker, which is the control-flow change this branch's constraints forbid.
+Both were priced; neither was taken. The re-raise path remains the documented
+raw-chain residual for **both** stderr (`reprocess`) and RQ's failed registry.
+
 ## Consequences
 
 - Operators debugging a stage failure read a redacted traceback in the log

@@ -70,6 +70,13 @@ untouched here: `route()`'s reasons are fixed §12 vocabulary
 reasons are system-minted (`ingest.py:107-135`), and the whole DB side (§18
 blanket pass, `raw_response`, serializers) is already covered by ADR-0018.
 
+**Note (2026-08-03, whole-branch review).** The sink map above missed two
+egresses — the enqueue loop's twin failed-job print (fixed in the close's fix
+wave, Route A) and `receipts reprocess`'s un-netted re-raise, whose rendered
+exception chain carries `_StageFailure`'s raw text to stderr (accepted
+residual; mechanism recorded in ADR-0022's dated correction). The tenth
+plan-versus-reality defect, the controller's.
+
 ## 2. The decision: four guarantees, one per egress
 
 The mechanism is the one already recorded in the tree at `queue.py:176-179` —
@@ -200,7 +207,10 @@ abstractly without grepping for; this design swept first (2026-08-03):
 
 Standards 2/3/9 held: every failing-capable test proven RED with exactly its
 own guarantee reverted, one variable at a time; the PAN fixture carries **two
-instances in one value**.
+instances in one value**. *(Note 2026-08-03, whole-branch review: T3's fixture
+carries one PAN and is exempt — `hide_parameters` suppresses the whole
+parameter block rather than scanning text, and standard 9 guards a scanner's
+between-hit failure mode, so it does not apply there.)*
 
 1. **T1 (G1), end-to-end through the live-reachable producer:** a receipt
    whose row is `reviewed`, re-run through `process_receipt` with a scripted
