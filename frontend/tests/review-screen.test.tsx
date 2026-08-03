@@ -3,7 +3,7 @@ import { cleanup, render, screen, waitFor, within } from '@testing-library/react
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ReviewScreen } from '../src/review/ReviewScreen'
-import { clear, hasDirtyEdits, restore } from '../src/review/stash'
+import { clear, hasDirtyEdits, remember, restore } from '../src/review/stash'
 import type { Money, ReceiptDetail, ReceiptSummary, ReviewTask } from '../src/api/types'
 
 afterEach(() => {
@@ -333,6 +333,44 @@ describe('ReviewScreen', () => {
     expect(await screen.findByRole('heading', { level: 1, name: 'Second Merchant' })).toBeDefined()
     expect(chain(fetchMock)).toContain('POST /review/t1/complete')
     expect(callsTo(fetchMock, '/review/next')).toBe(2)
+  })
+
+  it('a successful skip drops the stashed edits that belonged to the closed task', async () => {
+    // Design §8 lists "skip success" as a stash clear point; it was the one with
+    // no test at all, and deleting `clearStash()` from `skipHeldTask`'s success
+    // path survives the whole suite. It cannot be pinned inside the test above:
+    // that one's follow-on `load()` claims a second task, and the mirroring
+    // effect immediately calls `remember` for *that* task, replacing the t1
+    // entry -- so `restore('t1')` is null with the clear or without it.
+    // Measured, with the clear deleted and the assertion added there: 42/42
+    // green. Draining the queue is what makes the clear observable, because
+    // `empty` is a phase that stashes nothing.
+    const fetchMock = stubApi({
+      '/review/next': [
+        [200, { task: TASK, receipt: SUMMARY }],
+        [200, { task: null }],
+      ],
+      'GET /receipts/a1': [404, { error: { message: 'no receipt with id a1' } }],
+      'POST /review/t1/complete': [200, { ...TASK, state: 'done' }],
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const user = userEvent.setup()
+
+    // The edits a 401 left behind for this very task: ADR-0016 hands t1 back,
+    // and the receipt then refuses to load. Dirty first, so the assertions
+    // below measure a transition rather than a state that was always empty.
+    remember('t1', { 'totals.total': '99.00' })
+    render(<ReviewScreen />)
+    await screen.findByRole('alert')
+    await user.click(screen.getByRole('button', { name: /skip this receipt/i }))
+
+    expect(await screen.findByText(/review queue is empty/i)).toBeDefined()
+    // The task is closed, so the overlay can never be restored onto anything --
+    // ADR-0016 resumes only the caller's own IN_PROGRESS row. Kept, it would
+    // hold `hasDirtyEdits` true, and that is the sign-out gate (design §4.2):
+    // Sign out would demand confirmation for edits confirming cannot recover.
+    expect(restore('t1')).toBeNull()
+    expect(hasDirtyEdits()).toBe(false)
   })
 
   it('offers nothing to skip when no task was claimed in the first place', async () => {
@@ -1284,6 +1322,45 @@ describe('terminal submit and load states', () => {
     // One exit, and it advances without sending anything more.
     await user.click(screen.getByRole('button', { name: /next receipt/i }))
     expect(await screen.findByText(/review queue is empty/i)).toBeDefined()
+    expect(chain(fetchMock).filter((call) => call === 'PATCH /receipts/a1')).toHaveLength(1)
+    expect(chain(fetchMock).filter((call) => call === 'POST /review/t1/complete')).toHaveLength(2)
+  })
+
+  it('a Close task that succeeds ends the receipt and leaves nothing dirty', async () => {
+    // `closeTaskOnly`'s **success** path, which nothing reached: every existing
+    // Close task click lands in its `lost` branch, so the whole tail of that
+    // function -- releasing the claim, clearing the stash, advancing -- ran in
+    // no test. Design §8 lists "close-task success" as a stash clear point.
+    // Measured: deleting its `clearStash()` left the suite green.
+    const fetchMock = stubApi({
+      ...DRAINING,
+      'POST /review/t1/complete': [
+        [500, { error: { message: 'the task could not be closed' } }],
+        [200, { ...TASK, state: 'done' }],
+      ],
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const user = await claimAndEditTheTotal(fetchMock)
+    await user.click(screen.getByRole('button', { name: /approve/i }))
+
+    // The PATCH landed and the close did not -- a 500 is retryable, so the
+    // narrow retry is offered and the edits are still worth stashing.
+    expect((await screen.findByRole('alert')).textContent).toBe(
+      'Saved, but the task is still open: the task could not be closed',
+    )
+    expect(hasDirtyEdits()).toBe(true)
+
+    await user.click(screen.getByRole('button', { name: /close task/i }))
+
+    // The close took this time, so the screen advances on its own.
+    expect(await screen.findByText(/review queue is empty/i)).toBeDefined()
+    // And the edits go with the task: they are in the database already, and
+    // ADR-0016 cannot hand a DONE task back to restore an overlay onto. The
+    // `hasDirtyEdits` above is what makes this a measured transition.
+    expect(restore('t1')).toBeNull()
+    expect(hasDirtyEdits()).toBe(false)
+    // The narrow button re-ran only the close: one PATCH, two completes.
     expect(chain(fetchMock).filter((call) => call === 'PATCH /receipts/a1')).toHaveLength(1)
     expect(chain(fetchMock).filter((call) => call === 'POST /review/t1/complete')).toHaveLength(2)
   })

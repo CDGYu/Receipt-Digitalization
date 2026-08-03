@@ -41,6 +41,22 @@ describe('the edit stash', () => {
     expect(restore('t2')).toEqual({ 'totals.tax': '1.00' })
   })
 
+  it('a later remember for the SAME task replaces it too -- it does not merge', () => {
+    // The overlay is the dirty diff, rebuilt from scratch on every committed
+    // change, so a path that stops being dirty has to leave it. Merging instead
+    // is invisible to every other test here and to the whole suite -- measured
+    // -- while its consequence is not cosmetic: a reviewer who types 99.00 into
+    // the total, thinks better of it and types the stored value back, would
+    // have the abandoned 99.00 *restored onto the form* after a 401. It would
+    // also hold `hasDirtyEdits` true, and that is the sign-out gate (design
+    // §4.2), so Sign out would demand confirmation over an edit that no longer
+    // exists anywhere.
+    remember('t1', { 'totals.total': '99.00' })
+    remember('t1', {})
+    expect(hasDirtyEdits()).toBe(false)
+    expect(restore('t1')).toEqual({})
+  })
+
   it('hasDirtyEdits is false when empty, false for an empty overlay, true otherwise', () => {
     expect(hasDirtyEdits()).toBe(false)
     remember('t1', {})
