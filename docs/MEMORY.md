@@ -6,15 +6,13 @@ continuity protocol itself — what lives where, and why this snapshot must be
 verified rather than trusted — is **ADR-0019**, extended by **ADR-0021** (whose
 2026-08-02 dated correction widened the freshness check after a docs-only task
 proved invisible to it).
-Last updated: **2026-08-02 (second refresh, session end)**, at
-**`main @ b81ba34`** (last code commit `0d6cea2`, pushed, in sync) with
-**`feat/currency-bound-and-fixture-race` IN FLIGHT, its last *code* commit
-`9efeffb`, pushed**, this refresh riding on top as a docs-only commit. A stamp
-cannot name the commit that writes it, so the check is not a commit count —
-counts rot — but this:
+Last updated: **2026-08-03 (milestone close: currency bound & fixture race
+merged)**, at **`main @ f04aa65`**, no branch in flight, this refresh riding
+on top as a docs-only commit. A stamp cannot name the commit that writes it,
+so the check is not a commit count — counts rot — but this:
 
 ```
-git log --oneline 9efeffb..feat/currency-bound-and-fixture-race -- src tests frontend docs ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
+git log --oneline f04aa65..main -- src tests frontend docs ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
 ```
 
 **Empty means this file is current.** Any output means the tree moved after it
@@ -22,80 +20,91 @@ was written and you are reading something stale.
 
 ## Snapshot
 
-- **`main` @ `b81ba34`, pushed, in sync with `origin/main`.** pytest on
-  `main`: **916**.
-- **BRANCH IN FLIGHT: `feat/currency-bound-and-fixture-race` @ `9efeffb`**,
-  five commits ahead of `main`, **pushed**. Both implementation tasks are
-  DONE and task-reviewed; **the close is not started** (whole-branch review →
-  one fix wave → one scoped re-review → ff-merge → refresh). Gates at
-  `9efeffb`, controller-run: `verify.py` all five PASS, pytest **920/0/0/0**
-  junitxml, Vitest 170, outside-repo import OK. Detail below under "Currency
-  bound & fixture race". **The `main`-push authorization of 2026-08-02 was
-  one-time and consumed — ask again at this branch's merge.**
-- **The PAN grouping milestone is complete and merged** (2026-08-02, true
-  fast-forward `1d9f3e3` → `0d6cea2`; twelve branch commits: design/ADR/plan,
-  four tasks, three handoff-docs commits, a three-commit fix wave).
-  `feat/pan-grouping` is kept at its merge point and pushed; merged branches
-  and SDD workspaces are never cleaned up.
-- **The PAN hardening milestone is complete and merged** (2026-07-31).
-- **916 Python tests + 170 Vitest** on `main`, ruff clean, typecheck clean,
-  build clean — `python scripts/verify.py` all five gates PASS, re-measured by
-  the controller at `0d6cea2` (pytest count read from junitxml: 916/0/0/0).
-- **Phases 0–5 complete, plus PAN hardening and PAN grouping.** Phase 3 is
-  complete except **P3.T6 calibration** (blocked on ISSUE-001).
+- **`main` @ `f04aa65`, NOT pushed as of this stamp** — ten commits ahead of
+  `origin/main @ b81ba34` counting this refresh. Pushing `main` awaits a
+  fresh authorization (asked at the 2026-08-03 close; the 2026-08-02 one was
+  one-time and consumed). If it was granted and pushed later the same
+  session, a same-session amendment to this pair records it. pytest on
+  `main`: **920**.
+- **NO branch in flight.** Empty is the signal (ADR-0021).
+- **The currency bound & fixture race milestone is complete and merged**
+  (2026-08-03, true fast-forward `b81ba34` → `f04aa65`; nine branch commits:
+  design, plan, two tasks, a prose-only fix round, a mid-branch handoff, and
+  a three-commit close fix wave). `feat/currency-bound-and-fixture-race` is
+  kept at its merge point and pushed; merged branches and SDD workspaces are
+  never cleaned up.
+- **The PAN grouping milestone is complete and merged** (2026-08-02).
+  **The PAN hardening milestone is complete and merged** (2026-07-31).
+- **920 Python tests + 170 Vitest** on `main`, ruff clean, typecheck clean,
+  build clean — `python scripts/verify.py` all five gates PASS, re-measured
+  by the controller at `f04aa65`; outside-repo import of the changed module
+  verified the same session.
+- **Phases 0–5 complete, plus PAN hardening, PAN grouping, and the currency
+  bound.** Phase 3 is complete except **P3.T6 calibration** (blocked on
+  ISSUE-001).
 - Dev interpreter **Python 3.14.4**. Node **v22.22.2** / npm **10.9.7**.
 - Plan of record: `IMPLEMENTATION_PLAN.md`. Ledgers:
-  `.superpowers/sdd/2026-07-31-pan-grouping/progress.md` (complete — the full
-  record of the milestone including the whole-branch review, fix wave and
-  re-review), `.superpowers/sdd/2026-07-31-pan-hardening/progress.md`,
-  `.superpowers/sdd/2026-07-29-review-ui/progress.md` (Phase 5's parked items).
-  **`.superpowers/` is gitignored, so nothing in it is findable by searching the
-  tracked tree — open ledgers by path.**
+  `.superpowers/sdd/2026-08-02-currency-bound-and-fixture-race/progress.md`
+  (complete — both tasks, both rulings, and "THE CLOSE (2026-08-03)"),
+  `.superpowers/sdd/2026-07-31-pan-grouping/progress.md`,
+  `.superpowers/sdd/2026-07-31-pan-hardening/progress.md`,
+  `.superpowers/sdd/2026-07-29-review-ui/progress.md` (Phase 5's parked
+  items). **`.superpowers/` is gitignored, so nothing in it is findable by
+  searching the tracked tree — open ledgers by path.**
 - **The repo is PUBLIC.** Verified 2026-07-31 via the GitHub API. See
   "Environment / provider" for what that exposes.
 
-## Currency bound & fixture race — the branch in flight
+## Currency bound & fixture race — complete and merged (2026-08-03)
 
-`feat/currency-bound-and-fixture-race @ 9efeffb`, off `main @ b81ba34`,
-pushed. Design + plan: `docs/superpowers/{specs,plans}/2026-08-02-currency-bound-and-fixture-race*`
-(the design carries three dated correction notes added during execution).
-Ledger: `.superpowers/sdd/2026-08-02-currency-bound-and-fixture-race/progress.md`.
-Commits: `a71c902` design · `9a36d42` plan · `ce4bf9e` Task 1 · `022b4fa`
-Task 2 · `9efeffb` fix round 1 (prose-only, proven by AST identity).
+Design + plan: `docs/superpowers/{specs,plans}/2026-08-02-currency-bound-and-fixture-race*`
+(the design carries dated correction notes in §1.4, §1.5, §2.2, and the
+close's §1.3/§2.2 qualifications). Ledger:
+`.superpowers/sdd/2026-08-02-currency-bound-and-fixture-race/progress.md`.
+Branch commits: `a71c902` design · `9a36d42` plan · `ce4bf9e` Task 1 ·
+`022b4fa` Task 2 · `9efeffb` fix round 1 · `2a10f0a` mid-branch handoff ·
+`43a79ef`/`22639cd`/`f04aa65` the close's fix wave.
 
-**Task 1 (done, reviewed clean, 3 minors deferred):** `save_extraction` runs
-`currency` through `_CURRENCY_BOUND = _bounded_optional_text("currency")` —
-one instance shared with `_RECEIPT_FIELDS` — raising `ValueError` on
-over-long text (ADR-0006; implements ADR-0007's bounded-text decision on the
-machine path). Live pipeline unreachable by construction (normalize
-whitelists; failure/duplicate paths save empty extractions), pinned. **User
-ruling:** the §18 walk's second named structural exclusion — `currency`
-joins `card_last4`, seeded ≤3 chars, because a `String(3)` value cannot hold
-a 13-digit PAN; recorded as ADR-0018's dated correction (2026-08-02).
+**Task 1.** `save_extraction` runs `currency` through
+`_CURRENCY_BOUND = _bounded_optional_text("currency")` — one instance shared
+with `_RECEIPT_FIELDS`, so machine and human paths cannot drift — raising
+`ValueError` on over-long text (ADR-0006; implements ADR-0007's bounded-text
+decision on the machine path). Live pipeline unreachable by construction
+(normalize whitelists to ISO-or-None; failure/duplicate paths save empty
+extractions), pinned. **User ruling:** the §18 walk's second named structural
+exclusion — `currency` joins `card_last4`, seeded ≤3 chars, because a
+`String(3)` value cannot hold a 13-digit PAN; ADR-0018's dated correction
+records it and (since the close) names the guarantee on the excluded side,
+`test_save_extraction_bounds_the_machine_path_currency`.
 
-**Task 2 (done, reviewed clean after 1 fix round, 1 minor deferred):**
-`tests/test_cli_pipeline.py`'s fixture draws seeded random rectangles per
-call (uniform bitmaps all share the all-zero dHash — the diagnosed race into
-dedupe's 5-bit window). Pinned pairwise (min 21 / max 44 bits, threshold
-read via `inspect.signature`). Two transitive callers that DEPEND on
+**Task 2.** `tests/test_cli_pipeline.py`'s fixture draws seeded random
+rectangles per call (uniform bitmaps all share the all-zero dHash — the
+diagnosed race into dedupe's 5-bit window). Pinned pairwise with the
+threshold read via `inspect.signature`. The two tests that DEPEND on
 byte-identical images pass one shared blob via `_job`'s sibling-style
 `data=` override; their docstrings name the discriminating mutation (a
 failed run storing its hash — the empty-phash filter guards a *crash*, not a
 false match).
 
-**What remains:** the close only — whole-branch review (strongest model,
-range `b81ba34..9efeffb`, five deferred minors to triage — the list is in
-`docs/NEXT_SESSION_PROMPT.md` task 0), ONE fix wave, one scoped re-review,
-ff-merge, refresh this pair, ASK before pushing `main`.
+**The close, in numbers.** Whole-branch review on the strongest model
+(range `b81ba34..9efeffb`, package regenerated fresh): **0 Critical, 0
+Important, 4 Minor**, every claim reproduced by command — including a probe
+no prior report ran (the narrowed walk proven still non-vacuous by
+neutering `redact_pan`) and both `data=`-override failure modes (loud break
++ silent vacuity). Five queued minors triaged: **1–3 fix-before-merge, 4–5
+defer**. ONE fix wave (`43a79ef`, `22639cd`, `f04aa65` — six
+prose/fixture-internal fixes; fixture bytes proven identical by sha256 at
+fixed seed, ADR-0018 append-only across the branch). One scoped re-review:
+**all six ADDRESSED, no residuals, no new breakage**. Gates re-verified
+independently at every step; verify.py all five PASS on `main` post-merge.
 
 **Plan defects this branch (both the controller's, both caught by
 implementers stopping at their briefs' own stop conditions):** #7 the walk
 collision (→ user ruling above); #8 two *transitive* callers via
 `_pending_receipt` depending on shared bytes — the plan swept only direct
-callers (resolved via the design's own pre-authorized conditional). Plus a
-ninth near-miss now promoted as **review standard 13**: an unmeasured
-"(measured)" mutation-counterfactual survived two authors until review
-executed it and found the mutation raises rather than passes.
+callers. Plus review standard 13's origin: an unmeasured "(measured)"
+counterfactual survived two authors until review executed it — and the
+close's fix round then stripped a volatile "31 bits" from the *reworded*
+docstring (standard 5, inside the sentence written to satisfy standard 13).
 
 ## PAN grouping — complete and merged (2026-08-02)
 
@@ -142,28 +151,15 @@ two-instance check, every time.** The whole-branch review re-ran it over
 order is NOT load-bearing (measured; the trailing `(?!\d)` rejects truncated
 matches).
 
-**The close, in numbers.** Whole-branch review on the strongest model: 0
-Critical, 3 Important (the scheduled handoff refresh; the `{1,2}` cost
-understatement; the freshness check's docs blindness), 6 Minor. One
-consolidated fix wave (`d7667c1`, `3d7ae19`, `0d6cea2`), one scoped re-review:
-**all findings ADDRESSED**, two Minor docstring inaccuracies parked with
-rulings (see deferred list). Gates re-verified independently at every step.
-
-**Six plan-versus-reality defects this milestone, all the controller's, all
-caught by implementers or probes reading the artefacts first:** a
-lint-breaking snippet; three-vs-five falsified passages; a nonexistent import
-claim; a control row that was never in the frontend table (it lives in the
-*backend* docstring table — the second time the two tables were conflated); a
-sentence quantifying over a table the plan grew without re-measuring (promoted
-as review standard 12); an unqualified hash claim in
-`tests/test_repository.py`'s module docstring the plan never searched for. A
-controller fix-wave prompt added a seventh of the same class ("random" attached
-to crafted probe values) — caught by the implementer measuring the real rate.
+**Six plan-versus-reality defects that milestone, all the controller's, all
+caught by implementers or probes reading the artefacts first** — see the
+ledger; the pattern continued at two on the currency-bound branch and is why
+probe-first briefing stays mandatory.
 
 ## How to run
 
 - **There are two test suites.**
-  - `python -m pytest` — **916** on `main`; offline and **Node-free**.
+  - `python -m pytest` — **920** on `main`; offline and **Node-free**.
     `pyproject` sets `pythonpath=["src","."]`, `testpaths=["tests"]`.
   - **Vitest, in `frontend/`** — **170**. `npm test`.
 - **`npm test` does NOT type-check.** Run `npm run typecheck` too. **That trap
@@ -251,9 +247,9 @@ API path moves.
 - **Review-screen findings are labelled historical.** A dry-run `POST /validate`
   endpoint was considered and deferred.
 - **Push policy (2026-07-30): pushing `feat/*` branches is authorised. Ask
-  before pushing `main`.** The 2026-08-02 `main` push was a **one-time
-  authorization** for the PAN grouping merge (one push covering the standing
-  docs commit and the merged branch); the standing rule continues.
+  before pushing `main`.** Every `main` push authorization is one-time (the
+  2026-08-02 one covered the PAN grouping merge; a fresh one was requested at
+  the 2026-08-03 close).
 - **`GET /review/next` resumes the caller's own in-progress task** (2026-07-30,
   ADR-0016).
 - **`receipt.date_raw` is editable** (2026-07-31), as plain text.
@@ -269,9 +265,6 @@ API path moves.
   user has not been asked to make yet** — as is **narrowing the `{1,2}`
   separator** now that its real surface (36 spellings, 30 mixed) is measured
   and pinned (2026-08-02).
-- **Finish-the-branch authorization (2026-08-02):** Tasks 3–4, whole-branch
-  review, one fix wave, one scoped re-review, ff-merge, handoff refresh in the
-  same session — executed in full.
 - **Currency bound (2026-08-02):** over-long machine-path `currency` **raises
   `ValueError`** via the human path's own coercer (coerce-to-None refused);
   tasks 1–2 **bundled on one branch**; the spec approved after review.
@@ -358,22 +351,25 @@ pinned silent; the skip-recoverability triple pinned.
 **PAN grouping (2026-08-02, merged).** See "PAN grouping — complete and
 merged" above.
 
+**Currency bound & fixture race (2026-08-03, merged).** See its section
+above: the machine-path `currency` bound through the shared coercer
+(ADR-0018's second named walk exclusion, guarantee test named in the ADR),
+and the CLI test module's structurally distinct fixture images with the
+explicit `data=` override for the two byte-identity-dependent tests.
+
 ## Remaining work
 
 **`docs/NEXT_SESSION_PROMPT.md` carries the full ordered task list.** Headlines:
 
-0. **FINISH `feat/currency-bound-and-fixture-race` FIRST** — the close only:
-   whole-branch review (five deferred minors to triage), one fix wave, one
-   scoped re-review, ff-merge, refresh the pair, ask before pushing `main`.
-   (The branch's two implementation tasks — the currency bound and the
-   fixture race — are DONE and reviewed.)
 1. Phase 5 follow-ups: the five design §5 error-recovery behaviours (including
    **no logout control**), a read route for `corrections`, a real ASGI entry
    point, an admin release for a claimed task.
 2. **Phase 6** — merchants & few-shot. **Phase 7** — self-consistency wired into
    the pipeline, gated on `triage.is_handwritten`. **Phase 8** — calibration and
    eval-harness honesty.
-3. **ISSUE-001 last.**
+3. Still open from earlier phases — including the **unredacted failure-reason
+   path** the 2026-08-03 whole-branch review surfaced (see the deferred list).
+4. **ISSUE-001 last.**
 
 ## Environment / provider (user's `.env`, gitignored)
 
@@ -393,8 +389,9 @@ merged" above.
 - **Security:** a commented-out Gemini key was once echoed in output → **rotate
   it before use.** Never echo `.env` secret values.
 - **Git:** default branch `main`; `origin` → `CDGYu/Receipt-Digitalization`,
-  **PUBLIC**. Push `feat/*` freely; **ask before `main`**. Both `main` and
-  `feat/pan-grouping` are pushed and in sync as of this stamp.
+  **PUBLIC**. Push `feat/*` freely; **ask before `main`**.
+  `feat/currency-bound-and-fixture-race` is pushed at `f04aa65`; **`main` is
+  local-only past `b81ba34` as of this stamp** (see Snapshot).
 - **What the public repo exposes — surfaced to the user, no ruling yet.**
   Nothing secret leaked: `.env` never committed, no image file tracked,
   `var/`, `.kiro/`, `.github/`, `.superpowers/` and `eval/golden/images/` have
@@ -460,6 +457,16 @@ measured.**
 
 ## Deferred follow-ups / known minors (non-blocking)
 
+- **Unredacted failure-reason path (2026-08-03, found by the whole-branch
+  review; PRE-EXISTING and live-reachable, not introduced by any recent
+  branch):** the reviewed-row guard (`repository.py:613-618`) interpolates
+  raw `merchant.name` into its `ValueError`; that text reaches
+  `pipeline.py:761`'s `log.warning` (with `exc_info`) and the CLI's stdout
+  (`cli.py:857`, `:960`) via `ProcessResult.reason` **unredacted**. Only
+  `review_tasks.reason` is redacted at a sink (ADR-0018), and
+  `enqueue_review`'s redaction is a local rebinding that never reaches the
+  caller — measured at the close. A candidate small hardening branch of the
+  currency-bound shape.
 - **PAN — the accepted residue (ADR-0018 + ADR-0020 + its correction):**
   leak (b)'s remainder-in-the-clear (user ruling); the grouping residual
   (15/76, user ruling, closure queued as a decision); the `{1,2}` separator
@@ -475,6 +482,14 @@ measured.**
   the module docstring's "reaches thirteen" (exact only within the 16-hex
   domain); ADR-0018's References naming the nonexistent `MUST_MASK` battery
   (0020's correction discloses the real identifiers).
+- **Parked at the currency-bound close (2026-08-03):** `_PNG_SEEDS` starts at
+  0, overlapping the explicit `seed=0` blob (measured harmless — neither
+  seed-0 test makes a default call, DBs are per-test; worth a comment on the
+  next legitimate edit of `tests/test_cli_pipeline.py`); design §2.2 keeps
+  the crash-guard conclusion with only a terse mechanism (the upstream fact
+  lives in `find_duplicate_by_phash`'s docstring); the plan's self-review
+  note still resolves §2.2's conditional the falsified way (plans don't
+  self-amend — design §2.2's dated note is the record).
 - **`image_phash` on a failed receipt — corrected 2026-07-31.**
   `_persist_failure`'s *insert* branch does write it; the *update* branch never
   touches the column, and the normal ingest→process flow always takes the
@@ -505,8 +520,8 @@ measured.**
 - XLSX `write_only` streaming above 5000 rows is deferred.
 - ruff sorts `from alembic import command` as first-party in tests — don't
   "fix" that import order.
-- Phase 5's own minors are in its ledger with rulings; the PAN milestones' are
-  in their ledgers.
+- Phase 5's own minors are in its ledger with rulings; the PAN milestones' and
+  the currency-bound milestone's are in theirs.
 
 ## Workflow & conventions
 
@@ -520,9 +535,10 @@ measured.**
   fast-forward merge — **then the handoff refresh in the same session
   (ADR-0019)**. Branches and SDD workspaces are **kept**.
 - **Probe before dispatching.** Phase 5's plan was wrong about existing code
-  **eleven times**; the PAN hardening plan repeated the pattern; the PAN
-  grouping plan finished at **six**, plus one in a controller dispatch prompt.
-  The plan's prose is reliable; its claims about existing artefacts are not.
+  **eleven times**; PAN hardening five; PAN grouping six plus one in a
+  controller dispatch prompt; the currency-bound branch two (#7, #8), both
+  caught by implementers' stop conditions. The plan's prose is reliable; its
+  claims about existing artefacts are not.
 - Conventional commit messages (`feat(scope): …`, `fix: …`, `chore: …`,
   `docs: …`).
 
@@ -549,6 +565,9 @@ measured.**
     over the table** — the falsified sentence is an unchanged line, invisible
     to `git diff` and every gate. Re-measure or narrow those sentences with the
     rows.
+13. **A prose claim about what a test would do under a mutation needs the same
+    revert-proof discipline as an assertion — or it does not carry
+    "(measured)".**
 
 And: **a green suite is not evidence that installed software works.** Anything
 with an entry point gets run from outside the repository.
