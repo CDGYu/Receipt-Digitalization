@@ -285,8 +285,21 @@ export function ReviewScreen() {
   // Mirror the dirty diff into the stash on every committed change. Runs
   // after render, so it sees the fields React actually kept; idempotent, so
   // StrictMode's double-invocation is harmless.
+  //
+  // Not once this task's chain is over. `submittedTask.current === task.id` is
+  // exactly that: the ref is set when the chain starts and cleared again on
+  // every retryable failure, so edits a reviewer can still resubmit do stash,
+  // while the states that keep it armed -- a closed task held on
+  // `StoredDifferently`, or a `lost` one -- do not. Both leave the form mounted
+  // and editable, and an overlay kept for either is unrestorable: ADR-0016
+  // resumes only the caller's `IN_PROGRESS` row, and these tasks are done or
+  // gone. It is not free to keep, because `hasDirtyEdits` is the sign-out gate
+  // (design §4.2) -- a stash re-armed here demands confirmation for edits that
+  // confirming cannot recover. The narrow cost: keystrokes landed while the
+  // chain is in flight are not mirrored until the next one after it fails,
+  // which re-mirrors the whole dirty diff rather than an increment.
   useEffect(() => {
-    if (phase.kind === 'claimed') {
+    if (phase.kind === 'claimed' && submittedTask.current !== phase.task.id) {
       remember(phase.task.id, buildPatch(phase.original, phase.fields))
     }
   }, [phase])

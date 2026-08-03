@@ -3,7 +3,7 @@ import { cleanup, render, screen, waitFor, within } from '@testing-library/react
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ReviewScreen } from '../src/review/ReviewScreen'
-import { clear, restore } from '../src/review/stash'
+import { clear, hasDirtyEdits, restore } from '../src/review/stash'
 import type { Money, ReceiptDetail, ReceiptSummary, ReviewTask } from '../src/api/types'
 
 afterEach(() => {
@@ -916,5 +916,36 @@ describe('the edit stash across a 401', () => {
     await screen.findByText('The review queue is empty.')
 
     expect(restore('t1')).toBeNull()
+  })
+
+  it('does not re-stash edits typed while the screen holds a closed task', async () => {
+    // The `held` state means the PATCH landed and the task is closed, with the
+    // receipt -- and its still-editable form -- left on screen to be read. An
+    // overlay remembered now is unrestorable: ADR-0016 resumes only an
+    // `IN_PROGRESS` row, and this task is `DONE`. It is also not free, because
+    // `hasDirtyEdits` is the sign-out gate (design §4.2): a stash re-armed here
+    // makes Sign out demand confirmation for edits that exist nowhere but this
+    // screen and cannot be recovered by confirming anything.
+    const fetchMock = stubApi({
+      ...DRAINING,
+      'PATCH /receipts/a1': [200, storedAs({ date_raw: '**********3456' })],
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const user = userEvent.setup()
+
+    render(<ReviewScreen />)
+    await screen.findByRole('heading', { level: 1, name: 'Whole Foods Market' })
+    const printed = screen.getByLabelText('Printed date')
+    await user.clear(printed)
+    await user.type(printed, '20260730123456')
+    await user.click(screen.getByRole('button', { name: /approve/i }))
+    await screen.findByRole('heading', { name: /stored something different/i })
+    // The successful chain cleared the stash on its way into this state.
+    expect(restore('t1')).toBeNull()
+
+    await user.type(screen.getByLabelText('Total'), '1')
+
+    expect(restore('t1')).toBeNull()
+    expect(hasDirtyEdits()).toBe(false)
   })
 })
