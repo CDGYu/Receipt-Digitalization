@@ -365,6 +365,8 @@ describe('inline field errors', () => {
     const describedBy = blamed.getAttribute('aria-describedby')
     expect(describedBy).not.toBeNull()
     expect(document.getElementById(describedBy!)?.textContent).toBe('refused')
-    expect((screen.getByLabelText('SKU 0') as HTMLInputElement).getAttribute('aria-describedby')).toBeNull()
+    expect(
+      (screen.getByLabelText('SKU 0') as HTMLInputElement).getAttribute('aria-describedby'),
+    ).toBeNull()
   })
 })
