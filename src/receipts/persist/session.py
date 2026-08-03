@@ -34,7 +34,7 @@ def make_engine(url: str | None = None) -> Engine:
     ``line_items`` behind in development while production cascaded correctly.
     """
     resolved = url or Settings().database_url or DEFAULT_URL
-    engine = create_engine(resolved)
+    engine = create_engine(resolved, hide_parameters=True)
 
     if engine.dialect.name == "sqlite":
 

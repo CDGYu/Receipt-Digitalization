@@ -2326,3 +2326,31 @@ def test_make_session_factory_produces_working_sessions() -> None:
         assert got is not None
         assert got.total == Decimal("761.60")
         assert isinstance(got.line_items[0], LineItem)
+
+
+def test_engine_error_text_hides_statement_parameters() -> None:
+    """SQLAlchemy's parameter echo is a PAN egress, closed at the one factory.
+
+    A wrapped DBAPI error appends ``[parameters: (...)]`` -- raw statement
+    values, which on this schema are model text -- and that string reaches
+    the failure reason, the failure log's traceback, and RQ's failed
+    registry (the one durable sink this project cannot redact from its own
+    side). ``hide_parameters=True`` removes the echo at the source for every
+    runtime engine, all of which are built here (ADR-0022). Measured both
+    directions on 2026-08-03 before this test pinned it.
+    """
+    engine = make_engine("sqlite://")
+    with engine.connect() as conn:
+        conn.execute(sa.text("CREATE TABLE egress_probe (value TEXT UNIQUE)"))
+        conn.execute(
+            sa.text("INSERT INTO egress_probe VALUES (:v)"),
+            {"v": "4111111111111111"},
+        )
+        with pytest.raises(sa.exc.IntegrityError) as excinfo:
+            conn.execute(
+                sa.text("INSERT INTO egress_probe VALUES (:v)"),
+                {"v": "4111111111111111"},
+            )
+    message = str(excinfo.value)
+    assert "4111111111111111" not in message
+    assert "hidden" in message.lower()
