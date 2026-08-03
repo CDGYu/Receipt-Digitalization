@@ -83,3 +83,29 @@ all modify `frontend/src/review/ReviewScreen.tsx` and
   have provoked a destructive "fix" had it been trusted.
 * Work an agent reports as complete but uncommitted should be treated as not
   done. A reviewer reads commits, not working trees.
+
+---
+
+**Dated correction (2026-08-03, same day, the controller's):** this ADR's
+Context was written from one agent's partial view, and two of its causal
+claims are wrong while its rules stand.
+
+1. Task 6's uncommitted work was **not destroyed and is not lost**. The
+   controller deliberately quarantined it: the full diff of both files
+   (implementation and tests, 362 lines) was saved to
+   `.superpowers/sdd/2026-08-03-review-ui-error-recovery/runaway-task6-partial.diff`
+   *before* the working tree was restored to `HEAD` with the files' owner
+   stopped. The later `task-6-wip.diff` taken by the authoring agent was
+   indeed empty — it was taken after the restoration — but the earlier
+   controller copy is complete. "Only a scratchpad copy survived, and it
+   held the tests but not the implementation" is false.
+2. The "staged, reverted to pre-Task-5 content" transient was not
+   unexplained: it was the dispatched Task 5 verifier's disclosed
+   RED-reproduction window (task-5-report.md, Appendix A2) — a deliberate,
+   ~20-second revert-and-restore, verified byte-identical afterwards.
+
+What remains true, and is the reason this ADR stands: neither the author
+nor the affected agents could *distinguish* a deliberate peer operation
+from destruction, which is precisely the hazard the five rules close. The
+evidence of risk was real; the attribution was not. Recorded per the
+convention that ADRs are corrected by dated note, never rewritten.

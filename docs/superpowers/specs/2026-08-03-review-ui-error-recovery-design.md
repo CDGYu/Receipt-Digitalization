@@ -239,6 +239,15 @@ the two to drift apart silently.
 - **`field` / `other` (patch step)**: today's failed-submit state, plus §5's
   inline rendering when matched.
 
+> **Dated note (2026-08-03, implementation ruling):** §6's "distinct
+> state" was planned as a second `role="alert"` paragraph beside the
+> existing message alert. Measured during implementation: a second alert
+> makes every single-alert query in the pre-existing suite ambiguous (six
+> tests break), colliding with this milestone's pre-existing-tests-pass
+> constraint. **User ruling: the distinct backend-down sentence renders
+> without the alert role and is pinned by text; the always-present message
+> alert continues to announce.** The ledger carries the ruling of record.
+
 ### 6.2 The load path
 
 `load()`'s and `skipHeldTask()`'s catches classify too:
