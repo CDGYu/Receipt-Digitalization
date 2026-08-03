@@ -356,7 +356,18 @@ export function ReviewScreen() {
       // only exit is the explicit advance. Every other failure is retryable:
       // nothing was written, or only the close failed, and either way this
       // task can be submitted again.
-      if (next.kind !== 'lost') {
+      if (next.kind === 'lost') {
+        // And the edits are already in the database: `lost` is reachable only
+        // from the `complete` step, so the PATCH landed. ADR-0016 cannot hand
+        // this task back to restore an overlay onto -- it resumes only the
+        // caller's own `IN_PROGRESS` row, and this one is taken or gone -- so
+        // what is stashed is unrestorable, not merely stale. Design §4.1's
+        // rule is that the stash is cleared wherever the write landed, and
+        // this is such a place: keeping it holds `hasDirtyEdits` true, and
+        // that is the sign-out gate (design §4.2), so Sign out would demand
+        // confirmation for edits that confirming cannot recover.
+        clearStash()
+      } else {
         submittedTask.current = null
       }
       setSubmit(next)
@@ -392,7 +403,9 @@ export function ReviewScreen() {
       if (failure.kind === 'taken' || failure.kind === 'gone') {
         // The same dead end the chain's own close reaches, arrived at by the
         // narrower button: the guard stays armed and the only exit is the
-        // advance.
+        // advance. The patch landed before this button was ever offered, so
+        // the stash goes for the reason `approve`'s catch records.
+        clearStash()
         setSubmit({ kind: 'lost', flavor: failure.kind, message: failure.message })
         return
       }

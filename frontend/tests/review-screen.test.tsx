@@ -1154,6 +1154,44 @@ describe('terminal submit and load states', () => {
     await screen.findByText('The review queue is empty.')
   })
 
+  it('a lost chain leaves nothing dirty behind, before the reviewer advances', async () => {
+    // The `approve` half of the same rule. `lost` is reachable only from the
+    // `complete` step, so the PATCH landed: these edits are in the database,
+    // and ADR-0016 cannot hand this task back to restore them onto -- it
+    // resumes only the caller's own `IN_PROGRESS` row, and this one is taken.
+    // Design §4.1 clears the stash wherever the write landed; the plan simply
+    // omitted the site when it added `lost`. What it costs to omit is not
+    // cosmetic: `hasDirtyEdits` is the sign-out gate (design §4.2), so Sign
+    // out demanded confirmation over edits that confirming cannot recover.
+    //
+    // Asserted before any `Next receipt` click, because that handler clears
+    // the stash too and would make the omission invisible.
+    const fetchMock = stubApi({
+      ...DRAINING,
+      'POST /review/t1/complete': [
+        403,
+        { error: { message: 'only the assignee or an admin may complete this task' } },
+      ],
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const user = await claimAndEditTheTotal(fetchMock)
+    // The edit is stashed while the chain can still be retried, so the clear
+    // below is a transition and not a state that was always empty.
+    expect(hasDirtyEdits()).toBe(true)
+
+    await user.click(screen.getByRole('button', { name: /approve/i }))
+    await screen.findByRole('heading', {
+      name: 'Saved, but this task was taken over by someone else',
+    })
+
+    expect(restore('t1')).toBeNull()
+    expect(hasDirtyEdits()).toBe(false)
+    // Still on screen and still editable, which is why the stash has to be
+    // cleared rather than left to the advance: this is where a reviewer sits.
+    expect(screen.getByLabelText('Total')).toBeDefined()
+  })
+
   it('a Close task that finds the task taken lands in the same terminal state', async () => {
     // `closeTaskOnly`'s own `lost` branch, which nothing reached before. It is
     // not a hypothetical: a 500 on the chain's `complete` is retryable, and it
@@ -1178,6 +1216,9 @@ describe('terminal submit and load states', () => {
     expect((await screen.findByRole('alert')).textContent).toBe(
       'Saved, but the task is still open: the task could not be closed',
     )
+    // The stash still holds the edits here, and rightly: this failure is
+    // retryable, so they are still worth something.
+    expect(hasDirtyEdits()).toBe(true)
     await user.click(screen.getByRole('button', { name: /close task/i }))
 
     // Second stop: it is forever now.
@@ -1187,6 +1228,11 @@ describe('terminal submit and load states', () => {
       }),
     ).toBeDefined()
     expect(screen.getByText('only the assignee or an admin may complete this task')).toBeDefined()
+    // And now it is empty -- as the terminal state renders, before the advance
+    // that would otherwise clear it and hide the omission. The patch landed, so
+    // these edits are in the database and the overlay can restore nothing.
+    expect(restore('t1')).toBeNull()
+    expect(hasDirtyEdits()).toBe(false)
     // Neither retry survives: both could only fail identically from here.
     expect(screen.queryByRole('button', { name: /close task/i })).toBeNull()
     expect(screen.queryByRole('button', { name: /approve/i })).toBeNull()
