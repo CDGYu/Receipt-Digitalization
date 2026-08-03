@@ -29,6 +29,7 @@ Accepted; supersede it with a new ADR rather than editing history.
 | [0021](0021-handing-off-mid-milestone.md) | Handing off mid-milestone: the unfinished branch needs a record | Accepted |
 | [0022](0022-failure-egress-redaction.md) | Failure text is redacted at every process egress | Accepted |
 | [0023](0023-parallel-task-agents-share-one-worktree.md) | Parallel task agents share one worktree, so uncommitted work is not durable | Accepted |
+| [0024](0024-review-ui-error-recovery-contract.md) | The review UI's error-recovery contract | Accepted |
 
 Read **0001** first: it is the invariant everything else defers to. **0007** is
 the one to read before touching anything that writes card data or money, and

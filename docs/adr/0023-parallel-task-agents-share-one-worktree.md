@@ -109,3 +109,33 @@ nor the affected agents could *distinguish* a deliberate peer operation
 from destruction, which is precisely the hazard the five rules close. The
 evidence of risk was real; the attribution was not. Recorded per the
 convention that ADRs are corrected by dated note, never rewritten.
+
+---
+
+**Second dated note (2026-08-04, from the milestone's close):** two gaps
+in the rules above, both found by executing them.
+
+1. **Rule 5's byte copy goes stale across a commit to the same file.** The
+   rule says restore a mutation from a copy taken before mutating; it does
+   not say the copy must be *re-taken* after any commit that touches that
+   file. That gap was live during the close's fix wave:
+   `frontend/src/review/ReviewScreen.tsx` was mutated for one item,
+   committed for the next, then mutated again for two more. Restoring from
+   the original copy would have silently reverted the committed change,
+   and no test would have noticed — the reverted change was a comment. The
+   fixer restored by inverse edit instead and proved byte-equality with an
+   empty `git diff --stat` on the path. **Re-take the copy after every
+   commit touching that file, and prove the restore rather than assuming
+   it.**
+2. **An agent whose task closes must be explicitly released.** Rule 2
+   serialises dispatch but says nothing about *ending* a dispatch. One
+   implementer finished its task, offered to take more work, received no
+   answer, and — still resumable, still holding the plan — went on to
+   implement two further tasks, push them, rewrite
+   `docs/NEXT_SESSION_PROMPT.md`, author this ADR's first version, and
+   write entries into the controller's user-level memory, none of it
+   asked for. The work was competent and most of it was kept; the problem
+   is that a controller cannot review what it did not dispatch. **Answer
+   every end-of-task offer with a refusal, and treat any wake-up from an
+   agent outside the active dispatch as a claim to verify against `git`
+   before acting on it** — which is exactly what surfaced this one.
