@@ -821,3 +821,78 @@ def test_build_export_rows_without_a_secret_leaves_the_image_column_empty(
     assert rows, "fixture should produce at least one exportable receipt"
     # An unverifiable link is worse than no link.
     assert all(row.image_url is None for row in rows)
+
+
+# --------------------------------------------------------------------------- #
+# The 400 texts the review UI's failure classifier encodes (error-recovery
+# milestone). The client matches quoted spans in these messages against the
+# paths and values it just sent, so the exact wording is load-bearing on the
+# other side of the wire. See
+# docs/superpowers/specs/2026-08-03-review-ui-error-recovery-design.md §1.3.
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.parametrize(
+    ("body", "message"),
+    [
+        ({"totals.total": "abc"}, "not a decimal amount: 'abc'"),
+        (
+            {"totals.total": "nan"},
+            "money must be a finite amount, not 'nan'; a non-finite value "
+            "would destroy the stored amount and make the corrections audit "
+            "row disagree with the column",
+        ),
+        (
+            {"receipt.date": "14/07/2026"},
+            "not an ISO 8601 date (YYYY-MM-DD): '14/07/2026'",
+        ),
+        ({"receipt.time": "2.30pm"}, "not an ISO 8601 time (HH:MM): '2.30pm'"),
+        (
+            {"receipt.currency": "EUROS"},
+            "currency holds at most 3 characters, got 5 ('EUROS')",
+        ),
+    ],
+)
+def test_the_400_texts_the_client_matcher_encodes(
+    reviewer_client, receipt_id, body, message
+):
+    """Each row is a value a reviewer can actually type into the UI.
+
+    The value-coercion messages quote only the offending value, never the
+    field path -- the classifier's value-quote rule exists because of that,
+    so a wording change here must be mirrored in
+    frontend/src/review/failure.ts and its tests.
+    """
+    response = reviewer_client.patch(f"/receipts/{receipt_id}", json=body)
+    assert response.status_code == 400
+    assert response.json() == {"error": {"message": message}}
+
+
+def test_a_dotted_key_with_a_bad_value_is_the_valueerror_400_not_a_422(
+    reviewer_client, receipt_id
+):
+    """The UI sends flat dotted keys, which bypass CorrectionPatch's typed
+    sub-models (extra="allow", review/schemas.py:149) -- so even a JSON float
+    smuggled under one reaches `_coerce_money` and comes back as the enveloped
+    400, never FastAPI's 422 shape. The classifier's whole 400 orientation
+    rests on this division."""
+    response = reviewer_client.patch(f"/receipts/{receipt_id}", json={"totals.total": 1.5})
+    assert response.status_code == 400
+    body = response.json()
+    assert "detail" not in body
+    assert body["error"]["message"] == (
+        "money must be a Decimal or a string, not float (1.5); "
+        "a float cannot represent an exact amount"
+    )
+
+
+def test_logout_returns_204_with_an_empty_body_and_ends_the_session(
+    reviewer_client, receipt_id
+):
+    """The SignOutControl's contract: 204, no body (client.ts resolves an
+    empty body to `undefined`), and the session is really over."""
+    response = reviewer_client.post("/auth/logout")
+    assert response.status_code == 204
+    assert response.content == b""
+    after = reviewer_client.get(f"/receipts/{receipt_id}")
+    assert after.status_code == 401
