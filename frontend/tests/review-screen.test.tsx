@@ -381,6 +381,40 @@ describe('ReviewScreen', () => {
     expect(callsTo(fetchMock, '/review/next')).toBe(2)
   })
 
+  it('says so when the skip fails in a way that is not a release, and leaves the escape on screen', async () => {
+    // The *other* half of `skipHeldTask`'s catch, and the half the rewrite above
+    // took over. `treats a 403 on the skip as already released` now owns the
+    // `taken`/`gone` branch, which leaves this one -- anything else -- with no
+    // test at all, so deleting `heldTask: task`, or the whole `setPhase`, went
+    // unnoticed. A failure that is neither means the task is *still* this
+    // reviewer's, so the phase is re-rendered with the task held and the escape
+    // stays clickable. Silence, or an escape that quietly vanished, would leave
+    // a reviewer believing they had moved on from a task still in hand.
+    const fetchMock = stubApi({
+      '/review/next': [200, { task: TASK, receipt: SUMMARY }],
+      'GET /receipts/a1': [404, { error: { message: 'no receipt with id a1' } }],
+      'POST /review/t1/complete': [500, { error: { message: 'the task could not be closed' } }],
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const user = userEvent.setup()
+
+    render(<ReviewScreen />)
+    await screen.findByRole('alert')
+    await user.click(screen.getByRole('button', { name: /skip this receipt/i }))
+
+    // Pinned by its text rather than by the role, so a stale alert from the
+    // failed *load* cannot satisfy the wait.
+    const alert = await screen.findByText(
+      'could not release this receipt: the task could not be closed',
+    )
+    expect(alert.getAttribute('role')).toBe('alert')
+    // Still held, so the one escape must survive its own failure.
+    expect(screen.getByRole('button', { name: /skip this receipt/i })).toBeDefined()
+    // And nothing advanced: `fetchNext` is a claiming write, and this task is
+    // still in this reviewer's hands.
+    expect(callsTo(fetchMock, '/review/next')).toBe(1)
+  })
+
   it('loads again when the reviewer asks after a failure', async () => {
     const fetchMock = vi
       .fn()
