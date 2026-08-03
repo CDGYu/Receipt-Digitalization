@@ -248,6 +248,33 @@ the two to drift apart silently.
 > without the alert role and is pinned by text; the always-present message
 > alert continues to announce.** The ledger carries the ruling of record.
 
+> **Dated note (2026-08-03, implementation narrowing):** the `backend-down`
+> bullet above says a 503 gets a distinct state on *either* step. The
+> shipped code narrows that to the **patch** step: `ReviewScreen.tsx` gates
+> the distinct sentence on `openTaskId === null`, so a 503 on the **close**
+> renders the message alert alone. The sentence is simply false there —
+> `apply_corrections` commits in its own transaction, so the write landed
+> before `complete` was ever called. Unsuppressed, the screen rendered "The
+> database is unavailable — nothing can be saved right now." directly above
+> "Saved, but the task is still open: database unavailable": two
+> contradictory claims about one receipt, with nothing on screen to tell a
+> reviewer which is true. What the bullet promises for that step is
+> otherwise kept — the narrow `Close task` retry is still offered, because a
+> 503 is transient and closing the task is all that is left to do. Commit
+> `717c1c8`, covered by the test `a 503 on the close does not also claim
+> nothing could be saved`.
+
+> **Dated correction (2026-08-03, same day, the fix wave's):** the ruling
+> note above says "six tests break". Re-measured at the milestone head, by
+> restoring `role="alert"` at the failed-phase render site: it is **four**.
+> The count was right when it was taken and the suite has changed since,
+> which is exactly why the code comment that carried it now states the
+> mechanism rather than a number (the house rule at
+> `frontend/src/api/review.ts:80-86`). The ruling itself is unchanged, and
+> no longer rests on a count: both 503 tests now assert that the sentence
+> carries no `role` at all. Recorded by dated note rather than by rewriting
+> the note above, per the convention this project uses for ADRs.
+
 ### 6.2 The load path
 
 `load()`'s and `skipHeldTask()`'s catches classify too:
@@ -282,9 +309,23 @@ the two to drift apart silently.
 - The Python message pins go in the API-write test module, **not**
   `tests/test_repository.py`, whose own parked bundle should not be
   triggered by this milestone.
-- ADR-0022 is not extended: their inventory covers process egresses; the
-  inline slots display the same already-redacted API text the summary
-  alert has always shown. No new egress class is created.
+- **ADR-0022 is not extended — but not for the reason first written here**
+  (corrected 2026-08-03, the fix wave's). This bullet used to say the
+  inline slots "display the same already-redacted API text". That is
+  false. `_install_error_handlers` answers a `ValueError` with `str(exc)`
+  verbatim, and the coercers interpolate the reviewer's own value with
+  `!r`; nothing between the two redacts. Measured (2026-08-03):
+  `_coerce_date('4111 1111 1111 1111')` raises `not an ISO 8601 date
+  (YYYY-MM-DD): '4111 1111 1111 1111'`, and that is what reaches the 400
+  body. The exemption nevertheless stands, for a different reason:
+  ADR-0022 redacts at **process egresses**, and its inventory is
+  `_persist_failure`'s carrier, the failure log, the engine's statement
+  parameters, and the CLI's uncontained print. The browser DOM is none of
+  those — the text is the viewer's own keystrokes returning to the viewer
+  who typed them, on the screen they typed them on. §5 moves that text
+  from the summary alert to a slot beside the input; it changes neither
+  where the text goes nor who can see it. So: **no new persistence, no new
+  process egress, and no `redact_pan` claim about this path.**
 - The submit chain stays strictly sequential; `fetchNext` remains a
   claiming write called at most once per task in hand; nothing here adds a
   call site.
