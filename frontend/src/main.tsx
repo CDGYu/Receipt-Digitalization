@@ -4,6 +4,7 @@ import { ErrorBoundary } from './ErrorBoundary'
 import { isSignedIn, setSignedIn, subscribe } from './session'
 import { LoginPage } from './login/LoginPage'
 import { ReviewScreen } from './review/ReviewScreen'
+import { SignOutControl } from './SignOutControl'
 
 /** Two screens, no routing library -- two paths do not need one.
  *
@@ -25,6 +26,9 @@ import { ReviewScreen } from './review/ReviewScreen'
  * either screen -- or from `App` itself -- still has somewhere to land. Without
  * it React unmounts the tree and the reviewer gets a blank page; `request` is an
  * unchecked cast, so a reply missing a field really can throw inside render.
+ *
+ * The signed-in screen carries a `<header>` above `ReviewScreen` holding
+ * `SignOutControl`, so ending the session is reachable from any review.
  */
 function App() {
   const signedIn = useSyncExternalStore(subscribe, isSignedIn)
@@ -32,7 +36,14 @@ function App() {
   if (!signedIn) {
     return <LoginPage onSignedIn={() => setSignedIn(true)} />
   }
-  return <ReviewScreen />
+  return (
+    <>
+      <header>
+        <SignOutControl />
+      </header>
+      <ReviewScreen />
+    </>
+  )
 }
 
 createRoot(document.getElementById('root')!).render(
