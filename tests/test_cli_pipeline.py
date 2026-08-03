@@ -148,11 +148,12 @@ def _png_bytes(seed: int | None = None) -> bytes:
     two tests that need a real dedupe match ask for byte-identical images.
     """
     rng = random.Random(next(_PNG_SEEDS) if seed is None else seed)
-    image = Image.new("RGB", (900, 1400), (240, 240, 240))
+    size = (900, 1400)
+    image = Image.new("RGB", size, (240, 240, 240))
     draw = ImageDraw.Draw(image)
     for _ in range(24):
-        left = rng.randrange(0, 780)
-        top = rng.randrange(0, 1280)
+        left = rng.randrange(0, size[0] - 120)
+        top = rng.randrange(0, size[1] - 120)
         shade = rng.randrange(0, 200)
         draw.rectangle(
             [left, top, left + rng.randrange(20, 120), top + rng.randrange(20, 120)],
@@ -791,7 +792,7 @@ def test_a_receipt_whose_run_failed_is_never_matched_as_a_dedupe_original(
     even if the failed run *had* stored a hash, so the test would certify
     nothing. With it, that mutation is exactly what this test refuses:
     measured in review, a failed row carrying its own hash is matched under
-    the shared blob and unmatched (31 bits away) under distinct ones.
+    the shared blob and unmatched under distinct ones.
     """
     blob = _png_bytes(seed=0)
     failed_id = _pending_receipt(session_factory, storage, data=blob)
