@@ -60,6 +60,20 @@ describe('classifyFailure', () => {
     })
   })
 
+  it('degrades to other when a message quotes two sent paths', () => {
+    // No server message quotes two paths today: the path family is pinned in
+    // tests/test_api_write.py and each of its two messages quotes exactly one
+    // path (the receipt id and the position are interpolated bare). So this
+    // pins the matcher's own tie-break across its whole input space, rather
+    // than asserting anything about the API -- an ambiguous match must never
+    // guess a field, whatever a future message quotes.
+    const failure = classifyFailure(
+      new ApiError(400, "cannot reconcile 'totals.total' with 'totals.tax'"),
+      { sentPatch: { 'totals.total': '1.00', 'totals.tax': '2.00' }, fallback: FALLBACK },
+    )
+    expect(failure).toEqual({ kind: 'other', message: "cannot reconcile 'totals.total' with 'totals.tax'" })
+  })
+
   it('degrades to other when two dirty fields hold the rejected value', () => {
     const failure = classifyFailure(new ApiError(400, "not a decimal amount: 'abc'"), {
       sentPatch: { 'totals.total': 'abc', 'totals.tax': 'abc' },
