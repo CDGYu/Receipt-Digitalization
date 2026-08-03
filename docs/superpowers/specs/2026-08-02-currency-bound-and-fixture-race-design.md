@@ -78,10 +78,11 @@ Consequences, checked against the code:
   receipt `needs_review` naming the stage (ADR-0011); `_persist_failure`
   itself cannot re-trip the bound because it saves an empty extraction —
   no failure loop, nothing dropped.
-- A PAN-shaped currency quoted in the `ValueError` message is already covered:
-  `enqueue_review` redacts `reason` at the sink, and ADR-0018 records
-  `_bounded_optional_text`'s message as exactly the kind of text that pass
-  exists for.
+- A PAN-shaped currency quoted in the `ValueError` message is redacted where it
+  is persisted for reviewers (qualified 2026-08-03, whole-branch review):
+  `enqueue_review` redacts `reason` at the sink into `review_tasks.reason`, and
+  ADR-0018 records `_bounded_optional_text`'s message as exactly the kind of
+  text that pass exists for.
 - The coercer changes nothing else: `_coerce_optional_text` is exactly
   `None if value is None else str(value)` (`repository.py:1049-1050`) — no
   stripping, no empty-string mapping — so for a `str | None` input the only
@@ -195,9 +196,9 @@ having short-circuited extraction before the VLM is called.
 worse: it stays green while going vacuous, since with distinct images the
 second receipt would not match even if the failed run *had* stored its hash
 — which is the mutation that test exists to catch. (Measured in review: with
-that mutation applied, the shared blob is matched, while distinct blobs sit
-31 bits apart and go unmatched. Deleting the empty-`image_phash` skip is
-*not* the discriminating mutation — `phash_distance` raises on `""`.)
+that mutation applied, the shared blob is matched, while distinct blobs go
+unmatched. Deleting the empty-`image_phash` skip is *not* the discriminating
+mutation — `phash_distance` raises on `""`.)
 
 Both now pass one shared blob explicitly through `_job`'s sibling-style
 `data=` override (`tests/test_process_receipt.py:155-158`); the per-call
