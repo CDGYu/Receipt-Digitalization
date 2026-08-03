@@ -451,9 +451,11 @@ export function ReviewScreen() {
         {/* Deliberately NOT a second `role="alert"`. The server's own words
             below already carry the role and announce beside this sentence, and
             a second alert in the same region makes every single-alert query in
-            the suite ambiguous -- measured, six pre-existing tests break on it.
-            User ruling, dated in the design doc (§6.1); the sentence is pinned
-            by text instead. */}
+            the suite ambiguous: `findByRole('alert')` then matches two elements
+            and throws, so pre-existing tests break on it. User ruling, dated in
+            the design doc (§6.1). The sentence is pinned by its text, and the
+            absence of the role is asserted outright at both render sites -- by
+            text alone the ruling held only by the code agreeing with itself. */}
         {backendDown ? <p>The database is unavailable — nothing can be saved right now.</p> : null}
         <p role="alert">{phase.message}</p>
         <button type="button" onClick={() => void load()}>

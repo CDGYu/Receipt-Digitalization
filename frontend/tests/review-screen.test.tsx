@@ -1093,7 +1093,16 @@ describe('terminal submit and load states', () => {
     await screen.findByLabelText('Total')
     await userEvent.keyboard('{Control>}{Enter}{/Control}')
 
-    await screen.findByText('The database is unavailable — nothing can be saved right now.')
+    const sentence = await screen.findByText(
+      'The database is unavailable — nothing can be saved right now.',
+    )
+    // Deliberately NOT a second alert -- a dated user ruling (design §6.1).
+    // The message alert renders beside this sentence and already announces; a
+    // second alert in the same region makes every single-alert query in this
+    // file ambiguous. Measured before this assertion existed: restoring
+    // `role="alert"` at *this* sentence's render site left the whole suite
+    // green, so the ruling held only by the code agreeing with itself.
+    expect(sentence.getAttribute('role')).toBeNull()
     // The chain can be retried once the database is back: Approve survives.
     expect(screen.getByRole('button', { name: 'Approve (⌘↵)' })).toBeTruthy()
   })
@@ -1137,7 +1146,15 @@ describe('terminal submit and load states', () => {
       </StrictMode>,
     )
 
-    await screen.findByText('The database is unavailable — nothing can be saved right now.')
+    const sentence = await screen.findByText(
+      'The database is unavailable — nothing can be saved right now.',
+    )
+    // The same dated ruling (design §6.1), at the failed-load render site.
+    // This half is the one the pre-existing suite already reacted to -- adding
+    // the role here breaks tests that query for a single alert -- but it broke
+    // them by *count*, not by naming the ruling, and a suite that changes shape
+    // would stop noticing. This says the guarantee outright.
+    expect(sentence.getAttribute('role')).toBeNull()
     expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy()
     // Skip's completeTask needs the same database; offering it is a false exit.
     expect(screen.queryByRole('button', { name: 'Skip this receipt' })).toBeNull()
