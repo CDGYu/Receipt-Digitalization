@@ -31,6 +31,7 @@ import contextlib
 import hashlib
 import io
 import logging
+import traceback
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field, replace
@@ -761,8 +762,13 @@ def _persist_failure(
     """
     redacted = redact_pan(str(failure))
     reason = _truncate(redacted, _MAX_REASON_CHARS)
-    log.warning("Receipt %s failed at stage %r: %s", job.id, failure.stage, failure.cause,
-                exc_info=failure.cause)
+    log.warning(
+        "Receipt %s failed at stage %r: %s\n%s",
+        job.id,
+        failure.stage,
+        redacted,
+        redact_pan("".join(traceback.format_exception(failure.cause))),
+    )
 
     session = session_factory()
     try:

@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import io
 import json
+import logging
 import random
 import uuid
 from datetime import date
@@ -363,6 +364,40 @@ def test_a_failed_run_never_leaks_raw_model_text_through_its_reason(
     assert "4111111111111111" not in result.reason
     assert "5555555555554444" not in result.reason
     assert len(result.reason) <= _MAX_REASON_CHARS
+
+
+def test_the_failure_log_renders_a_redacted_traceback(
+    session_factory, storage, settings, caplog
+):
+    """The log keeps its stack trace and loses the raw model text.
+
+    ``exc_info`` renders the exception's own message into the log, so
+    redacting the ``%s`` alone still leaked the guard's ``merchant.name``
+    quote into log files. The ruling (2026-08-03): render the traceback,
+    redact it as text, drop ``exc_info`` -- full fidelity, nothing raw.
+    """
+    job = _job(storage)
+    with session_factory() as session:
+        create_pending_receipt(session, job)
+        session.commit()
+    with session_factory() as session:
+        apply_corrections(
+            session, job.id, {"totals": {"total": "999.99"}}, corrected_by="alice"
+        )
+
+    bad = _good()
+    bad.merchant.name = "SUPERMART 4111111111111111 AND 5555555555554444"
+
+    with caplog.at_level(logging.WARNING, logger=process_receipt.__module__):
+        _run(job, _Client([_triage(), bad]), session_factory, storage, settings)
+
+    text = caplog.text
+    assert "persist" in text
+    assert "Traceback (most recent call last)" in text
+    assert "************1111" in text
+    assert "************4444" in text
+    assert "4111111111111111" not in text
+    assert "5555555555554444" not in text
 
 
 def test_every_model_call_gets_an_audit_row(session_factory, storage, settings):
