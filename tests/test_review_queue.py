@@ -41,6 +41,7 @@ from receipts.review import (
     enqueue_review,
     next_task,
     queue_stats,
+    release_task,
 )
 from receipts.review.queue import _claim_stmt, _resume_stmt, _supports_skip_locked
 from receipts.score.confidence import ReceiptStatus
@@ -478,11 +479,15 @@ def test_next_task_ignores_closed_tasks(engine: sa.Engine) -> None:
 # --------------------------------------------------------------------------- #
 # next_task resumes the caller's own in-progress task (ADR-0016)
 #
-# Nothing releases a claim: ``_claim_stmt`` selects ``state == OPEN`` only,
-# ``enqueue_review`` reopens a task only when it is ``DONE``, and no route in
-# ``review/api.py`` unclaims. So a reviewer who reloaded the page, or whose
-# response was lost, stranded the task permanently. ``next_task`` now hands
-# them their own work back before it claims anything new.
+# When ADR-0016 was written nothing released a claim: ``_claim_stmt`` selects
+# ``state == OPEN`` only, ``enqueue_review`` reopens a task only when it is
+# ``DONE``, and no route in ``review/api.py`` unclaimed. So a reviewer who
+# reloaded the page, or whose response was lost, stranded the task
+# permanently. ``next_task`` now hands them their own work back before it
+# claims anything new -- that is what the tests below pin. ``release_task``
+# (ADR-0025) is the separate, admin-only case: work taken back from someone
+# who is not coming back for it. Resume needs no client call, which is why it,
+# and not a release, is what makes a reload survivable.
 # --------------------------------------------------------------------------- #
 
 EARLY = datetime(2026, 7, 27, 9, 0, tzinfo=UTC)
@@ -722,6 +727,159 @@ def test_close_review_for_receipt_is_a_no_op_for_a_receipt_with_no_task(
 
         assert close_review_for_receipt(session, receipt.id) is None
         assert close_review_for_receipt(session, uuid.uuid4()) is None
+
+
+# --------------------------------------------------------------------------- #
+# release_task
+# --------------------------------------------------------------------------- #
+
+
+def _claimed(session: Session, assignee: str = "ada") -> ReviewTask:
+    """An ``IN_PROGRESS`` task at priority 1, held by ``assignee``."""
+    _task(session, 1)
+    task = next_task(session, assignee)
+    assert task is not None
+    return task
+
+
+def test_release_task_returns_a_claimed_task_to_the_queue(engine: sa.Engine) -> None:
+    with Session(engine) as session:
+        task_id = _claimed(session).id
+
+        released, _ = release_task(session, task_id)
+
+        assert released.state is ReviewState.OPEN
+        session.commit()
+
+    with Session(engine) as session:
+        stored = session.get(ReviewTask, task_id)
+        assert stored is not None
+        assert stored.state is ReviewState.OPEN
+
+
+def test_release_task_clears_the_assignee_and_names_who_held_it(engine: sa.Engine) -> None:
+    with Session(engine) as session:
+        task_id = _claimed(session, "ada").id
+
+        released, previously_assigned_to = release_task(session, task_id)
+
+        assert previously_assigned_to == "ada"
+        assert released.assigned_to is None
+        session.commit()
+
+    with Session(engine) as session:
+        stored = session.get(ReviewTask, task_id)
+        assert stored is not None
+        assert stored.assigned_to is None
+
+
+def test_a_released_task_is_claimable_by_a_different_reviewer(engine: sa.Engine) -> None:
+    """The behavioural point. ``_claim_stmt`` selects ``state == OPEN`` only, so
+    until the state is written back the row is invisible to every future claim.
+    """
+    with Session(engine) as session:
+        task_id = _claimed(session, "ada").id
+
+        release_task(session, task_id)
+        claimed = next_task(session, "bob")
+
+        assert claimed is not None
+        assert claimed.id == task_id
+        assert claimed.assigned_to == "bob"
+        assert claimed.state is ReviewState.IN_PROGRESS
+
+
+def test_release_task_is_idempotent_on_an_open_task(engine: sa.Engine) -> None:
+    """The same shape ``close_task`` uses for a second close: reaching the goal
+    state is not an error. ``OPEN`` with an assignee is unreachable -- both
+    writers of ``assigned_to`` keep it in step with the state.
+    """
+    with Session(engine) as session:
+        task = _task(session, 1)
+
+        released, previously_assigned_to = release_task(session, task.id)
+
+        assert released.state is ReviewState.OPEN
+        assert released.assigned_to is None
+        assert previously_assigned_to is None
+
+
+def test_release_task_refuses_a_closed_task(engine: sa.Engine) -> None:
+    with Session(engine) as session:
+        task_id = _claimed(session).id
+        close_task(session, task_id)
+
+        with pytest.raises(ValueError, match=str(task_id)):
+            release_task(session, task_id)
+
+
+def test_release_task_leaves_a_closed_tasks_assignee_intact(engine: sa.Engine) -> None:
+    """``assigned_to`` on a ``DONE`` task is the only record in the system that
+    anyone reviewed the receipt: ``close_task`` leaves it set, no ``Receipt``
+    column names a reviewer, and a ``corrections`` row exists only for a field
+    whose value actually changed.
+    """
+    with Session(engine) as session:
+        task_id = _claimed(session, "ada").id
+        close_task(session, task_id)
+
+        with pytest.raises(ValueError):
+            release_task(session, task_id)
+
+        stored = session.get(ReviewTask, task_id)
+        assert stored is not None
+        assert stored.assigned_to == "ada"
+
+
+def test_release_task_rejects_an_unknown_id(engine: sa.Engine) -> None:
+    with Session(engine) as session:
+        missing = uuid.uuid4()
+
+        with pytest.raises(ValueError, match=str(missing)):
+            release_task(session, missing)
+
+
+def test_release_task_leaves_priority_opened_at_and_reason_alone(engine: sa.Engine) -> None:
+    """A released task returns to the queue position it already held. Moving
+    ``opened_at`` would send it to the back and punish the receipt for its
+    reviewer's absence.
+    """
+    opened_at = datetime(2026, 8, 1, 9, 0, tzinfo=UTC)
+    with Session(engine) as session:
+        _task(session, 2, reason="quick verify", opened_at=opened_at)
+        task = next_task(session, "ada")
+        assert task is not None
+        # Compared against the claimed task's own timestamp rather than the
+        # aware literal above: SQLite's DATETIME keeps no offset, and the
+        # identity map holds tasks weakly, so the row ``next_task`` reloads
+        # carries a naive 09:00. The pin is that releasing does not move it.
+        claimed_at = task.opened_at
+
+        released, _ = release_task(session, task.id)
+
+        assert released.priority == 2
+        assert released.opened_at == claimed_at
+        assert released.reason == "quick verify"
+
+
+def test_releasing_returns_the_task_to_the_open_backlog(engine: sa.Engine) -> None:
+    """A claimed task is absent from ``by_priority``, which counts open tasks
+    only (ADR-0016). Releasing puts it back, so ``/metrics`` stops
+    under-reporting the backlog.
+    """
+    with Session(engine) as session:
+        task_id = _claimed(session).id
+
+        before = queue_stats(session)
+        release_task(session, task_id)
+        after = queue_stats(session)
+
+        assert before.in_progress == 1
+        assert before.open == 0
+        assert before.by_priority == {}
+        assert after.in_progress == 0
+        assert after.open == 1
+        assert after.by_priority == {1: 1}
 
 
 # --------------------------------------------------------------------------- #

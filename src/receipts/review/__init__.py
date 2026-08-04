@@ -17,6 +17,7 @@ from .queue import (
     enqueue_review,
     next_task,
     queue_stats,
+    release_task,
 )
 
 __all__ = [
@@ -26,4 +27,5 @@ __all__ = [
     "enqueue_review",
     "next_task",
     "queue_stats",
+    "release_task",
 ]

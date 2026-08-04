@@ -22,9 +22,11 @@ Two details are load-bearing:
     ``FOR UPDATE SKIP LOCKED``; see :func:`_supports_skip_locked` for why that is
     decided in Python rather than left to the SQL compiler.
   * :func:`next_task` **resumes before it claims** (ADR-0016): a caller who
-    already holds an ``IN_PROGRESS`` task gets that one back. Nothing else
-    releases a claim, so without this a reload -- or a lost response -- took a
-    task out of the queue for good.
+    already holds an ``IN_PROGRESS`` task gets that one back. Resume is the
+    holder's *own* recovery and needs no client call, which is why it, and not
+    a release, is what makes a reload or a lost response survivable.
+    :func:`release_task` is the separate, admin-only case (ADR-0025): work
+    taken back from someone who is not coming back for it.
 """
 
 from __future__ import annotations
@@ -48,6 +50,7 @@ __all__ = [
     "enqueue_review",
     "next_task",
     "queue_stats",
+    "release_task",
 ]
 
 #: Dialects whose ``SELECT ... FOR UPDATE`` accepts ``SKIP LOCKED``. Everything
@@ -234,16 +237,23 @@ def next_task(session: Session, assignee: str) -> ReviewTask | None:
     ``IN_PROGRESS`` task it is returned unchanged -- nothing is written, and
     the queue is not drawn from. Only a caller holding none claims.
 
-    Without this the queue had no way back: ``ReviewState.OPEN`` is assigned in
-    exactly three places (the column default, a brand-new task in
-    :func:`enqueue_review`, and its reopen branch, which is gated on
-    ``state is ReviewState.DONE``), :func:`_claim_stmt` selects ``state ==
-    OPEN`` only, and no route releases a claim -- ``POST
+    Without this the queue had no way back. When ADR-0016 was written
+    ``ReviewState.OPEN`` was assigned in exactly three places (the column
+    default, a brand-new task in :func:`enqueue_review`, and its reopen branch,
+    which is gated on ``state is ReviewState.DONE``), :func:`_claim_stmt`
+    selects ``state == OPEN`` only, and nothing released a claim -- ``POST
     /review/{id}/complete`` closes a task, which is not a release. A reviewer
     who reloaded the page, whose browser died, or whose claim committed
     server-side while the response was lost took that task out of the queue
     permanently. Resuming is also what a reviewer wants on a reload: their own
     half-finished receipt back, not a different one.
+
+    :func:`release_task` (ADR-0025) is a fourth writer of ``OPEN`` and changes
+    none of that. It is admin-only at the route and is somebody *else* taking
+    the work back; resume needs no client call at all, which is why it, and not
+    a release, is what keeps a reload, a crash and a lost response survivable.
+    The two reach different failures: resume returns a task to the person
+    holding it, a release returns it to the queue for whoever polls next.
 
     **Resume outranks priority.** A held task comes back even when a
     priority-0 task is waiting; §12's ranking orders the queue, and a claimed
@@ -319,6 +329,69 @@ def close_task(session: Session, task_id: uuid.UUID) -> ReviewTask:
         task.closed_at = datetime.now(UTC)
     session.flush()
     return task
+
+
+def release_task(session: Session, task_id: uuid.UUID) -> tuple[ReviewTask, str | None]:
+    """Return a claimed task to the queue, and name who was holding it.
+
+    The inverse of :func:`next_task`'s claim, and the one transition this queue
+    never had: ``IN_PROGRESS`` -> ``OPEN`` with ``assigned_to`` cleared, so
+    :func:`_claim_stmt` -- which selects ``state == OPEN`` and nothing else --
+    can see the row again.
+
+    ADR-0016 left this out deliberately. It chose resume-before-claim *over* a
+    release for the page-unload case and still wins that argument; what it also
+    recorded is the gap resume cannot reach: "a task stranded under a username
+    that no longer polls stays stranded; nothing here reassigns work between
+    people, and doing so is a policy decision, not a bug fix." **ADR-0025 is
+    that policy decision**, and it is admin-only at the route. Resume is
+    unchanged and still handles the reload, the crash and the lost response.
+
+    Returns ``(task, previously_assigned_to)``. The second element is the whole
+    reason this does not simply return the task the way :func:`close_task`
+    does: the call *destroys* that name, so handing it back keeps the
+    information from depending on every caller remembering to read it first.
+
+    **Idempotent on an ``OPEN`` task** -- nothing is written and the prior
+    holder is ``None``, the same shape :func:`close_task` uses for a second
+    close. ``OPEN`` carrying an assignee is unreachable: ``assigned_to`` is
+    written in exactly two places (:func:`enqueue_review`'s reopen branch and
+    the claim below), and both keep it in step with the state.
+
+    **A ``DONE`` task is refused**, and that is not tidiness. :func:`close_task`
+    leaves ``assigned_to`` set, no ``Receipt`` column records a reviewer, and a
+    ``corrections`` row exists only for a field whose value actually changed --
+    so for a receipt a reviewer confirmed without editing anything, this column
+    is the only record in the system that a human ever looked at it. Reopening
+    is :func:`enqueue_review`'s job, which clears the name deliberately.
+
+    ``priority``, ``opened_at`` and ``reason`` are untouched: a released task
+    returns to the queue position it already held rather than to the back,
+    which would punish the receipt for its reviewer's absence. ``closed_at`` is
+    ``None`` in both live states and is not written either.
+
+    Raises ``ValueError`` for an unknown id and for a closed task. Flushes;
+    does not commit.
+    """
+    task = session.get(ReviewTask, task_id)
+    if task is None:
+        raise ValueError(f"no review task with id {task_id}")
+
+    if task.state is ReviewState.DONE:
+        raise ValueError(
+            f"review task {task_id} is closed; releasing it would clear "
+            "assigned_to, which on a closed task is the only record that "
+            "anyone reviewed this receipt. Reopening is enqueue_review's job."
+        )
+
+    if task.state is ReviewState.OPEN:
+        return task, None
+
+    previously_assigned_to = task.assigned_to
+    task.assigned_to = None
+    task.state = ReviewState.OPEN
+    session.flush()
+    return task, previously_assigned_to
 
 
 def close_review_for_receipt(session: Session, receipt_id: uuid.UUID) -> ReviewTask | None:
