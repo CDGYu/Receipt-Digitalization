@@ -791,8 +791,8 @@ def test_a_released_task_is_claimable_by_a_different_reviewer(engine: sa.Engine)
 
 def test_release_task_is_idempotent_on_an_open_task(engine: sa.Engine) -> None:
     """The same shape ``close_task`` uses for a second close: reaching the goal
-    state is not an error. ``OPEN`` with an assignee is unreachable -- both
-    writers of ``assigned_to`` keep it in step with the state.
+    state is not an error. ``OPEN`` with an assignee is unreachable -- every
+    writer of ``assigned_to`` keeps it in step with the state.
     """
     with Session(engine) as session:
         task = _task(session, 1)

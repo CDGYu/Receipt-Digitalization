@@ -11,7 +11,7 @@ caller commits**. These functions flush so ids and defaults exist, and raise
 ``ValueError`` -- never a bare ``IntegrityError`` -- when asked about something
 that does not exist.
 
-Two details are load-bearing:
+These details are load-bearing:
 
   * ``review_tasks.receipt_id`` is UNIQUE (§6.7). A receipt can be routed to
     review more than once (a repair pass, a re-extract, a reopened review), so
