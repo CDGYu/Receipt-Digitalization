@@ -9,7 +9,7 @@ ADR-0022 (failure text is redacted at every egress), ADR-0024 (the review UI's
 error-recovery contract, whose terminal `taken` state this feeds).
 **Supersedes, in part:** ADR-0016's Context claim that none of the routes in
 `review/api.py` "releases or unclaims". One now does. Nothing else in ADR-0016
-moves — see the dated note appended there.
+is superseded; one Consequence is narrowed — see the dated note appended there.
 
 ## Context
 
@@ -123,6 +123,17 @@ path and the refresh path alike, so every reader of `review_tasks.reason`
 serves already-redacted text. Adding a reader adds no unredacted egress. Adding
 a *writer* that skipped that call would.
 
+**The guarantee belongs to `enqueue_review`, not to the column** — the same
+caveat ADR-0016 records for `payment_method`: "seeding a row by constructing
+`Receipt(...)` directly — which is what the test fixtures do — bypasses both
+writers, so this key is only as clean as the code that filled it." It holds for
+everything under `src/`, which reaches this column only through
+`enqueue_review`; the sole `ReviewTask(...)` construction and the sole
+`existing.reason` write both sit inside it, downstream of the `redact_pan`
+call. A fixture assigning `task.reason` directly bypasses the sink entirely,
+which is exactly how `test_the_release_is_logged_without_the_tasks_reason`
+plants its sentinel.
+
 **The log line's contents are the other half of the same decision.** Task id,
 prior holder, acting admin — and `reason` deliberately absent, pinned by
 `test_the_release_is_logged_without_the_tasks_reason`. A log site is a new
@@ -225,17 +236,23 @@ and its reachability.
   `FOR UPDATE SKIP LOCKED` where the dialect supports it, and this route goes
   nowhere near that statement.
 - **What proves the claims this record rests hardest on.** The admin gate is
-  proven by substituting a stand-in dependency that returns an admin
-  `SessionUser`, which turns the reviewer's 403 into `assert 200 == 401`; the
-  `reason` omission is proven by capturing the task's `reason` inside the
-  route's session block and logging it, which puts the sentinel genuinely in the
-  emitted line. Both replaced mutations from the task brief that proved nothing
-  and are cited nowhere here: deleting the `admin` parameter also deletes the
-  binding the log line reads, so the route raises `NameError` before any
-  authorization decision is reached — two variables, not one; and logging
-  `task.reason` from outside the route's `with` block raises
-  `DetachedInstanceError` before formatting, so that mutant could not leak even
-  in principle and never exercised the ADR-0022 pin.
+  proven by replacing `Depends(require_role(ROLE_ADMIN))` with a stand-in
+  dependency returning an admin `SessionUser` — the gate and nothing else, so
+  the `admin` binding the log line reads survives. Measured, that mutant kills
+  two tests: `test_a_reviewer_cannot_release_a_task` fails
+  `assert 200 == 403` and `test_release_requires_authentication` fails
+  `assert 200 == 401`. Both are direct evidence that the dependency is what
+  refuses, not an inference from the route's shape. The `reason` omission is
+  proven by capturing the task's `reason` inside the route's session block and
+  logging it, which puts the sentinel genuinely in the emitted line.
+- **Two mutations from the task brief proved nothing and are cited nowhere
+  above.** Deleting the `admin` parameter also deletes the binding the log line
+  reads, so it changes two things, not one; there is then no authorization
+  decision left to test at all, and the `NameError` it raises fires at the log
+  line *after* `session.commit()` — the release has already committed by the
+  time anything fails. And logging `task.reason` from outside the route's
+  `with` block raises `DetachedInstanceError` before formatting, so that mutant
+  could not leak even in principle and never exercised the ADR-0022 pin.
 
 ## References
 
