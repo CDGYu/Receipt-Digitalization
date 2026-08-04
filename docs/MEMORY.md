@@ -6,13 +6,13 @@ continuity protocol itself — what lives where, and why this snapshot must be
 verified rather than trusted — is **ADR-0019**, extended by **ADR-0021** (whose
 2026-08-02 dated correction widened the freshness check after a docs-only task
 proved invisible to it).
-Last updated: **2026-08-04 (admin release merged)**, at
-**`main @ 9d31679`**, no branch in flight, this refresh riding on top as a
+Last updated: **2026-08-04 (admin release merged and pushed)**, at
+**`main @ 9dd2fea`**, no branch in flight, this refresh riding on top as a
 docs-only commit. A stamp cannot name the commit that writes it, so the
 check is not a commit count — counts rot — but this:
 
 ```
-git log --oneline 9d31679..main -- src tests frontend docs ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
+git log --oneline 9dd2fea..main -- src tests frontend docs ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
 ```
 
 **Empty means this file is current.** Any output means the tree moved after it
@@ -20,11 +20,10 @@ was written and you are reading something stale.
 
 ## Snapshot
 
-- **`main` @ `9d31679`** — merged locally by user choice at the admin-release
-  close. **`main` is NOT yet pushed**: at that close the user picked "merge
-  locally" and no `main` push authorization was asked for or granted, so
-  `origin/main` still sits at `c3a268c`. The standing ask-first rule for
-  `main` continues; **the next session should raise the push.**
+- **`main` @ `9dd2fea`, pushed, in sync with `origin/main`** — the
+  admin-release close merged locally by user choice, then a one-time `main`
+  push authorization was asked for and granted in the same session and
+  consumed by that push. The standing ask-first rule for `main` continues.
   pytest on `main`: **953**; Vitest **221**.
 - **NO branch in flight.** Empty is the signal (ADR-0021).
 - **The admin release is complete and merged** (2026-08-04, true
@@ -626,25 +625,13 @@ measured.**
 
 ## Deferred follow-ups / known minors (non-blocking)
 
-- **Parked at the admin-release close** (bundle with the next legitimate
-  edit of the file named) — both introduced by the close's own fix wave and
-  both single-sentence:
-  - `tests/test_api_write.py` — the machine-key auth test's docstring says
-    the key row "is pinned here or nowhere — every other non-`/health`
-    route gets it from `test_auth_matrix`". **False:** `POST /upload` and
-    `PATCH /receipts/{id}` get theirs from `test_upload_auth_matrix` and
-    `test_patch_auth_matrix`, and `POST /review/{id}/complete` is
-    deliberately excluded from the matrix and pinned by hand in that same
-    file — which the docstring's own first sentence cites. The conclusion
-    it supports is true; the generalization is not.
-  - `tests/test_review_queue.py` — the race test's repair instruction says
-    it "goes red when the interleaving stops producing that outcome, at
-    which point ADR-0025 is what needs editing". Measured: the *mechanism*
-    assertion can go red with the outcome unchanged (drop the strong
-    reference and force a collection — the identity-map entry is weakly
-    held). A reader following it would add a dated note to an immutable ADR
-    for a residual that has not moved. Needs one clause saying the
-    mechanism and outcome assertions fail for different reasons.
+- **Both items parked at the admin-release close were FIXED post-merge**
+  (2026-08-04, `9dd2fea`, at the user's direction rather than waiting for
+  the next edit of those files): `test_release_requires_authentication`'s
+  false generalization about where other routes get their machine-key row,
+  and the race test's repair instruction, which was true of its outcome
+  assertions and false of its mechanism one. Prose only. **Nothing from
+  this milestone remains parked.**
 - **Layer-wide and pre-existing, measured at the admin-release close:**
   nothing pins the queue layer's caller-commits rule. Deleting
   `release_task`'s `flush()`, or turning it into a `commit()`, leaves the

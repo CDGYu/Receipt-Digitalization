@@ -56,20 +56,19 @@ permanent.
 
 ## Where we are
 
-- **`main` @ `9d31679`**, with this handoff refresh riding on top as a
+- **`main` @ `9dd2fea`**, with this handoff refresh riding on top as a
   docs-only commit. The check:
 
   ```
-  git log --oneline 9d31679..main -- src tests frontend docs ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
+  git log --oneline 9dd2fea..main -- src tests frontend docs ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
   ```
 
   **Empty means this prompt is current.** Any output means the tree moved
   after it was written.
-- **`main` IS NOT PUSHED.** At the admin-release close the user chose "merge
-  locally"; no `main` push was asked for or granted, so `origin/main` is still
-  at `c3a268c` while local `main` is at `9d31679` plus this refresh. **Raise
-  the push early** — the standing rule is that pushing `feat/*` is authorised
-  and **every `main` push needs a fresh one-time ask.**
+- **`main` is pushed and in sync with `origin/main`** — the one-time
+  authorization asked for at this close was granted and consumed by that
+  push. The standing rule continues: pushing `feat/*` is authorised;
+  **every `main` push needs a fresh ask.**
   `feat/admin-release` is merged, kept, and pushed at `9d31679`.
 - Gates at `9d31679`, controller-run on `main` post-merge:
   `python scripts/verify.py` **all five PASS**; pytest **953**; Vitest **221**
@@ -119,11 +118,7 @@ still land and only the close fails. That is the contract's premise.
 
 ## The work, in order
 
-### 1. Push `main` — ask first
-
-Local `main` is two commits ahead of `origin/main` and unpushed. Raise it.
-
-### 2. Phase 5 follow-ups — two left
+### 1. Phase 5 follow-ups — two left
 
 1. **A read route for `corrections`.** Nothing does `select(Correction)`, so a
    reviewer cannot see the correction history of the receipt they are
@@ -134,7 +129,7 @@ Local `main` is two commits ahead of `origin/main` and unpushed. Raise it.
    e2e-scoped — inheriting a deployment policy from an e2e launcher is the
    mistake to avoid.
 
-### 3. The admin UI — a committed next milestone (user ruling, 2026-08-04)
+### 2. The admin UI — a committed next milestone (user ruling, 2026-08-04)
 
 The release shipped API-only by design. Driving it from a browser needs, in
 order, **two backend routes that do not exist**:
@@ -150,7 +145,7 @@ order, **two backend routes that do not exist**:
 Then the frontend's first role-awareness and a new `/app` admin surface. Each
 new route is an API contract and deserves its own design.
 
-### 4. Phase 6 — merchants & few-shot (P6.T1)
+### 3. Phase 6 — merchants & few-shot (P6.T1)
 
 Unchanged: `merchants/{fingerprint,registry}.py` is greenfield; few-shot images
 first, target last; hints end "trust the image"; measure top-10-merchant
@@ -161,32 +156,32 @@ built but not validated. Five things unblock here: semantic dedupe into
 the line — the file has grown**); the `image_phash` gap; `Merchant.receipt_count`
 (nothing writes it). `VAT Reg. TIN` is the strongest fingerprint on this corpus.
 
-### 5. Phase 7 — self-consistency (P7.T1)
+### 4. Phase 7 — self-consistency (P7.T1)
 
 Unchanged: wire `run_consistency` (`extract/extractor.py`, zero references in
 `pipeline.py`) for handwritten/low-legibility; **gate on
 `triage.is_handwritten`, never `document_type`**; consistency runs never cached.
 
-### 6. Phase 8 — calibration & eval-harness honesty
+### 5. Phase 8 — calibration & eval-harness honesty
 
 Unchanged: P3.T6/P8.T1 threshold sweep + weights into `config/rules.yaml`
 (**blocked on ISSUE-001**); P8.T2 grow the held-out set; P8.T3 the all-failed
 eval run still persists `"auto_approval_precision": 1.0` to JSON.
 
-### 7. Still open from earlier phases
+### 6. Still open from earlier phases
 
 Unchanged: R060/R061 grounding decision (also gates bbox); score
 `is_handwritten` from triage too; `is_receipt` has no consumer (never
 hard-reject on it); blank pre-printed template rows (sibling of R052).
 
-### 8. Parked, with rulings (see the ledgers)
+### 7. Parked, with rulings (see the ledgers)
 
-- **Parked at the admin-release close** — both introduced by the close's own
-  fix wave, both single-sentence, bundle with the next legitimate edit:
-  `tests/test_api_write.py`'s machine-key docstring generalizes falsely about
-  where other routes get their key row; `tests/test_review_queue.py`'s race
-  test gives a repair instruction that is wrong for one of its own red modes
-  (the mechanism assertion can go red with the outcome unchanged).
+- **Nothing from the admin release remains parked.** Its two parked items —
+  a false generalization in `tests/test_api_write.py`'s machine-key
+  docstring, and a repair instruction in `tests/test_review_queue.py`'s race
+  test that was wrong for one of its own red modes — were fixed post-merge
+  at the user's direction (`9dd2fea`) rather than waiting for the next edit
+  of those files.
 - **Layer-wide, measured:** nothing pins the queue's caller-commits rule —
   deleting `release_task`'s `flush()` or turning it into a `commit()` leaves
   the suite green, and the same holds for `enqueue_review` and `next_task`.
@@ -205,7 +200,7 @@ hard-reject on it); blank pre-printed template rows (sibling of R052).
   30 mixed, pinned; narrow or keep).
 - Plus the standing list in MEMORY.md's "Deferred follow-ups".
 
-### 9. LAST — ISSUE-001, deferred by the user until the system is built
+### 8. LAST — ISSUE-001, deferred by the user until the system is built
 
 Unchanged: read `docs/KNOWN_ISSUES.md`, do not re-derive; hosted tool-capable
 model needed (rotate the echoed Gemini key first); until it runs, no measured
@@ -291,25 +286,25 @@ entry points from outside the repository.
 
 ## Blocked on me (the user) — surface these, do not guess
 
-1. **Push `main`?** Local `main` is ahead of `origin/main` and unpushed.
-2. **Auth for the `corrections` read route** — reviewer-visible, or
+1. **Auth for the `corrections` read route** — reviewer-visible, or
    admin-only? (Gates Phase 5 follow-up #1.)
-3. **A hosted tool-capable provider + freshly rotated key** (ISSUE-001 → all
+2. **A hosted tool-capable provider + freshly rotated key** (ISSUE-001 → all
    calibration, and Phase 6's success metric).
-4. **Do the public golden labels need scrubbing?** (Real third-party names,
+3. **Do the public golden labels need scrubbing?** (Real third-party names,
    TINs, addresses — also the values the PAN silent-case tests pin.)
-5. **R060/R061 grounding (P2.T2)** — also gates bbox highlighting.
-6. **GitHub Actions again?** If yes, the workflow calls `scripts/verify.py`.
-7. **Close the PAN grouping residual?** Which priced route?
-8. **Narrow the `{1,2}` separator** now that its surface is measured?
-9. **Has anyone looked at the review UI in a browser?** Five error states
+4. **R060/R061 grounding (P2.T2)** — also gates bbox highlighting.
+5. **GitHub Actions again?** If yes, the workflow calls `scripts/verify.py`.
+6. **Close the PAN grouping residual?** Which priced route?
+7. **Narrow the `{1,2}` separator** now that its surface is measured?
+8. **Has anyone looked at the review UI in a browser?** Five error states
    shipped two milestones ago with no styling and no human ever viewing them.
 
 **Today's goal:** <FILL THIS IN — with no branch in flight, the default is
-"pick the next named piece of work". Pushing `main` (§1) is a one-minute ask
-that should happen first. Then: the **admin UI** (§3) is the committed next
-milestone and the largest well-scoped piece; the two Phase 5 follow-ups (§2)
-are smaller, and the `corrections` route needs an auth ruling before it can
-start. Phase 6 (§4) is the next substantial pipeline milestone but cannot be
+"pick the next named piece of work". The **admin UI** (§2) is the committed
+next milestone and the largest well-scoped piece, and it starts with two new
+backend routes rather than any frontend work. The two Phase 5 follow-ups (§1)
+are smaller — but the `corrections` route needs an auth ruling before it can
+start, so the ASGI entry point is the only one that can begin unblocked.
+Phase 6 (§3) is the next substantial pipeline milestone but cannot be
 validated until ISSUE-001 runs. Brainstorm → design → plan before touching
 code.>
