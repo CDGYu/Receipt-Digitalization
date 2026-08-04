@@ -1,4 +1,4 @@
-"""The review queue: enqueue, claim, close, and count (spec §14.9).
+"""The review queue: enqueue, claim, release, close, and count (spec §14.9).
 
 Receipts the confidence router did not auto-approve land here. One row per
 receipt in ``review_tasks``, worked **lowest ``priority`` first** (§12: ``0`` is
@@ -334,10 +334,10 @@ def close_task(session: Session, task_id: uuid.UUID) -> ReviewTask:
 def release_task(session: Session, task_id: uuid.UUID) -> tuple[ReviewTask, str | None]:
     """Return a claimed task to the queue, and name who was holding it.
 
-    The inverse of :func:`next_task`'s claim, and the one transition this queue
-    never had: ``IN_PROGRESS`` -> ``OPEN`` with ``assigned_to`` cleared, so
-    :func:`_claim_stmt` -- which selects ``state == OPEN`` and nothing else --
-    can see the row again.
+    The inverse of :func:`next_task`'s claim, and the transition from a claim
+    back to the queue -- one this queue never had: ``IN_PROGRESS`` -> ``OPEN``
+    with ``assigned_to`` cleared, so :func:`_claim_stmt` -- which selects
+    ``state == OPEN`` and nothing else -- can see the row again.
 
     ADR-0016 left this out deliberately. It chose resume-before-claim *over* a
     release for the page-unload case and still wins that argument; what it also
@@ -367,6 +367,14 @@ def release_task(session: Session, task_id: uuid.UUID) -> tuple[ReviewTask, str 
     so for a receipt a reviewer confirmed without editing anything, this column
     is the only record in the system that a human ever looked at it. Reopening
     is :func:`enqueue_review`'s job, which clears the name deliberately.
+
+    **What that refusal does not close is the concurrent path**, and the gap is
+    recorded rather than left to be rediscovered here: a release that commits
+    between ``POST /review/{task_id}/complete``'s permission check and its
+    :func:`close_task` still leaves a ``DONE`` task whose reviewer's name has
+    been erased -- ADR-0025, "No row lock, and the third race order", pinned by
+    ``test_a_release_inside_a_completes_window_erases_the_reviewers_name`` in
+    ``tests/test_review_queue.py``.
 
     ``priority``, ``opened_at`` and ``reason`` are untouched: a released task
     returns to the queue position it already held rather than to the back,

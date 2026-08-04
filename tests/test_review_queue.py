@@ -1,4 +1,4 @@
-"""Review queue tests (spec §14.9): enqueue, claim, close, and stats.
+"""Review queue tests (spec §14.9): enqueue, claim, release, close, and stats.
 
 Everything runs on an in-memory SQLite database with ``PRAGMA foreign_keys=ON``
 (the same fixture pattern as ``test_repository.py``) -- no Postgres, no psycopg,
@@ -53,6 +53,30 @@ PHASH = "0123456789abcdef"
 def engine() -> sa.Engine:
     """In-memory SQLite with FK enforcement on (mirrors ``test_repository.py``)."""
     eng = create_engine("sqlite+pysqlite:///:memory:")
+
+    @event.listens_for(eng, "connect")
+    def _enable_sqlite_fk(dbapi_conn, _record):
+        cur = dbapi_conn.cursor()
+        cur.execute("PRAGMA foreign_keys=ON")
+        cur.close()
+
+    Base.metadata.create_all(eng)
+    return eng
+
+
+@pytest.fixture()
+def file_engine(tmp_path) -> sa.Engine:
+    """File-backed SQLite: two ``Session`` objects on **separate** connections.
+
+    The ``engine`` fixture above is in-memory, and SQLAlchemy backs an in-memory
+    SQLite engine with a ``SingletonThreadPool`` -- every session opened from
+    this thread shares one DBAPI connection, so there is no connection boundary
+    for two sessions to interleave across (spelled out in
+    ``test_concurrent_enqueue_for_one_receipt_does_not_raise``). A file gives
+    each session its own connection, which is the shape the two routes have:
+    ``sessionmaker`` hands each request its own ``Session``.
+    """
+    eng = create_engine(f"sqlite+pysqlite:///{(tmp_path / 'queue.db').as_posix()}")
 
     @event.listens_for(eng, "connect")
     def _enable_sqlite_fk(dbapi_conn, _record):
@@ -793,15 +817,46 @@ def test_release_task_is_idempotent_on_an_open_task(engine: sa.Engine) -> None:
     """The same shape ``close_task`` uses for a second close: reaching the goal
     state is not an error. ``OPEN`` with an assignee is unreachable -- every
     writer of ``assigned_to`` keeps it in step with the state.
+
+    ``release_task``'s docstring says **nothing is written** on this path, and
+    ``state``/``assigned_to``/the ``None`` holder do not establish that: they
+    are already the goal state, so a call that also touched some *other* column
+    would satisfy all three. The whole row is therefore snapshotted and
+    compared -- in memory and again from the stored row -- because a release
+    that quietly demoted a task in the §12 backlog is invisible to every gate
+    the moment this test only looks at the three fields it is about.
+
+    Snapshotted from a re-read row rather than from ``_task``'s return value so
+    the ``opened_at`` comparison is naive-against-naive: SQLite's ``DATETIME``
+    keeps no offset, the same wrinkle the claimed-task version of this pin
+    below already documents.
     """
     with Session(engine) as session:
-        task = _task(session, 1)
+        task_id = _task(session, 1).id
+        session.commit()
 
-        released, previously_assigned_to = release_task(session, task.id)
+    with Session(engine) as session:
+        stored = session.get(ReviewTask, task_id)
+        assert stored is not None
+        untouched = (stored.priority, stored.reason, stored.opened_at, stored.closed_at)
+
+        released, previously_assigned_to = release_task(session, task_id)
 
         assert released.state is ReviewState.OPEN
         assert released.assigned_to is None
         assert previously_assigned_to is None
+        assert (
+            released.priority,
+            released.reason,
+            released.opened_at,
+            released.closed_at,
+        ) == untouched
+        session.commit()
+
+    with Session(engine) as session:
+        after = session.get(ReviewTask, task_id)
+        assert after is not None
+        assert (after.priority, after.reason, after.opened_at, after.closed_at) == untouched
 
 
 def test_release_task_refuses_a_closed_task(engine: sa.Engine) -> None:
@@ -883,6 +938,66 @@ def test_releasing_returns_the_task_to_the_open_backlog(engine: sa.Engine) -> No
         assert after.in_progress == 0
         assert after.open == 1
         assert after.by_priority == {1: 1}
+
+
+def test_a_release_inside_a_completes_window_erases_the_reviewers_name(
+    file_engine: sa.Engine,
+) -> None:
+    """ADR-0025's third race order, reproduced -- not reasoned about.
+
+    The ADR records an accepted residual: because neither route takes a row
+    lock, a release that commits *between* ``POST /review/{task_id}/complete``'s
+    permission check and its ``close_task`` is invisible to the complete already
+    in flight, and the result is a ``DONE`` task whose reviewer's name has been
+    erased -- the loss the ``DONE`` refusal exists to prevent, reached anyway.
+
+    **Deterministic, and no concurrency is needed to reach it.** No threads, no
+    load, no scheduling luck: the two routes each get their own ``Session``
+    (hence ``file_engine`` -- see that fixture), and the three steps below are
+    ordered by hand in the one order that matters. That is the whole cost of
+    measuring this, which is why it is a test rather than a paragraph.
+
+    This pins an **accepted** residual, so it is not a bug report: it goes red
+    when the interleaving stops producing that outcome, at which point ADR-0025
+    is what needs editing.
+    """
+    with Session(file_engine) as setup:
+        _task(setup, 2)
+        held = next_task(setup, "ada")
+        assert held is not None
+        task_id = held.id
+        setup.commit()
+
+    completing = Session(file_engine)  # POST /review/{task_id}/complete, ada's own
+    releasing = Session(file_engine)  # POST /review/{task_id}/release, an admin's
+
+    # 1. `/complete` reads the row for its assignee-or-admin check, and passes.
+    in_flight = completing.get(ReviewTask, task_id)
+    assert in_flight is not None
+    assert in_flight.assigned_to == "ada"
+
+    # 2. The whole release route runs and commits inside that window.
+    _, released_from = release_task(releasing, task_id)
+    releasing.commit()
+    assert released_from == "ada"
+
+    # 3. `/complete` carries on. The mechanism, asserted rather than described:
+    #    the in-flight session still holds the pre-release name -- which is what
+    #    its permission check passed against -- and `close_task` marks only
+    #    `state` and `closed_at` dirty, so the UPDATE cannot write it back.
+    closed = close_task(completing, task_id)
+    assert closed.assigned_to == "ada"
+    completing.commit()
+
+    completing.close()
+    releasing.close()
+
+    with Session(file_engine) as check:
+        stored = check.get(ReviewTask, task_id)
+        assert stored is not None
+        assert stored.state is ReviewState.DONE
+        assert stored.closed_at is not None
+        assert stored.assigned_to is None  # the record the DONE refusal defends
 
 
 # --------------------------------------------------------------------------- #

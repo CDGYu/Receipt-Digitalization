@@ -2,7 +2,8 @@
 
 Whatever the confidence router did not auto-approve becomes a review task, one
 per receipt, worked lowest ``priority`` first (§12 -- ``0`` is urgent).
-:mod:`receipts.review.queue` is the queue API: enqueue, claim, close, count.
+:mod:`receipts.review.queue` is the queue API: enqueue, claim, release, close,
+count.
 
 Same convention as the persistence layer: every function takes an explicit
 :class:`~sqlalchemy.orm.Session` and the caller owns the transaction.
