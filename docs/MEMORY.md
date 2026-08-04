@@ -6,13 +6,13 @@ continuity protocol itself — what lives where, and why this snapshot must be
 verified rather than trusted — is **ADR-0019**, extended by **ADR-0021** (whose
 2026-08-02 dated correction widened the freshness check after a docs-only task
 proved invisible to it).
-Last updated: **2026-08-04 (review-UI error recovery merged)**, at
-**`main @ db233aa`**, no branch in flight, this refresh riding on top as a
+Last updated: **2026-08-04 (admin release merged)**, at
+**`main @ 9d31679`**, no branch in flight, this refresh riding on top as a
 docs-only commit. A stamp cannot name the commit that writes it, so the
 check is not a commit count — counts rot — but this:
 
 ```
-git log --oneline db233aa..main -- src tests frontend docs ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
+git log --oneline 9d31679..main -- src tests frontend docs ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
 ```
 
 **Empty means this file is current.** Any output means the tree moved after it
@@ -20,11 +20,17 @@ was written and you are reading something stale.
 
 ## Snapshot
 
-- **`main` @ `db233aa`, pushed, in sync with `origin/main`** — the
-  one-time push authorization asked for at the review-UI error-recovery
-  close was granted and consumed by that push. The standing ask-first rule
-  for `main` continues. pytest on `main`: **935**; Vitest **221**.
+- **`main` @ `9d31679`** — merged locally by user choice at the admin-release
+  close. **`main` is NOT yet pushed**: at that close the user picked "merge
+  locally" and no `main` push authorization was asked for or granted, so
+  `origin/main` still sits at `c3a268c`. The standing ask-first rule for
+  `main` continues; **the next session should raise the push.**
+  pytest on `main`: **953**; Vitest **221**.
 - **NO branch in flight.** Empty is the signal (ADR-0021).
+- **The admin release is complete and merged** (2026-08-04, true
+  fast-forward `c3a268c` → `9d31679`; 13 branch commits: design, plan,
+  three tasks, two task-fix rounds, and a three-commit close fix wave).
+  `feat/admin-release` is kept at its merge point and pushed.
 - **The review-UI error-recovery milestone is complete and merged**
   (2026-08-04, true fast-forward `7c811fa` → `02edcd0`; 25 branch commits:
   design, plan, seven tasks, ADR-0023, a five-commit close fix wave).
@@ -37,16 +43,20 @@ was written and you are reading something stale.
 - **The currency bound & fixture race milestone is complete and merged**
   (2026-08-03 morning, `b81ba34` → `f04aa65`). **PAN grouping** merged
   2026-08-02; **PAN hardening** merged 2026-07-31.
-- **935 Python tests + 221 Vitest (19 files)** on `main`, ruff clean,
+- **953 Python tests + 221 Vitest (19 files)** on `main`, ruff clean,
   typecheck clean, build clean — `python scripts/verify.py` all five gates
-  PASS, run by the controller on `main` at `02edcd0` immediately after the
+  PASS, run by the controller on `main` at `9d31679` immediately after the
   merge.
 - **Phases 0–5 complete, plus PAN hardening, PAN grouping, the currency
-  bound, failure-egress redaction, and review-UI error recovery.** Phase 3
-  is complete except **P3.T6 calibration** (blocked on ISSUE-001). Phase 5
-  has three named follow-ups left (see "Remaining work").
+  bound, failure-egress redaction, review-UI error recovery, and the admin
+  release.** Phase 3 is complete except **P3.T6 calibration** (blocked on
+  ISSUE-001). Phase 5 has **two** named follow-ups left, and the admin UI
+  is a committed next milestone (see "Remaining work").
 - Dev interpreter **Python 3.14.4**. Node **v22.22.2** / npm **10.9.7**.
 - Plan of record: `IMPLEMENTATION_PLAN.md`. Ledgers:
+  `.superpowers/sdd/2026-08-04-admin-release/progress.md` (complete — three
+  task entries, seven plan defects, three controller rulings, and "THE
+  CLOSE"), `.superpowers/sdd/2026-08-03-review-ui-error-recovery/progress.md`,
   `.superpowers/sdd/2026-08-03-failure-egress-redaction/progress.md`
   (complete — four task entries and "THE CLOSE"),
   `.superpowers/sdd/2026-08-02-currency-bound-and-fixture-race/progress.md`
@@ -57,6 +67,60 @@ was written and you are reading something stale.
   searching the tracked tree — open ledgers by path.**
 - **The repo is PUBLIC.** Verified 2026-07-31 via the GitHub API. See
   "Environment / provider" for what that exposes.
+
+## Admin release — complete and merged (2026-08-04)
+
+Design + plan: `docs/superpowers/{specs,plans}/2026-08-04-admin-release*`
+(the design carries a dated note in §5 — see below). Decision: **ADR-0025**,
+plus dated notes on **ADR-0016** and **ADR-0015**. Ledger:
+`.superpowers/sdd/2026-08-04-admin-release/progress.md`.
+
+**What shipped — Phase 5 follow-up #3, the inverse of a claim.**
+`release_task` (`review/queue.py`) returns a claimed task to the queue:
+`IN_PROGRESS` → `OPEN`, `assigned_to` cleared, `priority`/`opened_at`/
+`reason`/`closed_at` untouched so it keeps its queue position. `OPEN` is
+idempotent; **`DONE` is refused** — `close_task` leaves `assigned_to` set,
+no `Receipt` column names a reviewer, and a `corrections` row exists only
+for a field that changed, so on a receipt confirmed without edits that
+column is the only record in the system that a human looked at it.
+`POST /review/{task_id}/release` is admin-only via `require_role`, 404s on
+an unknown task from its own existence check (a `ValueError` would render
+400), 400s on a closed one, and returns `_task_summary` plus a
+`released_from` sibling key. A log line names task, prior holder and acting
+admin — and **not `reason`** (ADR-0022), pinned by test.
+
+**This is the policy decision ADR-0016 deferred, not a correction to it.**
+ADR-0016 rejected a release as the *page-unload* recovery mechanism and
+still wins that argument; resume-before-claim is unchanged. What it left
+open was reassigning work between people, which it called "a policy
+decision, not a bug fix."
+
+**ADR-0024's terminal `taken` state now has a live producer** — it shipped
+last milestone handling a 403 only tests could generate.
+
+**The close, in numbers.** Whole-branch review on the strongest model ran
+**25 mutations** in an isolated byte copy: 0 Critical, 6 Important, 11
+Minor. **20 of 25 died, and deleting the whole route turns SEVEN tests
+red** — the direct contrast with the previous close, where that milestone's
+headline deliverable was deletable with all five gates green. ONE fix wave
+(ten items, three commits), one scoped re-review: all ten addressed. pytest
+951 → 953.
+
+**The race the design missed.** Design §5 reasoned about release-vs-complete
+in two orders and called both coherent. There is a third: `release_task`
+takes no row lock, so a release committing inside the holder's window does
+not stop their `close_task`, which writes `DONE` over an already-cleared
+`assigned_to` — losing the record of who reviewed the receipt. **Accepted,
+reproduced deterministically (two sessions, file-backed SQLite, no threads)
+and pinned** by a named test; the design carries a dated §5 note and
+ADR-0025 records the mechanism, the reachability and the cost of closing it.
+
+**Plan defects this milestone: SEVEN, all the controller's.** The worst was
+#7 — the Task 3 brief's sweep expectation would have led an implementer to
+edit the body of two Accepted ADRs, caught only because it refused to
+reconcile two instructions silently. Also: #5, two of seven mutations that
+killed their target *for the wrong reason* (one changed two variables, one
+was unreachable as a leak), which is why review standard 15 now exists.
 
 ## Review-UI error recovery — complete and merged (2026-08-04)
 
@@ -218,7 +282,7 @@ added to `_PAN_RE` requires the two-instance check, every time.**
 ## How to run
 
 - **There are two test suites.**
-  - `python -m pytest` — **935** on `main`; offline and **Node-free**.
+  - `python -m pytest` — **953** on `main`; offline and **Node-free**.
     `pyproject` sets `pythonpath=["src","."]`, `testpaths=["tests"]`.
   - **Vitest, in `frontend/`** — **221** across 19 files. `npm test`.
 - **`npm test` does NOT type-check.** Run `npm run typecheck` too. **That trap
@@ -347,6 +411,22 @@ API path moves.
 - **The runaway agent's work was kept, not reverted** (2026-08-03): commits
   authored outside the dispatch loop were gated by the normal task review
   and merged on their merits; provenance is recorded in the ledger.
+- **Admin release (2026-08-04, ADR-0025):** **admin-only**, not reviewer
+  self-release; `OPEN` is idempotent and **`DONE` is refused** (releasing a
+  closed task would lose the only record that anyone reviewed the receipt);
+  audit is **a log line plus a response echo**, no new column — with the
+  limit stated, that the log is the only durable trace and logs are not the
+  database; **API-only this milestone**, with the admin UI split off as its
+  own; and the **re-claim residual accepted** — because `opened_at` and
+  `priority` are preserved, a still-polling displaced reviewer can re-claim
+  the task an admin just took, which never arises for the case the feature
+  exists for (someone who stopped polling).
+- **`PATCH /receipts/{id}` stays claim-unaware** — a displaced reviewer's
+  edits still land and only the close fails. That is ADR-0024 §3's premise,
+  not an oversight; making it claim-aware is its own milestone.
+- **The admin surface is two milestones, release first** (2026-08-04), and
+  the release was merged **locally only** — the user chose "merge locally"
+  and no `main` push was authorized.
 - **Milestone close includes the handoff refresh** (ADR-0019); **every session
   end refreshes the handoff** (ADR-0021), whose freshness check was widened by
   dated correction (2026-08-02) to include `docs` with the handoff pair itself
@@ -393,7 +473,8 @@ shipped** — `prices_include_tax` is threaded from `extract/schema.py` into
 `extract/clients/limits.py` (`VLMGate` + `CostGuard` + `GuardedVLMClient`);
 `worker.py` (RQ, lazy behind a `worker` extra). `persist/users.py` (stdlib
 scrypt); `review/auth.py`; `review/{api,schemas,serializers}.py` — `create_app`
-plus eleven routes. `cli.py`:
+plus the route table in `review/api.py`, which is the durable reference (a
+count in prose here would rot; ADR-0025 added a row to it). `cli.py`:
 `ingest|process|export|eval|calibrate|merchants|reprocess|users`. ADR-0011,
 ADR-0012, ADR-0013, ADR-0014.
 
@@ -427,6 +508,11 @@ above: the machine-path `currency` bound through the shared coercer
 (ADR-0018's second named walk exclusion), and the CLI test module's
 structurally distinct fixture images with the `data=` override.
 
+**Admin release (2026-08-04, merged).** See its section above: `release_task`
+in `review/queue.py` and `POST /review/{task_id}/release` in
+`_install_write_routes`, admin-only, with ADR-0025 recording the five
+rulings, the accepted re-claim residual and the third race order.
+
 **Failure-egress redaction (2026-08-03, merged).** See its section above:
 the four ADR-0022 guarantees — carrier redact-before-truncate, the
 rendered-and-redacted failure log, `hide_parameters=True`, both failed-job
@@ -436,17 +522,23 @@ prints — pinned by six named tests including the straddle pin.
 
 **`docs/NEXT_SESSION_PROMPT.md` carries the full ordered task list.** Headlines:
 
-1. Phase 5 follow-ups — **the five design §5 error-recovery behaviours are
-   DONE** (2026-08-04, ADR-0024). Three remain: a read route for
-   `corrections` (needs an auth ruling), a real ASGI entry point, and an
-   **admin release for a claimed task** — which now has a consumer waiting,
-   since the terminal `taken` state was built for exactly the 403 it
-   produces.
-2. **Phase 6** — merchants & few-shot. **Phase 7** — self-consistency wired into
+1. Phase 5 follow-ups — the five §5 error-recovery behaviours (ADR-0024)
+   and the **admin release** (ADR-0025) are DONE. **Two remain:** a read
+   route for `corrections` (blocked on an auth ruling — reviewer-visible or
+   admin-only?) and a real ASGI entry point / deployment story.
+2. **The admin UI is a committed next milestone** (user ruling, 2026-08-04).
+   It needs two further backend routes before any frontend work starts:
+   **`GET /auth/me`**, because the frontend cannot learn a role after a
+   reload (`LoginPage.tsx` discards the login response, `session.ts` holds
+   one boolean, and there is no whoami route), and **a task-listing route**,
+   because nothing lists review tasks — `/metrics` returns counts only, so
+   an admin has no way to find a task id. Then the frontend's first
+   role-awareness and a new `/app` admin surface.
+3. **Phase 6** — merchants & few-shot. **Phase 7** — self-consistency wired into
    the pipeline, gated on `triage.is_handwritten`. **Phase 8** — calibration and
    eval-harness honesty.
-3. Still open from earlier phases (see the prompt's §5).
-4. **ISSUE-001 last.**
+4. Still open from earlier phases (see the prompt's §5).
+5. **ISSUE-001 last.**
 
 ## Environment / provider (user's `.env`, gitignored)
 
@@ -467,8 +559,10 @@ prints — pinned by six named tests including the straddle pin.
   it before use.** Never echo `.env` secret values.
 - **Git:** default branch `main`; `origin` → `CDGYu/Receipt-Digitalization`,
   **PUBLIC**. Push `feat/*` freely; **ask before `main`**.
-  `feat/failure-egress-redaction` is pushed at `1035fd3`; `main` is pushed
-  and in sync at `0708fd4` (see Snapshot's same-session amendment).
+  Every merged `feat/*` branch is kept at its merge point and pushed.
+  **For where `main` itself stands, read the Snapshot — never this bullet.**
+  It used to carry its own commit id and rotted by two whole milestones
+  before anyone noticed; the Snapshot is the single stamp of record.
 - **What the public repo exposes — surfaced to the user, no ruling yet.**
   Nothing secret leaked: `.env` never committed, no image file tracked. But
   `eval/golden/labels/r00*.json` **are** tracked and world-readable, carrying
@@ -532,6 +626,32 @@ measured.**
 
 ## Deferred follow-ups / known minors (non-blocking)
 
+- **Parked at the admin-release close** (bundle with the next legitimate
+  edit of the file named) — both introduced by the close's own fix wave and
+  both single-sentence:
+  - `tests/test_api_write.py` — the machine-key auth test's docstring says
+    the key row "is pinned here or nowhere — every other non-`/health`
+    route gets it from `test_auth_matrix`". **False:** `POST /upload` and
+    `PATCH /receipts/{id}` get theirs from `test_upload_auth_matrix` and
+    `test_patch_auth_matrix`, and `POST /review/{id}/complete` is
+    deliberately excluded from the matrix and pinned by hand in that same
+    file — which the docstring's own first sentence cites. The conclusion
+    it supports is true; the generalization is not.
+  - `tests/test_review_queue.py` — the race test's repair instruction says
+    it "goes red when the interleaving stops producing that outcome, at
+    which point ADR-0025 is what needs editing". Measured: the *mechanism*
+    assertion can go red with the outcome unchanged (drop the strong
+    reference and force a collection — the identity-map entry is weakly
+    held). A reader following it would add a dated note to an immutable ADR
+    for a residual that has not moved. Needs one clause saying the
+    mechanism and outcome assertions fail for different reasons.
+- **Layer-wide and pre-existing, measured at the admin-release close:**
+  nothing pins the queue layer's caller-commits rule. Deleting
+  `release_task`'s `flush()`, or turning it into a `commit()`, leaves the
+  suite green — and the same is true of `enqueue_review` and `next_task`
+  (controls were run). Only `close_task` is pinned, incidentally. A hidden
+  commit would make a queue function an undocumented exception to ADR-0006
+  with nothing going red.
 - **Parked at the review-UI error-recovery close** (bundle with the next
   legitimate edit of the file named): `frontend/tests/review-screen.test.tsx`
   carries **"42/42 green" in a comment** — a suite count (review standard 5)
@@ -623,11 +743,15 @@ measured.**
   (ADR-0019)**. Branches and SDD workspaces are **kept**.
 - **Probe before dispatching — and sweep transitively.** Plan-defect count by
   milestone: Phase 5 eleven; PAN hardening five; PAN grouping six (+1 in a
-  controller dispatch prompt); currency bound two (#7, #8); failure-egress
-  two (#9 the enqueue twin print, #10 the reprocess/stderr chain — both the
-  controller's sink map, found by an implementer's stop condition and by the
-  whole-branch review executing the escape path). The plan's prose is
-  reliable; its claims about existing artefacts are not.
+  controller dispatch prompt); currency bound two; failure-egress two;
+  review-UI error recovery four; **admin release seven** — including a
+  fixture that could not pass as written, two mutations that killed for the
+  wrong reason (standard 15), a `-k release` selector that silently skipped
+  every `test_releasing_*`, and a sweep expectation that would have led an
+  implementer to edit the body of two Accepted ADRs. **Every one was the
+  controller's, and every one was caught by an implementer or reviewer who
+  checked instead of trusting.** The plan's prose is reliable; its claims
+  about existing artefacts are not. Seven milestones, no exception.
 - Conventional commit messages (`feat(scope): …`, `fix: …`, `chore: …`,
   `docs: …`).
 
@@ -664,6 +788,17 @@ measured.**
     than land a pin that never fails. When a review says "unpinned", the
     answer is a mutation that goes red.
 
+15. **A mutation that kills the right test for the wrong reason proves
+    nothing.** The admin-release milestone shipped a mutation table in which
+    two of seven rows were worthless: deleting the route's `admin` parameter
+    also deleted the binding its log line reads, so the route raised
+    `NameError` before any authorization was tested; and "log `task.reason`"
+    could not leak, because the log call sits outside the session and the
+    attribute access raised `DetachedInstanceError` first. Both *looked*
+    like proof — tests went red on cue. Read the failure, not the colour:
+    if the assertion that failed is not the one the pin exists for, the
+    mutation changed more than one thing and proved none of them.
+
 And: **a green suite is not evidence that installed software works.** Anything
 with an entry point gets run from outside the repository.
 
@@ -675,7 +810,7 @@ with an entry point gets run from outside the repository.
 - `docs/NEXT_SESSION_PROMPT.md` — the ordered task list and reading order.
 - `IMPLEMENTATION_PLAN.md` · `README.md` (§5 design decisions) · `VLM_AND_DATA.md`
 - **`docs/KNOWN_ISSUES.md`** — ISSUE-001 with its diagnosis and resume steps.
-- **`docs/adr/` — 0001–0024**; see `docs/adr/README.md`. Read **0001** first;
+- **`docs/adr/` — 0001–0025**; see `docs/adr/README.md`. Read **0001** first;
   **0018 then 0020 (with corrections)** before touching `_PAN_RE`/`redact_pan`;
   **0022** before touching any failure-text egress; **0024** before touching
   the review UI's error surfaces (`failure.ts`, `stash.ts`,
