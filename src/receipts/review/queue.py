@@ -354,9 +354,12 @@ def release_task(session: Session, task_id: uuid.UUID) -> tuple[ReviewTask, str 
 
     **Idempotent on an ``OPEN`` task** -- nothing is written and the prior
     holder is ``None``, the same shape :func:`close_task` uses for a second
-    close. ``OPEN`` carrying an assignee is unreachable: ``assigned_to`` is
-    written in exactly two places (:func:`enqueue_review`'s reopen branch and
-    the claim below), and both keep it in step with the state.
+    close. ``OPEN`` carrying an assignee is unreachable, and what makes it so
+    is that every write of ``assigned_to`` moves it in step with the state --
+    not that the writers are few. There are three: :func:`enqueue_review`'s
+    reopen branch clears it as the task reopens, :func:`next_task`'s claim
+    sets it as the task leaves ``OPEN``, and this function clears it as the
+    task returns. A fourth writer would have to keep the same discipline.
 
     **A ``DONE`` task is refused**, and that is not tidiness. :func:`close_task`
     leaves ``assigned_to`` set, no ``Receipt`` column records a reviewer, and a
