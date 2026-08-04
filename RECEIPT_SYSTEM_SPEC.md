@@ -1439,6 +1439,7 @@ def apply_corrections(receipt_id: UUID, patch: dict,
 def enqueue_review(receipt_id: UUID, reason: str, priority: int) -> ReviewTask
 def next_task(assignee: str) -> ReviewTask | None
 def close_task(task_id: UUID) -> None
+def release_task(task_id: UUID) -> tuple[ReviewTask, str | None]
 def queue_stats() -> QueueStats
 
 # api.py  (FastAPI routes)
@@ -1452,6 +1453,7 @@ GET    /receipts/{id}/image       -> signed URL
 GET    /receipts/{id}/image/blob  -> streams the bytes; HMAC-signed, no session
 GET    /review/next               -> next task for the caller
 POST   /review/{id}/complete      -> {id} is the TASK id; assignee or admin only
+POST   /review/{id}/release       -> {id} is the TASK id; admin only
 GET    /export/xlsx               -> returns the workbook
 GET    /health
 GET    /metrics                   -> counts by status, auto-approval rate
@@ -1460,9 +1462,10 @@ GET    /metrics                   -> counts by status, auto-approval rate
 Auth is a signed session cookie carrying the username only, with the role re-read
 per request, plus a separate `X-API-Key` for unattended upload (ADR-0012). Every
 route except `/health`, `/auth/login` and the signed image blob requires a session;
-`/export/xlsx` requires `admin`. The API key authorizes `POST /upload` and nothing
-else — it can neither read a receipt nor write a correction, because a correction
-must name the person who made it.
+`GET /export/xlsx` and `POST /review/{id}/release` are the routes that require
+`admin`. The API key authorizes `POST /upload` and nothing else — it can neither
+read a receipt nor write a correction, because a correction must name the person
+who made it.
 
 ### 14.10 `pipeline.py` and `cli.py`
 

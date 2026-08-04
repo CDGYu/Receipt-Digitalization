@@ -181,3 +181,45 @@ extends, unmodified); ADR-0015 (the review UI that exposed both gaps);
 `tests/test_review_queue.py`, `tests/test_api_read.py`, `tests/test_api_write.py`;
 `.superpowers/sdd/2026-07-29-review-ui/task-3b-report.md` (RED/GREEN runs and the
 mutation table).
+
+---
+
+**Dated note (2026-08-04, from the admin-release milestone):** two claims above
+moved when `POST /review/{task_id}/release` shipped (ADR-0025). **The Decision
+did not.** Read this note before acting on either claim; neither is rewritten,
+per the convention that an Accepted ADR is corrected by dated note.
+
+1. **The Context bullet "None of the ... routes in `review/api.py` releases or
+   unclaims" is superseded by ADR-0025** (the elision is that bullet's route
+   count; the last sentence of this bullet is why). One route now does: an
+   admin-only release that moves a claimed task `IN_PROGRESS` → `OPEN` and
+   clears `assigned_to`. The bullet's second half still stands —
+   `POST /review/{task_id}/complete` calls `close_task`, which sets `DONE`, a
+   completion and not a release. That bullet also *counts* the routes, and the
+   figure was measured before the release route existed. Substituting a new
+   figure would only move the staleness forward, so read it this way instead:
+   **any sentence in this ADR that quantifies over `review/api.py`'s route
+   table is superseded by the table itself**, to which ADR-0025 adds exactly one
+   row.
+
+2. **The Consequence "a task stranded under a username that no longer polls
+   stays stranded" is narrowed, not falsified.** It stays stranded until an
+   admin releases it — a recovery path where the Context said there was none
+   ("reachable by nothing"), not an automatic one. The clause that
+   follows it — "doing so is a policy decision, not a bug fix" — is what
+   ADR-0025 quotes as its own mandate. ADR-0025 is that deferred policy
+   decision, not a correction to this record.
+
+**Resume-before-claim is unchanged, and this note exists partly to say so.**
+This ADR rejected a release *as the page-unload recovery mechanism*, because
+`beforeunload` is delivered unreliably and not at all on a crash, and that
+argument is untouched by anything in ADR-0025. Resume is the holder's own
+recovery, needs no client call, and still handles the reload, the crash and the
+lost response; a release is an admin acting on *someone else's* task, which
+resume by construction can never be — `_resume_stmt` filters on
+`assigned_to == assignee`, so it can only ever hand a task back to the person
+already holding it. `next_task`'s executable body is untouched by that
+milestone: the release lives in its own function (`release_task`) and its own
+route, and only the docstrings that explained why resume was necessary were
+rewritten, to name the release as the separate admin case. Nothing here was
+replaced.

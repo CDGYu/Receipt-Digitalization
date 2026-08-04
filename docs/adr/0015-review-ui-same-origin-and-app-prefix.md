@@ -109,3 +109,14 @@ including why bbox highlighting is out of scope);
 `tests/test_api_static.py` (the guards);
 `.superpowers/sdd/2026-07-29-review-ui/progress.md` (the vacuous-test
 reproduction and its ruling).
+
+---
+
+**Dated note (2026-08-04, from the admin-release milestone):** the Context's
+opening route count was measured before `POST /review/{task_id}/release`
+existed (ADR-0025), so it no longer counts every route. It is not replaced with
+a new figure, which would go stale the same way: **the route list in
+`review/api.py` is the durable reference, not a number in prose.** Nothing else
+in this ADR moves —
+the API still owns the bare paths, the SPA still lives under `/app`, and the
+new route is an API path like the rest.
