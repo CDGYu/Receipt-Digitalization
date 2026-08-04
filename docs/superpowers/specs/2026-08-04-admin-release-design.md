@@ -200,6 +200,22 @@ whose every interleaving converges:
 - **Release racing another reviewer's `GET /review/next`** — the row becomes
   `OPEN` and enters `_claim_stmt`'s result set normally. That is the point.
 
+> **Dated note (2026-08-04, same day, the fix wave's):** the paragraph above
+> says "a single-row state flip whose **every** interleaving converges", and
+> the release-vs-complete bullet closes with "Both coherent." **There is a
+> third interleaving of that same pair and it does not converge.** `POST
+> /review/{task_id}/complete` reads the task row for its permission check and
+> only then calls `close_task`, which sets `DONE` unconditionally; because
+> neither route takes a row lock, a release that commits *between* those two
+> steps is invisible to the complete already in flight, and the row ends `DONE`
+> with the reviewer's name erased. Each bullet above is still true of the order
+> it describes — what is false is the "every" and the "Both". ADR-0025, "No row
+> lock, and the third race order", is the record of decision: the outcome is an
+> accepted residual with its cost stated there, not a defect left open.
+> `test_a_release_inside_a_completes_window_erases_the_reviewers_name`
+> (`tests/test_review_queue.py`) reproduces it deterministically, with two
+> sessions on a file-backed database and no concurrency at all.
+
 ADR-0008's claim guarantee is untouched: `_claim_stmt` still takes
 `FOR UPDATE SKIP LOCKED` where the dialect supports it, and this route does not
 go near that statement.

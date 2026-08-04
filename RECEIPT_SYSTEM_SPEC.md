@@ -1438,7 +1438,7 @@ def apply_corrections(receipt_id: UUID, patch: dict,
 # queue.py
 def enqueue_review(receipt_id: UUID, reason: str, priority: int) -> ReviewTask
 def next_task(assignee: str) -> ReviewTask | None
-def close_task(task_id: UUID) -> None
+def close_task(task_id: UUID) -> ReviewTask
 def release_task(task_id: UUID) -> tuple[ReviewTask, str | None]
 def queue_stats() -> QueueStats
 

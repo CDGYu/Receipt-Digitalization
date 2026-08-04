@@ -104,6 +104,13 @@ as one; the response carries `released_from` beside `_task_summary`'s
 `released_from` says who held it. On the idempotent `OPEN` path `released_from`
 is `null` too, so an admin can tell a real release from a no-op.
 
+**The log draws the same distinction, because it is the durable half of it.**
+The idempotent path gets its own line, naming itself a no-op, rather than the
+release line carrying a `None` holder: `released from None` reads as a release
+that happened, and by the limit stated just below this line is the only record
+that survives the request. The admin still acted, so the attempt is logged — as
+the no-op it was. Neither line carries the task's `reason` (decision 4).
+
 **The limit, stated rather than hidden: the log is the only durable trace, and
 logs are not the database.** Nothing queryable records who released what. A
 durable record would be `released_by` / `released_at` columns; they were priced
@@ -188,8 +195,20 @@ unconditionally. Because neither route takes a row lock, a release that commits
 *between* those two steps is invisible to the complete already in flight: the
 permission check has already passed against the pre-release `assigned_to`,
 `close_task` writes only `state` and `closed_at`, and the release's committed
-`assigned_to = NULL` therefore stands. The result is a **closed task with
-`assigned_to = None`** — the very state decision 2's refusal exists to prevent.
+`assigned_to = NULL` therefore stands. The result is a **closed task whose
+reviewer's name has been erased** — the loss decision 2's refusal exists to
+prevent.
+
+**The loss, not the state — the distinction is load-bearing.** `DONE` with
+`assigned_to = None` is by itself an ordinary row, reachable today with no
+release and no race: an `OPEN`, never-claimed task closed by
+`close_review_for_receipt` (the pipeline's auto-approve branch, `pipeline.py`)
+lands at exactly `state = DONE, assigned_to = None`. Measured. Nobody looked at
+that receipt and the column correctly says so. What this race destroys is a
+name that *existed*. Nothing about a schema constraint follows from this
+paragraph, and a reader who took the state itself for the defect could reach
+for one: a `DONE ⇒ assigned_to NOT NULL` rule would refuse
+`close_review_for_receipt`'s ordinary close.
 
 **This does not make the `DONE` refusal wrong.** The refusal closes the
 single-request path into that state, which is the path an admin can take by
@@ -206,9 +225,20 @@ reviewed, its `corrections` rows are intact, and the log line still names who
 released what from whom. Closing it means a row lock on both routes, or
 re-reading `assigned_to` after `close_task` and refusing to close a task nobody
 holds — a transaction-shape change larger than the record it protects, and one
-that would give `/complete` a second way to fail. Traced against the shipped
-code rather than reproduced under load; what is recorded here is the mechanism
-and its reachability.
+that would give `/complete` a second way to fail.
+
+**Reproduced deterministically against the shipped code with two sessions; not
+exercised under concurrent load.** Two `Session` objects on a file-backed
+SQLite database, at the two routes' own transaction shape, with the three steps
+ordered by hand: no threads, no load and no scheduling luck. Every clause of
+the trace above holds, and the final row is `state = DONE, assigned_to = None`.
+`test_a_release_inside_a_completes_window_erases_the_reviewers_name`
+(`tests/test_review_queue.py`) is that probe, landed as a pin so the
+interleaving is a regression gate rather than a paragraph. Load would add
+timing evidence and nothing about the mechanism — and an earlier draft of this
+sentence said "reproduced under load", which priced the measurement at
+something it does not cost and is why it went unmeasured until the branch
+review.
 
 ## Consequences
 
@@ -244,7 +274,13 @@ and its reachability.
   `assert 200 == 401`. Both are direct evidence that the dependency is what
   refuses, not an inference from the route's shape. The `reason` omission is
   proven by capturing the task's `reason` inside the route's session block and
-  logging it, which puts the sentinel genuinely in the emitted line.
+  logging it, which puts the sentinel genuinely in the emitted line. The third
+  race order's pin was proven the same way: inserting `session.refresh(task)`
+  at the head of `close_task` — which makes the in-flight session re-read the
+  row instead of holding the name its permission check passed against — turns
+  that test red on the mechanism, and deleting `release_task`'s
+  `task.assigned_to = None` turns it red on the outcome. Each guarantee the
+  test makes has its own mutation.
 - **Two mutations from the task brief proved nothing and are cited nowhere
   above.** Deleting the `admin` parameter also deletes the binding the log line
   reads, so it changes two things, not one; there is then no authorization
@@ -282,8 +318,11 @@ cited to it.
 `redact_pan` sink); `src/receipts/review/api.py` (`review_release`,
 `_task_summary`, `review_complete`'s permission check);
 `tests/test_review_queue.py` (the queue-layer pins, among them
-`test_release_task_leaves_a_closed_tasks_assignee_intact` and
-`test_releasing_returns_the_task_to_the_open_backlog`);
+`test_release_task_leaves_a_closed_tasks_assignee_intact`,
+`test_releasing_returns_the_task_to_the_open_backlog` and
+`test_a_release_inside_a_completes_window_erases_the_reviewers_name`, the third
+race order's);
 `tests/test_api_write.py` (the route pins, among them
-`test_a_released_reviewer_gets_403_on_complete` and
-`test_the_release_is_logged_without_the_tasks_reason`).
+`test_a_released_reviewer_gets_403_on_complete`,
+`test_the_release_is_logged_without_the_tasks_reason` and
+`test_releasing_an_already_open_task_is_not_logged_as_a_release`).
