@@ -248,7 +248,7 @@ def next_task(session: Session, assignee: str) -> ReviewTask | None:
     permanently. Resuming is also what a reviewer wants on a reload: their own
     half-finished receipt back, not a different one.
 
-    :func:`release_task` (ADR-0025) is a fourth writer of ``OPEN`` and changes
+    :func:`release_task` (ADR-0025) is another writer of ``OPEN`` and changes
     none of that. It is admin-only at the route and is somebody *else* taking
     the work back; resume needs no client call at all, which is why it, and not
     a release, is what keeps a reload, a crash and a lost response survivable.
@@ -356,10 +356,10 @@ def release_task(session: Session, task_id: uuid.UUID) -> tuple[ReviewTask, str 
     holder is ``None``, the same shape :func:`close_task` uses for a second
     close. ``OPEN`` carrying an assignee is unreachable, and what makes it so
     is that every write of ``assigned_to`` moves it in step with the state --
-    not that the writers are few. There are three: :func:`enqueue_review`'s
-    reopen branch clears it as the task reopens, :func:`next_task`'s claim
-    sets it as the task leaves ``OPEN``, and this function clears it as the
-    task returns. A fourth writer would have to keep the same discipline.
+    not that the writers are few. :func:`enqueue_review`'s reopen branch clears
+    it as the task reopens, :func:`next_task`'s claim sets it as the task
+    leaves ``OPEN``, and this function clears it as the task returns. Any
+    writer added later has to keep the same discipline.
 
     **A ``DONE`` task is refused**, and that is not tidiness. :func:`close_task`
     leaves ``assigned_to`` set, no ``Receipt`` column records a reviewer, and a

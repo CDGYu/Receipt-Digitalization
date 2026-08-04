@@ -842,7 +842,9 @@ def test_release_task_rejects_an_unknown_id(engine: sa.Engine) -> None:
 def test_release_task_leaves_priority_opened_at_and_reason_alone(engine: sa.Engine) -> None:
     """A released task returns to the queue position it already held. Moving
     ``opened_at`` would send it to the back and punish the receipt for its
-    reviewer's absence.
+    reviewer's absence. ``closed_at`` is checked with them: it is ``None`` in
+    both live states, so a release that wrote it would leave a task that is
+    open and closed at once.
     """
     opened_at = datetime(2026, 8, 1, 9, 0, tzinfo=UTC)
     with Session(engine) as session:
@@ -860,6 +862,7 @@ def test_release_task_leaves_priority_opened_at_and_reason_alone(engine: sa.Engi
         assert released.priority == 2
         assert released.opened_at == claimed_at
         assert released.reason == "quick verify"
+        assert released.closed_at is None
 
 
 def test_releasing_returns_the_task_to_the_open_backlog(engine: sa.Engine) -> None:
