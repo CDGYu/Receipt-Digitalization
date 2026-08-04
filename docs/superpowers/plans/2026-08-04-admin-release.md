@@ -449,8 +449,11 @@ def test_the_release_is_logged_without_the_tasks_reason(
 
 - [ ] **Step 3: Run them to confirm they fail**
 
-Run: `python -m pytest tests/test_api_write.py -k release -v`
-Expected: 404 on every route call (Starlette's own "Not Found" for an unmatched path), so the assertions on status and body fail. `test_releasing_an_unknown_task_is_404` may pass **vacuously** at this point — an unmatched route is also a 404. Note that: it is a real vacuity, and Step 6's mutation 4 is what actually earns that test its keep.
+Run: `python -m pytest tests/test_api_write.py -k releas -v`
+
+**The selector is `releas`, not `release`.** `-k release` does not match `test_releasing_…` — "releasing" does not contain the substring "release" — so it silently collects 5 of the 7 new tests and reports green on a partial run. Measured during Task 1, where `-k release` collected 8 of 9. Confirm the count you get matches the count you wrote.
+
+Expected: 404 on every route call (Starlette's own "Not Found" for an unmatched path), so the assertions on status and body fail. `test_releasing_an_unknown_task_is_404` **passes vacuously** at this point — an unmatched route is also a 404. That is a real vacuity, disclosed rather than hidden; Step 6's mutation 4 is what actually earns that test its keep.
 
 - [ ] **Step 4: Implement the route**
 
@@ -533,6 +536,11 @@ Byte copy of `api.py` first. One mutation at a time; restore and re-run green be
 | 7 | add `task.reason` as a fourth `logger.info` argument and `%s` to the format | `…logged_without_the_tasks_reason` |
 
 **Mutations 5 and 6 are in `queue.py`, which Task 1 committed.** Per ADR-0023's second dated note, take a **fresh** byte copy of `queue.py` now — a copy taken before Task 1's commit would restore the file to its pre-commit state and silently revert the committed function. Prove each restore with `git diff --stat -- src/receipts/review/queue.py` returning empty.
+
+**Two mechanical traps, both measured during Task 1:**
+
+- **The working tree is CRLF.** A mutation applied by a script whose pattern is anchored on `\n` matches nothing and reports a false "mutation applied, tests still green" — which reads exactly like a surviving mutant. Edit the file directly, or anchor on `\r\n`, and always confirm the mutation landed (`git diff --stat` non-empty) *before* believing a green run.
+- **Anchor mutations on a unique string.** `if task is None:` appears in both `close_task` and `release_task`; `assigned_to = None` appears at `queue.py:228` as `existing.assigned_to = None` and at `:391` as `task.assigned_to = None`. Include enough surrounding context that the edit can only land in the function you mean.
 
 - [ ] **Step 7: Fix the two falsified claims in this task's files**
 
