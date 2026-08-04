@@ -643,9 +643,12 @@ def test_release_requires_authentication(app, task_id):
     """Both credential-less callers, matching
     ``test_review_complete_requires_authentication``: an anonymous one and the
     machine ``X-API-Key`` client, which authorizes ``POST /upload`` and nothing
-    else (fix wave, F11). The key row is pinned here or nowhere -- every other
-    non-``/health`` route gets it from ``test_auth_matrix``, which this route
-    cannot join for the reason the block comment above gives.
+    else (fix wave, F11). The key row is pinned here because this route cannot
+    join ``test_api_read.py``'s ``test_auth_matrix`` -- see the block comment
+    above for why -- which is the same reason ``POST /review/{id}/complete``'s
+    key row is pinned by hand a few tests up, in this file. Routes whose rule
+    *is* a role/actor predicate get theirs from one of that module's matrices
+    instead.
     """
     anonymous = TestClient(app).post(f"/review/{task_id}/release")
 

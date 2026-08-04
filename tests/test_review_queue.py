@@ -957,9 +957,15 @@ def test_a_release_inside_a_completes_window_erases_the_reviewers_name(
     ordered by hand in the one order that matters. That is the whole cost of
     measuring this, which is why it is a test rather than a paragraph.
 
-    This pins an **accepted** residual, so it is not a bug report: it goes red
-    when the interleaving stops producing that outcome, at which point ADR-0025
-    is what needs editing.
+    This pins an **accepted** residual, so it is not a bug report -- but
+    **read which assertion failed before concluding anything**, because the two
+    kinds here fail for different reasons. The final block asserts the
+    *outcome*; if those go red the interleaving has genuinely stopped producing
+    it, and ADR-0025 is what needs editing. Step 3's ``closed.assigned_to ==
+    "ada"`` asserts the *mechanism*, and it can go red on its own with the
+    outcome unchanged -- identity-map entries are held weakly, so merely losing
+    the in-flight reference is enough to break it. That is a test to repair,
+    not a residual that moved.
     """
     with Session(file_engine) as setup:
         _task(setup, 2)
