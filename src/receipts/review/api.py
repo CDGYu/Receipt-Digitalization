@@ -71,7 +71,7 @@ from .auth import (
     sign_url,
     verify_signature,
 )
-from .queue import close_task, next_task, queue_stats
+from .queue import close_task, next_task, queue_stats, release_task
 from .schemas import (
     CorrectionPatch,
     ErrorBody,
@@ -488,12 +488,16 @@ def _install_write_routes(app: FastAPI) -> None:
         **A caller who already holds an ``IN_PROGRESS`` task gets that one
         back**, unchanged and without touching the queue; only a caller
         holding none claims. That is what makes a reload, a crashed browser,
-        or a claim whose response never arrived recoverable: nothing else in
-        this service releases a claim -- ``POST /review/{id}/complete``
-        closes a task, which is not the same thing -- so before this the
-        task left the queue permanently. Per-user by construction (the
-        resume query matches on ``assigned_to``), and it outranks priority:
-        a held task comes back even when a priority-0 one is waiting. See
+        or a claim whose response never arrived recoverable, and it is the
+        only thing that does so unaided: ``POST /review/{id}/complete``
+        closes a task, which is not a release, and the one route that does
+        release a claim -- ``POST /review/{id}/release`` (ADR-0025) -- is
+        admin-only and answers a different question, a task stranded under
+        someone who has stopped polling. Without resume, the reloading
+        reviewer's own task would leave the queue until an admin noticed.
+        Per-user by construction (the resume query matches on
+        ``assigned_to``), and it outranks priority: a held task comes back
+        even when a priority-0 one is waiting. See
         :func:`receipts.review.queue.next_task`.
 
         ``{"task": null}`` (200, not 204) on an empty queue -- one response
@@ -545,6 +549,59 @@ def _install_write_routes(app: FastAPI) -> None:
             task = close_task(session, task_id)
             session.commit()
             return _task_summary(task)
+
+    @app.post("/review/{task_id}/release")
+    def review_release(
+        task_id: uuid.UUID,
+        request: Request,
+        admin: Annotated[SessionUser, Depends(require_role(ROLE_ADMIN))],
+    ) -> dict[str, Any]:
+        """Return a claimed task to the queue. Admin only (ADR-0025).
+
+        The inverse of a claim, and the case ``GET /review/next``'s resume
+        cannot cover: resume hands back *the holder's own* task, so a task held
+        by someone who has stopped polling stays out of the queue forever.
+        ADR-0016 named that gap and left closing it as a policy decision; this
+        is it. Resume is unchanged.
+
+        ``{task_id}`` is a **review task** id, not a receipt id -- the same
+        convention as ``POST /review/{task_id}/complete``.
+
+        Authorization is declarative rather than in-body. ``/complete`` checks
+        inside its body only because *assignee-or-admin* needs the task row
+        first; this is a pure role test, so it belongs in the dependency, where
+        it is enforced before the body runs.
+
+        The unknown-task 404 is raised here rather than left to
+        :func:`release_task`'s ``ValueError``, which the handler renders as
+        400. A *closed* task does come back as 400 through that handler, and
+        the split is the point: "no such task" and "that task cannot be
+        released" are different answers.
+
+        ``released_from`` sits beside ``assigned_to`` rather than replacing it:
+        ``assigned_to`` is now ``null`` -- who holds it, nobody -- and
+        ``released_from`` says who held it. On an already-open task it is
+        ``null`` too, so an admin can tell a real release from a no-op.
+        """
+        with request.app.state.session_factory() as session:
+            task = session.get(ReviewTask, task_id)
+            if task is None:
+                raise HTTPException(status_code=404, detail=f"no review task with id {task_id}")
+            task, released_from = release_task(session, task_id)
+            payload = {**_task_summary(task), "released_from": released_from}
+            session.commit()
+
+        # Logged here rather than in release_task for two reasons: only the
+        # route knows who acted, and queue.py imports no logger at all. Emitted
+        # after the commit, so a rolled-back release is never announced as one.
+        # The task's `reason` is deliberately absent -- see ADR-0022.
+        logger.info(
+            "review task %s released from %s by admin %s",
+            task_id,
+            released_from,
+            admin.username,
+        )
+        return payload
 
     @app.get("/export/xlsx")
     def export_xlsx(

@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import glob
 import io
+import logging
 import os
 import tempfile
 import uuid
@@ -517,14 +518,15 @@ def test_review_next_returns_the_same_task_when_a_reviewer_reloads(
 ):
     """The page-reload case ADR-0016 exists for, end to end.
 
-    Nothing releases a claim: ``_claim_stmt`` selects ``state == OPEN`` only,
-    ``enqueue_review`` reopens a task only when it is ``DONE``, and none of the
-    routes in ``review/api.py`` unclaims -- ``POST /review/{id}/complete``
-    closes, which is not a release. So before this, a reviewer who reloaded
-    claimed a *second* task and stranded the first out of the queue for good.
-    Two tasks are queued here rather than one precisely so a regression could
-    take the second: with one task the buggy behaviour and the fixed one both
-    return the same id.
+    Nothing the *reviewer* can reach releases a claim: ``_claim_stmt`` selects
+    ``state == OPEN`` only, ``enqueue_review`` reopens a task only when it is
+    ``DONE``, and ``POST /review/{id}/complete`` closes rather than releases.
+    ``POST /review/{id}/release`` does release one, but it is admin-only
+    (ADR-0025) and is not on this path. So without resume, a reviewer who
+    reloaded claimed a *second* task and stranded the first until an admin
+    intervened. Two tasks are queued here rather than one precisely so a
+    regression could take the second: with one task the buggy behaviour and
+    the fixed one both return the same id.
     """
     with session_factory() as session:
         enqueue_review(session, receipt_id, reason="quick verify", priority=2)
@@ -596,6 +598,114 @@ def test_review_complete_requires_authentication(app, task_id):
     keyed = TestClient(app)
     keyed.headers.update({"X-API-Key": "s3cret-machine-key"})
     assert keyed.post(f"/review/{task_id}/complete").status_code == 401
+
+
+# --------------------------------------------------------------------------- #
+# ADR-0025: `POST /review/{task_id}/release`, admin only.
+#
+# Deliberately NOT a row in `tests/test_api_read.py`'s READ_ROUTES matrix, and
+# for a different reason than the `/complete` exclusion that file already
+# documents. `test_auth_matrix` builds every URL with
+# `path.format(id=receipt_id)` and asserts 200 for an allowed actor, but this
+# route's path parameter is a **review task** id, not a receipt id -- a receipt
+# id substituted there is a legitimate 404, so an admin row would fail on a
+# correct implementation. The matrix's shape cannot express this route at all;
+# its auth is pinned behaviourally here instead
+# (`test_a_reviewer_cannot_release_a_task`, `test_release_requires_authentication`).
+# --------------------------------------------------------------------------- #
+
+
+def test_an_admin_can_release_a_claimed_task(admin_client, session_factory, task_id):
+    response = admin_client.post(f"/review/{task_id}/release")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["state"] == "open"
+    assert body["assigned_to"] is None
+    # A sibling key, not a replacement: assigned_to says who holds it (nobody),
+    # released_from says who held it.
+    assert body["released_from"] == "alice"
+
+    with session_factory() as session:
+        stored = session.get(ReviewTask, task_id)
+        assert stored.state.value == "open"
+        assert stored.assigned_to is None
+
+
+def test_a_reviewer_cannot_release_a_task(reviewer_client, task_id):
+    response = reviewer_client.post(f"/review/{task_id}/release")
+
+    assert response.status_code == 403
+    assert response.json()["error"]["message"] == "insufficient role"
+
+
+def test_release_requires_authentication(app, task_id):
+    response = TestClient(app).post(f"/review/{task_id}/release")
+
+    assert response.status_code == 401
+    assert response.json()["error"]["message"] == "authentication required"
+
+
+def test_releasing_an_unknown_task_is_404(admin_client):
+    """Not 400. ``release_task``'s own ValueError for an unknown id would render
+    400 through the error handler, so the route keeps its own existence check --
+    "no such task" and "that task cannot be released" are different answers.
+    """
+    missing = uuid.uuid4()
+
+    response = admin_client.post(f"/review/{missing}/release")
+
+    assert response.status_code == 404
+    assert str(missing) in response.json()["error"]["message"]
+
+
+def test_releasing_a_closed_task_is_400(admin_client, task_id):
+    assert admin_client.post(f"/review/{task_id}/complete").status_code == 200
+
+    response = admin_client.post(f"/review/{task_id}/release")
+
+    assert response.status_code == 400
+    assert str(task_id) in response.json()["error"]["message"]
+
+
+def test_a_released_reviewer_gets_403_on_complete(admin_client, reviewer_client, task_id):
+    """The milestone's headline claim: this is the exact 403 ADR-0024's terminal
+    `taken` state was built for, produced by a real release rather than a
+    hand-set fixture. Until this route shipped, that UI path was reachable only
+    by tests that set ``assigned_to`` by hand.
+    """
+    assert admin_client.post(f"/review/{task_id}/release").status_code == 200
+
+    response = reviewer_client.post(f"/review/{task_id}/complete")
+
+    assert response.status_code == 403
+    assert (
+        response.json()["error"]["message"]
+        == "only the assignee or an admin may complete this task"
+    )
+
+
+def test_the_release_is_logged_without_the_tasks_reason(
+    admin_client, session_factory, task_id, caplog
+):
+    """``reason`` is built from exception text and is redacted only at
+    ``enqueue_review``'s sink, so putting it in a log line would extend
+    ADR-0022's egress inventory. Ids and usernames only.
+    """
+    with session_factory() as session:
+        task = session.get(ReviewTask, task_id)
+        task.reason = "SENTINEL-REASON-TEXT"
+        session.commit()
+
+    with caplog.at_level(logging.INFO, logger="receipts.review.api"):
+        assert admin_client.post(f"/review/{task_id}/release").status_code == 200
+
+    lines = [r.getMessage() for r in caplog.records if "released" in r.getMessage()]
+    assert len(lines) == 1
+    assert str(task_id) in lines[0]
+    assert "alice" in lines[0]
+    assert "bob" in lines[0]
+    assert "SENTINEL-REASON-TEXT" not in lines[0]
 
 
 def test_a_skipped_receipt_stays_recoverable(
