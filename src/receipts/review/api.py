@@ -581,7 +581,9 @@ def _install_write_routes(app: FastAPI) -> None:
         ``released_from`` sits beside ``assigned_to`` rather than replacing it:
         ``assigned_to`` is now ``null`` -- who holds it, nobody -- and
         ``released_from`` says who held it. On an already-open task it is
-        ``null`` too, so an admin can tell a real release from a no-op.
+        ``null`` too, so an admin can tell a real release from a no-op -- and
+        the log line below draws the same distinction, because ADR-0025 §3
+        makes it the only *durable* half of that answer.
         """
         with request.app.state.session_factory() as session:
             task = session.get(ReviewTask, task_id)
@@ -594,13 +596,26 @@ def _install_write_routes(app: FastAPI) -> None:
         # Logged here rather than in release_task for two reasons: only the
         # route knows who acted, and queue.py imports no logger at all. Emitted
         # after the commit, so a rolled-back release is never announced as one.
-        # The task's `reason` is deliberately absent -- see ADR-0022.
-        logger.info(
-            "review task %s released from %s by admin %s",
-            task_id,
-            released_from,
-            admin.username,
-        )
+        #
+        # The idempotent path gets its own line for the same reason a
+        # rolled-back one gets none: ADR-0025 §3 makes this log the only durable
+        # trace of a release, and "released from None" reads as a release that
+        # happened. The admin still acted, so the attempt is recorded -- as the
+        # no-op it was. The task's `reason` is deliberately absent from both
+        # lines -- see ADR-0022.
+        if released_from is None:
+            logger.info(
+                "review task %s was already open; nothing released, requested by admin %s",
+                task_id,
+                admin.username,
+            )
+        else:
+            logger.info(
+                "review task %s released from %s by admin %s",
+                task_id,
+                released_from,
+                admin.username,
+            )
         return payload
 
     @app.get("/export/xlsx")

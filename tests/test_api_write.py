@@ -640,10 +640,24 @@ def test_a_reviewer_cannot_release_a_task(reviewer_client, task_id):
 
 
 def test_release_requires_authentication(app, task_id):
-    response = TestClient(app).post(f"/review/{task_id}/release")
+    """Both credential-less callers, matching
+    ``test_review_complete_requires_authentication``: an anonymous one and the
+    machine ``X-API-Key`` client, which authorizes ``POST /upload`` and nothing
+    else (fix wave, F11). The key row is pinned here or nowhere -- every other
+    non-``/health`` route gets it from ``test_auth_matrix``, which this route
+    cannot join for the reason the block comment above gives.
+    """
+    anonymous = TestClient(app).post(f"/review/{task_id}/release")
 
-    assert response.status_code == 401
-    assert response.json()["error"]["message"] == "authentication required"
+    assert anonymous.status_code == 401
+    assert anonymous.json()["error"]["message"] == "authentication required"
+
+    keyed_client = TestClient(app)
+    keyed_client.headers.update({"X-API-Key": "s3cret-machine-key"})
+    keyed = keyed_client.post(f"/review/{task_id}/release")
+
+    assert keyed.status_code == 401
+    assert keyed.json()["error"]["message"] == "authentication required"
 
 
 def test_releasing_an_unknown_task_is_404(admin_client):
@@ -706,6 +720,43 @@ def test_the_release_is_logged_without_the_tasks_reason(
     assert "alice" in lines[0]
     assert "bob" in lines[0]
     assert "SENTINEL-REASON-TEXT" not in lines[0]
+
+
+def test_releasing_an_already_open_task_is_not_logged_as_a_release(
+    admin_client, session_factory, receipt_id, caplog
+):
+    """A no-op must not be announced as a release (fix wave, F9).
+
+    The comment at the log site is careful that a *rolled-back* release is never
+    announced as one; a no-op was, as ``released from None``. ADR-0025 §3 calls
+    this line the only durable trace of a release, so a false positive in it is
+    an audit defect: nothing queryable records who released what, and the
+    response body that does distinguish the two is not kept anywhere.
+
+    ``admin_client`` seeds an **open**, never-claimed task for ``receipt_id``
+    (its own fixture does the ``enqueue_review``), which is exactly the
+    idempotent path -- this test deliberately does not ask for ``task_id``,
+    whose fixture would claim that same row for alice.
+    """
+    with session_factory() as session:
+        open_task_id = (
+            session.scalars(select(ReviewTask).where(ReviewTask.receipt_id == receipt_id))
+            .one()
+            .id
+        )
+        assert session.get(ReviewTask, open_task_id).state is ReviewState.OPEN
+
+    with caplog.at_level(logging.INFO, logger="receipts.review.api"):
+        response = admin_client.post(f"/review/{open_task_id}/release")
+
+    assert response.status_code == 200
+    assert response.json()["released_from"] is None
+
+    lines = [r.getMessage() for r in caplog.records if str(open_task_id) in r.getMessage()]
+    assert len(lines) == 1
+    assert "released from None" not in lines[0]
+    assert "nothing released" in lines[0]
+    assert "bob" in lines[0]  # the admin who acted is still on the record
 
 
 def test_a_skipped_receipt_stays_recoverable(
