@@ -4,10 +4,25 @@
  * `styles.null` reads as the language literal at every call site. Cosmetic --
  * same declarations, same behaviour. */
 
+/* **No `text-align: right` here, deliberately.** The plan's CSS carried it and it
+ * was inert: `text-align` sets the alignment of inline content *inside a block
+ * container*, and `Value` renders a `<span>`, so the declaration governed
+ * nothing. Giving the span a `display` that makes it meaningful would not help
+ * either -- an `inline-block` still shrink-wraps its text, so there is no slack
+ * for the alignment to take up, and `display: block` would force a line break on
+ * every numeric value including the ones a consumer wants mid-sentence.
+ *
+ * Right-alignment of a money column is the *cell's* property, not the value's,
+ * and design §5.2 already assigns it there: "Description left, numbers right ...
+ * column widths fixed so the decimal column does not shift as the reviewer
+ * edits." Task 3 sets `text-align: right` on the `<td>`.
+ *
+ * What genuinely belongs on the value, and works on an inline box, is the pair
+ * below: the monospaced family and tabular figures, which are what stop a digit
+ * from changing width as it is typed. */
 .numeric {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
-  text-align: right;
 }
 
 .text {
