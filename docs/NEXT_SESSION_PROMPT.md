@@ -61,6 +61,11 @@ all 14 `feat/*` branches are merged and pushed.
    untracked, still on disk).
 5. **`IMPLEMENTATION_PLAN.md`** · **`docs/KNOWN_ISSUES.md`** (ISSUE-001 — do
    not re-derive) · **`RECEIPT_SYSTEM_SPEC.md`** §§ as needed.
+5b. **`docs/superpowers/specs/2026-08-05-review-ui-design-system.md`** before
+   writing any CSS — with `design-system/receipt-review/MASTER.md` beside it
+   as the raw generated output. The spec's §2 records three deliberate
+   overrides of that generated system; its §4 carries the null-is-not-zero
+   rule, which is the prime directive reaching the last inch of the UI.
 6. **If you open the last milestone's plan
    (`docs/superpowers/plans/2026-08-05-admin-ui-backend-routes.md`), read its
    "Dated defect log" at the bottom FIRST.** Five of that plan's nine defects
@@ -164,6 +169,61 @@ consumes either one yet.** What remains:
 **Nobody has viewed ANY of the review UI in a browser.** That risk is
 inherited, not new; the design's §8 calls it out so this milestone does not
 absorb it silently. Consider making a browser pass part of its done.
+
+### 1b. The review UI's DESIGN SYSTEM — drafted, NOT approved, NOT planned
+
+**`docs/superpowers/specs/2026-08-05-review-ui-design-system.md`** (drafted
+2026-08-05, at the user's request, from the Qarin SaaS template reference plus
+the `ui-ux-pro-max` skill). Machine output persisted at
+`design-system/receipt-review/MASTER.md`. **Read the spec before writing any
+CSS — and read its §2, which records three deliberate overrides of the
+generated system so nobody "restores" them.**
+
+**The measured fact this rests on:** `git ls-files frontend | grep -E
+'\.(css|scss)$'` returns **nothing**. There is no stylesheet anywhere in
+`frontend/`. Every surface is browser default.
+
+**What the reference actually gave us.** Qarin is a SaaS *marketing website*
+template — hero, pricing tiers, testimonials, blog feed. Four patterns
+transfer (stat tiles → `/metrics` summary; comparison table → the task table's
+row rhythm; FAQ accordion → the findings panel; card shell → panel shell). The
+rest does not, and the spec says so rather than bending a landing page into a
+review tool.
+
+**The one rule no generic design system supplies — §4:**
+**`null` must never look like `0`, and neither may look like "empty".** It
+falls straight out of the prime directive: rendering an unextracted total as
+`0.00` destroys the system's central safety property at the last inch, on the
+one screen where a human decides. Three distinct treatments, and it is
+**testable** — assert a null `total`'s accessible name is not `"0"`, `"0.00"`
+or `""`. `auto_approval_rate`'s `str | None` and the confidence breakdown's
+`NULL`-vs-`[]` are the same rule at the API boundary, already built that way.
+
+**Four open questions gate the work** (spec §9): light-vs-dark default;
+CSS Modules vs Tailwind vs plain CSS (**recommendation: CSS Modules + one
+`tokens.css`**, zero new runtime deps); whether a browser pass is part of
+"done"; and whether the admin surface gets its own route shell.
+
+**Suggested task shape once approved** — draw the boundaries so no two tasks
+share a file (ADR-0023):
+
+1. **Tokens + font vendoring** — `tokens.css`, light/dark sets, self-hosted
+   Fira Sans/Fira Code woff2. **Not the Google CDN** (spec §2.3): the service
+   runs on a LAN and the suite is offline, so a CDN `@import` renders fallback
+   fonts exactly where it is deployed.
+2. **Primitives** — `MoneyField` (`type="text"` + `inputMode="decimal"`, never
+   `type="number"` — ADR-0015), the null/zero/empty treatment, buttons, chips,
+   focus ring.
+3. **Review screen** — form, `LineItemsTable`, `ConfidenceRail`,
+   `FindingsPanel`, `ImagePane`, and the five ADR-0024 error states, styled
+   **without disturbing the single-`role="alert"` contract**.
+4. **Admin surface** — `TaskTable` + `StatTiles`, with a scope-aware empty
+   state (a reviewer's empty list must not read as a broken queue — ADR-0026).
+5. **Accessibility pass** — contrast in both themes, focus visibility, 44px
+   targets, never-colour-alone, `prefers-reduced-motion`.
+
+Tasks 3 and 4 both consume the primitives from 2, so **2 runs before either**,
+and 3 and 4 touch different files so they may run in either order.
 
 ### 2. Phase 5 follow-ups — two left
 
@@ -380,6 +440,10 @@ entry points from outside the repository.
 7. **Narrow the `{1,2}` separator** now that its surface is measured?
 8. **Has anyone looked at the review UI in a browser?** Still nobody, and the
    frontend milestone is the natural moment.
+9. **The four design-system questions** (§1b, spec §9): light-vs-dark default;
+   CSS Modules vs Tailwind vs plain CSS; whether a browser pass is part of
+   "done"; whether the admin surface gets its own route shell. **All four gate
+   the styling work — it cannot start without at least the first two.**
 
 *(The `main` push question is settled — it was granted and consumed on
 2026-08-05, and `main` is in sync. The next push needs a fresh ask.)*

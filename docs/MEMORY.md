@@ -654,6 +654,22 @@ the "Write routes (P4.T5)" banner was wrong once a read route consumed it.
    route for `corrections` (**blocked on the auth ruling — see "Still
    needing a user decision" #1, whose answer needs re-confirming**) and a
    real ASGI entry point / deployment story.
+1b. **A design system for the review UI is DRAFTED but NOT APPROVED and NOT
+   PLANNED** — `docs/superpowers/specs/2026-08-05-review-ui-design-system.md`,
+   with the raw generated output at `design-system/receipt-review/MASTER.md`.
+   Written 2026-08-05 at the user's request from a Qarin SaaS-template
+   reference plus the `ui-ux-pro-max` skill. **Measured basis: `frontend/`
+   contains NO stylesheet at all** — `git ls-files frontend` matches no
+   `.css`/`.scss`, so every surface is browser default. The reference is a
+   *marketing* template, so only four patterns transfer (stat tiles,
+   comparison-table row rhythm, accordion, card shell) and the spec says so
+   rather than bending a landing page into a review tool. **Its §4 is the
+   rule no generic system supplies: `null` must never look like `0`, and
+   neither may look like "empty"** — the prime directive reaching the last
+   inch of the UI, and testable. **Four questions gate the work** (spec §9):
+   light-vs-dark default, CSS Modules vs Tailwind vs plain CSS (recommended:
+   CSS Modules + one `tokens.css`), whether a browser pass is part of "done",
+   and whether the admin surface gets its own route shell.
 2. **The admin UI's FRONTEND half is the committed next milestone.** Its two
    backend contracts shipped 2026-08-05 (ADR-0026) and **nothing under
    `frontend/` consumes either one yet.** What remains: read `/auth/me` on
