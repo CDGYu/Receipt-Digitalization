@@ -208,16 +208,73 @@ function referencedClasses(tsx: string): Set<string> {
  *  landed, not argued.
  *
  *  Choosing a better needle (`'color: var(--color-null)'`) would have closed that
- *  instance and left the shape. Splitting the body into declarations closes the
- *  class: a property is looked up as a property and compared to a whole value,
- *  so no declaration can answer for another and no assertion here can be
- *  satisfied by a longer string that happens to contain it.
+ *  instance and left the shape. Splitting the body into declarations closes it on
+ *  the **value axis**: a property is looked up as a property and compared to a
+ *  whole value, so no declaration can answer for another.
+ *
+ *  Round 2 claimed that closed "the class". It did not -- it moved the needle
+ *  from the value to the **selector**, and round 3 broke it there. All three of
+ *  these satisfied every §4 assertion while `.notExtracted`, the class actually
+ *  on the mark, carried none of them:
+ *
+ *    * `.notExtractedInline { ... }` above `.notExtracted { padding-left: ... }`
+ *      -- an unanchored `indexOf` matches the longer name first;
+ *    * `@media (...) { .notExtracted { ... } }` above the gutted base rule;
+ *    * `.notExtracted:hover { ... }` above the gutted base rule.
+ *
+ *  Neither shape is contrived: `Button.module.css:55` is
+ *  `.button:hover:not(:disabled)` and `tokens.css:106` is a
+ *  `prefers-color-scheme` block, so hoisting the mark's paint into a dark-theme
+ *  block is one ordinary refactor away from losing §4's headline signal in light
+ *  mode with the guard green.
+ *
+ *  So the selector axis is closed three ways: the match must be followed by a
+ *  **boundary** (`[\s{,]`), so a longer class name and a pseudo-class are not it;
+ *  it must sit at **brace depth 0**, so a copy nested in an at-rule is not it
+ *  (the boundary alone does not cover this -- `.notExtracted ` inside `@media`
+ *  passes it); and it must be **unique**, because two top-level rules for one
+ *  selector leave nothing to say which paints the mark.
+ *
+ *  Absence **throws** rather than returning an empty map. `indexOf` returning -1
+ *  fed `code.indexOf('{', -1)`, which clamps to 0 and silently read the *first
+ *  rule in the file* -- against the real stylesheet that is `.numeric`, which
+ *  carries `font-family: var(--font-mono)`, so the font assertion would have gone
+ *  green against an unrelated rule.
+ *
+ *  Still not closed, and not claimed to be: this is a scanner, not a CSS parser.
+ *  It assumes rules do not nest inside a top-level rule and that values carry no
+ *  braces or semicolons, which holds for these four stylesheets.
  *
  *  First colon wins, which is right for these values -- none contains a colon,
  *  and `var(--x)` does not. */
 function declarationsIn(css: string, selector: string): Map<string, string> {
   const code = css.replace(/\/\*[\s\S]*?\*\//g, '')
-  const open = code.indexOf('{', code.indexOf(selector))
+  const starts: number[] = []
+  let depth = 0
+  for (let i = 0; i < code.length; i += 1) {
+    if (code[i] === '{') {
+      depth += 1
+    } else if (code[i] === '}') {
+      depth -= 1
+    } else if (depth === 0 && code.startsWith(selector, i)) {
+      // A boundary, not just a prefix: `.notExtractedInline` and
+      // `.notExtracted:hover` are different selectors and must not answer here.
+      if (/[\s{,]/.test(code[i + selector.length] ?? '')) {
+        starts.push(i)
+      }
+    }
+  }
+  if (starts.length !== 1) {
+    throw new Error(
+      starts.length === 0
+        ? `no top-level rule for ${selector}. It was renamed, or it moved inside ` +
+          `an at-rule -- either way this guard is reading nothing and must not ` +
+          `silently pass.`
+        : `${starts.length} top-level rules for ${selector}; the guard cannot ` +
+          `tell which one paints it. Fold them into one.`,
+    )
+  }
+  const open = code.indexOf('{', starts[0])
   const pairs = new Map<string, string>()
   for (const part of code.slice(open + 1, code.indexOf('}', open)).split(';')) {
     const colon = part.indexOf(':')
@@ -241,13 +298,42 @@ function declarationsIn(css: string, selector: string): Map<string, string> {
  *  the claim true: a new union member fails until it is both listed here and
  *  painted in the stylesheet.
  *
- *  A union reformatted one-member-per-line would not match this pattern. That
- *  fails loudly rather than vacuously -- the derived set is empty, and the
- *  equality assertion reports the mismatch instead of quietly checking nothing. */
+ *  A union reformatted one-member-per-line would not match this pattern at all.
+ *  That fails loudly rather than vacuously -- the derived set is empty, and the
+ *  equality assertion reports the mismatch instead of quietly checking nothing.
+ *
+ *  **Silent truncation is the harder failure, and it re-achieves the exact defect
+ *  this helper exists to close.** The chain is greedy but stops at the first
+ *  member it cannot chain, so if it stops precisely where the hand-maintained
+ *  list ends, the guard is green while the extra tone ships unpainted -- G4 all
+ *  over again with `derived.length === 5`. Three spellings do it:
+ *  `| "critical"` (double quotes -- and quote style is unenforced, there is no
+ *  formatter config in the tracked tree), `| LegacyTones` (a member that is a
+ *  type alias, not a literal), and a `//` comment inside the union followed by
+ *  `| 'critical'`.
+ *
+ *  So the match must consume the whole annotation: if the next thing after it is
+ *  another `|`, the union continued and this parse is a lie. The check skips line
+ *  comments as well as whitespace, because the third spelling hides the `|`
+ *  behind one -- and note the direction. `referencedClasses` strips block
+ *  comments only, and justifies it because the residue causes a *false failure*.
+ *  Here the identical gap causes a *false pass*, which is why it is closed rather
+ *  than documented. */
 function unionMembers(source: string, prop: string): string[] {
   const code = source.replace(/\/\*[\s\S]*?\*\//g, '')
   const union = new RegExp(`\\b${prop}\\??:\\s*((?:'[\\w-]+'\\s*\\|\\s*)*'[\\w-]+')`).exec(code)
-  return union === null ? [] : Array.from(union[1].matchAll(/'([\w-]+)'/g), (m) => m[1])
+  if (union === null) {
+    return []
+  }
+  const rest = code.slice(union.index + union[0].length)
+  if (/^(?:\s|\/\/[^\n]*)*\|/.test(rest)) {
+    throw new Error(
+      `the ${prop} union continues past what this parse read, so the derived set ` +
+        `is a truncation and would silently agree with a stale list. Extend ` +
+        `unionMembers to cover the spelling that stopped it.`,
+    )
+  }
+  return Array.from(union[1].matchAll(/'([\w-]+)'/g), (m) => m[1])
 }
 
 interface GuardedComponent {
@@ -355,6 +441,56 @@ describe('every class a component references exists in its stylesheet', () => {
     expect(full.get('padding')).toBeUndefined()
   })
 
+  it('locates the rule by selector, not by substring', () => {
+    // The three shapes that satisfied every §4 assertion while the real rule
+    // carried none of them. Each declares the paint on a *different* selector
+    // above the gutted base rule, so a helper that reads the first textual hit
+    // reports the decoy's declarations.
+    const gutted = '.notExtracted { padding-left: 4px }'
+    const paint = 'color: var(--color-null)'
+
+    for (const [label, decoy] of [
+      ['a longer class name', `.notExtractedInline { ${paint} }`],
+      ['an at-rule copy', `@media (prefers-contrast: more) { .notExtracted { ${paint} } }`],
+      ['a pseudo-class', `.notExtracted:hover { ${paint} }`],
+    ] as const) {
+      const found = declarationsIn(`${decoy}\n${gutted}`, '.notExtracted')
+      expect(found.get('padding-left'), `${label}: read the decoy, not the rule`).toBe('4px')
+      expect(found.get('color'), `${label}: the decoy's paint answered for the rule`).toBeUndefined()
+    }
+  })
+
+  it('throws rather than reading the wrong rule when the selector is not there', () => {
+    // `indexOf` returned -1, and `indexOf('{', -1)` clamps to 0 -- so the helper
+    // silently read the FIRST rule in the file. Against the real stylesheet that
+    // is `.numeric`, which carries `font-family: var(--font-mono)`, so the font
+    // assertion would have passed against an unrelated rule while the message
+    // blamed the colour.
+    expect(() => declarationsIn('.numeric { font-family: var(--font-mono) }', '.gone')).toThrow(
+      /no top-level rule/,
+    )
+    // Two top-level rules for one selector leave nothing to say which paints it.
+    expect(() => declarationsIn('.x { color: red }\n.x { color: blue }', '.x')).toThrow(
+      /2 top-level rules/,
+    )
+  })
+
+  it('rejects a truncated union instead of agreeing with a stale list', () => {
+    // Each of these stops the greedy chain exactly at five members, which is the
+    // length of Chip's hand-maintained list -- so without this check the guard is
+    // green while the sixth tone ships unpainted. G4 re-achieved.
+    const five = "tone: 'error' | 'warn' | 'info' | 'positive' | 'neutral'"
+    expect(unionMembers(five, 'tone')).toEqual(['error', 'warn', 'info', 'positive', 'neutral'])
+
+    for (const [label, tail] of [
+      ['a double-quoted member', ' | "critical"'],
+      ['a type alias member', ' | LegacyTones'],
+      ['a line comment hiding the continuation', "\n  // and one more\n  | 'critical'"],
+    ] as const) {
+      expect(() => unionMembers(five + tail, 'tone'), label).toThrow(/continues past/)
+    }
+  })
+
   it('gives the not-extracted mark all three signals §4 names for it', () => {
     // Every one of these is compared as a whole value against a named property,
     // so each is falsified only by its own declaration changing. Reverted one at
@@ -374,7 +510,12 @@ describe('every class a component references exists in its stylesheet', () => {
     // not: a union member added without a rule shipped class="undefined" with
     // every gate green. Deriving the set from the source is what makes the claim
     // true rather than narrowing it.
-    for (const component of COMPONENTS.filter((entry) => entry.prop !== '')) {
+    const guarded = COMPONENTS.filter((entry) => entry.prop !== '')
+    // The filter is an escape hatch: blanking `prop` on both entries would leave
+    // this loop with zero iterations and no assertion executed, and the
+    // anti-vacuity checks below are *inside* the loop, so they could not fire.
+    expect(guarded.length, 'the derive-the-union loop has been emptied').toBe(2)
+    for (const component of guarded) {
       const derived = unionMembers(read(component.tsx), component.prop)
       expect(
         derived.length,
