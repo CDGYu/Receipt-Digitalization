@@ -7,12 +7,12 @@ verified rather than trusted — is **ADR-0019**, extended by **ADR-0021** (whos
 2026-08-02 dated correction widened the freshness check after a docs-only task
 proved invisible to it).
 Last updated: **2026-08-05 (admin UI backend routes merged and pushed)**, at
-**`main @ 684e316`**, no branch in flight, this refresh riding on top as a
+**`main @ eab0b26`**, no branch in flight, this refresh riding on top as a
 docs-only commit. A stamp cannot name the commit that writes it, so the
 check is not a commit count — counts rot — but this:
 
 ```
-git log --oneline 684e316..main -- src tests frontend docs ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
+git log --oneline eab0b26..main -- src tests frontend docs ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
 ```
 
 **Empty means this file is current.** Any output means the tree moved after it
@@ -20,7 +20,7 @@ was written and you are reading something stale.
 
 ## Snapshot
 
-- **`main` @ `684e316`, pushed, in sync with `origin/main`.** The milestone
+- **`main` @ `eab0b26`, pushed, in sync with `origin/main`.** The milestone
   was first merged locally with no push; the user then authorized the push
   explicitly ("merge all of the branches with the main and push it"), and
   that one-time authorization was consumed by it. The standing ask-first
