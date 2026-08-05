@@ -199,31 +199,46 @@ one screen where a human decides. Three distinct treatments, and it is
 or `""`. `auto_approval_rate`'s `str | None` and the confidence breakdown's
 `NULL`-vs-`[]` are the same rule at the API boundary, already built that way.
 
-**Four open questions gate the work** (spec §9): light-vs-dark default;
-CSS Modules vs Tailwind vs plain CSS (**recommendation: CSS Modules + one
-`tokens.css`**, zero new runtime deps); whether a browser pass is part of
-"done"; and whether the admin surface gets its own route shell.
+**All four questions are SETTLED (2026-08-05, user rulings)** and recorded in
+spec §9: **light default** with a full dark theme; **CSS Modules + one
+`tokens.css`** (zero new runtime deps, native to Vite); **a browser pass IS
+part of "done"**; and — controller's call, flagged — **a ~20-line pathname
+switch rather than React Router**, because runtime deps are exactly `react`
+and `react-dom` and the backend already serves a history fallback
+(`_SpaFiles(..., html=True)`, `api.py:856`), so `/app/admin` survives a
+reload without one.
 
-**Suggested task shape once approved** — draw the boundaries so no two tasks
-share a file (ADR-0023):
+**The plan is written:**
+`docs/superpowers/plans/2026-08-05-review-ui-styling.md` — six tasks, lanes
+drawn so Tasks 3 and 4 share no file (ADR-0023). **Not yet executed.**
 
-1. **Tokens + font vendoring** — `tokens.css`, light/dark sets, self-hosted
-   Fira Sans/Fira Code woff2. **Not the Google CDN** (spec §2.3): the service
-   runs on a LAN and the suite is offline, so a CDN `@import` renders fallback
-   fonts exactly where it is deployed.
-2. **Primitives** — `MoneyField` (`type="text"` + `inputMode="decimal"`, never
-   `type="number"` — ADR-0015), the null/zero/empty treatment, buttons, chips,
-   focus ring.
-3. **Review screen** — form, `LineItemsTable`, `ConfidenceRail`,
-   `FindingsPanel`, `ImagePane`, and the five ADR-0024 error states, styled
-   **without disturbing the single-`role="alert"` contract**.
-4. **Admin surface** — `TaskTable` + `StatTiles`, with a scope-aware empty
-   state (a reviewer's empty list must not read as a broken queue — ADR-0026).
-5. **Accessibility pass** — contrast in both themes, focus visibility, 44px
-   targets, never-colour-alone, `prefers-reduced-motion`.
+**The six planned tasks:** (1) tokens + **self-hosted** Fira woff2 + the
+light/dark switch; (2) primitives — `Value`, `Button`, `Chip`, and the
+restyled `MoneyInput`, carrying **the null-is-not-zero pin**; (3) style the
+review screen, `className` only, **without disturbing the single-`role="alert"`
+contract**; (4) the `/app/admin` surface with a **scope-aware empty state**
+(ADR-0026 — a reviewer's empty list must not read as a broken queue); (5) **the
+browser pass**; (6) ADR-0027.
 
-Tasks 3 and 4 both consume the primitives from 2, so **2 runs before either**,
-and 3 and 4 touch different files so they may run in either order.
+Lanes: 1 → 2 → {3 ∥ 4} → 5 → 6. Tasks 3 and 4 share no file, but `main.tsx`
+belongs to 4 and is the one file a careless 3 might reach for.
+
+**How it connects to the backend — it already does, fully.** The API *serves
+the SPA itself* (`_SpaFiles` mounted at `/app`, `api.py:856`, history
+fallback), so the browser is same-origin and ADR-0015 can ban
+`CORSMiddleware`. `vite.config.ts` proxies every API prefix to
+`localhost:8000` for dev. **The styling work adds no backend plumbing** — every
+route it consumes already ships. The money path is unbroken:
+`Numeric(14,4, asdecimal=True)` → `Decimal` → `money()`'s `str()` → JSON
+string → React state string → PATCH string → `_reject_json_float`. That is
+*why* `MoneyField` must be `type="text"`.
+
+**Found while checking, and folded into Task 4:** `vite.config.ts:14-23`
+claims its route list is "cross-checked against every route `create_app`
+registers" and **is missing three** — `GET /auth/me`, `GET /review/tasks`, and
+`POST /review/{id}/release` (missing since 2026-08-04). Harmless functionally,
+since `API_PREFIXES` matches by prefix, but the claim is false. Two milestones
+missed it because both scoped their file rules to exclude `frontend/`.
 
 ### 2. Phase 5 follow-ups — two left
 

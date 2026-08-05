@@ -353,7 +353,22 @@ Any implementation must hold these; they are not style choices:
 
 ---
 
-## 9. Open questions for the user
+## 9. Rulings — all four settled 2026-08-05
+
+1. **Light default, dark available.** As argued in §2.2.
+2. **CSS Modules + one `tokens.css`.** Zero new runtime dependencies, native
+   to Vite, and component styles stay colocated with components.
+3. **A browser pass is part of "done".** Playwright is installed and
+   `scripts/seed_review_e2e.py` exists, so screenshots are cheap. This closes
+   the standing gap where two UI milestones shipped without anyone looking.
+4. **A ~20-line pathname switch, not React Router** — controller's call,
+   flagged. Runtime dependencies today are exactly `react` and `react-dom`;
+   the only pathname read in the app is `session.ts:21`; and the backend
+   already serves a history fallback (`_SpaFiles(..., html=True)`,
+   `api.py:856`), so `/app/admin` survives a reload without a router. Adding
+   one would be the app's third runtime dependency for one route.
+
+### The original open questions (kept for the record)
 
 1. **Light default with dark available, or dark default?** §2.2 argues light
    for image comparison; the generated system says dark. This is reversible but
