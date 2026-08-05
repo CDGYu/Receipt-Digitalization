@@ -23,9 +23,9 @@ from __future__ import annotations
 import hmac
 import logging
 from dataclasses import dataclass
-from typing import Callable
+from typing import Annotated, Callable
 
-from fastapi import APIRouter, FastAPI, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, Response
 from pydantic import BaseModel
 from starlette.middleware.sessions import SessionMiddleware
 
@@ -160,7 +160,7 @@ class _LoginBody(BaseModel):
 
 
 def build_auth_router() -> APIRouter:
-    """``POST /auth/login`` and ``POST /auth/logout``."""
+    """``POST /auth/login``, ``GET /auth/me`` and ``POST /auth/logout``."""
     router = APIRouter()
 
     @router.post("/auth/login")
@@ -176,6 +176,25 @@ def build_auth_router() -> APIRouter:
                 raise HTTPException(status_code=401, detail="invalid credentials")
             request.session[_SESSION_KEY] = user.username
             return {"username": user.username, "role": user.role}
+
+    @router.get("/auth/me")
+    def me(user: Annotated[SessionUser, Depends(require_user)]) -> dict[str, str]:
+        """Who the caller is -- the reload path for what login already returns.
+
+        The session cookie carries the username only and the browser cannot
+        read it, so after a reload a page knows it *has* a session but not
+        whose. ``POST /auth/login`` has always returned this exact body; this
+        route is what makes it reachable a second time.
+
+        Guarded by :func:`require_user`, so an anonymous caller and the
+        machine key both get 401 rather than a ``{"user": null}`` body. Two
+        consequences, both wanted (ADR-0026): the route stays inside the guard
+        every other authenticated route uses and joins ``READ_ROUTES``; and
+        the frontend's global 401 handler already turns that 401 into "signed
+        out" with no new client logic. The cost is a 401 in the log on every
+        anonymous cold load, which is accepted and recorded.
+        """
+        return {"username": user.username, "role": user.role}
 
     @router.post("/auth/logout")
     def logout(request: Request) -> Response:

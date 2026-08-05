@@ -509,6 +509,8 @@ READ_ROUTES = [
     ("GET", "/receipts/{id}/image", {"reviewer", "admin"}),
     ("GET", "/review/next", {"reviewer", "admin"}),
     ("GET", "/export/xlsx", {"admin"}),
+    # Not a P4.T5 receipt route: the admin UI's reload path (design 2026-08-05 §2).
+    ("GET", "/auth/me", {"reviewer", "admin"}),
 ]
 
 

@@ -15,6 +15,9 @@ The load-bearing behaviours pinned down below:
 
   * no session cookie -> 401; the wrong role on a role-gated route -> 403.
   * a login sets the session cookie (username only) and logout clears it.
+  * ``GET /auth/me`` reports the caller's own username and role -- the same
+    body ``POST /auth/login`` returns -- and 401s once the account is
+    deactivated.
   * an unknown username and a wrong password produce byte-identical 401
     responses -- ``verify_credentials`` already guarantees this; this module
     proves the web layer does not leak the distinction back in. A
@@ -200,6 +203,56 @@ def test_a_deactivated_accounts_login_failure_matches_the_others(client, session
     missing = client.post("/auth/login", json={"username": "nobody", "password": "nope"})
     assert deactivated.status_code == missing.status_code == 401
     assert deactivated.json() == missing.json()
+
+
+def test_auth_me_returns_the_caller_identity(client):
+    client.post("/auth/login", json={"username": "alice", "password": "pw-alice"})
+
+    response = client.get("/auth/me")
+
+    assert response.status_code == 200
+    assert response.json() == {"username": "alice", "role": ROLE_REVIEWER}
+
+
+def test_auth_me_reports_the_admin_role(client):
+    """Two accounts, not one: a handler that hardcoded ``"reviewer"`` would
+    pass the test above and fail this one.
+    """
+    client.post("/auth/login", json={"username": "bob", "password": "pw-bob"})
+
+    assert client.get("/auth/me").json() == {"username": "bob", "role": ROLE_ADMIN}
+
+
+def test_auth_me_returns_the_same_body_as_login(client):
+    """The drift pin. ``POST /auth/login`` has disclosed the role since P4.T3
+    and ``/auth/me`` exists only because the frontend discards that body and a
+    reload cannot get it back (design 1.3). If the two ever disagree, a
+    reloaded page and a freshly signed-in page would render different roles
+    for one account -- and the reloaded one would be the wrong half.
+    """
+    login = client.post("/auth/login", json={"username": "alice", "password": "pw-alice"})
+
+    me = client.get("/auth/me")
+
+    assert login.status_code == me.status_code == 200
+    assert login.json() == me.json()
+
+
+def test_auth_me_reflects_a_deactivation_on_the_next_request(client, session_factory):
+    """``_current_user`` re-reads ``is_active`` from the database on every
+    request, so a deactivated account's *live* session dies immediately rather
+    than at cookie expiry (ADR-0012). This proves ``/auth/me`` sits on that
+    path and does not answer from the cookie alone -- which is exactly the
+    mistake a whoami route invites.
+    """
+    client.post("/auth/login", json={"username": "alice", "password": "pw-alice"})
+    assert client.get("/auth/me").status_code == 200
+
+    with session_factory() as session:
+        deactivate(session, "alice")
+        session.commit()
+
+    assert client.get("/auth/me").status_code == 401
 
 
 def test_deactivating_a_user_invalidates_their_live_session(client, session_factory):
