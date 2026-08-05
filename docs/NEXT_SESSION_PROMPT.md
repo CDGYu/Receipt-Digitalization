@@ -30,7 +30,7 @@ permanent.
    are completed prior milestones; `2026-07-29-review-ui/progress.md` holds
    Phase 5's parked items. **`.superpowers/` is gitignored — open ledgers by
    path; nothing in them is findable by searching the tracked tree.**
-3. **`docs/adr/README.md`, then the ADRs (0001–0025).** Mandatory before
+3. **`docs/adr/README.md`, then the ADRs (0001–0026).** Mandatory before
    touching the matching area. Session-relevant highlights:
    - **0025** — the admin release: admin-only, `OPEN` idempotent, `DONE`
      refused, log-plus-echo audit, the accepted re-claim residual, and the

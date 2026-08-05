@@ -188,11 +188,14 @@ def build_auth_router() -> APIRouter:
 
         Guarded by :func:`require_user`, so an anonymous caller and the
         machine key both get 401 rather than a ``{"user": null}`` body. Two
-        consequences, both wanted (ADR-0026): the route stays inside the guard
-        every other authenticated route uses and joins ``READ_ROUTES``; and
-        the frontend's global 401 handler already turns that 401 into "signed
-        out" with no new client logic. The cost is a 401 in the log on every
-        anonymous cold load, which is accepted and recorded.
+        consequences, both wanted (ADR-0026): the route stays inside
+        :func:`require_user` -- the same guard every other
+        *session*-authenticated route uses (:func:`require_role` builds on
+        it; the machine-key and signed-blob paths are the two that do not) --
+        and joins ``READ_ROUTES``; and the frontend's global 401 handler
+        already turns that 401 into "signed out" with no new client logic.
+        The cost is a 401 in the log on every anonymous cold load, which is
+        accepted and recorded.
         """
         return {"username": user.username, "role": user.role}
 
