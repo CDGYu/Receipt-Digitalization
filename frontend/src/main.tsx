@@ -1,3 +1,22 @@
+// The fonts, then the tokens that name them -- once, at the entry, never
+// per-component. `@fontsource` self-hosts: Vite bundles the woff2 files into
+// `dist`, so this costs no network request at runtime, which is the actual
+// requirement behind design §2.3. The alternative considered was hand-vendored
+// woff2 files under `src/assets/fonts/`; these packages are lockfile-pinned
+// with integrity hashes, which is provenance a hand-copied binary cannot prove.
+//
+// Five imports because the design uses five faces (§3.1): Fira Sans 400/500/600
+// for prose and labels, Fira Code 400/500 for every number. Each file declares
+// all of the family's subsets with a `unicode-range`, so a browser rendering
+// latin text fetches only the latin woff2 -- the rest sit in `dist` unrequested,
+// and a merchant name in Cyrillic or Greek still renders in the right family
+// instead of falling back mid-string.
+import '@fontsource/fira-sans/400.css'
+import '@fontsource/fira-sans/500.css'
+import '@fontsource/fira-sans/600.css'
+import '@fontsource/fira-code/400.css'
+import '@fontsource/fira-code/500.css'
+import './styles/tokens.css'
 import { StrictMode, useSyncExternalStore } from 'react'
 import { createRoot } from 'react-dom/client'
 import { ErrorBoundary } from './ErrorBoundary'

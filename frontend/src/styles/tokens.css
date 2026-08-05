@@ -1,0 +1,102 @@
+/* The review UI's design tokens -- design §3.
+ *
+ * The vocabulary for the whole milestone: Tasks 2-4 consume these names and
+ * introduce no raw hex, so every colour a component can reach is defined here
+ * and nowhere else.
+ *
+ * The fonts are self-hosted through `@fontsource/fira-sans` and
+ * `@fontsource/fira-code`, imported by weight in `src/main.tsx`. There is no
+ * `@font-face` block here and no `@import url(...)`: design §2.3 records why a
+ * CDN is not usable -- the service runs on a LAN and the suite is offline, so a
+ * CDN import renders fallback fonts exactly where the app is deployed. Vite
+ * bundles the woff2 files into `dist`, so nothing here reaches the network at
+ * runtime either; the packages only add lockfile-pinned provenance that a
+ * hand-vendored binary could not prove.
+ */
+
+:root {
+  --font-sans: 'Fira Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'Fira Code', ui-monospace, 'Cascadia Mono', Consolas, monospace;
+
+  --text-xs: 0.75rem;  --text-sm: 0.875rem; --text-base: 1rem;
+  --text-lg: 1.125rem; --text-xl: 1.5rem;   --text-2xl: 2rem;
+
+  --space-xs: 2px;  --space-sm: 4px;  --space-md: 8px;  --space-lg: 12px;
+  --space-xl: 16px; --space-2xl: 24px; --space-3xl: 32px;
+
+  --radius-sm: 4px; --radius-md: 8px; --radius-lg: 12px;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,.05);
+  --shadow-md: 0 4px 6px rgba(0,0,0,.1);
+
+  /* Light is the default theme (design §2.2). */
+  --color-background: #F8FAFC;
+  --color-surface: #FFFFFF;
+  --color-surface-raised: #FFFFFF;
+  --color-foreground: #0F172A;
+  --color-muted-foreground: #475569;
+  --color-border: #E2E8F0;
+  --color-primary: #0F172A;
+  --color-ring: #2563EB;
+  --color-severity-error: #DC2626;
+  --color-severity-warn: #B45309;
+  --color-severity-info: #1D4ED8;
+  --color-positive: #15803D;
+  --color-null: #64748B;
+}
+
+:root[data-theme='dark'] {
+  --color-background: #020617;
+  --color-surface: #0E1223;
+  --color-surface-raised: #1A1E2F;
+  --color-foreground: #F8FAFC;
+  --color-muted-foreground: #94A3B8;
+  --color-border: #334155;
+  --color-primary: #F8FAFC;
+  --color-ring: #60A5FA;
+  --color-severity-error: #EF4444;
+  --color-severity-warn: #F59E0B;
+  --color-severity-info: #60A5FA;
+  --color-positive: #22C55E;
+  --color-null: #64748B;
+}
+
+/* `:root:not([data-theme='light'])` is load-bearing, not a flourish: it lets an
+ * explicit light choice win over an OS dark preference, while an unset
+ * preference still follows the OS. A bare `:root` here would make the OS
+ * setting unbeatable; a bare `[data-theme='dark']` would make the OS setting
+ * unreachable. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --color-background: #020617;
+    --color-surface: #0E1223;
+    --color-surface-raised: #1A1E2F;
+    --color-foreground: #F8FAFC;
+    --color-muted-foreground: #94A3B8;
+    --color-border: #334155;
+    --color-primary: #F8FAFC;
+    --color-ring: #60A5FA;
+    --color-severity-error: #EF4444;
+    --color-severity-warn: #F59E0B;
+    --color-severity-info: #60A5FA;
+    --color-positive: #22C55E;
+    --color-null: #64748B;
+  }
+}
+
+body {
+  margin: 0;
+  background: var(--color-background);
+  color: var(--color-foreground);
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  line-height: 1.5;
+}
+
+:where(a, button, input, select, textarea):focus-visible {
+  outline: 2px solid var(--color-ring);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; animation: none !important; }
+}
