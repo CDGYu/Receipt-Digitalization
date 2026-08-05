@@ -516,6 +516,15 @@ def _extra_tasks(session_factory) -> None:
     ``next_task`` resumes before it claims (ADR-0016), so carol's second call
     would return her first task unchanged; closing the first is what lets her
     hold one ``DONE`` row and one ``IN_PROGRESS`` row.
+
+    **Carol's first claim takes the *seeded* task, not one of these three.**
+    ``_seed`` enqueues ``RECEIPT_B`` at priority 1 and these are priority 2,
+    and the queue serves the lowest priority number first -- so the ``DONE``
+    row ends up being ``RECEIPT_B``'s and the ``IN_PROGRESS`` row is one of
+    these. The end state is four tasks: one ``DONE`` (carol), one
+    ``IN_PROGRESS`` (carol), two ``OPEN`` and unassigned. Every assertion
+    below is written against that end state, so do not "fix" the priorities
+    without re-reading them.
     """
     with session_factory() as session:
         for _ in range(3):
