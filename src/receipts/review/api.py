@@ -9,7 +9,8 @@ install_session_middleware`, which refuses to start without
 not a generated default), mounts the auth router
 (:func:`~receipts.review.auth.build_auth_router`), installs the error
 handlers, and installs the read routes (Task 4: ``GET /health``,
-``GET /receipts``, ``GET /receipts/{id}``, ``GET /metrics``) and the write
+``GET /receipts``, ``GET /receipts/{id}``, ``GET /metrics``; plus
+``GET /review/tasks``, the admin UI's queue listing) and the write
 routes (Task 5: ``POST /upload``, ``PATCH /receipts/{id}``, the signed image
 routes, the review queue routes, ``GET /export/xlsx``), and finally -- after
 every one of those -- the SPA static mount (P5.T0: ``_install_spa``), which
@@ -51,7 +52,7 @@ from config.settings import Settings, get_settings
 
 from ..export.xlsx import export_workbook
 from ..ingest.ingest import ReceiptJob, ingest_bytes
-from ..persist.models import Receipt, ReviewTask
+from ..persist.models import Receipt, ReviewState, ReviewTask
 from ..persist.repository import (
     apply_corrections,
     create_pending_receipt,
@@ -71,7 +72,7 @@ from .auth import (
     sign_url,
     verify_signature,
 )
-from .queue import close_task, next_task, queue_stats, release_task
+from .queue import close_task, list_tasks, next_task, queue_stats, release_task
 from .schemas import (
     CorrectionPatch,
     ErrorBody,
@@ -79,6 +80,7 @@ from .schemas import (
     HealthStatus,
     MetricsResponse,
     ReceiptListResponse,
+    ReviewTaskListResponse,
 )
 from .serializers import build_export_rows, query_export_receipts, receipt_detail, receipt_summary
 
@@ -149,6 +151,25 @@ def _install_error_handlers(app: FastAPI) -> None:
             content=_error_body(str(exc.detail)),
             headers=exc.headers,
         )
+
+
+# --------------------------------------------------------------------------- #
+# Shared serialization helpers
+# --------------------------------------------------------------------------- #
+
+
+def _task_summary(task: ReviewTask) -> dict[str, Any]:
+    """A :class:`~receipts.persist.models.ReviewTask` row as JSON."""
+    return {
+        "id": str(task.id),
+        "receipt_id": str(task.receipt_id),
+        "reason": task.reason,
+        "priority": task.priority,
+        "assigned_to": task.assigned_to,
+        "state": task.state.value,
+        "opened_at": task.opened_at.isoformat(),
+        "closed_at": task.closed_at.isoformat() if task.closed_at is not None else None,
+    }
 
 
 # --------------------------------------------------------------------------- #
@@ -264,24 +285,45 @@ def _install_read_routes(app: FastAPI) -> None:
             },
         }
 
+    @app.get("/review/tasks", response_model=ReviewTaskListResponse)
+    def list_review_tasks(
+        request: Request,
+        user: Annotated[SessionUser, Depends(require_user)],
+        state: ReviewState | None = None,
+        limit: int = Query(50, ge=1, le=200),
+        offset: int = Query(0, ge=0),
+    ) -> Any:
+        """The review queue as rows, so an admin can find a task id (§14.9).
+
+        Guarded by ``require_user``, **not** ``require_role``: both roles reach
+        this route and differ only in which rows come back -- an admin sees
+        every task, a reviewer sees the open backlog plus their own (ADR-0026).
+        That is exactly why this route cannot express its own rule in
+        ``test_api_read.py``'s ``READ_ROUTES`` table, for the same reason
+        ``POST /review/{id}/complete`` cannot: the table's shape is one boolean
+        per role, and this difference is not one.
+
+        Declared here rather than beside ``GET /review/next``, which lives with
+        the write routes because claiming a task *writes*. This one does not.
+
+        ``has_more`` comes off a ``limit + 1`` fetch, like ``GET /receipts``.
+        """
+        visible_to = None if user.role == ROLE_ADMIN else user.username
+        with request.app.state.session_factory() as session:
+            rows = list_tasks(
+                session,
+                visible_to=visible_to,
+                state=state,
+                limit=limit + 1,
+                offset=offset,
+            )
+            items = [_task_summary(task) for task in rows[:limit]]
+        return {"items": items, "has_more": len(rows) > limit}
+
 
 # --------------------------------------------------------------------------- #
 # Write routes (P4.T5)
 # --------------------------------------------------------------------------- #
-
-
-def _task_summary(task: ReviewTask) -> dict[str, Any]:
-    """A :class:`~receipts.persist.models.ReviewTask` row as JSON."""
-    return {
-        "id": str(task.id),
-        "receipt_id": str(task.receipt_id),
-        "reason": task.reason,
-        "priority": task.priority,
-        "assigned_to": task.assigned_to,
-        "state": task.state.value,
-        "opened_at": task.opened_at.isoformat(),
-        "closed_at": task.closed_at.isoformat() if task.closed_at is not None else None,
-    }
 
 
 def _image_key_for(receipt: Receipt, variant: ImageVariant) -> str:

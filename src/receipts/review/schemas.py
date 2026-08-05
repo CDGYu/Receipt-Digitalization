@@ -36,6 +36,7 @@ __all__ = [
     "MetricsResponse",
     "QueueStatsOut",
     "ReceiptListResponse",
+    "ReviewTaskListResponse",
     "ThresholdsOut",
 ]
 
@@ -61,6 +62,20 @@ class ReceiptListResponse(BaseModel):
 
     ``has_more`` is read off the extra row a ``limit + 1`` fetch returns, not
     a ``COUNT(*)`` -- see ``_install_read_routes``.
+    """
+
+    items: list[dict[str, Any]]
+    has_more: bool
+
+
+class ReviewTaskListResponse(BaseModel):
+    """One page of ``_task_summary`` rows (``GET /review/tasks``).
+
+    Same envelope-typed / payload-untyped split as
+    :class:`ReceiptListResponse`, for the reason the module docstring gives:
+    redeclaring a task's fields here would be a second place for the shape to
+    drift from ``_task_summary``, silently, until one field disagreed.
+    ``has_more`` is read off the extra row a ``limit + 1`` fetch returns.
     """
 
     items: list[dict[str, Any]]

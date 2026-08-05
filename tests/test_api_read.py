@@ -44,7 +44,7 @@ from receipts.persist.repository import _RECEIPT_FIELDS  # noqa: E402
 from receipts.persist.session import make_engine, make_session_factory  # noqa: E402
 from receipts.persist.users import ROLE_ADMIN, ROLE_REVIEWER, create_user  # noqa: E402
 from receipts.review.api import create_app  # noqa: E402
-from receipts.review.queue import enqueue_review  # noqa: E402
+from receipts.review.queue import close_task, enqueue_review, next_task  # noqa: E402
 from receipts.score.confidence import ReceiptStatus  # noqa: E402
 from receipts.validate.report import Severity  # noqa: E402
 
@@ -511,6 +511,10 @@ READ_ROUTES = [
     ("GET", "/export/xlsx", {"admin"}),
     # Not a P4.T5 receipt route: the admin UI's reload path (design 2026-08-05 §2).
     ("GET", "/auth/me", {"reviewer", "admin"}),
+    # Also the admin UI's and also not a receipt route: the queue listing
+    # (design 2026-08-05 §3). Its row is about status codes only -- see the
+    # block comment below for what this table cannot say about it.
+    ("GET", "/review/tasks", {"reviewer", "admin"}),
 ]
 
 
@@ -541,6 +545,16 @@ def test_auth_matrix(clients, method, path, allowed, actor, receipt_id):
 # `tests/test_api_write.py` instead
 # (`test_a_reviewer_cannot_complete_someone_elses_task` and
 # `test_an_admin_can_complete_a_task_assigned_to_someone_else`).
+#
+# `GET /review/tasks` is the second route this table cannot fully express,
+# and it differs from that one by taking a row anyway: both roles do get 200,
+# so the boolean-per-role shape is right about the status code and the row
+# above is true as far as it goes. What the table cannot say is that the two
+# roles get *different rows back* (ADR-0026) -- a difference in content, not
+# in access -- so its row covers status codes only, and the content half is
+# pinned behaviourally at the bottom of this module by
+# `test_the_reviewer_scope_never_returns_someone_elses_name` and
+# `test_an_admin_sees_a_task_assigned_to_someone_else`.
 # --------------------------------------------------------------------------- #
 
 
@@ -577,3 +591,135 @@ def test_patch_auth_matrix(clients, actor, receipt_id):
         assert response.status_code == 200
     else:
         assert response.status_code == 401
+
+
+# --------------------------------------------------------------------------- #
+# GET /review/tasks (design 2026-08-05 §3): equal access, role-dependent
+# content. A read route -- the write-route block comment above introduces
+# `test_upload_auth_matrix` and `test_patch_auth_matrix` and stops here.
+# --------------------------------------------------------------------------- #
+
+
+def _extra_tasks(session_factory) -> None:
+    """Three more tasks so a scope has something to hide.
+
+    Every row is produced through the **public queue API** -- enqueue, claim,
+    close -- so the shapes are exactly the ones the system can actually reach,
+    rather than hand-built rows that might not be.
+
+    ``next_task`` resumes before it claims (ADR-0016), so carol's second call
+    would return her first task unchanged; closing the first is what lets her
+    hold one ``DONE`` row and one ``IN_PROGRESS`` row.
+
+    **Carol's first claim takes the *seeded* task, not one of these three.**
+    ``_seed`` enqueues ``RECEIPT_B`` at priority 1 and these are priority 2,
+    and the queue serves the lowest priority number first -- so the ``DONE``
+    row ends up being ``RECEIPT_B``'s and the ``IN_PROGRESS`` row is one of
+    these. The end state is four tasks: one ``DONE`` (carol), one
+    ``IN_PROGRESS`` (carol), two ``OPEN`` and unassigned. Every assertion
+    below is written against that end state, so do not "fix" the priorities
+    without re-reading them.
+    """
+    with session_factory() as session:
+        for _ in range(3):
+            extra_id = uuid.uuid4()
+            session.add(
+                Receipt(
+                    id=extra_id,
+                    status=ReceiptStatus.NEEDS_REVIEW,
+                    confidence=Decimal("0.400"),
+                    image_key=f"receipts/2026/08/{extra_id}/original.jpg",
+                    image_phash="",
+                )
+            )
+            session.flush()
+            enqueue_review(session, extra_id, reason="needs_review", priority=2)
+
+        first = next_task(session, "carol")
+        assert first is not None
+        close_task(session, first.id)
+        second = next_task(session, "carol")
+        assert second is not None
+        session.commit()
+
+
+def test_the_reviewer_scope_never_returns_someone_elses_name(session_factory, reviewer_client):
+    """The privacy pin for ADR-0026's dual scope.
+
+    A reviewer's page may contain only rows whose ``assigned_to`` is NULL or
+    their own. That holds because every path producing an ``OPEN`` row clears
+    ``assigned_to`` -- pinned per-path in ``tests/test_review_queue.py`` -- and
+    this asserts the property the *route* actually claims, which is where a
+    fourth ``OPEN``-producer would show up.
+
+    Goes red if ``list_tasks`` stops scoping: carol's ``IN_PROGRESS`` row
+    arrives with her name on it.
+    """
+    _extra_tasks(session_factory)
+
+    body = reviewer_client.get("/review/tasks?limit=200").json()
+
+    # Not decoration: without rows this assertion set is vacuous, and a
+    # vacuously-passing privacy test is worse than none.
+    assert body["items"]
+    assert {row["assigned_to"] for row in body["items"]} <= {None, "alice"}
+
+
+def test_an_admin_sees_a_task_assigned_to_someone_else(session_factory, admin_client):
+    """The other half of the scope: an admin needs the holder's name, because
+    that is who they are taking the task away from (ADR-0025).
+    """
+    _extra_tasks(session_factory)
+
+    body = admin_client.get("/review/tasks?limit=200").json()
+
+    assert any(row["assigned_to"] == "carol" for row in body["items"])
+
+
+def test_tasks_come_back_in_queue_order(session_factory, admin_client):
+    """Lower priority number first -- the same total order ``_claim_stmt``
+    uses. The seeded ``RECEIPT_B`` task is priority 1 and ``_extra_tasks``
+    adds priority 2s, so the seeded one must lead.
+    """
+    _extra_tasks(session_factory)
+
+    items = admin_client.get("/review/tasks?limit=200").json()["items"]
+
+    priorities = [row["priority"] for row in items]
+    assert priorities == sorted(priorities)
+    assert priorities[0] == 1
+
+
+def test_has_more_is_true_only_when_a_further_page_exists(session_factory, admin_client):
+    """Read off a ``limit + 1`` fetch, like ``GET /receipts`` -- never a
+    ``COUNT(*)`` per page. Four tasks total: the seeded one plus three.
+    """
+    _extra_tasks(session_factory)
+
+    first = admin_client.get("/review/tasks?limit=2").json()
+    rest = admin_client.get("/review/tasks?limit=2&offset=2").json()
+
+    assert len(first["items"]) == 2
+    assert first["has_more"] is True
+    assert len(rest["items"]) == 2
+    assert rest["has_more"] is False
+
+
+def test_the_state_filter_narrows_and_rejects_an_unknown_value(session_factory, admin_client):
+    _extra_tasks(session_factory)
+
+    in_progress = admin_client.get("/review/tasks?state=in_progress").json()
+
+    assert in_progress["items"]
+    assert {row["state"] for row in in_progress["items"]} == {"in_progress"}
+    assert admin_client.get("/review/tasks?state=nonsense").status_code == 422
+
+
+def test_the_literal_tasks_path_is_not_captured_by_a_task_id_route(admin_client):
+    """``/review/tasks`` must never be matched as ``/review/{task_id}``.
+    FastAPI matches in declaration order, so a future ``GET /review/{task_id}``
+    declared *before* this route would bind ``task_id="tasks"`` and fail UUID
+    validation with a 422. No such route exists today; this asserts the
+    outcome rather than the absence, so it keeps guarding if one is added.
+    """
+    assert admin_client.get("/review/tasks").status_code == 200
