@@ -212,28 +212,37 @@ function referencedClasses(tsx: string): Set<string> {
  *  the **value axis**: a property is looked up as a property and compared to a
  *  whole value, so no declaration can answer for another.
  *
- *  Round 2 claimed that closed "the class". It did not -- it moved the needle
- *  from the value to the **selector**, and round 3 broke it there. All three of
- *  these satisfied every §4 assertion while `.notExtracted`, the class actually
- *  on the mark, carried none of them:
+ *  ## The guarantee, stated once and bounded
  *
- *    * `.notExtractedInline { ... }` above `.notExtracted { padding-left: ... }`
- *      -- an unanchored `indexOf` matches the longer name first;
- *    * `@media (...) { .notExtracted { ... } }` above the gutted base rule;
- *    * `.notExtracted:hover { ... }` above the gutted base rule.
+ *  **This function returns the declarations of the unique top-level rule whose
+ *  selector is *exactly* `selector`, and throws otherwise.** That is the whole
+ *  claim. It is a property, not a list of defeated shapes.
  *
- *  Neither shape is contrived: `Button.module.css:55` is
- *  `.button:hover:not(:disabled)` and `tokens.css:106` is a
- *  `prefers-color-scheme` block, so hoisting the mark's paint into a dark-theme
- *  block is one ordinary refactor away from losing §4's headline signal in light
- *  mode with the guard green.
+ *  Stating it that way is the actual fix here, and it took three rounds to
+ *  arrive at. Round 1 anchored nothing and `border-left` answered for `color`.
+ *  Round 2 anchored inside the body and `@media`, `:hover` and a longer class
+ *  name answered for the rule. Round 3 anchored the selector's trailing edge and
+ *  `.numeric.notExtracted` answered for it. Each round closed the shapes that had
+ *  been found and then re-asserted that the whole class was closed; each was
+ *  falsified by the next shape. **The recurring defect was the claim, not the
+ *  code.** So the docblock now claims exactly what is enforced, and the shapes
+ *  live in the tests as examples rather than here as a guarantee.
  *
- *  So the selector axis is closed three ways: the match must be followed by a
- *  **boundary** (`[\s{,]`), so a longer class name and a pseudo-class are not it;
- *  it must sit at **brace depth 0**, so a copy nested in an at-rule is not it
- *  (the boundary alone does not cover this -- `.notExtracted ` inside `@media`
- *  passes it); and it must be **unique**, because two top-level rules for one
- *  selector leave nothing to say which paints the mark.
+ *  Exactness is enforced on four fronts, which is what "exactly, uniquely,
+ *  top-level" decomposes into:
+ *
+ *    * a **leading** boundary -- walking back over whitespace, the previous
+ *      non-space character must be `}` or `,` or start-of-input, so a qualifier
+ *      in front (`.numeric.notExtracted`, `.numeric .notExtracted`,
+ *      `.numeric > .notExtracted`, `span.notExtracted`, `[data-x].notExtracted`)
+ *      is a different selector and not this one;
+ *    * a **trailing** boundary (`[\s{,]`), so `.notExtractedInline` and
+ *      `.notExtracted:hover` are not it either;
+ *    * **brace depth 0**, so a copy nested in an at-rule is not it. The
+ *      boundaries alone do not cover this -- `.notExtracted ` inside `@media`
+ *      satisfies both perfectly well;
+ *    * **uniqueness**, because two top-level rules for one selector leave
+ *      nothing to say which paints the mark.
  *
  *  Absence **throws** rather than returning an empty map. `indexOf` returning -1
  *  fed `code.indexOf('{', -1)`, which clamps to 0 and silently read the *first
@@ -241,12 +250,40 @@ function referencedClasses(tsx: string): Set<string> {
  *  carries `font-family: var(--font-mono)`, so the font assertion would have gone
  *  green against an unrelated rule.
  *
- *  Still not closed, and not claimed to be: this is a scanner, not a CSS parser.
- *  It assumes rules do not nest inside a top-level rule and that values carry no
- *  braces or semicolons, which holds for these four stylesheets.
+ *  What this is **not**: a CSS parser. The guarantee above is about locating a
+ *  rule, and it says nothing about parsing one. Reading the body assumes rules do
+ *  not nest inside a top-level rule and that values carry no braces or
+ *  semicolons. That holds for these four stylesheets and is not claimed beyond
+ *  them.
  *
  *  First colon wins, which is right for these values -- none contains a colon,
  *  and `var(--x)` does not. */
+/** Whether the occurrence of `selector` at `at` is the *whole* selector rather
+ *  than a fragment of a longer one -- both edges, per `declarationsIn`'s
+ *  guarantee.
+ *
+ *  The leading edge walks back over whitespace and requires `}`, `,` or
+ *  start-of-input: the three things that can precede a complete selector at the
+ *  top level, being respectively the end of the previous rule, the previous
+ *  member of a comma list, and the top of the file. Anything else -- a class, a
+ *  tag, `>`, `]` -- means this occurrence is qualified by something, and a
+ *  qualified selector does not match the element the component actually renders.
+ *
+ *  Provenance, stated honestly: unlike the at-rule and pseudo-class shapes, there
+ *  is no compound or descendant selector anywhere in the five tracked CSS files,
+ *  so this edge is closed on the strength of the property rather than of an
+ *  observed pattern. */
+function exactlyThisSelector(code: string, at: number, selector: string): boolean {
+  if (!/[\s{,]/.test(code[at + selector.length] ?? '')) {
+    return false
+  }
+  let back = at - 1
+  while (back >= 0 && /\s/.test(code[back] ?? '')) {
+    back -= 1
+  }
+  return back < 0 || code[back] === '}' || code[back] === ','
+}
+
 function declarationsIn(css: string, selector: string): Map<string, string> {
   const code = css.replace(/\/\*[\s\S]*?\*\//g, '')
   const starts: number[] = []
@@ -256,20 +293,18 @@ function declarationsIn(css: string, selector: string): Map<string, string> {
       depth += 1
     } else if (code[i] === '}') {
       depth -= 1
-    } else if (depth === 0 && code.startsWith(selector, i)) {
-      // A boundary, not just a prefix: `.notExtractedInline` and
-      // `.notExtracted:hover` are different selectors and must not answer here.
-      if (/[\s{,]/.test(code[i + selector.length] ?? '')) {
-        starts.push(i)
-      }
+    } else if (depth === 0 && code.startsWith(selector, i) && exactlyThisSelector(code, i, selector)) {
+      starts.push(i)
     }
   }
   if (starts.length !== 1) {
     throw new Error(
       starts.length === 0
-        ? `no top-level rule for ${selector}. It was renamed, or it moved inside ` +
-          `an at-rule -- either way this guard is reading nothing and must not ` +
-          `silently pass.`
+        ? `no top-level rule whose selector is exactly ${selector}. It was ` +
+          `renamed, or it gained a qualifier (${selector} is not ` +
+          `.x${selector}), or it moved inside an at-rule -- and the element the ` +
+          `component renders carries ${selector} alone, so none of those paint ` +
+          `it. This guard is reading nothing and must not silently pass.`
         : `${starts.length} top-level rules for ${selector}; the guard cannot ` +
           `tell which one paints it. Fold them into one.`,
     )
@@ -313,14 +348,27 @@ function declarationsIn(css: string, selector: string): Map<string, string> {
  *  `| 'critical'`.
  *
  *  So the match must consume the whole annotation: if the next thing after it is
- *  another `|`, the union continued and this parse is a lie. The check skips line
- *  comments as well as whitespace, because the third spelling hides the `|`
- *  behind one -- and note the direction. `referencedClasses` strips block
- *  comments only, and justifies it because the residue causes a *false failure*.
- *  Here the identical gap causes a *false pass*, which is why it is closed rather
- *  than documented. */
+ *  another `|`, the union continued and this parse is a lie.
+ *
+ *  **Line comments are stripped before the match, not merely skipped after it.**
+ *  Round 3 did only the latter and left the leftmost-`exec` door open: a
+ *  `// tone: 'error' | ... | 'neutral'` line *above* a union genuinely extended
+ *  with `| 'critical'` wins the match, and the tail check then sees `\n  tone:`
+ *  rather than `|` and stays quiet -- five stale members, agreeing with the
+ *  hand-maintained list, green, with `.critical` shipping `class="undefined"`.
+ *  G4 through the door round 3's own docblock called closed. Not live today (no
+ *  `//` comment in `frontend/src` mentions `tone:` or `variant:`), and closed
+ *  anyway, because round 3's stated reasoning already argued for it.
+ *
+ *  Note the direction, which is why this differs from `referencedClasses`. There,
+ *  block-comments-only leaves a residue that causes a *false failure* -- loud,
+ *  one edit from fixed. Here the identical gap causes a *false pass*. Same gap,
+ *  opposite consequence, opposite call. Stripping `//` over the whole file is
+ *  safe for *this* helper because it only ever removes text, and the pattern it
+ *  looks for cannot span a newline, so nothing can be joined into a spurious
+ *  match. */
 function unionMembers(source: string, prop: string): string[] {
-  const code = source.replace(/\/\*[\s\S]*?\*\//g, '')
+  const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '')
   const union = new RegExp(`\\b${prop}\\??:\\s*((?:'[\\w-]+'\\s*\\|\\s*)*'[\\w-]+')`).exec(code)
   if (union === null) {
     return []
@@ -460,6 +508,54 @@ describe('every class a component references exists in its stylesheet', () => {
     }
   })
 
+  it('reads the selector exactly, so a qualifier in front is a different rule', () => {
+    // The leading edge. Round 3 anchored only the trailing one, so anything
+    // *prefixed* to the selector still matched -- and unlike the hoist shapes,
+    // these need no second rule: replacing `.notExtracted {` with
+    // `.numeric.notExtracted {` leaves all three §4 declarations asserted while
+    // the mark, which renders with `.notExtracted` alone, gets no paint at all.
+    const paint = 'color: var(--color-null)'
+    const gutted = '.notExtracted { padding-left: 4px }'
+
+    for (const [label, qualified] of [
+      ['a compound class', '.numeric.notExtracted'],
+      ['a descendant', '.numeric .notExtracted'],
+      ['a child combinator', '.numeric > .notExtracted'],
+      ['a tag qualifier', 'span.notExtracted'],
+      ['an attribute qualifier', '[data-x].notExtracted'],
+    ] as const) {
+      // Alone, a qualified selector is not this selector at all.
+      expect(
+        () => declarationsIn(`${qualified} { ${paint} }`, '.notExtracted'),
+        `${label}: answered for the unqualified rule`,
+      ).toThrow(/no top-level rule whose selector is exactly/)
+
+      // ...and beside the real rule, it is the real one that is read.
+      const found = declarationsIn(`${qualified} { ${paint} }\n${gutted}`, '.notExtracted')
+      expect(found.get('padding-left'), `${label}: read the decoy`).toBe('4px')
+      expect(found.get('color'), `${label}: the decoy's paint answered`).toBeUndefined()
+    }
+  })
+
+  it('accepts every shape the real stylesheets actually use', () => {
+    // The other half of the leading edge: it must not reject legitimate CSS. The
+    // three things that can precede a complete top-level selector are the top of
+    // the file, the previous rule's `}`, and a comma.
+    expect(declarationsIn('.first { color: red }', '.first').get('color')).toBe('red')
+    expect(declarationsIn('.a { color: red }\n.b { color: blue }', '.b').get('color')).toBe('blue')
+    expect(declarationsIn('.a,\n.b { color: red }', '.b').get('color')).toBe('red')
+    // And the real files, which is the case that actually matters.
+    for (const component of COMPONENTS) {
+      const css = read(component.css)
+      for (const name of declaredClasses(css)) {
+        expect(
+          () => declarationsIn(css, `.${name}`),
+          `${component.css}: .${name} is declared but not locatable`,
+        ).not.toThrow()
+      }
+    }
+  })
+
   it('throws rather than reading the wrong rule when the selector is not there', () => {
     // `indexOf` returned -1, and `indexOf('{', -1)` clamps to 0 -- so the helper
     // silently read the FIRST rule in the file. Against the real stylesheet that
@@ -467,7 +563,7 @@ describe('every class a component references exists in its stylesheet', () => {
     // assertion would have passed against an unrelated rule while the message
     // blamed the colour.
     expect(() => declarationsIn('.numeric { font-family: var(--font-mono) }', '.gone')).toThrow(
-      /no top-level rule/,
+      /no top-level rule whose selector is exactly/,
     )
     // Two top-level rules for one selector leave nothing to say which paints it.
     expect(() => declarationsIn('.x { color: red }\n.x { color: blue }', '.x')).toThrow(
@@ -485,10 +581,44 @@ describe('every class a component references exists in its stylesheet', () => {
     for (const [label, tail] of [
       ['a double-quoted member', ' | "critical"'],
       ['a type alias member', ' | LegacyTones'],
-      ['a line comment hiding the continuation', "\n  // and one more\n  | 'critical'"],
     ] as const) {
       expect(() => unionMembers(five + tail, 'tone'), label).toThrow(/continues past/)
     }
+
+    // A line comment *inside* the union was a third truncation spelling in round
+    // 3, which skipped comments only in the tail check. Stripping them before the
+    // match subsumes it: the union now parses in full rather than being rejected,
+    // which is the better outcome -- six members derived, and the equality check
+    // against the hand-maintained five is what reds.
+    expect(unionMembers(`${five}\n  // and one more\n  | 'critical'`, 'tone')).toEqual([
+      'error',
+      'warn',
+      'info',
+      'positive',
+      'neutral',
+      'critical',
+    ])
+  })
+
+  it('is not diverted by a line comment that looks like the union', () => {
+    // The leftmost-`exec` door. A commented-out copy of the OLD union above the
+    // real, extended one wins the match; the tail check then sees `tone:` rather
+    // than `|` and stays quiet, so five stale members agree with the list and the
+    // sixth tone ships unpainted. Stripping `//` before the match is what closes
+    // it -- skipping comments only in the tail check does not.
+    const decoyed =
+      `  // ${"tone: 'error' | 'warn' | 'info' | 'positive' | 'neutral'"}\n` +
+      `  tone: 'error' | 'warn' | 'info' | 'positive' | 'neutral' | 'critical'\n`
+    // Round 3 derived the decoy's five stale members here, which matched the
+    // hand-maintained list and went green. It now reads the real union, so
+    // `critical` is in the derived set and the equality check reds.
+    expect(unionMembers(decoyed, 'tone')).toContain('critical')
+    expect(unionMembers(decoyed, 'tone')).toHaveLength(6)
+
+    // ...and the same decoy above an unextended union still reads the real one
+    // rather than the comment's invented members.
+    const honest = `  // ${"tone: 'stale' | 'members'"}\n  tone: 'error' | 'warn'\n`
+    expect(unionMembers(honest, 'tone')).toEqual(['error', 'warn'])
   })
 
   it('gives the not-extracted mark all three signals §4 names for it', () => {
