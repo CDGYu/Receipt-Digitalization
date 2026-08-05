@@ -1440,10 +1440,12 @@ def enqueue_review(receipt_id: UUID, reason: str, priority: int) -> ReviewTask
 def next_task(assignee: str) -> ReviewTask | None
 def close_task(task_id: UUID) -> ReviewTask
 def release_task(task_id: UUID) -> tuple[ReviewTask, str | None]
+def list_tasks(visible_to: str | None, state: ReviewState | None, limit: int, offset: int) -> list[ReviewTask]
 def queue_stats() -> QueueStats
 
 # api.py  (FastAPI routes)
 POST   /auth/login                -> sets the session cookie
+GET    /auth/me                   -> the caller's username and role
 POST   /auth/logout
 POST   /upload                    -> ReceiptJob (writes a `pending` row first)
 GET    /receipts                  -> paginated list
@@ -1451,6 +1453,7 @@ GET    /receipts/{id}             -> record + findings + confidence explanation
 PATCH  /receipts/{id}             -> apply corrections
 GET    /receipts/{id}/image       -> signed URL
 GET    /receipts/{id}/image/blob  -> streams the bytes; HMAC-signed, no session
+GET    /review/tasks              -> paginated list; scope depends on role
 GET    /review/next               -> next task for the caller
 POST   /review/{id}/complete      -> {id} is the TASK id; assignee or admin only
 POST   /review/{id}/release       -> {id} is the TASK id; admin only
@@ -1463,9 +1466,11 @@ Auth is a signed session cookie carrying the username only, with the role re-rea
 per request, plus a separate `X-API-Key` for unattended upload (ADR-0012). Every
 route except `/health`, `/auth/login` and the signed image blob requires a session;
 `GET /export/xlsx` and `POST /review/{id}/release` are the routes that require
-`admin`. The API key authorizes `POST /upload` and nothing else — it can neither
-read a receipt nor write a correction, because a correction must name the person
-who made it.
+`admin`. `GET /review/tasks` is a third case: both roles reach it, and the role
+decides which rows come back — an admin sees every task, a reviewer sees the open
+backlog plus their own (ADR-0026). The API key authorizes `POST /upload` and
+nothing else — it can neither read a receipt nor write a correction, because a
+correction must name the person who made it.
 
 ### 14.10 `pipeline.py` and `cli.py`
 

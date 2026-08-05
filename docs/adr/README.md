@@ -31,6 +31,7 @@ Accepted; supersede it with a new ADR rather than editing history.
 | [0023](0023-parallel-task-agents-share-one-worktree.md) | Parallel task agents share one worktree, so uncommitted work is not durable | Accepted |
 | [0024](0024-review-ui-error-recovery-contract.md) | The review UI's error-recovery contract | Accepted |
 | [0025](0025-admin-release-for-a-claimed-task.md) | Admin release for a claimed review task | Accepted |
+| [0026](0026-admin-ui-backend-routes.md) | The admin UI's backend routes: whoami, and a scoped task listing | Accepted |
 
 Read **0001** first: it is the invariant everything else defers to. **0007** is
 the one to read before touching anything that writes card data or money, and
@@ -38,6 +39,10 @@ the one to read before touching anything that writes card data or money, and
 which card groupings the detector covers, and of the residual it deliberately
 leaves. **0017** is the one to read before believing a green test run — `npm
 test` does not type-check, and that trap fired three times in one milestone.
+**0026** is the one to read before writing anything that can leave a review task
+`OPEN`: `GET /review/tasks` discloses no reviewer's name to another reviewer only
+because every existing `OPEN`-producer clears `assigned_to`, and nothing in the
+schema enforces that.
 
 Primary sources these build on: `RECEIPT_SYSTEM_SPEC.md` (build spec),
 `README.md` (§5 design decisions), `VLM_AND_DATA.md`, and the always-on
