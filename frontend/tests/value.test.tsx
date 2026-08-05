@@ -197,6 +197,42 @@ function referencedClasses(tsx: string): Set<string> {
   return new Set(Array.from(code.matchAll(/\bstyles\.([A-Za-z]\w*)/g), (match) => match[1]))
 }
 
+/** Whether the occurrence of `selector` at `at` is the *whole* selector rather
+ *  than a fragment of a longer one -- both edges, per `declarationsIn`'s
+ *  guarantee.
+ *
+ *  The leading edge walks back over whitespace and requires `}`, `,` or
+ *  start-of-input: the end of the previous rule, the previous member of a comma
+ *  list, and the top of the file. Anything else -- a class, a tag, `>`, `]` --
+ *  means this occurrence is qualified by something, and a qualified selector does
+ *  not match the element the component actually renders.
+ *
+ *  Those three are not everything that can *legally* precede a selector: a `;`
+ *  can, after a statement at-rule such as `@import` or `@charset`. That is
+ *  deliberately not accepted. It makes a stylesheet with a leading `@import`
+ *  throw here rather than pass, which is loud and one edit from fixed, and is the
+ *  ruling recorded in `declarationsIn`'s bound rather than a case to chase.
+ *
+ *  Provenance, stated honestly and narrowly, because the first version of this
+ *  note overstated it: **no class selector in the five tracked CSS files is
+ *  qualified by another class, a tag or an attribute, and none is a descendant or
+ *  child of one** -- verified by grep, and that is the shape this edge rejects.
+ *  Compound selectors as such certainly do exist here
+ *  (`.button:hover:not(:disabled)`, `:root[data-theme='dark']`,
+ *  `:where(...):focus-visible`), so "no compound selector anywhere" would have
+ *  been simply false. Unlike the at-rule and pseudo-class shapes, then, this edge
+ *  is closed on the strength of the property rather than of an observed pattern. */
+function exactlyThisSelector(code: string, at: number, selector: string): boolean {
+  if (!/[\s{,]/.test(code[at + selector.length] ?? '')) {
+    return false
+  }
+  let back = at - 1
+  while (back >= 0 && /\s/.test(code[back] ?? '')) {
+    back -= 1
+  }
+  return back < 0 || code[back] === '}' || code[back] === ','
+}
+
 /** The declarations of one rule, as (property, value) pairs.
  *
  *  **Substring checks on a rule body do not work, and this is the third time in
@@ -256,34 +292,17 @@ function referencedClasses(tsx: string): Set<string> {
  *  semicolons. That holds for these four stylesheets and is not claimed beyond
  *  them.
  *
+ *  **And the property itself is bounded to stylesheets of the shape these four
+ *  have: no functional selector lists and no statement at-rules.** Inside
+ *  `:is(...)` or `:where(...)` a selector is read imprecisely, and a leading
+ *  `@import` makes the lookup throw with a message that misdescribes the cause.
+ *  Both are ruled parked rather than pursued -- the first is harmless (the rule
+ *  still paints the mark) and the second is loud and safe -- and chasing them
+ *  would be three more enumerated instances of the very defect this docblock was
+ *  rewritten to stop committing.
+ *
  *  First colon wins, which is right for these values -- none contains a colon,
  *  and `var(--x)` does not. */
-/** Whether the occurrence of `selector` at `at` is the *whole* selector rather
- *  than a fragment of a longer one -- both edges, per `declarationsIn`'s
- *  guarantee.
- *
- *  The leading edge walks back over whitespace and requires `}`, `,` or
- *  start-of-input: the three things that can precede a complete selector at the
- *  top level, being respectively the end of the previous rule, the previous
- *  member of a comma list, and the top of the file. Anything else -- a class, a
- *  tag, `>`, `]` -- means this occurrence is qualified by something, and a
- *  qualified selector does not match the element the component actually renders.
- *
- *  Provenance, stated honestly: unlike the at-rule and pseudo-class shapes, there
- *  is no compound or descendant selector anywhere in the five tracked CSS files,
- *  so this edge is closed on the strength of the property rather than of an
- *  observed pattern. */
-function exactlyThisSelector(code: string, at: number, selector: string): boolean {
-  if (!/[\s{,]/.test(code[at + selector.length] ?? '')) {
-    return false
-  }
-  let back = at - 1
-  while (back >= 0 && /\s/.test(code[back] ?? '')) {
-    back -= 1
-  }
-  return back < 0 || code[back] === '}' || code[back] === ','
-}
-
 function declarationsIn(css: string, selector: string): Map<string, string> {
   const code = css.replace(/\/\*[\s\S]*?\*\//g, '')
   const starts: number[] = []
@@ -363,10 +382,16 @@ function declarationsIn(css: string, selector: string): Map<string, string> {
  *  Note the direction, which is why this differs from `referencedClasses`. There,
  *  block-comments-only leaves a residue that causes a *false failure* -- loud,
  *  one edit from fixed. Here the identical gap causes a *false pass*. Same gap,
- *  opposite consequence, opposite call. Stripping `//` over the whole file is
- *  safe for *this* helper because it only ever removes text, and the pattern it
- *  looks for cannot span a newline, so nothing can be joined into a spurious
- *  match. */
+ *  opposite consequence, opposite call.
+ *
+ *  Stripping `//` over the whole file is safe for *this* helper, but not for the
+ *  reason the first version of this note gave. It claimed "the pattern cannot
+ *  span a newline", which is false -- `\s*` matches newlines, and the assertion
+ *  that a comment inside a union is now parsed through depends on exactly that.
+ *  The real reason is that **the strip preserves the newline**: `[^\n]*` stops
+ *  before it, so no two lines are ever joined, and within a line a comment runs
+ *  to the end, so there is no code after it to join to. Removal alone cannot
+ *  manufacture a match that the code did not already contain. */
 function unionMembers(source: string, prop: string): string[] {
   const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '')
   const union = new RegExp(`\\b${prop}\\??:\\s*((?:'[\\w-]+'\\s*\\|\\s*)*'[\\w-]+')`).exec(code)
@@ -472,6 +497,22 @@ describe('every class a component references exists in its stylesheet', () => {
     expect(value.has('notExtracted')).toBe(true)
     expect(value.has('numeric')).toBe(true)
     expect(value.has('text')).toBe(true)
+
+    // ...and the component still *applies* the mark's class. The guard's main
+    // check is `referenced` subset of `declared`, and a subset check cannot see a
+    // reference being DELETED: dropping `className={styles.notExtracted}` leaves
+    // one fewer reference, which is still a subset, so the guard stays green --
+    // and every rendering test stays green too, because they read textContent,
+    // role and accessible name, none of which a class affects. Measured: the
+    // whole suite passes with §4's paint entirely gone.
+    //
+    // This is the class §4's visual half depends on, so it gets the symmetric
+    // assertion. Non-vacuous for the same reason as its `declaredClasses`
+    // neighbour above -- it reads source text, not the `css: false` proxy.
+    expect(
+      referencedClasses(read('ui/Value.tsx')).has('notExtracted'),
+      'Value.tsx no longer applies the not-extracted class; the mark has no paint',
+    ).toBe(true)
   })
 
   it('separates declarations, so no one of them can answer for another', () => {
