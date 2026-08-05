@@ -153,7 +153,21 @@ describe('Chip — the tone is never the only signal', () => {
  *  comment about prose answering for code. */
 const SRC = join(dirname(fileURLToPath(import.meta.url)), '..', 'src')
 
-const read = (relative: string): string => readFileSync(join(SRC, relative), 'utf8')
+/** Reading a path that no longer exists otherwise fails with a bare `ENOENT`,
+ *  which does not say that a *guard* went blind or what to do about it. The
+ *  guard reaches outside `src/ui` into `review/MoneyInput.*`, so a rename over
+ *  there lands here. */
+const read = (relative: string): string => {
+  try {
+    return readFileSync(join(SRC, relative), 'utf8')
+  } catch (cause) {
+    throw new Error(
+      `the class guard cannot read src/${relative}. If that file moved or was ` +
+        `renamed, update COMPONENTS -- this guard is not optional cover.`,
+      { cause },
+    )
+  }
+}
 
 /** The class selectors a stylesheet declares.
  *
@@ -183,31 +197,96 @@ function referencedClasses(tsx: string): Set<string> {
   return new Set(Array.from(code.matchAll(/\bstyles\.([A-Za-z]\w*)/g), (match) => match[1]))
 }
 
+/** The declarations of one rule, as (property, value) pairs.
+ *
+ *  **Substring checks on a rule body do not work, and this is the third time in
+ *  this milestone that has been proved.** Task 1 had `--color-surface-raised`
+ *  satisfying `toContain('--color-surface')`; round 1 of this task shipped
+ *  `expect(body).toContain('var(--color-null)')`, which the *border* declaration
+ *  satisfies -- so deleting `color: var(--color-null)` outright, the headline
+ *  visual signal of §4, left all seventeen tests green. Measured before this fix
+ *  landed, not argued.
+ *
+ *  Choosing a better needle (`'color: var(--color-null)'`) would have closed that
+ *  instance and left the shape. Splitting the body into declarations closes the
+ *  class: a property is looked up as a property and compared to a whole value,
+ *  so no declaration can answer for another and no assertion here can be
+ *  satisfied by a longer string that happens to contain it.
+ *
+ *  First colon wins, which is right for these values -- none contains a colon,
+ *  and `var(--x)` does not. */
+function declarationsIn(css: string, selector: string): Map<string, string> {
+  const code = css.replace(/\/\*[\s\S]*?\*\//g, '')
+  const open = code.indexOf('{', code.indexOf(selector))
+  const pairs = new Map<string, string>()
+  for (const part of code.slice(open + 1, code.indexOf('}', open)).split(';')) {
+    const colon = part.indexOf(':')
+    if (colon !== -1) {
+      pairs.set(part.slice(0, colon).trim(), part.slice(colon + 1).trim())
+    }
+  }
+  return pairs
+}
+
+/** The string-literal union assigned to `prop` in a component's source.
+ *
+ *  This is what makes the `computed` lists below more than documentation. Round
+ *  1's docblock claimed they "mirror the union type verbatim, so a tone or
+ *  variant added to the type without a rule to paint it fails here" -- and the
+ *  re-reviewer disproved it by adding `'critical'` to Chip's union, seeing every
+ *  gate stay green, and watching `styles[tone]` ship `class="undefined"`. The
+ *  hand-maintained list caught a *deleted* rule and nothing else.
+ *
+ *  Deriving the same set from the component and requiring the two to agree makes
+ *  the claim true: a new union member fails until it is both listed here and
+ *  painted in the stylesheet.
+ *
+ *  A union reformatted one-member-per-line would not match this pattern. That
+ *  fails loudly rather than vacuously -- the derived set is empty, and the
+ *  equality assertion reports the mismatch instead of quietly checking nothing. */
+function unionMembers(source: string, prop: string): string[] {
+  const code = source.replace(/\/\*[\s\S]*?\*\//g, '')
+  const union = new RegExp(`\\b${prop}\\??:\\s*((?:'[\\w-]+'\\s*\\|\\s*)*'[\\w-]+')`).exec(code)
+  return union === null ? [] : Array.from(union[1].matchAll(/'([\w-]+)'/g), (m) => m[1])
+}
+
+interface GuardedComponent {
+  readonly name: string
+  readonly tsx: string
+  readonly css: string
+  /** The prop whose string-literal union names classes reached as `styles[x]`,
+   *  or `''` when the component reaches none that way. */
+  readonly prop: string
+  readonly computed: readonly string[]
+}
+
 /** `computed` holds the classes reached as `styles[union]`, which no regex over
- *  the component can see. Each list mirrors that component's union type
- *  verbatim, so a tone or variant added to the type without a rule to paint it
- *  fails here. */
-const COMPONENTS = [
-  { name: 'Value', tsx: 'ui/Value.tsx', css: 'ui/Value.module.css', computed: [] },
+ *  the component can see. `prop` is what lets the guard derive that same list
+ *  from the source rather than trust it -- see `unionMembers`. */
+const COMPONENTS: readonly GuardedComponent[] = [
+  { name: 'Value', tsx: 'ui/Value.tsx', css: 'ui/Value.module.css', prop: '', computed: [] },
   {
     name: 'Button',
     tsx: 'ui/Button.tsx',
     css: 'ui/Button.module.css',
+    prop: 'variant',
     computed: ['primary', 'secondary', 'danger'],
   },
   {
     name: 'Chip',
     tsx: 'ui/Chip.tsx',
     css: 'ui/Chip.module.css',
+    prop: 'tone',
     computed: ['error', 'warn', 'info', 'positive', 'neutral'],
   },
   {
     name: 'MoneyInput',
     tsx: 'review/MoneyInput.tsx',
     css: 'review/MoneyInput.module.css',
+    prop: '',
     computed: [],
   },
-] as const
+]
 
 describe('every class a component references exists in its stylesheet', () => {
   it('is reading real files, not empty ones', () => {
@@ -259,13 +338,56 @@ describe('every class a component references exists in its stylesheet', () => {
     expect(value.has('notExtracted')).toBe(true)
     expect(value.has('numeric')).toBe(true)
     expect(value.has('text')).toBe(true)
+  })
 
-    // ...and that the mark's rule actually carries both signals §4 names.
-    const css = read('ui/Value.module.css').replace(/\/\*[\s\S]*?\*\//g, '')
-    const rule = css.slice(css.indexOf('.notExtracted'))
-    const body = rule.slice(rule.indexOf('{'), rule.indexOf('}'))
-    expect(body).toContain('var(--color-null)')
-    expect(body).toContain('border-left')
+  it('separates declarations, so no one of them can answer for another', () => {
+    // The positive control for `declarationsIn`, and specifically for the defect
+    // it replaces: with ONLY the border present, `color` must come back
+    // undefined. The substring version returned a hit here, which is exactly how
+    // the mark's colour became deletable with every gate green.
+    const bitten = declarationsIn('.x { border-left: 2px solid var(--t) }', '.x')
+    expect(bitten.get('border-left')).toBe('2px solid var(--t)')
+    expect(bitten.get('color')).toBeUndefined()
+
+    const full = declarationsIn('.x { color: red; border-left: 2px solid red }', '.x')
+    expect(full.get('color')).toBe('red')
+    expect(full.get('border-left')).toBe('2px solid red')
+    expect(full.get('padding')).toBeUndefined()
+  })
+
+  it('gives the not-extracted mark all three signals §4 names for it', () => {
+    // Every one of these is compared as a whole value against a named property,
+    // so each is falsified only by its own declaration changing. Reverted one at
+    // a time, and each reds alone.
+    const mark = declarationsIn(read('ui/Value.module.css'), '.notExtracted')
+    expect(mark.get('color'), 'the mark lost its colour').toBe('var(--color-null)')
+    expect(mark.get('border-left'), 'the mark lost the scannability border').toBe(
+      '2px solid var(--color-null)',
+    )
+    // §4 names the monospaced family for the mark alongside the colour, and
+    // round 1 asserted it nowhere at all.
+    expect(mark.get('font-family'), 'the mark lost --font-mono').toBe('var(--font-mono)')
+  })
+
+  it('derives each computed list from its union, so a new tone cannot go unpainted', () => {
+    // Round 1's docblock claimed the hand-maintained lists did this. They did
+    // not: a union member added without a rule shipped class="undefined" with
+    // every gate green. Deriving the set from the source is what makes the claim
+    // true rather than narrowing it.
+    for (const component of COMPONENTS.filter((entry) => entry.prop !== '')) {
+      const derived = unionMembers(read(component.tsx), component.prop)
+      expect(
+        derived.length,
+        `${component.tsx}: could not read the ${component.prop} union -- if it was ` +
+          `reformatted, unionMembers needs updating, because an empty set here ` +
+          `would check nothing`,
+      ).toBeGreaterThan(0)
+      expect(
+        [...derived].sort(),
+        `${component.name}: the ${component.prop} union and the guard's computed ` +
+          `list disagree -- a member added to one and not the other is unpainted`,
+      ).toEqual([...component.computed].sort())
+    }
   })
 })
 
