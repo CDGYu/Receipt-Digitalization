@@ -14,8 +14,9 @@ of closing a milestone; **ADR-0021 makes it part of ending any session** (its
 verification step is permanent.
 
 **No branch is in flight.** The admin-UI-backend-routes milestone was closed and
-merged (true fast-forward `7aa0a22` → `b59f164`). **`main` is NOT pushed** —
-`origin/main` is nine commits behind at `7aa0a22`.
+merged (true fast-forward `7aa0a22` → `b59f164`), then **`main` was pushed** on
+an explicit one-time authorization. `main` and `origin/main` are in sync, and
+all 14 `feat/*` branches are merged and pushed.
 
 ## Reading order
 
@@ -60,23 +61,34 @@ merged (true fast-forward `7aa0a22` → `b59f164`). **`main` is NOT pushed** —
    untracked, still on disk).
 5. **`IMPLEMENTATION_PLAN.md`** · **`docs/KNOWN_ISSUES.md`** (ISSUE-001 — do
    not re-derive) · **`RECEIPT_SYSTEM_SPEC.md`** §§ as needed.
+6. **If you open the last milestone's plan
+   (`docs/superpowers/plans/2026-08-05-admin-ui-backend-routes.md`), read its
+   "Dated defect log" at the bottom FIRST.** Five of that plan's nine defects
+   are still in its body — plans are dated historical records here and do not
+   self-amend, so the log is appended the way an ADR takes a dated
+   correction. One of those five reached the shipped tree once already,
+   precisely because it was re-derived from the plan instead of checked
+   against the code.
 
 ## Where we are
 
-- **`main` @ `b59f164`**, with this handoff refresh riding on top as a
+- **`main` @ `684e316`**, with this handoff refresh riding on top as a
   docs-only commit. The check:
 
   ```
-  git log --oneline b59f164..main -- src tests frontend docs ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
+  git log --oneline 684e316..main -- src tests frontend docs ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
   ```
 
   **Empty means this prompt is current.** Any output means the tree moved
   after it was written.
-- **`main` is NOT pushed.** `origin/main` is at `7aa0a22`, nine commits
-  behind. The user chose "merge locally" and authorized only the `feat/*`
+- **`main` is pushed and in sync with `origin/main`.** The one-time
+  authorization asked for at this close was granted and consumed by that
   push. The standing rule continues: pushing `feat/*` is authorised;
   **every `main` push needs a fresh ask.**
-  `feat/admin-ui-routes` is merged, kept, and **pushed** at `b59f164`.
+- **All 14 `feat/*` branches are merged into `main` and pushed.** Audited
+  2026-08-05: `git branch --no-merged main` is empty and every branch adds
+  **+0** commits — they are historical merge points, kept, never cleaned up.
+  There is nothing left to merge.
 - Gates at `b59f164`, controller-run on `main` post-merge:
   `python scripts/verify.py` **all five PASS**; pytest **979**; Vitest **221**
   (19 files). **`src/` changed this milestone**, so the outside-repo import
@@ -168,7 +180,36 @@ absorb it silently. Consider making a browser pass part of its done.
    e2e-scoped — inheriting a deployment policy from an e2e launcher is the
    mistake to avoid. **This is the only item that can start with no ruling.**
 
-### 3. Phase 6 — merchants & few-shot (P6.T1)
+### 3. THE ONE RESIDUAL — pre-existing, known false, NOT fixed
+
+**`src/receipts/review/api.py`'s signed-blob handler claims: "This is the one
+unauthenticated route in the service."** It is false. Measured at the
+2026-08-05 close by building the route table from `create_app` and reading
+each route's resolved dependant tree: **`GET /health`, `POST /auth/login`,
+`POST /auth/logout` and the `/app` mount are also reachable with no session**
+— five such routes, or **nine** with `DOCS_ENABLED=true`.
+
+**Why it is called out here rather than buried in the deferred list:**
+
+- It is the **same defect class** as the close's own Important #9 — a false
+  universal about the auth surface — and it sits in the **very file** that
+  finding cited as its counter-example. One was fixed; its twin was not.
+- It is **pre-existing, not this branch's**: verified on `main` since
+  `130b202`, and the admin-UI-routes branch never touches that docstring.
+  That is why it was out of scope for a close whose fix wave is scoped to
+  the branch diff, and why there was no second fix wave to catch it.
+- Nothing depends on it and it changes no behaviour. It is a prose defect in
+  a docstring that reads as an inventory — exactly the shape that has now
+  misled a standard-12 re-read once on this project.
+
+**Fix it with the next legitimate edit of `api.py`** (one sentence — name the
+real set, or narrow the claim to "the one route that serves receipt data
+without a session"). **Do not open a branch just for it**; do not let it
+survive a milestone that edits that file. And when you fix it, apply review
+standard 17: *answer the universal by enumerating, not by arguing* — the
+enumeration script and its two traps are in the plan's dated defect log.
+
+### 4. Phase 6 — merchants & few-shot (P6.T1)
 
 Unchanged: `merchants/{fingerprint,registry}.py` is greenfield; few-shot images
 first, target last; hints end "trust the image"; measure top-10-merchant
@@ -179,25 +220,25 @@ built but not validated. Five things unblock here: semantic dedupe into
 the line — the file has grown**); the `image_phash` gap; `Merchant.receipt_count`
 (nothing writes it). `VAT Reg. TIN` is the strongest fingerprint on this corpus.
 
-### 4. Phase 7 — self-consistency (P7.T1)
+### 5. Phase 7 — self-consistency (P7.T1)
 
 Unchanged: wire `run_consistency` (`extract/extractor.py`, zero references in
 `pipeline.py`) for handwritten/low-legibility; **gate on
 `triage.is_handwritten`, never `document_type`**; consistency runs never cached.
 
-### 5. Phase 8 — calibration & eval-harness honesty
+### 6. Phase 8 — calibration & eval-harness honesty
 
 Unchanged: P3.T6/P8.T1 threshold sweep + weights into `config/rules.yaml`
 (**blocked on ISSUE-001**); P8.T2 grow the held-out set; P8.T3 the all-failed
 eval run still persists `"auto_approval_precision": 1.0` to JSON.
 
-### 6. Still open from earlier phases
+### 7. Still open from earlier phases
 
 Unchanged: R060/R061 grounding decision (also gates bbox); score
 `is_handwritten` from triage too; `is_receipt` has no consumer (never
 hard-reject on it); blank pre-printed template rows (sibling of R052).
 
-### 7. Deferred, with rulings (see the ledgers)
+### 8. Deferred, with rulings (see the ledgers)
 
 - **Nothing from the admin-UI-routes milestone is parked** — its close never
   hit the breaker. **20 Minor findings shipped**, triaged as safe by the
@@ -223,7 +264,7 @@ hard-reject on it); blank pre-printed template rows (sibling of R052).
   shapes) and the `{1,2}` separator surface (36 spellings, pinned).
 - Plus the standing list in MEMORY.md's "Deferred follow-ups".
 
-### 8. LAST — ISSUE-001, deferred by the user until the system is built
+### 9. LAST — ISSUE-001, deferred by the user until the system is built
 
 Unchanged: read `docs/KNOWN_ISSUES.md`, do not re-derive; hosted tool-capable
 model needed (rotate the echoed Gemini key first); until it runs, no measured
@@ -339,8 +380,9 @@ entry points from outside the repository.
 7. **Narrow the `{1,2}` separator** now that its surface is measured?
 8. **Has anyone looked at the review UI in a browser?** Still nobody, and the
    frontend milestone is the natural moment.
-9. **Push `main`?** It is nine commits ahead of `origin/main` and has never
-   been pushed since `7aa0a22`.
+
+*(The `main` push question is settled — it was granted and consumed on
+2026-08-05, and `main` is in sync. The next push needs a fresh ask.)*
 
 **Today's goal:** <FILL THIS IN — with no branch in flight, the default is
 "pick the next named piece of work". The **admin UI's frontend half** (§1) is
@@ -349,6 +391,9 @@ contracts exist and nothing consumes them. It is also the first frontend work
 since two UI milestones shipped without anyone opening a browser, so consider
 making a browser pass part of its definition of done. The **ASGI entry point**
 (§2.2) is the only smaller item that needs no ruling from me. The
-`corrections` route (§2.1) needs its ruling re-confirmed first. Phase 6 (§3)
-can be built but not validated until ISSUE-001 runs. Brainstorm → design →
-plan before touching code.>
+`corrections` route (§2.1) needs its ruling re-confirmed first. **§3's
+residual is not a milestone — it is one sentence, to be folded into whichever
+milestone next edits `api.py`**; do not open a branch for it, and do not let
+it survive a branch that touches that file. Phase 6 (§4) can be built but not
+validated until ISSUE-001 runs. Brainstorm → design → plan before touching
+code.>

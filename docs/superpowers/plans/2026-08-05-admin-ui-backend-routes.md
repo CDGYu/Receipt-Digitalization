@@ -891,3 +891,114 @@ git commit -m "docs: record ADR-0026 and absorb the two routes into spec 14.9"
 
 - The `has_more` test at Task 2 Step 9 assumes the seeded database holds exactly one task before `_extra_tasks` runs. That is true at `7aa0a22` (`_seed` enqueues only `RECEIPT_B`, `tests/test_api_read.py:150`). If a future seed adds a second, that test's arithmetic breaks — and it will break loudly, on the count, not silently.
 - Task 2 Step 17's edit to the `READ_ROUTES` block comment is a judgement call about prose. The reviewer should check the resulting sentence against the table rather than accept that it was touched.
+
+---
+
+## Dated defect log — 2026-08-05, added after the milestone closed
+
+**This plan's body is left as written.** Plans are dated historical records
+here and do not self-amend; this log is appended the way an ADR takes a dated
+correction. **Read it before re-deriving anything from the text above** — five
+of the nine defects below are still sitting in that text, and one of them
+(#9) reached the shipped tree once already precisely because it was re-derived
+from a plan rather than checked against the code.
+
+Nine plan defects, all the plan author's. Three were caught before any
+implementer was dispatched; six by an implementer or reviewer who checked
+instead of trusting.
+
+| # | Where | The defect | Status |
+|---|---|---|---|
+| 1 | body, corrected | `_extra_tasks`' docstring said carol closes one of the three tasks the helper creates | **Corrected in the body pre-dispatch** (`f021d10`) |
+| 2 | body, corrected | Task 1's mutation predicted two tests red when only one could be | **Corrected in the body pre-dispatch** |
+| 3 | body, corrected | Task 2's `-k "tasks or …"` selector would have collected 5 of 6 | **Corrected in the body pre-dispatch** |
+| 4 | `:238`, `:780` | the gate command | **Still wrong above** — see below |
+| 5 | Task 1 Step 8 | no red-proof prescribed for the new `READ_ROUTES` row | **Still missing above** |
+| 6 | `:771` | Step 16's mutation presented as single-guarantee | **Still wrong above** |
+| 7 | `:769-774` | Step 10's prose on which test fails differently | **Still wrong above** |
+| 8 | `:440` | the `list_tasks` docstring's pin list | **Still wrong above**; fixed in the tree at `bb45ae5` |
+| 9 | `:151` | the `/auth/me` guard sentence | **Still wrong above**; fixed in the tree at `b59f164` |
+
+### The five that are still wrong in the text above
+
+**#4 — the gate command prints no pass count.** `pyproject.toml:61` already
+sets `addopts = "-q"`, so the plan's `python -m pytest -q` is really `-qq` and
+prints **nothing** — green would have rested on the exit code alone. `-v`
+(Step 10) nets back to default dot output for the same reason; `-vv` is what
+produces a listing. **Use bare `python -m pytest`.**
+
+**#5 — the `READ_ROUTES` row was never red-proofed.** Review standard 2 binds
+every new test, and the plan prescribed no mutation for the row. Mutations A
+and B change only the response *body*, while `test_auth_matrix` asserts only
+status codes, so neither could have turned it red; and the row was written
+after the route existed, so it never went red on its own. The Task 1
+implementer added a third mutation — remove the guard, keep the per-user read
+— which turned exactly the anonymous and `api_key` cases red on the 401
+assertion. The task reviewer found it closes a subtler hole too: the
+deactivation test dies at its *first* assertion during RED, so its second
+assertion got failure evidence from no other run.
+
+**#6 — Step 16's mutation is not single-guarantee** (review standard 4).
+Inverting `visible_to is not None` to `is None` also mis-scopes the **admin**
+path, because SQLAlchemy renders `assigned_to == None` as `IS NULL`. Run
+without the `-k scope` selector it kills 5 of 6 route tests, and three of
+those reds prove nothing. **The selector in that step is load-bearing, and the
+step does not say so.**
+
+**#7 — Step 10 names the wrong test as the odd one out.** Measured: **five**
+of the six new route tests fail on `KeyError: 'items'`, not just the
+state-filter one. Only `test_the_literal_tasks_path_is_not_captured_by_a_task_id_route`
+fails on `assert 404 == 200`. The count and the root cause were right.
+
+**#8 — the `list_tasks` docstring at `:440` conflates two different triples.**
+It enumerates the three `assigned_to` **writes** (reopen, `next_task`'s claim,
+`release_task`), explicitly excludes the brand-new row, and then claims each
+is pinned by `test_enqueue_review_creates_an_open_task`,
+`test_enqueue_review_reopens_a_closed_task` and
+`test_release_task_clears_the_assignee_and_names_who_held_it`. The first of
+those pins a **brand-new** row — the path the sentence just excluded — and
+`next_task`'s claim is pinned by **none** of the three.
+
+The correct accounting, re-derived by grep at the close: `ReviewState.OPEN` is
+assigned at `queue.py:209`, `:227`, `:404` only; `assigned_to` is written at
+`:229`, `:306`, `:403` only (a fourth grep hit, `previously_assigned_to =
+task.assigned_to`, is a **read**). The three **`OPEN`-producers** are the
+brand-new row (never sets it), the reopen branch, and `release_task` — and
+*those* map one-for-one onto the three named tests. `next_task`'s claim is the
+remaining writer and produces no `OPEN` row. **The shipped docstring says
+this correctly; the text above does not.**
+
+**#9 — the `/auth/me` guard sentence at `:151` is a false universal, and it
+reached the shipped tree.** "the route stays inside the guard **every other
+authenticated route** uses" has two counter-examples in the codebase:
+`GET /receipts/{receipt_id}/image/blob` declares **no user dependency at all**
+(HMAC-signed; its own docstring says "No session dependency, on purpose"), and
+`POST /upload` goes through `require_upload`, which returns `None` for a valid
+machine key **before** it ever reaches `require_user`.
+
+This sentence was *explicitly re-read* during Task 2 under review standard 12
+and cleared as "STILL TRUE" — on a reasoning error. The check verified that
+`require_role` and `require_upload` *call* `require_user` and generalised from
+that, never enumerating the routes. The close's re-reviewer settled the same
+question in one pass by building the route table from `create_app` and reading
+each route's resolved dependant tree: **17 routes, 13 guarded, exactly two
+outside `require_user`.**
+
+The shipped text is now: *"the route stays inside `require_user` — the same
+guard every other **session**-authenticated route uses (`require_role` builds
+on it; the machine-key and signed-blob paths are the two that do not) — and
+joins `READ_ROUTES`."*
+
+**Two traps for anyone enumerating routes here**, both measured: on this
+FastAPI version `include_router` wraps the auth router in an `_IncludedRouter`,
+so a flat walk of `app.routes` yields 13 routes with **zero** `/auth/*` paths —
+recurse through `.original_router.routes`. And a transitively-called guard
+(`require_role` → `require_user`) is invisible at runtime, because it is plain
+Python rather than a nested `Depends`; only reading the source establishes it.
+
+### The standing lesson
+
+**A universal claim is answered by an enumeration, not an argument.** Defect #9
+is the only one of the nine that reached shipped code, and it got there through
+a re-read that reasoned about the set instead of listing it. Both
+counter-examples were sitting in the tree the whole time.

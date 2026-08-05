@@ -6,13 +6,13 @@ continuity protocol itself — what lives where, and why this snapshot must be
 verified rather than trusted — is **ADR-0019**, extended by **ADR-0021** (whose
 2026-08-02 dated correction widened the freshness check after a docs-only task
 proved invisible to it).
-Last updated: **2026-08-05 (admin UI backend routes merged locally)**, at
-**`main @ b59f164`**, no branch in flight, this refresh riding on top as a
+Last updated: **2026-08-05 (admin UI backend routes merged and pushed)**, at
+**`main @ 684e316`**, no branch in flight, this refresh riding on top as a
 docs-only commit. A stamp cannot name the commit that writes it, so the
 check is not a commit count — counts rot — but this:
 
 ```
-git log --oneline b59f164..main -- src tests frontend docs ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
+git log --oneline 684e316..main -- src tests frontend docs ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
 ```
 
 **Empty means this file is current.** Any output means the tree moved after it
@@ -20,12 +20,16 @@ was written and you are reading something stale.
 
 ## Snapshot
 
-- **`main` @ `b59f164`, merged locally, NOT pushed.** `origin/main` is still
-  at **`7aa0a22`**, nine commits behind. The user chose "merge locally" and
-  authorized only the `feat/*` push; **no `main` push authorization was
-  given or consumed this session.** The standing ask-first rule for `main`
-  continues — every push needs its own fresh ask.
+- **`main` @ `684e316`, pushed, in sync with `origin/main`.** The milestone
+  was first merged locally with no push; the user then authorized the push
+  explicitly ("merge all of the branches with the main and push it"), and
+  that one-time authorization was consumed by it. The standing ask-first
+  rule for `main` continues — every push needs its own fresh ask.
   pytest on `main`: **979**; Vitest **221**.
+- **All 14 `feat/*` branches are ancestors of `main` and all are pushed.**
+  Audited 2026-08-05: `git branch --no-merged main` is empty and every
+  branch adds **+0** commits, so "merge all branches" was already a no-op —
+  they are historical merge points, kept per the standing rule.
 - **NO branch in flight.** Empty is the signal (ADR-0021).
 - **The admin UI's backend routes are complete and merged** (2026-08-05,
   true fast-forward `7aa0a22` → `b59f164`; 9 branch commits: design, plan, a
@@ -525,9 +529,14 @@ API path moves.
   would then silently drop an open task from every reviewer's list, and
   per-caller masking was rejected because under the invariant that code
   never executes. **A listed row reuses `_task_summary` unchanged.**
-- **The admin release was merged locally only and stayed unpushed; so was
-  this milestone** (2026-08-05). The user authorized the `feat/*` push and
-  **not** a `main` push, so `origin/main` sits at `7aa0a22`.
+- **`main` was pushed at the end of the admin-UI-routes session**
+  (2026-08-05), on an explicit one-time authorization that is now consumed.
+  All 14 `feat/*` branches were audited as already-merged (+0 commits each)
+  and all are pushed. **The nine plan defects were re-audited at the same
+  time**: all three that touched shipped code are correct in the tree, and
+  the five still living in the plan's body are covered by a **dated defect
+  log appended to that plan** — plans do not self-amend here, so the log is
+  appended the way an ADR takes a dated correction.
 - **Milestone close includes the handoff refresh** (ADR-0019); **every session
   end refreshes the handoff** (ADR-0021), whose freshness check was widened by
   dated correction (2026-08-02) to include `docs` with the handoff pair itself
