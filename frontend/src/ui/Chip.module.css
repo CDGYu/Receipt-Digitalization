@@ -1,0 +1,54 @@
+/* Status chips -- design §3.3 (radius-sm) and §6 (never colour alone).
+ * Tokens only; no raw hex.
+ *
+ * Every tone paints the *text and the border*, on the ordinary surface, rather
+ * than flooding a background with the severity colour. Two reasons: a filled
+ * severity pill competes with the row it is describing, and tinting a background
+ * without a token for the tint would mean inventing hex. Contrast measured
+ * against `--color-surface` for all five tones in light (the tighter theme):
+ * error 4.8:1, warn 4.7:1, info 6.7:1, positive 5.0:1, neutral 7.6:1. Dark is
+ * looser -- every tone's dark value is the lighter of the pair against a
+ * near-black surface. */
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-xs) var(--space-md);
+  border: 1px solid currentColor;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+/* Sized so a Phosphor outline icon at `size={20}` sits on the text baseline
+ * without stretching the chip past its line box. */
+.icon {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+}
+
+.error {
+  color: var(--color-severity-error);
+}
+
+.warn {
+  color: var(--color-severity-warn);
+}
+
+.info {
+  color: var(--color-severity-info);
+}
+
+.positive {
+  color: var(--color-positive);
+}
+
+.neutral {
+  color: var(--color-muted-foreground);
+}

@@ -1,0 +1,56 @@
+/* The money field -- design §5.1. Tokens only; no raw hex.
+ *
+ * `.input` is right-aligned, `--font-mono`, tabular figures: the decimal points
+ * line up down a column of totals, and every digit is the same width, so a
+ * reviewer comparing the form against the photograph is not re-reading a value
+ * that shifted while they typed.
+ *
+ * **There is no currency prefix rule implemented here, and that is deliberate.**
+ * §5.1 requires the symbol to sit outside the input so it is never part of the
+ * editable string. `MoneyInput` renders no symbol at all today, so the rule is
+ * already satisfied -- the string in the box is the amount and nothing else --
+ * and adding one would need a new prop, which this task is not permitted to do.
+ * A hardcoded `::before { content: '$' }` would be worse than the omission:
+ * `receipt.currency` is a per-receipt correctable field, so a fixed symbol would
+ * mislabel every receipt that is not in that currency.
+ *
+ * No `:focus` rule: `tokens.css` gives every input the 2px `--color-ring`
+ * outline through a zero-specificity `:where()`, and overriding it by accident
+ * is exactly how "never `outline: none`" gets broken. */
+
+.field {
+  display: inline-flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  color: var(--color-foreground);
+}
+
+.input {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  /* §6: targets >= 44x44px. */
+  min-height: 44px;
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-foreground);
+  font-size: var(--text-base);
+}
+
+/* Colour is the *second* signal on a refused field, never the only one: the
+ * server's sentence renders below in `.error` and the summary alert at the
+ * bottom of the screen carries the same message (ADR-0024). */
+.invalid {
+  border-color: var(--color-severity-error);
+}
+
+.error {
+  margin: 0;
+  color: var(--color-severity-error);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+}

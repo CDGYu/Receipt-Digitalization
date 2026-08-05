@@ -1,0 +1,26 @@
+/* The three states of a value -- design §4. Tokens only; no raw hex.
+ *
+ * `.notExtracted` is the plan's `.null` renamed by controller resolution:
+ * `styles.null` reads as the language literal at every call site. Cosmetic --
+ * same declarations, same behaviour. */
+
+.numeric {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.text {
+  font-family: var(--font-sans);
+}
+
+/* The hairline left border is not decoration: it is what lets a scan down the
+ * form find every gap without reading a single value (§4). Monospaced like
+ * `.numeric` so the mark sits on the same rhythm as the numbers it stands in
+ * for, rather than reading as prose. */
+.notExtracted {
+  font-family: var(--font-mono);
+  color: var(--color-null);
+  border-left: 2px solid var(--color-null);
+  padding-left: var(--space-sm);
+}

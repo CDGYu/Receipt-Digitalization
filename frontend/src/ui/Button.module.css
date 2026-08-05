@@ -1,0 +1,57 @@
+/* Buttons -- design §3.3 (radius-md), §6 (targets, focus) and §7 (motion).
+ * Tokens only; no raw hex.
+ *
+ * No `:focus` rule here and no `outline: none` anywhere: `tokens.css` already
+ * gives every button a 2px `--color-ring` outline at 2px offset via
+ * `:where(...):focus-visible`, and `:where()` has zero specificity, so a
+ * component stylesheet overrides it by accident far too easily. The a11y
+ * contract's "never `outline: none`" is kept by there being nothing to keep. */
+
+.button {
+  /* §6: targets >= 44x44px. Today's controls are browser default and smaller. */
+  min-height: 44px;
+  min-width: 44px;
+  padding: var(--space-md) var(--space-xl);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  font-weight: 500;
+  line-height: 1.5;
+  cursor: pointer;
+  /* §7: 150ms ease-out, and only for state the user caused. The global
+   * `prefers-reduced-motion` block in tokens.css turns this off. */
+  transition: background-color 150ms ease-out, border-color 150ms ease-out;
+}
+
+.button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* `--color-primary` and `--color-background` invert together across the two
+ * themes (#0F172A on #F8FAFC light, #F8FAFC on #020617 dark), so one pair of
+ * declarations reads correctly in both instead of needing a dark override. */
+.primary {
+  background: var(--color-primary);
+  color: var(--color-background);
+}
+
+.secondary {
+  background: var(--color-surface);
+  color: var(--color-foreground);
+  border-color: var(--color-border);
+}
+
+/* Contrast measured against the token values in both themes, since this is the
+ * one variant that paints a severity colour rather than a neutral:
+ * light #F8FAFC on #DC2626 is 4.7:1, dark #020617 on #EF4444 is 5.3:1 -- both
+ * over the 4.5:1 the accessibility contract sets. */
+.danger {
+  background: var(--color-severity-error);
+  color: var(--color-background);
+}
+
+.button:hover:not(:disabled) {
+  border-color: var(--color-ring);
+}

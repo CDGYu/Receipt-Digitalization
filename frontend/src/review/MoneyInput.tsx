@@ -1,4 +1,5 @@
 import { useId } from 'react'
+import styles from './MoneyInput.module.css'
 
 export interface MoneyInputProps {
   readonly label: string
@@ -51,10 +52,11 @@ export function MoneyInput({ label, value, onChange, error }: MoneyInputProps) {
   const active = error != null
   return (
     <>
-      <label htmlFor={id}>
+      <label className={styles.field} htmlFor={id}>
         {label}
         <input
           id={id}
+          className={active ? `${styles.input} ${styles.invalid}` : styles.input}
           type="text"
           inputMode="decimal"
           value={value ?? ''}
@@ -63,7 +65,7 @@ export function MoneyInput({ label, value, onChange, error }: MoneyInputProps) {
         />
       </label>
       {active ? (
-        <p role="alert" id={errorId}>
+        <p className={styles.error} role="alert" id={errorId}>
           {error}
         </p>
       ) : null}
