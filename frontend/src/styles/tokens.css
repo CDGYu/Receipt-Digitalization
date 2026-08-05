@@ -12,9 +12,25 @@
  * bundles the woff2 files into `dist`, so nothing here reaches the network at
  * runtime either; the packages only add lockfile-pinned provenance that a
  * hand-vendored binary could not prove.
+ *
+ * ## The three blocks, and why they must stay in step
+ *
+ * `:root` is light and is the default (design §2.2). `:root[data-theme='dark']`
+ * is the explicit opt-in; the `prefers-color-scheme: dark` block is the OS one.
+ * The last two carry identical declarations on purpose -- two routes to one
+ * theme, not two themes -- and `tokens.test.ts` pins that they parse to the
+ * same (property, value) set, because a drift between them is invisible on any
+ * one machine.
  */
 
 :root {
+  /* `color-scheme` is not decoration. Without it the user agent paints its own
+   * widgets -- form controls, scrollbars, spellcheck underlines, autofill --
+   * from the light palette whatever the page does, so a dark theme would ship
+   * with light scrollbars against a #020617 page. Declared in all three blocks
+   * for that reason. */
+  color-scheme: light;
+
   --font-sans: 'Fira Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-mono: 'Fira Code', ui-monospace, 'Cascadia Mono', Consolas, monospace;
 
@@ -32,6 +48,20 @@
   --color-background: #F8FAFC;
   --color-surface: #FFFFFF;
   --color-surface-raised: #FFFFFF;
+  /* Two surfaces design §3.2's table does not name, added by controller ruling
+   * in review round 1 because the UI already needs both and Tasks 2-4 are
+   * forbidden raw hex:
+   *
+   * `--color-surface-active` is the current/focused row. Deliberately a pale
+   * blue tied to `--color-ring`, NOT the #fffbe6 yellow presently inline at
+   * `LineItemsTable.tsx:109` -- amber is reserved for WARN severity (§3.2), so
+   * a yellow row reads as a warning about that row. Task 3 owns the swap.
+   *
+   * `--color-surface-sunken` is the ImagePane surround, which design §5.5
+   * specifies as #F1F5F9 without naming a token for it. Sunken rather than
+   * raised: the photograph sits *in* the page, below the panel surfaces. */
+  --color-surface-active: #EFF6FF;
+  --color-surface-sunken: #F1F5F9;
   --color-foreground: #0F172A;
   --color-muted-foreground: #475569;
   --color-border: #E2E8F0;
@@ -45,9 +75,13 @@
 }
 
 :root[data-theme='dark'] {
+  color-scheme: dark;
+
   --color-background: #020617;
   --color-surface: #0E1223;
   --color-surface-raised: #1A1E2F;
+  --color-surface-active: #1E293B;
+  --color-surface-sunken: #020617;
   --color-foreground: #F8FAFC;
   --color-muted-foreground: #94A3B8;
   --color-border: #334155;
@@ -63,13 +97,21 @@
 /* `:root:not([data-theme='light'])` is load-bearing, not a flourish: it lets an
  * explicit light choice win over an OS dark preference, while an unset
  * preference still follows the OS. A bare `:root` here would make the OS
- * setting unbeatable; a bare `[data-theme='dark']` would make the OS setting
- * unreachable. */
+ * setting unbeatable; a bare attribute selector would make it unreachable.
+ * `tokens.test.ts` pins this selector's exact text for that reason.
+ *
+ * Specificity is (0,2,0) for both this block and the one above -- `:not()`
+ * takes its argument's specificity -- so source order decides and this one
+ * wins. That is only safe because the two carry identical declarations. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {
+    color-scheme: dark;
+
     --color-background: #020617;
     --color-surface: #0E1223;
     --color-surface-raised: #1A1E2F;
+    --color-surface-active: #1E293B;
+    --color-surface-sunken: #020617;
     --color-foreground: #F8FAFC;
     --color-muted-foreground: #94A3B8;
     --color-border: #334155;
