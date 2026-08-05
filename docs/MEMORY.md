@@ -26,7 +26,7 @@ was written and you are reading something stale.
   that one-time authorization was consumed by it. The standing ask-first
   rule for `main` continues — every push needs its own fresh ask.
   pytest on `main`: **979**; Vitest **221**.
-- **All 14 `feat/*` branches are ancestors of `main` and all are pushed.**
+- **All 13 `feat/*` branches are ancestors of `main` and all are pushed.**
   Audited 2026-08-05: `git branch --no-merged main` is empty and every
   branch adds **+0** commits, so "merge all branches" was already a no-op —
   they are historical merge points, kept per the standing rule.
@@ -531,7 +531,7 @@ API path moves.
   never executes. **A listed row reuses `_task_summary` unchanged.**
 - **`main` was pushed at the end of the admin-UI-routes session**
   (2026-08-05), on an explicit one-time authorization that is now consumed.
-  All 14 `feat/*` branches were audited as already-merged (+0 commits each)
+  All 13 `feat/*` branches were audited as already-merged (+0 commits each)
   and all are pushed. **The nine plan defects were re-audited at the same
   time**: all three that touched shipped code are correct in the tree, and
   the five still living in the plan's body are covered by a **dated defect

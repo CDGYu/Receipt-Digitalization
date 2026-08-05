@@ -16,7 +16,7 @@ verification step is permanent.
 **No branch is in flight.** The admin-UI-backend-routes milestone was closed and
 merged (true fast-forward `7aa0a22` → `b59f164`), then **`main` was pushed** on
 an explicit one-time authorization. `main` and `origin/main` are in sync, and
-all 14 `feat/*` branches are merged and pushed.
+all 13 `feat/*` branches are merged and pushed.
 
 ## Reading order
 
@@ -90,7 +90,7 @@ all 14 `feat/*` branches are merged and pushed.
   authorization asked for at this close was granted and consumed by that
   push. The standing rule continues: pushing `feat/*` is authorised;
   **every `main` push needs a fresh ask.**
-- **All 14 `feat/*` branches are merged into `main` and pushed.** Audited
+- **All 13 `feat/*` branches are merged into `main` and pushed.** Audited
   2026-08-05: `git branch --no-merged main` is empty and every branch adds
   **+0** commits — they are historical merge points, kept, never cleaned up.
   There is nothing left to merge.
@@ -170,7 +170,7 @@ consumes either one yet.** What remains:
 inherited, not new; the design's §8 calls it out so this milestone does not
 absorb it silently. Consider making a browser pass part of its done.
 
-### 1b. The review UI's DESIGN SYSTEM — drafted, NOT approved, NOT planned
+### 1b. The review UI's DESIGN SYSTEM — designed, RULED ON, and PLANNED
 
 **`docs/superpowers/specs/2026-08-05-review-ui-design-system.md`** (drafted
 2026-08-05, at the user's request, from the Qarin SaaS template reference plus
