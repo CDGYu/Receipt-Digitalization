@@ -35,7 +35,7 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
-from sqlalchemy import Select, func, select
+from sqlalchemy import Select, func, or_, select
 from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -48,6 +48,7 @@ __all__ = [
     "close_review_for_receipt",
     "close_task",
     "enqueue_review",
+    "list_tasks",
     "next_task",
     "queue_stats",
     "release_task",
@@ -403,6 +404,57 @@ def release_task(session: Session, task_id: uuid.UUID) -> tuple[ReviewTask, str 
     task.state = ReviewState.OPEN
     session.flush()
     return task, previously_assigned_to
+
+
+def list_tasks(
+    session: Session,
+    *,
+    visible_to: str | None = None,
+    state: ReviewState | None = None,
+    limit: int = 50,
+    offset: int = 0,
+) -> list[ReviewTask]:
+    """Review tasks in queue order, scoped to what ``visible_to`` may see.
+
+    ``visible_to=None`` is unrestricted -- the admin case, spelled explicitly
+    at the call site rather than as a bare boolean. A username scopes the
+    result to ``state == OPEN`` plus that caller's own rows in any state, so a
+    reviewer keeps their own history (``close_task`` leaves ``assigned_to``
+    set -- ADR-0025) without seeing anyone else's.
+
+    **That scope discloses no other reviewer's name**, because every path
+    producing an ``OPEN`` row clears ``assigned_to``: it is written in exactly
+    three places -- :func:`enqueue_review`'s reopen branch, :func:`next_task`'s
+    claim, and :func:`release_task` -- and a brand-new row never sets it at
+    all. Each of the three is pinned individually by
+    ``test_enqueue_review_creates_an_open_task``,
+    ``test_enqueue_review_reopens_a_closed_task`` and
+    ``test_release_task_clears_the_assignee_and_names_who_held_it``. A **fourth**
+    producer that forgot to clear it would widen this scope silently, which is
+    what ``test_the_reviewer_scope_never_returns_someone_elses_name`` exists to
+    catch -- and ADR-0026 records the limit of that guard: it catches such a
+    producer only if some test exercises it.
+
+    Ordered ``priority`` then ``opened_at`` then ``id``, the same total order
+    :func:`_claim_stmt` uses, so the first row of a ``state=open`` page is the
+    row :func:`next_task` would hand out next.
+
+    A pure read: no flush, no commit, and no ``ValueError``. The route's own
+    query validation rejects an unknown ``state`` and an out-of-range ``limit``
+    before this is reached.
+    """
+    query = select(ReviewTask)
+    if visible_to is not None:
+        query = query.where(
+            or_(
+                ReviewTask.state == ReviewState.OPEN,
+                ReviewTask.assigned_to == visible_to,
+            )
+        )
+    if state is not None:
+        query = query.where(ReviewTask.state == state)
+    query = query.order_by(ReviewTask.priority, ReviewTask.opened_at, ReviewTask.id)
+    return list(session.scalars(query.limit(limit).offset(offset)))
 
 
 def close_review_for_receipt(session: Session, receipt_id: uuid.UUID) -> ReviewTask | None:

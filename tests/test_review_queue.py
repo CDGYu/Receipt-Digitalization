@@ -39,6 +39,7 @@ from receipts.review import (
     close_review_for_receipt,
     close_task,
     enqueue_review,
+    list_tasks,
     next_task,
     queue_stats,
     release_task,
@@ -1004,6 +1005,98 @@ def test_a_release_inside_a_completes_window_erases_the_reviewers_name(
         assert stored.state is ReviewState.DONE
         assert stored.closed_at is not None
         assert stored.assigned_to is None  # the record the DONE refusal defends
+
+
+# --------------------------------------------------------------------------- #
+# list_tasks
+# --------------------------------------------------------------------------- #
+
+
+def test_list_tasks_is_unrestricted_when_visible_to_is_none(engine: sa.Engine) -> None:
+    """``visible_to=None`` is the admin case, spelled explicitly at the call
+    site rather than as a bare boolean.
+    """
+    with Session(engine) as session:
+        open_task = _task(session, 2)
+        held = _claimed(session, "ada")
+
+        rows = list_tasks(session)
+
+        assert {row.id for row in rows} == {open_task.id, held.id}
+
+
+def test_list_tasks_hides_another_users_claim_from_a_reviewer(engine: sa.Engine) -> None:
+    """The scope ADR-0026 records: the open backlog plus the caller's own
+    rows, never a row carrying someone else's name.
+    """
+    with Session(engine) as session:
+        open_task = _task(session, 2)
+        held = _claimed(session, "ada")
+
+        rows = list_tasks(session, visible_to="bob")
+
+        assert {row.id for row in rows} == {open_task.id}
+        assert held.id not in {row.id for row in rows}
+
+
+def test_list_tasks_includes_the_callers_own_claim(engine: sa.Engine) -> None:
+    with Session(engine) as session:
+        held = _claimed(session, "ada")
+
+        rows = list_tasks(session, visible_to="ada")
+
+        assert [row.id for row in rows] == [held.id]
+
+
+def test_list_tasks_includes_the_callers_own_closed_task(engine: sa.Engine) -> None:
+    """``close_task`` leaves ``assigned_to`` set (ADR-0025), so a reviewer's
+    own history stays visible to them after the task closes. That is the whole
+    reason the scope is ``assigned_to == caller`` rather than a state filter.
+    """
+    with Session(engine) as session:
+        held = _claimed(session, "ada")
+        close_task(session, held.id)
+
+        rows = list_tasks(session, visible_to="ada")
+
+        assert [row.id for row in rows] == [held.id]
+        assert rows[0].state is ReviewState.DONE
+
+
+def test_list_tasks_orders_by_priority_then_opened_at(engine: sa.Engine) -> None:
+    """The same total order :func:`_claim_stmt` uses, so the first row of a
+    ``state=open`` page is the row :func:`next_task` would hand out next.
+    ``opened_at`` is set explicitly because SQLite resolves
+    ``CURRENT_TIMESTAMP`` only to the second.
+    """
+    with Session(engine) as session:
+        urgent = _task(session, 0, opened_at=datetime(2026, 8, 5, 12, 0, tzinfo=UTC))
+        latest = _task(session, 2, opened_at=datetime(2026, 8, 5, 10, 0, tzinfo=UTC))
+        middle = _task(session, 1, opened_at=datetime(2026, 8, 5, 11, 0, tzinfo=UTC))
+
+        rows = list_tasks(session)
+
+        assert [row.id for row in rows] == [urgent.id, middle.id, latest.id]
+
+
+def test_list_tasks_filters_by_state(engine: sa.Engine) -> None:
+    with Session(engine) as session:
+        open_task = _task(session, 2)
+        _claimed(session, "ada")
+
+        rows = list_tasks(session, state=ReviewState.OPEN)
+
+        assert [row.id for row in rows] == [open_task.id]
+
+
+def test_list_tasks_pages_with_limit_and_offset(engine: sa.Engine) -> None:
+    with Session(engine) as session:
+        first = _task(session, 0)
+        second = _task(session, 1)
+        third = _task(session, 2)
+
+        assert [row.id for row in list_tasks(session, limit=2)] == [first.id, second.id]
+        assert [row.id for row in list_tasks(session, limit=2, offset=2)] == [third.id]
 
 
 # --------------------------------------------------------------------------- #
