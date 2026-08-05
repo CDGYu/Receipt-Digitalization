@@ -423,15 +423,24 @@ def list_tasks(
     set -- ADR-0025) without seeing anyone else's.
 
     **That scope discloses no other reviewer's name**, because every path
-    producing an ``OPEN`` row clears ``assigned_to``: it is written in exactly
-    three places -- :func:`enqueue_review`'s reopen branch, :func:`next_task`'s
-    claim, and :func:`release_task` -- and a brand-new row never sets it at
-    all. Each of the three is pinned individually by
-    ``test_enqueue_review_creates_an_open_task``,
-    ``test_enqueue_review_reopens_a_closed_task`` and
-    ``test_release_task_clears_the_assignee_and_names_who_held_it``. A **fourth**
-    producer that forgot to clear it would widen this scope silently, which is
-    what ``test_the_reviewer_scope_never_returns_someone_elses_name`` exists to
+    producing an ``OPEN`` row leaves ``assigned_to`` NULL. There are exactly
+    three such producers, and each is pinned individually:
+
+      * a brand-new task in :func:`enqueue_review`, which never sets
+        ``assigned_to`` at all -- ``test_enqueue_review_creates_an_open_task``;
+      * :func:`enqueue_review`'s reopen branch, which clears it --
+        ``test_enqueue_review_reopens_a_closed_task``;
+      * :func:`release_task`, which clears it --
+        ``test_release_task_clears_the_assignee_and_names_who_held_it``.
+
+    :func:`next_task`'s claim is the one remaining writer of ``assigned_to``,
+    and it produces no ``OPEN`` row: it sets the name and ``IN_PROGRESS`` in
+    the same step, which is what
+    ``test_next_task_claims_the_task_and_records_the_assignee`` asserts
+    together rather than as two separate facts. A **fourth**
+    ``OPEN``-producer that forgot to clear ``assigned_to`` would widen this
+    scope silently, which is what
+    ``test_the_reviewer_scope_never_returns_someone_elses_name`` exists to
     catch -- and ADR-0026 records the limit of that guard: it catches such a
     producer only if some test exercises it.
 

@@ -553,8 +553,10 @@ def test_auth_matrix(clients, method, path, allowed, actor, receipt_id):
 # roles get *different rows back* (ADR-0026) -- a difference in content, not
 # in access -- so its row covers status codes only, and the content half is
 # pinned behaviourally at the bottom of this module by
-# `test_the_reviewer_scope_never_returns_someone_elses_name` and
-# `test_an_admin_sees_a_task_assigned_to_someone_else`.
+# `test_the_reviewer_scope_never_returns_someone_elses_name`,
+# `test_a_reviewer_sees_their_own_claimed_task` and
+# `test_an_admin_sees_a_task_assigned_to_someone_else` -- one per half of the
+# reviewer scope, plus the admin's.
 # --------------------------------------------------------------------------- #
 
 
@@ -643,6 +645,24 @@ def _extra_tasks(session_factory) -> None:
         session.commit()
 
 
+def _claim_as(session_factory, assignee: str) -> None:
+    """Hand ``assignee`` one open task through the public queue API.
+
+    ``next_task`` resumes before it claims (ADR-0016), and ``assignee`` holds
+    nothing at the point this is called, so it genuinely claims: an ``OPEN``
+    row leaves that state carrying this name.
+
+    Kept as a separate helper rather than folded into ``_extra_tasks`` as a
+    claimant parameter, so that helper's end state -- four tasks, one ``DONE``
+    and one ``IN_PROGRESS`` both carol's, two ``OPEN`` and unassigned -- stays
+    exactly what the six tests written against it already assume.
+    """
+    with session_factory() as session:
+        task = next_task(session, assignee)
+        assert task is not None
+        session.commit()
+
+
 def test_the_reviewer_scope_never_returns_someone_elses_name(session_factory, reviewer_client):
     """The privacy pin for ADR-0026's dual scope.
 
@@ -662,6 +682,33 @@ def test_the_reviewer_scope_never_returns_someone_elses_name(session_factory, re
     # Not decoration: without rows this assertion set is vacuous, and a
     # vacuously-passing privacy test is worse than none.
     assert body["items"]
+    assert {row["assigned_to"] for row in body["items"]} <= {None, "alice"}
+
+
+def test_a_reviewer_sees_their_own_claimed_task(session_factory, reviewer_client):
+    """The other half of the reviewer scope: "plus that caller's own rows".
+
+    ``test_the_reviewer_scope_never_returns_someone_elses_name`` bounds the page
+    from **above** -- no name but alice's may appear -- and that bound is
+    satisfied vacuously as long as every visible row is unassigned. Nothing else
+    in this module ever assigns a row to alice (``_extra_tasks`` claims only as
+    carol), so without this test the ``user.username`` half of the route's
+    ``visible_to`` mapping is a surviving mutant: replacing it with any constant
+    other than "carol" leaves every other test in this module green while a
+    reviewer silently loses their own claimed task from the queue page.
+
+    Asserted in this order on purpose. The ``assigned_to == "alice"`` assertion
+    is the one this test exists for; the subset assertion after it re-checks the
+    upper bound now that a *real* name is genuinely in the page rather than only
+    NULLs, so the privacy pin above is no longer the only thing standing between
+    the two halves.
+    """
+    _extra_tasks(session_factory)
+    _claim_as(session_factory, "alice")
+
+    body = reviewer_client.get("/review/tasks?limit=200").json()
+
+    assert any(row["assigned_to"] == "alice" for row in body["items"])
     assert {row["assigned_to"] for row in body["items"]} <= {None, "alice"}
 
 
