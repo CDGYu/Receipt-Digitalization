@@ -77,11 +77,11 @@ all 13 `feat/*` branches are merged and pushed.
 
 ## Where we are
 
-- **`main` @ `6f666bf`**, with this handoff refresh riding on top as a
+- **`main` @ `e0577ab`**, with this handoff refresh riding on top as a
   docs-only commit. The check:
 
   ```
-  git log --oneline 6f666bf..main -- src tests frontend docs ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
+  git log --oneline e0577ab..main -- src tests frontend docs ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
   ```
 
   **Empty means this prompt is current.** Any output means the tree moved
