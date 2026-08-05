@@ -4,447 +4,442 @@ where the last session left off.
 
 **Read these first, then confirm the state back to me — and verify the snapshot
 below against the repo rather than trusting it.** It has been stale at the start
-of several sessions, once by a whole milestone, and once it was rewritten
-*mid-milestone* by a subagent working outside its lane, so it described a branch
-that no longer existed. **Most recently (2026-08-05) it carried two sentences
-that contradicted each other about whether `main` was pushed** — the header said
-no, the body said yes, and only git settled it. ADR-0019 made the refresh part
-of closing a milestone; **ADR-0021 makes it part of ending any session** (its
-2026-08-02 correction widened the freshness check to include `docs`). This
-verification step is permanent.
+of several sessions, once by a whole milestone, once rewritten *mid-milestone*
+by a subagent working outside its lane, and once carrying two sentences that
+contradicted each other about whether `main` was pushed. On 2026-08-05 its own
+verification step caught two further defects in it — a branch count wrong in
+four places, and a heading that contradicted its own body. ADR-0019 made the
+refresh part of closing a milestone; **ADR-0021 makes it part of ending any
+session.** This verification step is permanent.
 
-**No branch is in flight.** The admin-UI-backend-routes milestone was closed and
-merged (true fast-forward `7aa0a22` → `b59f164`), then **`main` was pushed** on
-an explicit one-time authorization. `main` and `origin/main` are in sync, and
-all 13 `feat/*` branches are merged and pushed.
+---
+
+# ⚠️ A BRANCH IS IN FLIGHT. This is a mid-milestone handoff.
+
+**`feat/review-ui-styling`**, seven commits off `main@1314485`. `main` itself is
+untouched, pushed, and in sync with `origin/main`.
+
+**Tasks 1 and 2 of six are done; 3, 4, 5 and 6 are not started.** Task 2 was in
+**fix round 5 of 5** when the session ended — check whether it landed:
+
+```
+git log --oneline 41d01ab..feat/review-ui-styling
+git status --short          # a modified Value.tsx may be a live mutation
+```
+
+**If the tree is dirty, do not "clean" it.** ADR-0023: never repair a peer's
+tree. A modified `frontend/src/ui/Value.tsx` with no commit after `41d01ab`
+means round 5's `className` deletion mutation was mid-flight. Restore from the
+committed blob rather than guessing, and check the ledger first.
+
+---
 
 ## Reading order
 
 1. **`docs/MEMORY.md`** — current state, decisions already made, environment,
-   blockers, deferred and parked items. Its "Admin UI backend routes —
-   complete and merged" section records the last milestone.
-2. **The ledgers** —
-   `.superpowers/sdd/2026-08-05-admin-ui-backend-routes/progress.md`
-   (complete: three task entries, **nine plan defects**, and "THE CLOSE" — a
-   whole-branch review that ran **25 mutations** plus an exhaustive
-   **1,554-path** reachability walk, one fix wave, one scoped re-review).
-   `2026-08-04-admin-release/progress.md`,
-   `2026-08-03-review-ui-error-recovery/progress.md`,
-   `2026-08-03-failure-egress-redaction/progress.md`,
-   `2026-08-02-currency-bound-and-fixture-race/progress.md`,
-   `2026-07-31-pan-grouping/progress.md`, `2026-07-31-pan-hardening/progress.md`
-   are completed prior milestones; `2026-07-29-review-ui/progress.md` holds
-   Phase 5's parked items. **`.superpowers/` is gitignored — open ledgers by
+   blockers, deferred and parked items.
+2. **The in-flight ledger** —
+   `.superpowers/sdd/2026-08-05-review-ui-styling/progress.md`. **Read this
+   before touching the branch.** It carries every plan defect, every mutation,
+   the controller rulings, and the three carry-forwards Task 3 must honour.
+   Completed milestone ledgers sit beside it (`2026-08-05-admin-ui-backend-routes`,
+   `2026-08-04-admin-release`, `2026-08-03-*`, `2026-08-02-*`, `2026-07-31-*`,
+   `2026-07-29-review-ui`). **`.superpowers/` is gitignored — open ledgers by
    path; nothing in them is findable by searching the tracked tree.**
-3. **`docs/adr/README.md`, then the ADRs (0001–0026).** Mandatory before
-   touching the matching area. Session-relevant highlights:
-   - **0026** — the two backend routes: `/auth/me` answers 401 not
-     200-with-null; `/review/tasks` gives equal access with role-dependent
-     content; and the privacy property is **derived, not structural**, with
-     its limit stated. **Read before touching `/auth/me`, `/review/tasks`,
-     `list_tasks`, or anything that can put a name on an `OPEN` task.**
-   - **0025** — the admin release, whose `POST /review/{task_id}/release` is
-     what `/review/tasks` exists to feed. `close_task` deliberately leaves
-     `assigned_to` set on a `DONE` task; that is load-bearing.
-   - **0016 + its dated note** — resume-before-claim, unchanged.
-   - **0024** — the review UI's error-recovery contract.
-   - **0023 + its two dated corrections** — parallel task agents share one
-     worktree: commit every green step; never dispatch two tasks that touch
-     one file; never repair a peer's tree; **restore a mutation from a byte
-     copy, never `git checkout --`**; release an implementer explicitly.
-   - **0022** failure-text egress · **0018 + 0020 + corrections** PAN ·
-     **0015** the review UI's same-origin/`/app` rules · **0012** auth,
-     roles and the machine key · **0007** money integrity · **0006** the
-     ValueError boundary · **0017** the gate runner · **0019 + 0021**
-     session continuity and this snapshot's verification.
-4. **`.kiro/steering/receipt-system.md`** — always-on rules (gitignored,
+3. **`docs/adr/README.md`, then the ADRs (0001–0027).** Mandatory before
+   touching the matching area. Session-relevant:
+   - **0027** — the review UI's design system: light default, CSS Modules,
+     `@fontsource` never a CDN, a pathname switch not React Router, and
+     **`null` ≠ `0` ≠ empty**. **Read before writing any CSS or rendering any
+     extracted value.** Its Consequences section names what is still owed.
+   - **0026** — `/auth/me` and `/review/tasks`; the privacy property is
+     *derived, not structural*, and **not closed**.
+   - **0024** — the error-recovery contract. **Exactly one `role="alert"` on
+     screen.** Styling must not disturb it.
+   - **0015** — money is a string; `<input type="number">` and `valueAsNumber`
+     are banned; same-origin, `/app/*` only.
+   - **0023 + its two dated corrections** — parallel agents share one worktree.
+   - **0025** admin release · **0022** failure-text egress · **0018 + 0020**
+     PAN · **0012** auth and the persisted breakdown's `NULL` vs `[]` ·
+     **0006** the ValueError boundary · **0017** the gate runner ·
+     **0019 + 0021** session continuity.
+4. **`docs/superpowers/specs/2026-08-05-review-ui-design-system.md`** — the
+   design. **§2** records three deliberate overrides of the generated system;
+   **§4** is the null rule; **§9** the four settled rulings.
+   `design-system/receipt-review/MASTER.md` is the raw generated output.
+5. **`docs/superpowers/plans/2026-08-05-review-ui-styling.md`** — the plan
+   under execution. Tasks 3–6 are there in full.
+6. **`.kiro/steering/receipt-system.md`** — always-on rules (gitignored,
    untracked, still on disk).
-5. **`IMPLEMENTATION_PLAN.md`** · **`docs/KNOWN_ISSUES.md`** (ISSUE-001 — do
+7. **`IMPLEMENTATION_PLAN.md`** · **`docs/KNOWN_ISSUES.md`** (ISSUE-001 — do
    not re-derive) · **`RECEIPT_SYSTEM_SPEC.md`** §§ as needed.
-5b. **`docs/superpowers/specs/2026-08-05-review-ui-design-system.md`** before
-   writing any CSS — with `design-system/receipt-review/MASTER.md` beside it
-   as the raw generated output. The spec's §2 records three deliberate
-   overrides of that generated system; its §4 carries the null-is-not-zero
-   rule, which is the prime directive reaching the last inch of the UI.
-6. **If you open the last milestone's plan
-   (`docs/superpowers/plans/2026-08-05-admin-ui-backend-routes.md`), read its
-   "Dated defect log" at the bottom FIRST.** Five of that plan's nine defects
-   are still in its body — plans are dated historical records here and do not
-   self-amend, so the log is appended the way an ADR takes a dated
-   correction. One of those five reached the shipped tree once already,
-   precisely because it was re-derived from the plan instead of checked
-   against the code.
+8. **If you open `docs/superpowers/plans/2026-08-05-admin-ui-backend-routes.md`,
+   read its "Dated defect log" at the bottom FIRST.** Five of that plan's nine
+   defects are still in its body — plans are dated historical records here and
+   do not self-amend. One reached the shipped tree once already, precisely
+   because it was re-derived from the plan instead of checked against the code.
+
+---
 
 ## Where we are
 
-- **`main` @ `e0577ab`**, with this handoff refresh riding on top as a
-  docs-only commit. The check:
+- **`main` @ `1314485`, pushed, in sync with `origin/main`.** Untouched by the
+  in-flight branch. Every `main` push needs a fresh ask; the last was granted
+  and consumed on 2026-08-05.
+- **All 13 merged `feat/*` branches are pushed** (audited:
+  `git branch --no-merged main` was empty, every branch +0 commits).
+  `feat/review-ui-styling` is the fourteenth and is the one in flight.
+- **Freshness check** — run it before trusting anything above, using the commit
+  named in `docs/MEMORY.md`'s "Last updated" line:
 
   ```
-  git log --oneline e0577ab..main -- src tests frontend docs ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
+  git log --oneline <STAMP>..main -- src tests frontend docs ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
   ```
 
-  **Empty means this prompt is current.** Any output means the tree moved
-  after it was written.
-- **`main` is pushed and in sync with `origin/main`.** The one-time
-  authorization asked for at this close was granted and consumed by that
-  push. The standing rule continues: pushing `feat/*` is authorised;
-  **every `main` push needs a fresh ask.**
-- **All 13 `feat/*` branches are merged into `main` and pushed.** Audited
-  2026-08-05: `git branch --no-merged main` is empty and every branch adds
-  **+0** commits — they are historical merge points, kept, never cleaned up.
-  There is nothing left to merge.
-- Gates at `b59f164`, controller-run on `main` post-merge:
-  `python scripts/verify.py` **all five PASS**; pytest **979**; Vitest **221**
-  (19 files). **`src/` changed this milestone**, so the outside-repo import
-  check applied and was run from `/c/Users` — keep applying it whenever a
-  Python module changes.
+  **Empty means this prompt is current.**
+- Gates on the branch at `41d01ab`: `python scripts/verify.py` **all five
+  PASS**; pytest **979** (unchanged — no Python touched); Vitest **258** across
+  21 files, up from 221 on `main`.
 
-### What the last milestone shipped
+---
 
-**The two backend contracts the admin UI needs**, both read routes, no
-frontend change at all.
+# THE WORK, IN ORDER
 
-**`GET /auth/me`** returns `{"username", "role"}` for a signed-in caller and
-**401 otherwise, including for the machine key** — guarded by `require_user`,
-so it joins `READ_ROUTES` rather than inventing a 200-with-null shape. Bare
-`dict[str, str]`, no Pydantic model, because `POST /auth/login` has returned
-this body since `d255750`; a **drift test** pins the two equal.
+## 1. FINISH THE IN-FLIGHT MILESTONE — `feat/review-ui-styling`
 
-**`GET /review/tasks`** lists the queue so an admin can find a task id for
-`POST /review/{task_id}/release`. **Equal access, role-dependent content:**
-both roles get 200; an admin sees every row, a reviewer sees `state == OPEN`
-plus their own rows in any state. Ordered `priority, opened_at, id` — the
-same total order `_claim_stmt` uses. `has_more` off a `limit + 1` fetch.
-Backed by `list_tasks` in `queue.py`, exported from **both** `__all__` lists.
+Plan: `docs/superpowers/plans/2026-08-05-review-ui-styling.md`.
+Lanes: **1 → 2 → {3 ∥ 4} → 5 → 6.** Tasks 1 and 2 are done.
 
-**The privacy property is derived, not structural** (ADR-0026): a reviewer
-sees no other name only because `state == OPEN` implies `assigned_to IS
-NULL`. **The class is NOT closed** — the route-level pin catches a fourth
-`OPEN`-producer only if some test exercises it. Do not read it as closed.
+### 1.1 Close out Task 2 (fix round 5 of 5)
 
-**The close:** whole-branch review on the strongest model, **25 mutations** in
-an isolated byte copy — 0 Critical, 2 Important, 11 Minor. **Deleting
-`/review/tasks` turns 11 tests red, `/auth/me` 8, the scoping clause 3 — on
-the subset bound itself.** The scope then survived an **exhaustive 1,554-path
-reachability walk** with zero violations. ONE fix wave (two items), one scoped
-re-review, both addressed. pytest 953 → 979.
+If round 5 has not landed, resume or re-dispatch with exactly two items —
+**do not widen the scope**:
 
-## Non-negotiables
+- **IMPORTANT: `className={styles.notExtracted}` is deletable with every test
+  green.** Deleting it at `Value.tsx:59` leaves the whole suite passing with
+  §4's paint entirely gone. One token, zero contrivance. Rendering tests read
+  `textContent`, role and accessible name; the class guard only checks
+  `referenced ⊆ declared`, so *dropping* a reference is invisible. Fix is one
+  source-text assertion —
+  `referencedClasses(read('ui/Value.tsx')).has('notExtracted')` — symmetric
+  with the existing `declaredClasses` check. **It does not need a browser
+  pass**, contrary to what the task report says.
+- **MINOR: the property docblock is orphaned from its function.** Two JSDoc
+  blocks sit back to back with no code between, so tooling binds the nearer one
+  and `declarationsIn`'s 60-line guarantee is attached to no declaration.
 
-Unchanged: `Decimal` money path; pure validation; stable rule IDs; null over
-confident-wrong; **a full PAN never persisted**; nothing silently dropped;
-a machine run never overwrites a `reviewed` row; optional-import discipline;
-tool-use structured output; few-shot images first; consistency never cached;
-`python -m pytest` offline and Node-free. **PAN:** ADR-0018 + 0020 + their
-corrections; any `_PAN_RE` change replays the committed battery both ways,
-two-instance-tests, keeps the structural guards green. **Egress (ADR-0022):**
-failure text goes through `redact_pan` at every place it leaves the process.
-**Queue (ADR-0006):** explicit `Session` first, flush, **never commit**,
-`ValueError` at the boundary — and `list_tasks` is a pure read, so no flush
-either. **Frontend (ADR-0015):** money is a string; no `<input type="number">`;
-no `valueAsNumber`; no `CORSMiddleware`; `/app/*` only. **Error recovery
-(ADR-0024):** the summary alert always renders; the classifier never invents
-copy; the stash never touches browser storage; **`PATCH /receipts/{id}` stays
-claim-unaware**. **Scope (ADR-0026):** `visible_to=None` means unrestricted;
-the role mapping must not fail open; and nothing may put a name on an `OPEN`
-task without a test that catches it.
+**Round 5 is the cap.** Anything still open after it gets a ruling in the
+ledger, not another dispatch.
 
-## The work, in order
+### 1.2 Task 3 — style the review screen
 
-### 1. The admin UI's FRONTEND half — the committed next milestone
+`frontend/src/review/*` + `SignOutControl`. **`className` only — change no
+other JSX.** If a component needs restructuring to be styleable, stop and
+report rather than reshaping markup the tests assert against.
 
-The two backend contracts shipped 2026-08-05 and **nothing under `frontend/`
-consumes either one yet.** What remains:
+**Three carry-forwards this task MUST honour** (all in the ledger):
 
-- Read `GET /auth/me` on mount, and widen **`session.ts`** from one boolean
-  to an identity. Today `session.ts:21` is
-  `let signedIn = window.location.pathname !== '/app/login'` — a *guess*,
-  corrected only by a rejected request. `/auth/me` replaces it with a fact.
-- Give **`LoginPage.tsx`** somewhere to put the role it currently discards
-  (`:15` awaits `request('/auth/login', …)` and throws the body away).
-- A new **`/app` admin surface** that lists tasks via `GET /review/tasks` and
-  drives `POST /review/{task_id}/release` from a browser.
+1. **`Value` has no consumer, and structurally cannot deliver §4 on this
+   screen** — every one of the 17 correctable paths is an `<input>`. §4
+   specifies the input half separately as `value=""` **with
+   `placeholder="—"`**, and `placeholder` appears **zero** times in
+   `frontend/src`. **A null total renders as a blank box today.** Closing this
+   is the first job of the task.
+2. **`ConfidenceRail.tsx:62` already renders `{confidence ?? '—'}`** with no
+   accessible name, no `--color-null` and no border — an uncoordinated second
+   copy of half the rule. Convert it to `Value` first.
+3. **The currency prefix and `autoComplete` (design §5.1) are UNOWNED.**
+   Task 2 was forbidden prop changes and refused correctly, reasoning that
+   `receipt.currency` is a per-receipt correctable field so a hardcoded symbol
+   would mislabel. **Controller ruling: assigned to Task 3, widening its file
+   list to include `MoneyInput.tsx`.**
 
-**Nobody has viewed ANY of the review UI in a browser.** That risk is
-inherited, not new; the design's §8 calls it out so this milestone does not
-absorb it silently. Consider making a browser pass part of its done.
+Also: `LineItemsTable.tsx:109` still paints the focused row raw `#fffbe6`;
+`--color-surface-active` now exists for it (pale blue, deliberately not yellow
+— amber is reserved for WARN). And **Task 3 sets `text-align: right` on the
+`<td>`**; `Value` deliberately does not, because `text-align` is inert on an
+inline span.
 
-### 1b. The review UI's DESIGN SYSTEM — designed, RULED ON, and PLANNED
+**Do not disturb ADR-0024's single-`role="alert"` contract.** A second alert
+broke six tests once already, in the milestone that wrote the contract.
 
-**`docs/superpowers/specs/2026-08-05-review-ui-design-system.md`** (drafted
-2026-08-05, at the user's request, from the Qarin SaaS template reference plus
-the `ui-ux-pro-max` skill). Machine output persisted at
-`design-system/receipt-review/MASTER.md`. **Read the spec before writing any
-CSS — and read its §2, which records three deliberate overrides of the
-generated system so nobody "restores" them.**
+### 1.3 Task 4 — the `/app/admin` surface
 
-**The measured fact this rests on:** `git ls-files frontend | grep -E
-'\.(css|scss)$'` returns **nothing**. There is no stylesheet anywhere in
-`frontend/`. Every surface is browser default.
+`frontend/src/admin/*`, `api/admin.ts`, `route.ts`, `main.tsx`, `session.ts`,
+plus **one fix to `vite.config.ts`**: its comment at `:14-23` claims to be
+"cross-checked against every route `create_app` registers" and **is missing
+three** — `GET /auth/me`, `GET /review/tasks`, and `POST /review/{id}/release`
+(missing since 2026-08-04). The functional `API_PREFIXES` array is fine; the
+claim is what is false.
 
-**What the reference actually gave us.** Qarin is a SaaS *marketing website*
-template — hero, pricing tiers, testimonials, blog feed. Four patterns
-transfer (stat tiles → `/metrics` summary; comparison table → the task table's
-row rhythm; FAQ accordion → the findings panel; card shell → panel shell). The
-rest does not, and the spec says so rather than bending a landing page into a
-review tool.
+**The empty state must name its scope** (ADR-0026): a reviewer sees a filtered
+list, so a bare "No tasks" would read as a broken queue. Reviewer → "No open
+tasks, and none assigned to you"; admin → "No tasks".
 
-**The one rule no generic design system supplies — §4:**
-**`null` must never look like `0`, and neither may look like "empty".** It
-falls straight out of the prime directive: rendering an unextracted total as
-`0.00` destroys the system's central safety property at the last inch, on the
-one screen where a human decides. Three distinct treatments, and it is
-**testable** — assert a null `total`'s accessible name is not `"0"`, `"0.00"`
-or `""`. `auto_approval_rate`'s `str | None` and the confidence breakdown's
-`NULL`-vs-`[]` are the same rule at the API boundary, already built that way.
-
-**All four questions are SETTLED (2026-08-05, user rulings)** and recorded in
-spec §9: **light default** with a full dark theme; **CSS Modules + one
-`tokens.css`** (zero new runtime deps, native to Vite); **a browser pass IS
-part of "done"**; and — controller's call, flagged — **a ~20-line pathname
-switch rather than React Router**, because runtime deps are exactly `react`
-and `react-dom` and the backend already serves a history fallback
-(`_SpaFiles(..., html=True)`, `api.py:856`), so `/app/admin` survives a
-reload without one.
-
-**The plan is written:**
-`docs/superpowers/plans/2026-08-05-review-ui-styling.md` — six tasks, lanes
-drawn so Tasks 3 and 4 share no file (ADR-0023). **Not yet executed.**
-
-**The six planned tasks:** (1) tokens + **self-hosted** Fira woff2 + the
-light/dark switch; (2) primitives — `Value`, `Button`, `Chip`, and the
-restyled `MoneyInput`, carrying **the null-is-not-zero pin**; (3) style the
-review screen, `className` only, **without disturbing the single-`role="alert"`
-contract**; (4) the `/app/admin` surface with a **scope-aware empty state**
-(ADR-0026 — a reviewer's empty list must not read as a broken queue); (5) **the
-browser pass**; (6) ADR-0027.
-
-Lanes: 1 → 2 → {3 ∥ 4} → 5 → 6. Tasks 3 and 4 share no file, but `main.tsx`
+Tasks 3 and 4 **share no file** and may run in either order, but `main.tsx`
 belongs to 4 and is the one file a careless 3 might reach for.
 
-**How it connects to the backend — it already does, fully.** The API *serves
-the SPA itself* (`_SpaFiles` mounted at `/app`, `api.py:856`, history
-fallback), so the browser is same-origin and ADR-0015 can ban
-`CORSMiddleware`. `vite.config.ts` proxies every API prefix to
-`localhost:8000` for dev. **The styling work adds no backend plumbing** — every
-route it consumes already ships. The money path is unbroken:
-`Numeric(14,4, asdecimal=True)` → `Decimal` → `money()`'s `str()` → JSON
-string → React state string → PATCH string → `_reject_json_float`. That is
-*why* `MoneyField` must be `type="text"`.
+### 1.4 Task 5 — the browser pass nobody has ever done
 
-**Found while checking, and folded into Task 4:** `vite.config.ts:14-23`
-claims its route list is "cross-checked against every route `create_app`
-registers" and **is missing three** — `GET /auth/me`, `GET /review/tasks`, and
-`POST /review/{id}/release` (missing since 2026-08-04). Harmless functionally,
-since `API_PREFIXES` matches by prefix, but the claim is false. Two milestones
-missed it because both scoped their file rules to exclude `frontend/`.
+**This closes a two-milestone-old gap: no human has opened any of this UI.**
+Build, seed a real database, serve, and capture every surface at **375, 1024,
+1440px** in **both themes**: login; the review screen with null fields;
+findings at all three severities; each of the five ADR-0024 error states; the
+admin surface with tasks; and the admin surface empty, as a reviewer.
 
-### 2. Phase 5 follow-ups — two left
+**Report findings; do not fix them.** A pass that quietly repairs leaves no
+record of what was wrong. **Lay down no pixel baselines** — a first-ever visual
+pass has nothing to diff against, and a baseline from unreviewed output pins
+whatever is broken.
+
+Check specifically: is a **null field visibly different from a zero**? Is the
+money column aligned on the decimal at every width? Do severity colours survive
+dark mode at 4.5:1? Does anything scroll horizontally at 375px? Are focus rings
+visible in both themes? Is the receipt image legible against its surround?
+
+### 1.5 Task 6 — absorb the findings
+
+**ADR-0027 is already written and Accepted.** Task 6 therefore becomes:
+**append a dated note recording what the browser pass found**, since that is
+the first evidence this project has about how any of its UI actually looks. Do
+**not** edit 0027's body — ADRs are immutable here.
+
+### 1.6 Then close the milestone
+
+Whole-branch review on the strongest model → **ONE** fix wave → one scoped
+re-review → ff-merge → refresh this pair in the same session → **ask before
+pushing `main`.**
+
+---
+
+## 2. Phase 5 follow-ups — two left
 
 1. **A read route for `corrections`.** Nothing does `select(Correction)`, so a
    reviewer cannot see the correction history of the receipt they are
-   correcting and an auditor needs database access. Additive; **blocked on an
-   auth ruling.** An answer was given on 2026-08-05 — *"both, scoped
-   differently: reviewers see corrections for the receipt they hold, admins
-   see any receipt's"* — **but it arrived alongside a system notice
-   disclaiming it as user input and was never restated for confirmation.
-   Re-confirm it verbatim before designing the route.**
+   correcting and an auditor needs database access. **Blocked on an auth
+   ruling.** An answer was given on 2026-08-05 — *"both, scoped differently:
+   reviewers see corrections for the receipt they hold, admins see any
+   receipt's"* — **but it arrived alongside a system notice disclaiming it as
+   user input and was never restated. Re-confirm it verbatim before designing
+   the route.**
 2. **An ASGI entry point / deployment story.** `create_app` is a factory
    nothing under `src/` calls. `scripts/serve_review_e2e.py` is deliberately
    e2e-scoped — inheriting a deployment policy from an e2e launcher is the
-   mistake to avoid. **This is the only item that can start with no ruling.**
+   mistake to avoid. **The only item that can start with no ruling.**
 
-### 3. THE ONE RESIDUAL — pre-existing, known false, NOT fixed
+## 3. THE ONE RESIDUAL — pre-existing, known false, NOT fixed
 
 **`src/receipts/review/api.py`'s signed-blob handler claims: "This is the one
-unauthenticated route in the service."** It is false. Measured at the
-2026-08-05 close by building the route table from `create_app` and reading
-each route's resolved dependant tree: **`GET /health`, `POST /auth/login`,
-`POST /auth/logout` and the `/app` mount are also reachable with no session**
-— five such routes, or **nine** with `DOCS_ENABLED=true`.
+unauthenticated route in the service."** False. Measured by building the route
+table from `create_app` and reading each route's resolved dependant tree:
+`GET /health`, `POST /auth/login`, `POST /auth/logout` and the `/app` mount are
+also reachable with no session — **five**, or **nine** with `DOCS_ENABLED=true`.
 
-**Why it is called out here rather than buried in the deferred list:**
+Same defect class as ADR-0026's own Important #9, in the very file that finding
+cited. Pre-existing on `main` since `130b202`. **Fix with the next legitimate
+edit of `api.py`; do not open a branch for it.** Apply review standard 17 when
+you do — answer the universal by enumerating, not by arguing.
 
-- It is the **same defect class** as the close's own Important #9 — a false
-  universal about the auth surface — and it sits in the **very file** that
-  finding cited as its counter-example. One was fixed; its twin was not.
-- It is **pre-existing, not this branch's**: verified on `main` since
-  `130b202`, and the admin-UI-routes branch never touches that docstring.
-  That is why it was out of scope for a close whose fix wave is scoped to
-  the branch diff, and why there was no second fix wave to catch it.
-- Nothing depends on it and it changes no behaviour. It is a prose defect in
-  a docstring that reads as an inventory — exactly the shape that has now
-  misled a standard-12 re-read once on this project.
+## 4. Phase 6 — merchants & few-shot (P6.T1)
 
-**Fix it with the next legitimate edit of `api.py`** (one sentence — name the
-real set, or narrow the claim to "the one route that serves receipt data
-without a session"). **Do not open a branch just for it**; do not let it
-survive a milestone that edits that file. And when you fix it, apply review
-standard 17: *answer the universal by enumerating, not by arguing* — the
-enumeration script and its two traps are in the plan's dated defect log.
+`merchants/{fingerprint,registry}.py` is greenfield; few-shot images first,
+target last; hints end "trust the image"; measure top-10-merchant accuracy
+before/after — **blocked on ISSUE-001**, so Phase 6 can be built but not
+validated. Five things unblock here: semantic dedupe into `process_receipt`;
+the same hints into `_attempt_prompt_hash`; `merchant_default_currency` at its
+plug-in point in `pipeline.py` (**re-verify the line — the file has grown**);
+the `image_phash` gap; `Merchant.receipt_count` (nothing writes it).
+`VAT Reg. TIN` is the strongest fingerprint on this corpus.
 
-### 4. Phase 6 — merchants & few-shot (P6.T1)
+## 5. Phase 7 — self-consistency (P7.T1)
 
-Unchanged: `merchants/{fingerprint,registry}.py` is greenfield; few-shot images
-first, target last; hints end "trust the image"; measure top-10-merchant
-accuracy before/after — **which is blocked on ISSUE-001**, so Phase 6 can be
-built but not validated. Five things unblock here: semantic dedupe into
-`process_receipt`; the same hints into `_attempt_prompt_hash`;
-`merchant_default_currency` at its plug-in point in `pipeline.py` (**re-verify
-the line — the file has grown**); the `image_phash` gap; `Merchant.receipt_count`
-(nothing writes it). `VAT Reg. TIN` is the strongest fingerprint on this corpus.
-
-### 5. Phase 7 — self-consistency (P7.T1)
-
-Unchanged: wire `run_consistency` (`extract/extractor.py`, zero references in
+Wire `run_consistency` (`extract/extractor.py`, zero references in
 `pipeline.py`) for handwritten/low-legibility; **gate on
 `triage.is_handwritten`, never `document_type`**; consistency runs never cached.
 
-### 6. Phase 8 — calibration & eval-harness honesty
+## 6. Phase 8 — calibration & eval-harness honesty
 
-Unchanged: P3.T6/P8.T1 threshold sweep + weights into `config/rules.yaml`
-(**blocked on ISSUE-001**); P8.T2 grow the held-out set; P8.T3 the all-failed
-eval run still persists `"auto_approval_precision": 1.0` to JSON.
+P3.T6/P8.T1 threshold sweep + weights into `config/rules.yaml` (**blocked on
+ISSUE-001**); P8.T2 grow the held-out set; P8.T3 the all-failed eval run still
+persists `"auto_approval_precision": 1.0` to JSON.
 
-### 7. Still open from earlier phases
+## 7. Still open from earlier phases
 
-Unchanged: R060/R061 grounding decision (also gates bbox); score
-`is_handwritten` from triage too; `is_receipt` has no consumer (never
-hard-reject on it); blank pre-printed template rows (sibling of R052).
+R060/R061 grounding decision (also gates bbox); score `is_handwritten` from
+triage too; `is_receipt` has no consumer (never hard-reject on it); blank
+pre-printed template rows (sibling of R052).
 
-### 8. Deferred, with rulings (see the ledgers)
+## 8. Deferred, with rulings
 
-- **Nothing from the admin-UI-routes milestone is parked** — its close never
-  hit the breaker. **20 Minor findings shipped**, triaged as safe by the
-  whole-branch reviewer and listed in MEMORY.md's "Deferred follow-ups". The
-  one a future editor will trip over: **`api.py`'s signed-blob docstring says
-  it "is the one unauthenticated route in the service" — false and
-  pre-existing** (five such routes, nine with `DOCS_ENABLED=true`), and it is
-  the *same defect class* as the close's own Important #9, in the very file
-  that finding cited. Fix with the next legitimate edit of `api.py`.
-- **`GET /receipts`' `has_more` is unpinned in the `True` direction** — a
-  constant `has_more: False` survives all 979 tests. Measured as a control;
-  `GET /review/tasks` is strictly better than the route it was copied from.
-- **Layer-wide, measured:** nothing pins the queue's caller-commits rule —
-  deleting `release_task`'s `flush()` or turning it into a `commit()` leaves
-  the suite green, and the same holds for `enqueue_review` and `next_task`.
-- **The admin release's accepted residuals (ADR-0025):** the still-polling
-  displaced reviewer can re-claim the task; and the third race order.
+- **From the styling branch** (full list in its ledger): the class-name guard's
+  bounded property and its three residual leaks — harmless-but-inexact
+  (`:is`/`:where`), harmful-but-absurd (`:not(…, .mark) { color: … }` is
+  self-contradictory CSS), loud-and-safe (`@import` before the first rule).
+  **Parked with a ruling; do not spend a round on them.** Also: token *values*
+  are unpinned in the light block; `declaredClasses` matches `.name` outside
+  selector position; `block()` assumes flat rule bodies.
+- **From the admin-UI-routes milestone:** 20 Minor findings, triaged as safe.
+  `GET /receipts`' `has_more` is **unpinned in the `True` direction** — a
+  constant `has_more: False` survives all 979 tests.
+- **Layer-wide, measured:** nothing pins the queue's caller-commits rule.
+- **ADR-0025's accepted residuals:** the re-claim, and the third race order.
 - **Parked at the review-UI error-recovery close:** the `42/42` comment;
   `edit()` not resetting `submit`; no `aria-invalid`; the comment-only
-  select/checkbox invariant; the sign-out confirm's wording; keystrokes
-  during an in-flight submit not stashed.
+  select/checkbox invariant; the sign-out confirm's wording; keystrokes during
+  an in-flight submit not stashed.
 - **Two queued PAN scoped decisions** — the grouping residual (76 of 97 band
   shapes) and the `{1,2}` separator surface (36 spellings, pinned).
-- Plus the standing list in MEMORY.md's "Deferred follow-ups".
+- Plus MEMORY.md's "Deferred follow-ups".
 
-### 9. LAST — ISSUE-001, deferred by the user until the system is built
+## 9. LAST — ISSUE-001
 
-Unchanged: read `docs/KNOWN_ISSUES.md`, do not re-derive; hosted tool-capable
-model needed (rotate the echoed Gemini key first); until it runs, no measured
-accuracy numbers and no real precision claim.
+Read `docs/KNOWN_ISSUES.md`, do not re-derive; hosted tool-capable model needed
+(rotate the echoed Gemini key first); until it runs, no measured accuracy
+numbers and no real precision claim.
+
+---
+
+## Non-negotiables
+
+`Decimal` money path; pure validation; stable rule IDs; null over
+confident-wrong; **a full PAN never persisted**; nothing silently dropped; a
+machine run never overwrites a `reviewed` row; optional-import discipline;
+tool-use structured output; few-shot images first; consistency never cached;
+`python -m pytest` offline and Node-free.
+
+**PAN:** ADR-0018 + 0020 + corrections; any `_PAN_RE` change replays the
+committed battery both ways, two-instance-tests, keeps the structural guards
+green. **Egress (ADR-0022):** failure text goes through `redact_pan` at every
+process exit. **Queue (ADR-0006):** explicit `Session` first, flush, **never
+commit**, `ValueError` at the boundary; `list_tasks` is a pure read.
+**Frontend (ADR-0015):** money is a string; no `<input type="number">`; no
+`valueAsNumber`; no `CORSMiddleware`; `/app/*` only. **Error recovery
+(ADR-0024):** exactly one `role="alert"`; the classifier never invents copy;
+the stash never touches browser storage; `PATCH /receipts/{id}` stays
+claim-unaware. **Scope (ADR-0026):** the role mapping must not fail open.
+**UI (ADR-0027):** `null` ≠ `0` ≠ empty; severity colours are reserved; no raw
+hex outside `tokens.css`; no CDN fonts.
+
+---
 
 ## Running it
 
-- Two suites: `python -m pytest` (**979** on `main`) and Vitest in `frontend/`
-  (**221**, 19 files). `npm test` does NOT type-check — run `npm run typecheck`
-  too. `python scripts/verify.py` is what "passing" means (ADR-0017).
-- **`pyproject.toml:61` already sets `addopts = "-q"`.** So `python -m pytest
-  -q` is `-qq` and prints **no pass count** — green would rest on the exit
-  code alone — and `-v` nets back to dot output (`-vv` gives a listing).
-  **Use bare `python -m pytest`,** or `--junitxml` and read the XML.
-- **`python scripts/verify.py` exceeds a 2-minute tool timeout.** Run it in
-  the background or raise the timeout.
-- Lint is `python -m ruff check .`.
-- **`pytest -k` matches substrings, not words.** `-k tasks` does **not** match
-  `test_an_admin_sees_a_task_assigned_to_someone_else` (`a_task`, not
-  `tasks`). Measured: it would have collected 5 of 6.
-- **The working tree is CRLF.** A mutation applied by a script anchored on
-  `\n` matches nothing and reports "applied, tests green" — indistinguishable
-  from a surviving mutant. **And a non-empty `git diff --stat` is not enough:
-  `api.py` carries `limit=limit + 1` and the `has_more` return line TWICE,
-  and two mutation runs landed cleanly on the wrong route and reported the
-  suite passing.** Confirm the change landed *where you meant*.
-- **Enumerating routes: `include_router` wraps the auth router in an
-  `_IncludedRouter`,** so a flat walk of `app.routes` yields 13 routes with
-  **zero** `/auth/*` paths — recurse through `.original_router.routes` for
-  the real 17. A transitively-called guard (`require_role` → `require_user`)
-  is invisible at runtime too; it is plain Python, not a nested `Depends`.
+- Two suites: `python -m pytest` (**979**) and Vitest in `frontend/` (**258**
+  on the branch, 221 on `main`). `npm test` does NOT type-check — run
+  `npm run typecheck` too. `python scripts/verify.py` is what "passing" means.
+- **`pyproject.toml:61` sets `addopts = "-q"`.** So `python -m pytest -q` is
+  `-qq` and prints **no pass count**; `-v` nets to dot output (`-vv` gives a
+  listing). **Use bare `python -m pytest`,** or `--junitxml`.
+- **`scripts/verify.py` exceeds a 2-minute tool timeout.** Background it.
+- Lint: `python -m ruff check .`. The frontend linter is **oxlint**; there is
+  no formatter config anywhere in the tracked tree.
+- **`pytest -k` matches substrings, not words.** `-k tasks` does not match
+  `test_an_admin_sees_a_task_assigned_to_someone_else`.
+- **The working tree is CRLF.** A mutation anchored on `\n` matches nothing and
+  still reports success. **And a non-empty `git diff --stat` is not enough** —
+  `api.py` carries `limit=limit + 1` and the `has_more` return line twice, and
+  two runs landed on the *wrong route* and reported the suite passing. Confirm
+  it landed **where you meant**. `git diff --stat` is also **silent on
+  untracked files**; use an md5 landed-check.
+- **Vitest's environment pragma is matched ANYWHERE in a file** — including
+  inside a docblock that merely quotes it. Verified at source: the matcher is
+  unanchored against the whole file. It silently moved the suite to Node and
+  killed 11 rendering tests on `document is not defined`.
+- **Vitest sets `css: false`**, so a `.module.css` import returns a proxy whose
+  keys echo back. **Class names are unpinnable by rendering tests** — guard
+  them by reading the stylesheet as text.
+- **`dirname(fileURLToPath(import.meta.url))` DOES work under jsdom.** It is
+  the `new URL(specifier, import.meta.url)` *pattern* Vite rewrites into an
+  asset URL. `tokens.test.ts`'s attribution is right;
+  **`no-float-in-money-path.test.ts:3-5`'s is wrong** and still uncorrected —
+  it has been outside every task's permitted file set so far.
+- **Enumerating routes:** `include_router` wraps the auth router in an
+  `_IncludedRouter`, so a flat walk of `app.routes` yields 13 routes with
+  **zero** `/auth/*` paths — recurse through `.original_router.routes` for the
+  real 17. A transitively-called guard (`require_role` → `require_user`) is
+  invisible at runtime; it is plain Python, not a nested `Depends`.
 - **The Grep tool mangles `/` in content output** — verify slash-sensitive
   claims with Read, `git grep` via Bash, or by executing.
-- The destructive-commands hook false-positives: `rm` under the repo,
-  read-only `git grep` whose *pattern* names a sensitive file, and **any
-  heredoc whose text contains a word like "erase"**. PowerShell
-  `Add-Content` / `Remove-Item` and the Write tool work.
-- CLI: `python -m receipts.cli <command>`. E2E deliberate:
-  `python scripts/seed_review_e2e.py --reset` then
-  `cd frontend && npx playwright test`.
+- The destructive-commands hook false-positives on: `rm` under the repo;
+  read-only `git grep` whose *pattern* names a sensitive file; **any heredoc
+  containing slash-separated config filenames**; and reading `vite.config.ts`
+  via `cat`. Use the Read tool and rephrase patterns.
+- CLI: `python -m receipts.cli <command>`. E2E: `python scripts/seed_review_e2e.py
+  --reset` then `cd frontend && npx playwright test`.
 
 ## Git
 
-Default branch **`main`**; `origin` → `CDGYu/Receipt-Digitalization`,
-**public**. **Pushing `feat/*` is authorised; ask before pushing `main`**
-(every `main` push authorization is one-time). Merged `feat/*` branches and
-SDD workspaces are **kept, never cleaned up** — this overrides the
-superpowers skills, which would delete both. `.kiro/`, `.github/workflows/`,
-`.superpowers/`, `var/`, `eval/golden/images/` are gitignored — never stage
-anything under `var/` (real receipt images).
+Default branch **`main`**; `origin` → `CDGYu/Receipt-Digitalization`, **public**.
+**Pushing `feat/*` is authorised; ask before pushing `main`** (every `main` push
+authorization is one-time). Merged `feat/*` branches and SDD workspaces are
+**kept, never cleaned up** — this overrides the superpowers skills, which would
+delete both. `.kiro/`, `.github/workflows/`, `.superpowers/`, `var/`,
+`eval/golden/images/` are gitignored — never stage anything under `var/`.
 
 ## Workflow
 
-brainstorm → design doc → ADR for anything load-bearing → implementation plan
-→ subagent-driven execution (one fresh implementer per task, briefed to read
-the real signatures first; controller reviews the diff, re-runs gates
-independently, dispatches a task review, appends to the ledger). Milestone
-close: whole-branch review on the strongest model → ONE fix wave → one scoped
-re-review → ff-merge → refresh this pair in the same session. Mid-branch
-session end: refresh anyway and push (ADR-0021).
+brainstorm → design doc → ADR for anything load-bearing → implementation plan →
+subagent-driven execution (one fresh implementer per task, briefed to read the
+real signatures first; controller reviews the diff, re-runs gates independently,
+dispatches a task review, appends to the ledger). Milestone close: whole-branch
+review on the strongest model → ONE fix wave → one scoped re-review → ff-merge →
+refresh this pair in the same session.
 
 **Dispatch discipline (ADR-0023):** tasks that share a file run **strictly
-serially**. The last milestone's Tasks 1 and 2 both touched
-`tests/test_api_read.py` and were serialised for exactly that reason — and
-folding both matrix rows into one task was rejected, because it would assert
-a route that does not exist at that commit.
+serially**. Draw boundaries so no two tasks share a file.
 
-**Probe before dispatching — and sweep transitively.** Plan-defect count by
-milestone: Phase 5 eleven; PAN hardening five; PAN grouping six; currency
-bound two; failure-egress two; review-UI error recovery four; admin release
-seven; **admin UI backend routes NINE**. Every one across eight milestones
-was the controller's, and every one was caught by an implementer or reviewer
-who checked instead of trusting. **The plan's prose is reliable; its claims
-about existing artefacts are not.**
+**Probe before dispatching.** Plan-defect count by milestone: Phase 5 eleven;
+PAN hardening five; PAN grouping six; currency bound two; failure-egress two;
+review-UI error recovery four; admin release seven; admin UI backend routes
+nine; **review-UI styling nine so far**. Every one across nine milestones was
+the controller's, and every one was caught by an implementer or reviewer who
+checked instead of trusting. **The plan's prose is reliable; its claims about
+existing artefacts are not.**
 
-## Review standards this project learned the hard way — hold all of them
+## Review standards — hold all of them
 
-1–15 unchanged (reproduce, don't reason · RED proofs · revert each guarantee
-separately · single-variable mutations · **no rotting numbers in comments** ·
+1–15 unchanged (reproduce don't reason · RED proofs · revert each guarantee
+separately · single-variable mutations · no rotting numbers in comments ·
 grep-don't-recall · don't credit unasked tools · stub-reflects-write · two
 instances in one input · replay the committed battery both ways · coverage and
 cross-boundary risk move together · a grown prose table changes every sentence
 quantifying over it · a prose claim about a mutation needs revert-proof
-discipline · a pin never proven to fail is not a pin · **a mutation that kills
-the right test for the wrong reason proves nothing**), plus:
+discipline · a pin never proven red is not a pin · a mutation that kills the
+right test for the wrong reason proves nothing), plus:
 
 16. **Confirming a mutation landed is not confirming it landed where you
-    meant.** `api.py` carries `limit=limit + 1` and the `has_more` return
-    line twice. Two runs applied cleanly, with a correct non-empty byte
-    delta, **to the wrong route**, and reported the full suite passing.
+    meant.** Two runs applied cleanly with a correct byte delta to the wrong
+    route and reported the suite passing.
 
-17. **A universal claim is answered by an enumeration, not an argument.**
-    Defect #9 — "the guard every other authenticated route uses" — survived
-    an explicit standard-12 re-read because the check reasoned about which
-    guards call `require_user` instead of listing the routes. Two
-    counter-examples were sitting in the tree, and **the ledger recorded the
-    wrong answer as settled.** Enumerating took one script.
+17. **A universal claim is answered by an enumeration, not an argument.** A
+    false universal about the auth surface survived an explicit standard-12
+    re-read because the check reasoned about which guards call `require_user`
+    instead of listing the routes.
 
-And: **a green suite is not evidence that installed software works** — run
-entry points from outside the repository.
+18. **A substring can answer for a declaration.** Three times in one milestone:
+    `--color-surface-raised` satisfied `toContain('--color-surface')`;
+    `border-left: 2px solid var(--color-null)` satisfied
+    `toContain('var(--color-null)')`. Assert on declarations, exact equality,
+    or set membership — never on containment.
+
+19. **An enumerated defence never converges.** Four consecutive fix rounds each
+    closed the shapes that had been found and re-asserted the class was closed;
+    each assertion was falsified by the next round. **The recurring defect was
+    the assertion, not the code.** What broke it: state one bounded, checkable
+    property, enforce it at both ends, move the enumerations into the tests as
+    examples, and **report further shapes rather than fixing them**. A round has
+    converged when it adds a *universally-quantified accept-side* assertion that
+    fails on the previous round's defect without anyone having thought of it.
+
+And: **a green suite is not evidence that installed software works** — run entry
+points from outside the repository.
+
+---
 
 ## Blocked on me (the user) — surface these, do not guess
 
 1. **Re-confirm the `corrections` auth ruling** — "both, scoped differently"
-   was answered on 2026-08-05 but never confirmed. (Gates §2.1.)
+   was answered 2026-08-05 but never confirmed. (Gates §2.1.)
 2. **A hosted tool-capable provider + freshly rotated key** (ISSUE-001 → all
    calibration, and Phase 6's success metric).
 3. **Do the public golden labels need scrubbing?** (Real third-party names,
@@ -453,26 +448,12 @@ entry points from outside the repository.
 5. **GitHub Actions again?** If yes, the workflow calls `scripts/verify.py`.
 6. **Close the PAN grouping residual?** Which priced route?
 7. **Narrow the `{1,2}` separator** now that its surface is measured?
-8. **Has anyone looked at the review UI in a browser?** Still nobody, and the
-   frontend milestone is the natural moment.
-9. **The four design-system questions** (§1b, spec §9): light-vs-dark default;
-   CSS Modules vs Tailwind vs plain CSS; whether a browser pass is part of
-   "done"; whether the admin surface gets its own route shell. **All four gate
-   the styling work — it cannot start without at least the first two.**
+8. **`main` push** — the next one needs a fresh ask.
 
-*(The `main` push question is settled — it was granted and consumed on
-2026-08-05, and `main` is in sync. The next push needs a fresh ask.)*
-
-**Today's goal:** <FILL THIS IN — with no branch in flight, the default is
-"pick the next named piece of work". The **admin UI's frontend half** (§1) is
-the committed next milestone and now genuinely unblocked: both backend
-contracts exist and nothing consumes them. It is also the first frontend work
-since two UI milestones shipped without anyone opening a browser, so consider
-making a browser pass part of its definition of done. The **ASGI entry point**
-(§2.2) is the only smaller item that needs no ruling from me. The
-`corrections` route (§2.1) needs its ruling re-confirmed first. **§3's
-residual is not a milestone — it is one sentence, to be folded into whichever
-milestone next edits `api.py`**; do not open a branch for it, and do not let
-it survive a branch that touches that file. Phase 6 (§4) can be built but not
-validated until ISSUE-001 runs. Brainstorm → design → plan before touching
-code.>
+**Today's goal:** <FILL THIS IN — the default is **finish the in-flight
+milestone** (§1). Check whether Task 2's round 5 landed, close it out, then
+Tasks 3 → 4 → 5 → 6 and the whole-branch review. Task 3 is the biggest and
+carries three must-honour items from the ledger; Task 5 is the browser pass
+nobody has ever done and is the point of the whole milestone. If you would
+rather pause the branch, it is committed and green at every step — say so and
+I will push it and stop.>

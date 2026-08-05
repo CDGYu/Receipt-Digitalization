@@ -32,6 +32,7 @@ Accepted; supersede it with a new ADR rather than editing history.
 | [0024](0024-review-ui-error-recovery-contract.md) | The review UI's error-recovery contract | Accepted |
 | [0025](0025-admin-release-for-a-claimed-task.md) | Admin release for a claimed review task | Accepted |
 | [0026](0026-admin-ui-backend-routes.md) | The admin UI's backend routes: whoami, and a scoped task listing | Accepted |
+| [0027](0027-review-ui-design-system.md) | The review UI's design system: tokens, themes, fonts, and `null` ≠ `0` | Accepted |
 
 Read **0001** first: it is the invariant everything else defers to. **0007** is
 the one to read before touching anything that writes card data or money, and
@@ -41,8 +42,11 @@ leaves. **0017** is the one to read before believing a green test run — `npm
 test` does not type-check, and that trap fired three times in one milestone.
 **0026** is the one to read before writing anything that can leave a review task
 `OPEN`: `GET /review/tasks` discloses no reviewer's name to another reviewer only
-because every existing `OPEN`-producer clears `assigned_to`, and nothing in the
-schema enforces that.
+because every existing `OPEN`-producer clears or never sets `assigned_to`, and
+nothing in the schema enforces that. **0027** is the one to read before writing
+any CSS or rendering any extracted value: it carries the token vocabulary, the
+light/dark contract, and the rule that `null` must never look like `0` — the
+prime directive reaching the last inch of the UI.
 
 Primary sources these build on: `RECEIPT_SYSTEM_SPEC.md` (build spec),
 `README.md` (§5 design decisions), `VLM_AND_DATA.md`, and the always-on

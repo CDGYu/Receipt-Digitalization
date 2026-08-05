@@ -6,19 +6,31 @@ continuity protocol itself — what lives where, and why this snapshot must be
 verified rather than trusted — is **ADR-0019**, extended by **ADR-0021** (whose
 2026-08-02 dated correction widened the freshness check after a docs-only task
 proved invisible to it).
-Last updated: **2026-08-05 (admin UI backend routes merged and pushed)**, at
-**`main @ e0577ab`**, no branch in flight, this refresh riding on top as a
-docs-only commit. A stamp cannot name the commit that writes it, so the
-check is not a commit count — counts rot — but this:
+Last updated: **2026-08-05 (mid-milestone: `feat/review-ui-styling` IN FLIGHT)**,
+at **`main @ 1314485`**, which the branch does not touch. A stamp cannot name
+the commit that writes it, so the check is this:
 
 ```
-git log --oneline e0577ab..main -- src tests frontend docs ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
+git log --oneline 1314485..main -- src tests frontend docs ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
 ```
 
 **Empty means this file is current.** Any output means the tree moved after it
 was written and you are reading something stale.
 
 ## Snapshot
+
+- **⚠️ A BRANCH IS IN FLIGHT: `feat/review-ui-styling`**, eight commits off
+  `main@1314485`. **Tasks 1 and 2 of six are complete; 3, 4, 5, 6 are not
+  started.** Vitest **258** on the branch (221 on `main`); pytest **979**
+  unchanged (no Python touched); all five gates PASS at every commit.
+  ADR-0027 records its decisions. **The plan is
+  `docs/superpowers/plans/2026-08-05-review-ui-styling.md`; the ledger is
+  `.superpowers/sdd/2026-08-05-review-ui-styling/progress.md` and must be read
+  before touching the branch.**
+- **Round 5 of Task 2's fix loop hit the cap (`e216af4`) and its scoped
+  re-review was NOT run** — the session ended on a wrap-up instruction while
+  it was in flight. **The whole-branch review must cover `41d01ab..e216af4`
+  explicitly**; it is the one diff on this branch no reviewer has seen.
 
 - **`main` @ `e0577ab`, pushed, in sync with `origin/main`.** The milestone
   was first merged locally with no push; the user then authorized the push
