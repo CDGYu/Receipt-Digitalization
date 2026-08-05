@@ -6,13 +6,13 @@ continuity protocol itself — what lives where, and why this snapshot must be
 verified rather than trusted — is **ADR-0019**, extended by **ADR-0021** (whose
 2026-08-02 dated correction widened the freshness check after a docs-only task
 proved invisible to it).
-Last updated: **2026-08-04 (admin release merged and pushed)**, at
-**`main @ 9dd2fea`**, no branch in flight, this refresh riding on top as a
+Last updated: **2026-08-05 (admin UI backend routes merged locally)**, at
+**`main @ b59f164`**, no branch in flight, this refresh riding on top as a
 docs-only commit. A stamp cannot name the commit that writes it, so the
 check is not a commit count — counts rot — but this:
 
 ```
-git log --oneline 9dd2fea..main -- src tests frontend docs ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
+git log --oneline b59f164..main -- src tests frontend docs ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
 ```
 
 **Empty means this file is current.** Any output means the tree moved after it
@@ -20,12 +20,17 @@ was written and you are reading something stale.
 
 ## Snapshot
 
-- **`main` @ `9dd2fea`, pushed, in sync with `origin/main`** — the
-  admin-release close merged locally by user choice, then a one-time `main`
-  push authorization was asked for and granted in the same session and
-  consumed by that push. The standing ask-first rule for `main` continues.
-  pytest on `main`: **953**; Vitest **221**.
+- **`main` @ `b59f164`, merged locally, NOT pushed.** `origin/main` is still
+  at **`7aa0a22`**, nine commits behind. The user chose "merge locally" and
+  authorized only the `feat/*` push; **no `main` push authorization was
+  given or consumed this session.** The standing ask-first rule for `main`
+  continues — every push needs its own fresh ask.
+  pytest on `main`: **979**; Vitest **221**.
 - **NO branch in flight.** Empty is the signal (ADR-0021).
+- **The admin UI's backend routes are complete and merged** (2026-08-05,
+  true fast-forward `7aa0a22` → `b59f164`; 9 branch commits: design, plan, a
+  plan correction, three tasks, one task fix, and a two-item close fix wave).
+  `feat/admin-ui-routes` is kept at its merge point **and pushed**.
 - **The admin release is complete and merged** (2026-08-04, true
   fast-forward `c3a268c` → `9d31679`; 13 branch commits: design, plan,
   three tasks, two task-fix rounds, and a three-commit close fix wave).
@@ -42,17 +47,23 @@ was written and you are reading something stale.
 - **The currency bound & fixture race milestone is complete and merged**
   (2026-08-03 morning, `b81ba34` → `f04aa65`). **PAN grouping** merged
   2026-08-02; **PAN hardening** merged 2026-07-31.
-- **953 Python tests + 221 Vitest (19 files)** on `main`, ruff clean,
+- **979 Python tests + 221 Vitest (19 files)** on `main`, ruff clean,
   typecheck clean, build clean — `python scripts/verify.py` all five gates
-  PASS, run by the controller on `main` at `9d31679` immediately after the
-  merge.
+  PASS, run by the controller on `main` at `b59f164` immediately after the
+  merge. `src/` changed, so the **outside-repo import check** was run from
+  `/c/Users` too: `receipts.review.list_tasks` resolves through the package,
+  `create_app` and `build_auth_router` import clean, and
+  `python -m receipts.cli --help` runs.
 - **Phases 0–5 complete, plus PAN hardening, PAN grouping, the currency
-  bound, failure-egress redaction, review-UI error recovery, and the admin
-  release.** Phase 3 is complete except **P3.T6 calibration** (blocked on
-  ISSUE-001). Phase 5 has **two** named follow-ups left, and the admin UI
-  is a committed next milestone (see "Remaining work").
+  bound, failure-egress redaction, review-UI error recovery, the admin
+  release, and the admin UI's backend routes.** Phase 3 is complete except
+  **P3.T6 calibration** (blocked on ISSUE-001). Phase 5 has **two** named
+  follow-ups left, and the admin UI's **frontend half** is the committed
+  next milestone (see "Remaining work").
 - Dev interpreter **Python 3.14.4**. Node **v22.22.2** / npm **10.9.7**.
 - Plan of record: `IMPLEMENTATION_PLAN.md`. Ledgers:
+  `.superpowers/sdd/2026-08-05-admin-ui-backend-routes/progress.md`
+  (complete — three task entries, **nine plan defects**, and "THE CLOSE"),
   `.superpowers/sdd/2026-08-04-admin-release/progress.md` (complete — three
   task entries, seven plan defects, three controller rulings, and "THE
   CLOSE"), `.superpowers/sdd/2026-08-03-review-ui-error-recovery/progress.md`,
@@ -66,6 +77,74 @@ was written and you are reading something stale.
   searching the tracked tree — open ledgers by path.**
 - **The repo is PUBLIC.** Verified 2026-07-31 via the GitHub API. See
   "Environment / provider" for what that exposes.
+
+## Admin UI backend routes — complete and merged (2026-08-05)
+
+Design + plan: `docs/superpowers/{specs,plans}/2026-08-05-admin-ui-backend-routes*`.
+Decision: **ADR-0026**. Ledger:
+`.superpowers/sdd/2026-08-05-admin-ui-backend-routes/progress.md`.
+
+**What shipped — the two contracts the admin UI needs before any frontend
+work can start.**
+
+**`GET /auth/me`** (`review/auth.py`, in `build_auth_router()`) returns
+`{"username", "role"}` for a signed-in caller and **401 otherwise, including
+for the machine key** — it is guarded by `require_user`, so it joins
+`READ_ROUTES` like every other session-authenticated route rather than
+inventing a 200-with-null shape. It returns a bare `dict[str, str]`; **no
+Pydantic model**, because `POST /auth/login` has returned this exact body
+since session auth first shipped (`d255750`) and a model on one side only
+would be asymmetric. A **drift test** pins the two bodies equal. This exists
+because `session.ts:21` holds one boolean whose initial value is a *guess*
+and `LoginPage.tsx:15` discards the login body, so a reloaded page cannot
+learn its role.
+
+**`GET /review/tasks`** (`api.py`'s `_install_read_routes`, backed by
+`list_tasks` in `review/queue.py`) is the queue as rows, so an admin can
+find the task id that `POST /review/{task_id}/release` needs — `/metrics`
+returns counts only. **Equal access, role-dependent content:** both roles
+get 200; an admin sees every row, a reviewer sees `state == OPEN` plus
+their own rows in any state. Ordered `priority, opened_at, id` — the same
+total order `_claim_stmt` uses, so the first row of `?state=open` is the row
+`GET /review/next` would hand out next. `has_more` off a `limit + 1` fetch.
+Reuses `_task_summary` unchanged.
+
+**The privacy property is derived, not structural** (ADR-0026): a reviewer
+sees no other reviewer's name only because `state == OPEN` implies
+`assigned_to IS NULL`. That holds because the three `OPEN`-producers — a
+brand-new row (never sets it), `enqueue_review`'s reopen branch, and
+`release_task` — each clear or omit it, and those three are pinned
+one-for-one by existing tests. **The class is NOT closed**: the route-level
+pin catches a fourth `OPEN`-producer only if some test exercises it. ADR-0026
+says so plainly rather than claiming closure.
+
+**The close, in numbers.** Whole-branch review on the strongest model ran
+**25 mutations** in an isolated byte copy: 0 Critical, 2 Important, 11 Minor.
+**Deleting `GET /review/tasks` turns 11 tests red; deleting `GET /auth/me`
+turns 8 red; deleting the scoping clause turns 3 red on the subset bound
+itself.** The privacy scope then survived an **exhaustive 1,554-path
+reachability walk** (depth 4 over enqueue/claim/close/release, each on a
+fresh database) with zero violations. ONE fix wave (two items, one commit),
+one scoped re-review: both addressed. pytest 953 → 979.
+
+**Two mutation traps worth remembering**, both new: `api.py` contains
+`limit=limit + 1` and the `has_more` return line **twice** — once for
+`/receipts`, once for `/review/tasks` — so a mutation can land cleanly, with
+a correct byte delta, **on the wrong route** and report all tests passing.
+*Confirming a mutation landed is not enough; confirm it landed where you
+meant.* And the "unguard `/auth/me`" mutation in its nested-dependency form
+turns the route into a 422 via a postponed-annotation failure — it changed
+more than one thing and had to be re-run module-level.
+
+**Plan defects this milestone: NINE, all the controller's.** The worst was
+**#9**, and it is the one that let a falsehood into the shipped tree: the
+`/auth/me` docstring claimed the route "stays inside the guard **every other
+authenticated route** uses". False — the signed blob route takes no user
+dependency at all, and `require_upload` returns for a valid machine key
+before reaching `require_user`. **The ledger itself had cleared that sentence
+as "STILL TRUE"** during a standard-12 re-read, on a reasoning error. It was
+fixed at the close, and the re-reviewer proved the replacement by building
+its own 17-route enumeration rather than accepting it.
 
 ## Admin release — complete and merged (2026-08-04)
 
@@ -281,7 +360,7 @@ added to `_PAN_RE` requires the two-instance check, every time.**
 ## How to run
 
 - **There are two test suites.**
-  - `python -m pytest` — **953** on `main`; offline and **Node-free**.
+  - `python -m pytest` — **979** on `main`; offline and **Node-free**.
     `pyproject` sets `pythonpath=["src","."]`, `testpaths=["tests"]`.
   - **Vitest, in `frontend/`** — **221** across 19 files. `npm test`.
 - **`npm test` does NOT type-check.** Run `npm run typecheck` too. **That trap
@@ -303,6 +382,14 @@ added to `_PAN_RE` requires the two-instance check, every time.**
   - Piped pytest output can lose its final summary line. The `superclaude`
     attribution is **unproven**. Workaround: `--junitxml`, read counts from
     the XML.
+  - **`pyproject.toml:61` already sets `addopts = "-q"`.** So `python -m
+    pytest -q` is really `-qq` and prints **no pass count at all** — green
+    would rest on the exit code alone — and `-v` nets back to default dot
+    output, so `-vv` is what produces a listing. **Use bare `python -m
+    pytest`.** Measured 2026-08-05; it was a plan defect that shipped into
+    a task brief.
+  - **`python scripts/verify.py` takes longer than a 2-minute tool
+    timeout.** Run it with `run_in_background`, or raise the timeout.
   - **The Grep tool mangles `/` in its content output** (`"/receipts/"` →
     `"\receipts\"`, `[ .\-_/,]` → `[ .\-_\,]`, inconsistently within one
     result). It nearly produced a false `_PAN_RE` defect report on 2026-08-02.
@@ -426,6 +513,21 @@ API path moves.
 - **The admin surface is two milestones, release first** (2026-08-04), and
   the release was merged **locally only** — the user chose "merge locally"
   and no `main` push was authorized.
+- **Admin UI backend routes (2026-08-05, ADR-0026):** **`GET /auth/me`
+  answers 401, not `200 {"user": null}`** — it stays inside `require_user`,
+  joins `READ_ROUTES`, and lets the frontend's existing global 401 handler
+  correct `session.ts`'s guess with no new client logic; the accepted cost
+  is a 401 in the log on every anonymous cold load. **`GET /review/tasks`
+  gives equal access with role-dependent content** — a reviewer sees the
+  open backlog plus their own rows, an admin sees everything. **The privacy
+  property is relied on and pinned rather than defended by a defensive
+  filter** — a defensive filter was rejected because a broken invariant
+  would then silently drop an open task from every reviewer's list, and
+  per-caller masking was rejected because under the invariant that code
+  never executes. **A listed row reuses `_task_summary` unchanged.**
+- **The admin release was merged locally only and stayed unpushed; so was
+  this milestone** (2026-08-05). The user authorized the `feat/*` push and
+  **not** a `main` push, so `origin/main` sits at `7aa0a22`.
 - **Milestone close includes the handoff refresh** (ADR-0019); **every session
   end refreshes the handoff** (ADR-0021), whose freshness check was widened by
   dated correction (2026-08-02) to include `docs` with the handoff pair itself
@@ -433,7 +535,15 @@ API path moves.
 
 ## Still needing a user decision
 
-1. **A hosted tool-capable provider + a freshly rotated key** — for ISSUE-001,
+1. **Auth for the `corrections` read route** — reviewer-visible, admin-only,
+   or both scoped differently? **An answer was given in the 2026-08-05
+   session — "both, scoped differently: reviewers see corrections for the
+   receipt they hold, admins see any receipt's" — but it arrived alongside a
+   system notice disclaiming it as user input, and it was never restated for
+   confirmation.** Treat it as the user's likely intent and **re-confirm it
+   verbatim before designing the route**; do not record it as a settled
+   ruling on the strength of that exchange alone. Gates Phase 5 follow-up #1.
+2. **A hosted tool-capable provider + a freshly rotated key** — for ISSUE-001,
    and therefore for all calibration.
 2. **R060/R061 OCR grounding (P2.T2)** — model returns the text it read / a
    cheap OCR pass / drop the rules. Also gates bbox highlighting.
@@ -517,22 +627,35 @@ the four ADR-0022 guarantees — carrier redact-before-truncate, the
 rendered-and-redacted failure log, `hide_parameters=True`, both failed-job
 prints — pinned by six named tests including the straddle pin.
 
+**Admin UI backend routes (2026-08-05, merged).** See its section above:
+`GET /auth/me` in `review/auth.py`'s `build_auth_router()`, and
+`GET /review/tasks` in `_install_read_routes` backed by `list_tasks` in
+`review/queue.py` (exported from **both** `queue.py`'s and
+`review/__init__.py`'s `__all__`), with ADR-0026 recording the three
+decisions, the two rejected alternatives, and the stated limit of the
+privacy pin. `_task_summary` moved above the read routes; its old home under
+the "Write routes (P4.T5)" banner was wrong once a read route consumed it.
+
 ## Remaining work
 
 **`docs/NEXT_SESSION_PROMPT.md` carries the full ordered task list.** Headlines:
 
 1. Phase 5 follow-ups — the five §5 error-recovery behaviours (ADR-0024)
    and the **admin release** (ADR-0025) are DONE. **Two remain:** a read
-   route for `corrections` (blocked on an auth ruling — reviewer-visible or
-   admin-only?) and a real ASGI entry point / deployment story.
-2. **The admin UI is a committed next milestone** (user ruling, 2026-08-04).
-   It needs two further backend routes before any frontend work starts:
-   **`GET /auth/me`**, because the frontend cannot learn a role after a
-   reload (`LoginPage.tsx` discards the login response, `session.ts` holds
-   one boolean, and there is no whoami route), and **a task-listing route**,
-   because nothing lists review tasks — `/metrics` returns counts only, so
-   an admin has no way to find a task id. Then the frontend's first
-   role-awareness and a new `/app` admin surface.
+   route for `corrections` (**blocked on the auth ruling — see "Still
+   needing a user decision" #1, whose answer needs re-confirming**) and a
+   real ASGI entry point / deployment story.
+2. **The admin UI's FRONTEND half is the committed next milestone.** Its two
+   backend contracts shipped 2026-08-05 (ADR-0026) and **nothing under
+   `frontend/` consumes either one yet.** What remains: read `/auth/me` on
+   mount, widen `session.ts` from one boolean to an identity (today
+   `session.ts:21` guesses "signed in unless the URL says otherwise"), give
+   `LoginPage` somewhere to put the role it currently discards, and build a
+   new `/app` admin surface that lists tasks via `GET /review/tasks` and
+   drives `POST /review/{task_id}/release` from a browser. **Nobody has
+   viewed ANY of the review UI in a browser** — that risk is inherited, not
+   new, and is called out in the design's §8 so the frontend design does not
+   absorb it silently.
 3. **Phase 6** — merchants & few-shot. **Phase 7** — self-consistency wired into
    the pipeline, gated on `triage.is_handwritten`. **Phase 8** — calibration and
    eval-harness honesty.
@@ -625,6 +748,38 @@ measured.**
 
 ## Deferred follow-ups / known minors (non-blocking)
 
+- **Shipped from the admin-UI-routes close (2026-08-05): 20 Minor findings,
+  triaged by the whole-branch reviewer as safe to ship.** They live in
+  `.superpowers/sdd/2026-08-05-admin-ui-backend-routes/progress.md` with
+  per-item rulings. The ones a future editor will actually trip over:
+  - **`api.py`'s signed-blob docstring says it "is the one unauthenticated
+    route in the service". FALSE and PRE-EXISTING** (on `main` since
+    `130b202`): `/health`, `/auth/login`, `/auth/logout` and the `/app`
+    mount are also reachable with no session — five, or nine with
+    `DOCS_ENABLED=true`. **Same defect class as the close's own Important
+    #9**, in the very file that finding cited. Fix it with the next
+    legitimate edit of `api.py`.
+  - `tests/test_api_read.py:507-508`'s block comment ("each of these is a
+    bare GET against `receipt_id`") is false for two of its three rows —
+    `/review/next` and `/export/xlsx` take no `receipt_id`. Pre-existing.
+  - **`GET /receipts`' `has_more` is unpinned in the `True` direction** — a
+    constant `has_more: False` survives all 979 tests. Measured at the close
+    as a control. `GET /review/tasks` is strictly better than the route it
+    was copied from: both directions die there.
+  - The route-level ordering test for `/review/tasks` is blind to `ORDER BY`
+    *removal* (the fixture's insertion order already equals queue order) but
+    does discriminate a *wrong* order. The guarantee is properly pinned at
+    the queue layer, whose fixture inserts out of order.
+  - `ReviewTaskListResponse`'s body is byte-identical to
+    `ReceiptListResponse`'s. Defensible — distinct response models give
+    distinct OpenAPI schema names — but a third page envelope earns a base.
+  - `RECEIPT_SYSTEM_SPEC.md`'s `# api.py  (FastAPI routes)` header now heads
+    three routes that live in `auth.py`'s `build_auth_router()`.
+    `# api.py + auth.py` settles it when that line is next in remit.
+  - **No cache directives anywhere in `src/`** — no `Cache-Control`,
+    `no-store` or `Vary`, verified by grep. `GET /auth/me` echoes an
+    identity on every cold load, which makes it the natural place to raise a
+    global `no-store` decision during the frontend milestone.
 - **Both items parked at the admin-release close were FIXED post-merge**
   (2026-08-04, `9dd2fea`, at the user's direction rather than waiting for
   the next edit of those files): `test_release_requires_authentication`'s
@@ -731,14 +886,28 @@ measured.**
 - **Probe before dispatching — and sweep transitively.** Plan-defect count by
   milestone: Phase 5 eleven; PAN hardening five; PAN grouping six (+1 in a
   controller dispatch prompt); currency bound two; failure-egress two;
-  review-UI error recovery four; **admin release seven** — including a
-  fixture that could not pass as written, two mutations that killed for the
-  wrong reason (standard 15), a `-k release` selector that silently skipped
-  every `test_releasing_*`, and a sweep expectation that would have led an
-  implementer to edit the body of two Accepted ADRs. **Every one was the
-  controller's, and every one was caught by an implementer or reviewer who
-  checked instead of trusting.** The plan's prose is reliable; its claims
-  about existing artefacts are not. Seven milestones, no exception.
+  review-UI error recovery four; admin release seven; **admin UI backend
+  routes NINE** — three caught before any dispatch (a pre-flight scan and
+  the plan's own self-review), then: a gate command that printed no pass
+  count because `addopts` already held `-q`; no red-proof prescribed for a
+  new `READ_ROUTES` row; a mutation presented as single-guarantee that
+  killed three extra tests for the wrong reason; a wrong test named in a RED
+  prediction; a docstring whose pin list enumerated one triple and cited
+  tests for a different one; and **#9, a false universal about the auth
+  guard that this project's own ledger had cleared as "STILL TRUE" during a
+  standard-12 re-read** — the only one that reached the shipped tree.
+  **Every one was the controller's, and every one was caught by an
+  implementer or reviewer who checked instead of trusting.** The plan's
+  prose is reliable; its claims about existing artefacts are not. **Eight
+  milestones, no exception.**
+- **Adjudicating a standard-12 re-read is not the same as performing one.**
+  Defect #9 shipped because the controller accepted an implementer's
+  "STILL TRUE" answer, which rested on verifying that two guards *call*
+  `require_user` and generalising from that — never enumerating the routes.
+  The close's re-reviewer settled the same question in one pass by building
+  the route table from `create_app` and reading each route's resolved
+  dependant tree. **If a claim quantifies over a set, the answer is the
+  enumeration, not an argument about the set.**
 - Conventional commit messages (`feat(scope): …`, `fix: …`, `chore: …`,
   `docs: …`).
 
@@ -786,6 +955,28 @@ measured.**
     if the assertion that failed is not the one the pin exists for, the
     mutation changed more than one thing and proved none of them.
 
+16. **Confirming a mutation landed is not confirming it landed where you
+    meant.** The admin-UI-routes close found that `api.py` carries
+    `limit=limit + 1` and the `has_more` return line **twice** — once for
+    `GET /receipts`, once for `GET /review/tasks`. Two mutation runs applied
+    cleanly, with a correct non-empty byte delta, **to the wrong route**,
+    and reported the full suite passing. A non-empty `git diff --stat` only
+    proves *something* changed. Anchor on text unique to the target, or
+    verify the changed line's location, before believing a survivor.
+
+17. **A universal claim is answered by an enumeration, not an argument.**
+    Defect #9 — "the guard every other authenticated route uses" — survived
+    an explicit standard-12 re-read because the check reasoned about which
+    guards call `require_user` instead of listing the routes. Two
+    counter-examples were sitting in the tree. Enumerating them took one
+    script; the reasoning that replaced it took less and was wrong. **Note
+    the trap in that enumeration:** on this FastAPI version `include_router`
+    wraps the auth router in an `_IncludedRouter`, so a flat walk of
+    `app.routes` yields 13 routes with **zero** `/auth/*` paths — recurse
+    through `.original_router.routes` for the real 17. A transitively-called
+    guard (`require_role` → `require_user`) is invisible at runtime too; it
+    is plain Python, not a nested `Depends`.
+
 And: **a green suite is not evidence that installed software works.** Anything
 with an entry point gets run from outside the repository.
 
@@ -802,7 +993,9 @@ with an entry point gets run from outside the repository.
   **0022** before touching any failure-text egress; **0024** before touching
   the review UI's error surfaces (`failure.ts`, `stash.ts`,
   `SignOutControl.tsx`, `ReviewScreen.tsx`'s state unions, the inline error
-  slots); **0023 (with both dated notes)** before dispatching parallel task
+  slots); **0026** before touching `/auth/me`, `/review/tasks` or
+  `list_tasks`' scope — it is also where the privacy invariant's limit is
+  recorded; **0023 (with both dated notes)** before dispatching parallel task
   agents; **0017** before believing a green test run; **0019 + 0021 (with its
   correction)** for how cross-session state works.
 - `docs/superpowers/specs/` and `docs/superpowers/plans/` — per-milestone design
