@@ -1042,9 +1042,12 @@ measured.**
     * The design spec's "Rulings — all four settled 2026-08-05", which reads as
       an index of every decision taken and is in fact the four questions open
       at drafting. Corrected `ae4b782`.
-    * `vite.config.ts:14-23`'s "Cross-checked against every route `create_app`
-      registers" — **missing three** since 2026-08-04. **Still open**; the
-      admin-surface task owns it.
+    * `vite.config.ts`'s "Cross-checked against every route `create_app`
+      registers" — listed 13 of 16. **Closed `2689635`**, by re-deriving the
+      list from the built app rather than editing the list in place; the
+      comment now records the method and the date so the next reader re-runs
+      it. It listed exactly 13 because a *flat* walk of `app.routes` yields
+      13 — the same trap standard 17 records.
     * `api.py:494` — "This is the one unauthenticated route in the service."
       Five, or nine with `DOCS_ENABLED=true`. **Still open**, on `main` since
       `130b202`.

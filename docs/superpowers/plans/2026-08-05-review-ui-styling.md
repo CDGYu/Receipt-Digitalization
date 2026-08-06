@@ -552,3 +552,111 @@ Re-read the prose under `docs/adr/README.md`'s table — it quantifies over the 
 - **Task 1's font files are a manual download.** No step can fetch them offline, and no test can prove the vendored file *is* Fira Sans rather than a renamed placeholder. The test proves only that no CDN is referenced.
 - **Task 5's findings are unknown by construction.** Its budget is a guess, and if it returns Critical findings the milestone grows a fix round it has not planned for. That is the correct trade for a first look.
 - **Vitest's 221 must not move in Task 3.** If styling forces a markup change that breaks a test, the plan is wrong and the task should stop and report rather than editing the test to match — those tests encode a contract two milestones paid for.
+
+---
+
+## Dated defect log — 2026-08-06, added mid-milestone
+
+**This plan's body is left as written.** Plans are dated historical records here
+and do not self-amend; this log is appended the way an ADR takes a dated
+correction. **Read it before re-deriving anything from the text above** — most
+of the defects below are still sitting in that text.
+
+It is appended *mid*-milestone rather than at the close, because Tasks 4, 5 and
+6 have not run yet and their implementers will read the body above. The
+admin-ui-backend-routes plan's log records what happens otherwise: one of its
+defects reached the shipped tree because it was re-derived from the plan
+instead of checked against the code.
+
+Fourteen plan defects so far, all the plan author's (the controller). Nine were
+found during Tasks 1–2 and are recorded in the SDD ledger; five more were found
+in Task 3's pre-flight on 2026-08-06 and are below.
+
+| # | Where | The defect | Status |
+|---|---|---|---|
+| 1–9 | Tasks 1–2 | font provenance · the unfalsifiable dark-block mutation · a test that could never pass as written · `toContain` matching substrings · the load-bearing selector with no pin · the token-vocabulary hole · three tests that could not catch a money-only null rule · a mutation that under-proved two of its own tests · `JSX.Element` that does not compile | All resolved during Tasks 1–2; see the ledger |
+| 10 | Task 3 Step 3 | "Expected: **221 passing**, unchanged" | **Still wrong above** — the suite is 258 after Tasks 1–2 |
+| 11 | Task 6 | "Create `docs/adr/0027-…`" and "Modify `docs/adr/README.md`" | **Still wrong above** — both landed at `91e93c5` |
+| 12 | Task 3 Step 2 | "Change no JSX except `className`" contradicts Task 3's own carry-forwards | **Still wrong above** — ruled 2026-08-06 |
+| 13 | ADR-0027 + handoff | "every one of the 17 correctable paths is an `<input>`" | Corrected in the tree at `46eb965` / `459cd87` |
+| 14 | design §5.1 | the currency prefix, placed as worded, renames every money field | Parked by ruling; dated note at `ae4b782` |
+
+### The three that are still wrong in the text above
+
+**#10 — Task 3 Step 3's expected count rotted.** It says "Expected: **221
+passing, unchanged**, after every component", and the self-review above repeats
+it. Tasks 1 and 2 took the suite to **258 across 21 files**. An implementer
+following the text reads a correct green run as a regression — or deletes
+toward 221. Review standard 5: a number that can change without its sentence
+changing does not belong in the instruction.
+
+**#11 — Task 6's deliverables already exist.** It says "Create:
+`docs/adr/0027-review-ui-design-system.md`" and "Modify: `docs/adr/README.md`".
+Both landed at `91e93c5`; ADR-0027 is **Accepted** and indexed in the README
+table. ADRs are immutable here, so Task 6 becomes: **append a dated note
+recording what the browser pass found.** Do not rewrite 0027's body. It now also
+carries a `## Correction (2026-08-06)` — see #13.
+
+**#12 — Task 3's `className`-only rule blocks Task 3's own required work.** The
+body says "Change no JSX except `className`", but the task must add
+`placeholder="—"` (an attribute), convert `ConfidenceRail`'s `<p>` to `Value`
+(markup), take `autoComplete` on `MoneyInput` (an attribute on a shared
+component), and remove `LineItemsTable`'s inline `style` prop. Task 2's
+implementer hit this exact wall and **correctly refused to widen its own
+scope**.
+
+> **Ruling (user, 2026-08-06):** the constraint is **relaxed for an enumerated
+> list of exactly four edits** — the three above plus the inline-style removal.
+> Everything else stays `className`-only, and *"if a component needs
+> restructuring to be styleable, stop and report"* still binds absolutely.
+
+### Two corrections that changed the tracked tree
+
+**#13 — the 17-inputs claim was false, in an Accepted ADR.** Enumerated rather
+than argued (review standard 17): `_RECEIPT_FIELDS` has exactly 17 keys, and
+`ReceiptForm` renders 8 `TEXT_FIELDS` + 6 `MONEY_FIELDS` + one `<select>` + two
+checkboxes — **sixteen inputs and one select**, so `placeholder` reaches
+**fourteen** of the 17. `ReceiptForm.tsx:175` had it right all along
+("seventeen *controls*"); the ADR generalised a precise word into a wrong one.
+ADR-0027 carries a dated correction (`46eb965`) and the handoff was fixed in
+place (`459cd87`).
+
+**#14 — the currency prefix is parked, not designed away.** Design §5.1 says the
+symbol "sits **outside** the input" and never says where relative to the
+`<label>` — and `MoneyInput`'s markup is `<label>{label}<input/></label>`, so a
+prefix span joins the field's accessible name. Compounds with the reason Task 2
+already gave: `receipt.currency` is itself a correctable field edited live on
+the same screen. Task 3 takes `autoComplete="off"` only. Dated note at
+`ae4b782`.
+
+### One step of Task 4 is already done
+
+**Task 4 Step 1 is complete (`2689635`) and `vite.config.ts` is no longer Task
+4's file.** Its comment claimed to be "Cross-checked against every route
+`create_app` registers" and listed **13 of 16** (plus the `/app` mount) —
+missing `GET /auth/me`, `GET /review/tasks` and `POST /review/{id}/release`.
+
+It was fixed by **re-deriving the list from the built app**, not by editing the
+list in place: construct `create_app`, walk `app.routes`, recursing through
+`.original_router.routes`. **The plan's own Step 1 prescribes grepping
+decorators instead** — which works here but is the weaker method, and the
+comment listed exactly 13 because a *flat* walk of `app.routes` returns 13 with
+zero `/auth/*` paths. The comment now records the method and the date so the
+next reader re-runs it rather than trusting it.
+
+Second correction in the same file: its DOCS_ENABLED note said "FastAPI's own
+**three**". Three *prefixes*, **four** route paths — `/docs` also registers
+`/docs/oauth2-redirect`, so the same enumeration with `DOCS_ENABLED=true`
+returns 21 rather than 17. The array is unchanged; only the claim was wrong.
+
+**Consequence for the dispatch:** drop `vite.config.ts` from Task 4's permitted
+set. Tasks 3 and 4 now share no file at all.
+
+### The standard this milestone added, and the one it turned up
+
+**Review standard 19** came out of Task 2's five fix rounds: *an enumerated
+defence never converges.* **Review standard 20** came out of Task 3's
+pre-flight: *a list in prose is read as complete, so writing one is a claim* —
+#13, design §9's "all four settled", this file's route comment, and
+`api.py:494`'s "the one unauthenticated route" are four instances, of which
+only the last is still open.

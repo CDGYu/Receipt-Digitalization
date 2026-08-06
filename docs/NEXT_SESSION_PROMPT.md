@@ -171,12 +171,15 @@ broke six tests once already, in the milestone that wrote the contract.
 
 ### 1.3 Task 4 — the `/app/admin` surface
 
-`frontend/src/admin/*`, `api/admin.ts`, `route.ts`, `main.tsx`, `session.ts`,
-plus **one fix to `vite.config.ts`**: its comment at `:14-23` claims to be
-"cross-checked against every route `create_app` registers" and **is missing
-three** — `GET /auth/me`, `GET /review/tasks`, and `POST /review/{id}/release`
-(missing since 2026-08-04). The functional `API_PREFIXES` array is fine; the
-claim is what is false.
+`frontend/src/admin/*`, `api/admin.ts`, `route.ts`, `main.tsx`, `session.ts`.
+
+**`vite.config.ts` is NO LONGER Task 4's** — the plan's Step 1 is already done
+(`2689635`, 2026-08-06). Its comment did claim to be "cross-checked against
+every route `create_app` registers" while listing 13 of 16; the three missing
+were `GET /auth/me`, `GET /review/tasks` and `POST /review/{id}/release`. The
+functional `API_PREFIXES` array was always fine — it matches by prefix — so the
+claim was the defect, never the proxy. **Drop the file from Task 4's permitted
+set**; that also removes the only overlap Task 4 had with anything else.
 
 **The empty state must name its scope** (ADR-0026): a reviewer sees a filtered
 list, so a bare "No tasks" would read as a broken queue. Reviewer → "No open
@@ -443,10 +446,11 @@ right test for the wrong reason proves nothing), plus:
     inputs and one `<select>`; `placeholder` reaches **fourteen**) — corrected
     `46eb965`; the design spec's "Rulings — all four settled" (an index of every
     decision, it reads; the four open at drafting, it is) — corrected `ae4b782`;
-    **`vite.config.ts:14-23`'s "Cross-checked against every route `create_app`
-    registers", missing three** — still open, Task 4 owns it; and
-    **`api.py:494`'s "This is the one unauthenticated route in the service"** —
-    five, or nine with `DOCS_ENABLED=true` — still open (§3).
+    `vite.config.ts`'s "Cross-checked against every route `create_app`
+    registers" (13 of 16) — closed `2689635` by re-deriving from the built app,
+    not by editing the list; and **`api.py:494`'s "This is the one
+    unauthenticated route in the service"** — five, or nine with
+    `DOCS_ENABLED=true` — **still open** (§3), the last of the four.
     Standard 17 governs how to *answer* such a claim; this one governs
     **writing** it. An enumeration in prose inherits the authority of what it
     enumerates, so it is trusted rather than re-derived — one of these misled an
