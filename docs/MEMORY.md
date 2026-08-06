@@ -6,8 +6,8 @@ continuity protocol itself — what lives where, and why this snapshot must be
 verified rather than trusted — is **ADR-0019**, extended by **ADR-0021** (whose
 2026-08-02 dated correction widened the freshness check after a docs-only task
 proved invisible to it).
-Last updated: **2026-08-06 (mid-milestone: `feat/review-ui-styling` IN FLIGHT,
-Task 4 dispatched and unfinished)**, at **`main @ 1314485`**, which the branch
+Last updated: **2026-08-06 (`feat/review-ui-styling` IN FLIGHT — all six tasks
+complete, the close not yet run)**, at **`main @ 1314485`**, which the branch
 still does not touch. A stamp cannot name the commit that writes it, so the
 check is this:
 
@@ -114,8 +114,10 @@ was written and you are reading something stale.
 
 ## Review-UI styling — IN FLIGHT (2026-08-05 → )
 
-Six tasks, lanes 1 → 2 → {3 ∥ 4} → 5 → 6. **1, 2, 3 done; 4 dispatched; 5, 6
-not started.** Branch `feat/review-ui-styling` @ `593e194`, 20 commits, pushed.
+Six tasks, lanes 1 → 2 → {3 ∥ 4} → 5 → 6. **All six complete; the close
+remains.** Branch `feat/review-ui-styling`, pushed — **run
+`git rev-list --count main..feat/review-ui-styling` rather than quoting a
+number from here** (ADR-0028 §1).
 
 - **Task 1** — `tokens.css` (35 tokens, three blocks), self-hosted fonts via
   `@fontsource` (never a CDN), light default with `:root:not([data-theme='light'])`
