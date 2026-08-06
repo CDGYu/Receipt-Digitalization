@@ -30,7 +30,25 @@ import type { Browser, Locator, Page, Route } from '@playwright/test'
  * target sizes, horizontal overflow, the focus outline the browser actually
  * computes, whether the money font really has tabular figures -- are taken in
  * the page and written to `var/e2e/visual/measurements.json` beside the images.
- * They are recorded, not asserted: this pass reports, it does not gate.
+ * Most of them are still recorded and asserted nowhere: a threshold for a hit
+ * target or a focus ring is a judgement nobody in this repository has made.
+ *
+ * **Two of them are now asserted, and the reason is a measurement.** The
+ * whole-branch review reverted three of Task 5's fixes one at a time and all
+ * three left every gate green -- including `.field` going back to `inline-flex`,
+ * which puts a 246px money control in a 92px cell, and the dark `--color-null`
+ * lift going back to 3.91:1. This file computed `cellOverflow` and 488 contrast
+ * ratios per run while both of those were live, and asserted neither. So the
+ * floor and the overflow are asserted now, in `assertMeasured`, which explains
+ * at length why asserting a *computed number against a documented threshold* is
+ * not the pixel baseline this file still refuses to become.
+ *
+ * **And this file is still not a gate.** `scripts/verify.py` runs five gates and
+ * says in as many words that the Playwright run is not one of them, so those two
+ * assertions are only as good as somebody choosing to run
+ * `npx playwright test visual`. The declaration-level half of the same pin --
+ * every rule's declarations, and the token contrast computed from the hex -- is
+ * in `tests/stylesheets.test.ts`, which the `vitest` gate does run.
  *
  * ## Interception, and why it is the right tool rather than a compromise
  *
@@ -719,7 +737,14 @@ async function measure(page: Page) {
     // `table-layout: fixed` a cell does not grow to its content, so a control
     // wider than its column paints over the columns beside it -- and the
     // difference is the number that says so.
+    //
+    // `cellsMeasured` counts every (cell, control) pair examined, and exists so
+    // that "nothing overflowed" can be told apart from "nothing was looked at".
+    // An empty `cellOverflow` is the pass condition and is also what a page with
+    // no table returns, so the count is the witness that makes the assertion in
+    // `assertMeasured` non-vacuous.
     const cellOverflow: { column: string; cell: number; control: number; overflowsBy: number }[] = []
+    let cellsMeasured = 0
     const headers = Array.from(document.querySelectorAll('thead th')).map((th) =>
       (th.textContent ?? '').trim(),
     )
@@ -728,6 +753,7 @@ async function measure(page: Page) {
       if (control === null) {
         continue
       }
+      cellsMeasured += 1
       const outer = cell.getBoundingClientRect()
       const inner = control.getBoundingClientRect()
       const index = Array.from(cell.parentElement?.children ?? []).indexOf(cell)
@@ -825,6 +851,7 @@ async function measure(page: Page) {
         checkboxTargets,
       },
       cellOverflow,
+      cellsMeasured,
       money,
     }
   })
@@ -866,8 +893,107 @@ async function focusWalk(page: Page, stops: number) {
   return seen
 }
 
+// ---------------------------------------------------------------------------
+// The two measurements that are asserted, and why only two
+// ---------------------------------------------------------------------------
+
+/** Design §6's body-text floor, flat -- no large-text discount.
+ *
+ *  The sweep in `measure` above already flags anything under 4.5 whatever its
+ *  size, so taking the discount here would make the two disagree. The tree's
+ *  measured minimum is 4.76 (`--color-null` on white), so the flat floor holds
+ *  with margin rather than by luck. `tests/stylesheets.test.ts` uses the same
+ *  number and the same arithmetic on the token values themselves. */
+const AA_FLOOR = 4.5
+
+interface ContrastSample {
+  readonly what: string
+  readonly ratio: number
+  readonly color: string
+  readonly background: string
+}
+
+interface CellOverflow {
+  readonly column: string
+  readonly cell: number
+  readonly control: number
+  readonly overflowsBy: number
+}
+
+/** How much this run actually looked at, so `afterAll` can refuse to call an
+ *  empty check a pass. */
+let cellsChecked = 0
+
+/** The measurements that stopped being merely recorded, and the reason.
+ *
+ * **This is not a pixel baseline and must not become one.** There is still no
+ * `toHaveScreenshot`, no snapshot and no image comparison anywhere in this file,
+ * for the reason the docblock at the top gives. What is asserted here are two
+ * *numbers the page computed* -- a contrast ratio and a box-width difference --
+ * each against a threshold the design document names. A baseline says "it looks
+ * like it did last time"; these say "it clears the floor", which is a claim that
+ * stays true when the design changes and false when the guarantee breaks. Every
+ * other measurement -- hit target sizes, focus rings, tabular figures, document
+ * overflow -- is still recorded and still asserted nowhere, because a threshold
+ * for those is a judgement nobody has made yet.
+ *
+ * These are the two the whole-branch review proved were unheld: reverting
+ * `MoneyInput.module.css`'s `.field` to `inline-flex` and reverting the dark
+ * `--color-null` lift both left all five gates green, and this file computed the
+ * evidence for both and asserted neither.
+ *
+ * **`expect.soft`, not `expect`.** A hard failure would abort the surface loop
+ * and lose every screenshot after it, which would turn one contrast regression
+ * into a run with no evidence in it -- the opposite of what this file is for.
+ * Soft failures let all sixty-odd captures complete, write `measurements.json`,
+ * and then fail the run with every offending sample named at once. */
+function assertMeasured(where: string, data: unknown): void {
+  const measured = data as {
+    contrast?: readonly ContrastSample[]
+    cellOverflow?: readonly CellOverflow[]
+    cellsMeasured?: number
+  }
+
+  if (measured.contrast !== undefined) {
+    // A page whose sampler returned nothing would satisfy the loop below
+    // perfectly. The smallest real record is the 503 screen at two samples.
+    expect
+      .soft(
+        measured.contrast.length,
+        `${where}: no contrast sample at all -- the sampler in \`measure\` stopped ` +
+          `matching, so the floor below is being checked against nothing`,
+      )
+      .toBeGreaterThan(0)
+    for (const sample of measured.contrast) {
+      expect
+        .soft(
+          sample.ratio,
+          `${where} -- ${sample.what}: ${sample.color} on ${sample.background} is ` +
+            `${sample.ratio}:1, below design §6's ${AA_FLOOR}:1 body-text floor`,
+        )
+        .toBeGreaterThanOrEqual(AA_FLOOR)
+    }
+  }
+
+  if (measured.cellOverflow !== undefined) {
+    cellsChecked += measured.cellsMeasured ?? 0
+    expect
+      .soft(
+        measured.cellOverflow,
+        `${where}: a control is wider than the table cell holding it. Under ` +
+          `\`table-layout: fixed\` the cell does not grow, so the control paints over ` +
+          `the column beside it and its right-aligned content -- the em dash that ` +
+          `says a value was never extracted -- is pushed outside the clipped ` +
+          `scroller. \`MoneyInput.module.css\`'s \`.field\` being block-level rather ` +
+          `than inline-level is what holds this.`,
+      )
+      .toEqual([])
+  }
+}
+
 function record(surface: string, viewport: Viewport, theme: Theme, data: unknown): void {
   measurements.push({ surface, width: viewport.width, theme, data })
+  assertMeasured(`${surface} @${viewport.width} ${theme}`, data)
 }
 
 // ---------------------------------------------------------------------------
@@ -928,6 +1054,10 @@ test.beforeAll(() => {
 })
 
 test.afterAll(() => {
+  // The artefacts are written FIRST, before anything below can throw: the
+  // screenshots and the measurements are the whole product of this file, and a
+  // run that fails its own coverage check is exactly the run whose evidence
+  // someone needs to read.
   fs.writeFileSync(
     path.join(SHOTS, 'measurements.json'),
     `${JSON.stringify(measurements, null, 2)}\n`,
@@ -935,7 +1065,27 @@ test.afterAll(() => {
   )
   fs.writeFileSync(path.join(SHOTS, 'captured.txt'), `${captured.join('\n')}\n`, 'utf8')
   // eslint-disable-next-line no-console
-  console.log(`\n${captured.length} screenshots in ${SHOTS}`)
+  console.log(
+    `\n${captured.length} screenshots in ${SHOTS}\n` +
+      `${measurements.length} measurement records, ${cellsChecked} table cells checked for overflow`,
+  )
+
+  // The cell-overflow assertion passes on an empty list, and a page with no
+  // table returns an empty list -- so without this, a selector change in
+  // `measure` would silently reduce that check to nothing while every surface
+  // still went green. `expect`, not `expect.soft`: there is nothing left to
+  // collect.
+  //
+  // A run filtered to surfaces that have no line-items table (`-g "login"`) will
+  // trip this, and that is the intended reading rather than a wrinkle: such a
+  // run is not evidence about cell overflow and should not be quoted as if it
+  // were. A full run measures several hundred pairs.
+  expect(
+    cellsChecked,
+    'this run examined no table cell at all, so its clean cell-overflow result ' +
+      'says nothing. Either `measure` stopped finding controls in `tbody td`, or ' +
+      'the run was filtered to surfaces that have no line-items table.',
+  ).toBeGreaterThan(0)
 })
 
 test('login, at three widths in both themes', async ({ browser }, testInfo) => {

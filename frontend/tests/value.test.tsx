@@ -504,6 +504,59 @@ describe('every class a component references exists in its stylesheet', () => {
     }
   })
 
+  // ------------------------------------------------------------------------ //
+  // The ruling this test records, because the ledger it was parked in does not
+  // survive the merge.
+  //
+  // Task 2's round 5 parked an item: the guard should gain the other direction,
+  // `declared` subset of `referenced`, and it "would pass as-is, 18 declared
+  // classes, all referenced today". **That form is wrong and the count had
+  // rotted.** Measured at the time of writing: 24 declared classes across the
+  // five components, of which EIGHT are unreferenced -- Button's `danger`,
+  // `primary` and `secondary`, and Chip's `error`, `info`, `neutral`, `positive`
+  // and `warn`. They are not orphans. `Button.tsx` applies `styles[variant]` and
+  // `Chip.tsx` applies `styles[tone]`, and `referencedClasses` matches
+  // `styles.NAME` only, so dynamic indexing is invisible to it by construction.
+  // That is what the `computed` field on each entry above is for, and it is
+  // already derived from the component's own union type by `unionMembers`.
+  //
+  // So the correct form is `declared` subset of (`referenced` union `computed`),
+  // which holds 24/24. The "18" was true at e216af4 and rotted by six when
+  // LoginPage.module.css was added.
+  //
+  // What it buys, and it is not symmetry for its own sake: the guard's other
+  // direction cannot see a rule that nothing paints. A class renamed in the CSS
+  // *and* in the TSX passes both directions; a class renamed in the CSS alone
+  // fails the other direction; a class left behind in the CSS when its reference
+  // is deleted fails only this one. `stylesheets.test.ts` audits declarations
+  // without asking whether anything reaches them, so this is the only check in
+  // the tree that says a rule in a guarded component is dead.
+  //
+  // The bound: it covers the five components in COMPONENTS and nothing else.
+  // `LineItemsTable.module.css`'s `.rowActive` is declared and referenced by
+  // nothing today -- deliberately, per its own comment -- and would fail this if
+  // that file were guarded here.
+  // ------------------------------------------------------------------------ //
+  it('declares no class that nothing reaches, so a rule cannot be left dead', () => {
+    for (const component of COMPONENTS) {
+      const declared = declaredClasses(read(component.css))
+      const reached = new Set([
+        ...referencedClasses(read(component.tsx)),
+        ...component.computed,
+      ])
+      for (const name of declared) {
+        expect(
+          reached.has(name),
+          `${component.name}: ${component.css} declares .${name} but ${component.tsx} ` +
+            `neither writes styles.${name} nor reaches it through the guard's ` +
+            `computed list -- so nothing paints with it and the rule is dead. If it ` +
+            `is reached dynamically, add it to computed (and to the union the ` +
+            `component indexes, which is what unionMembers checks it against).`,
+        ).toBe(true)
+      }
+    }
+  })
+
   it('still names the classes §4 depends on, so the mark keeps its colour and border', () => {
     // The three above are structural: they check the two sides agree. This one
     // checks *what* they agree on, so renaming `.notExtracted` consistently on
