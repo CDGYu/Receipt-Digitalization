@@ -30,6 +30,31 @@ export interface MoneyInputProps {
  * `ValueError: not a decimal amount: ''`, so "no amount" and "the empty string"
  * are not interchangeable on the way back.
  *
+ * **`placeholder="—"` is design §4's input half, and it is the reason this task
+ * exists.** `Value` renders the mark for a value that is merely displayed; an
+ * editable amount that was never extracted was a blank box until this line, and
+ * a blank box is indistinguishable from a field nobody has filled in yet -- on
+ * the one screen where a human decides whether the machine's `null` is right.
+ * The placeholder is not the accessible name and cannot become one: the
+ * `<label htmlFor>` above supplies it, and the accessible-name algorithm reaches
+ * a placeholder only when nothing else names the control.
+ *
+ * Its paint is `--color-null` (`MoneyInput.module.css`), which is the same token
+ * `Value` uses for the same glyph, so the two halves of §4 agree by construction
+ * rather than by coincidence.
+ *
+ * **`autoComplete="off"` is §5.1's**, and it is not decoration here: the browser
+ * offering a remembered `1000.00` under a total transcribed from a photograph
+ * invites a reviewer to accept a number that came from another receipt.
+ *
+ * What §5.1 also asks for and this file deliberately does **not** do is the
+ * currency prefix. §5.1 wants the symbol "outside the input"; the markup is
+ * `<label>{label}<input/></label>`, so outside the input is *inside the label*,
+ * and a prefix span there joins the field's accessible name by exactly the
+ * name-from-content walk documented below -- `Total` would become `Total ₱`.
+ * Controller ruling, user-approved 2026-08-06: the prefix is parked as an open
+ * design question rather than implemented against the measurement.
+ *
  * `useId` rather than a caller-supplied id: `LineItemsTable` renders one of
  * these per money column per row, and a duplicated `htmlFor` would point every
  * label at the first input.
@@ -59,6 +84,8 @@ export function MoneyInput({ label, value, onChange, error }: MoneyInputProps) {
           className={active ? `${styles.input} ${styles.invalid}` : styles.input}
           type="text"
           inputMode="decimal"
+          autoComplete="off"
+          placeholder="—"
           value={value ?? ''}
           aria-describedby={active ? errorId : undefined}
           onChange={(e) => onChange(e.target.value === '' ? null : e.target.value)}

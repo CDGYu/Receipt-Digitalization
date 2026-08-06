@@ -1,4 +1,5 @@
 import type { Finding } from '../api/types'
+import styles from './FindingsPanel.module.css'
 
 /** What the deterministic validator found **when the receipt was extracted**.
  *
@@ -22,13 +23,15 @@ export interface FindingsPanelProps {
 
 export function FindingsPanel({ findings }: FindingsPanelProps) {
   return (
-    <section>
-      <h2>What the machine found at extraction time</h2>
-      <p>Not re-checked when you edit -- this is the receipt as it was extracted.</p>
+    <section className={styles.panel}>
+      <h2 className={styles.heading}>What the machine found at extraction time</h2>
+      <p className={styles.note}>
+        Not re-checked when you edit -- this is the receipt as it was extracted.
+      </p>
       {findings.length === 0 ? (
-        <p>No findings.</p>
+        <p className={styles.empty}>No findings.</p>
       ) : (
-        <ul>
+        <ul className={styles.list}>
           {findings.map((finding, index) => (
             /* Keyed on the index too, because nothing constrains `rule_id` to be
                unique per receipt: `save_findings` appends rows and never
@@ -37,9 +40,20 @@ export function FindingsPanel({ findings }: FindingsPanelProps) {
                no unique index over (receipt_id, rule_id). Whether a duplicate
                actually occurs today is not measured -- the key simply does not
                depend on the answer. */
-            <li key={`${finding.rule_id}-${index}`}>
-              <strong>{finding.rule_id}</strong> <em>{finding.severity}</em> {finding.message}
-              {finding.resolved_by_repair ? <span> (resolved by repair)</span> : null}
+            <li className={styles.finding} key={`${finding.rule_id}-${index}`}>
+              <strong className={styles.ruleId}>{finding.rule_id}</strong>{' '}
+              {/* The severity word is always rendered; the class only paints it.
+                  `styles[...]` is keyed on the server's own lowercase vocabulary
+                  (`error`/`warn`/`info`, validate/report.py:16-19) and paints
+                  nothing for anything else, so an unknown severity degrades to
+                  the word alone rather than to a wrong colour. */}
+              <em className={`${styles.severity} ${styles[finding.severity] ?? ''}`}>
+                {finding.severity}
+              </em>{' '}
+              {finding.message}
+              {finding.resolved_by_repair ? (
+                <span className={styles.resolved}> (resolved by repair)</span>
+              ) : null}
             </li>
           ))}
         </ul>

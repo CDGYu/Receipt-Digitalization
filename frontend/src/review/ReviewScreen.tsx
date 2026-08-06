@@ -20,6 +20,7 @@ import type { Failure } from './failure'
 import { buildPatch, fieldsFromReceipt } from './patch'
 import type { FieldMap } from './patch'
 import { clear as clearStash, remember, restore } from './stash'
+import styles from './ReviewScreen.module.css'
 
 /** Claim a task, load the receipt behind it, let a reviewer correct it, and
  *  close it.
@@ -447,7 +448,7 @@ export function ReviewScreen() {
     const held = phase.heldTask
     const backendDown = phase.failure.kind === 'backend-down'
     return (
-      <main>
+      <main className={styles.notice}>
         {/* Deliberately NOT a second `role="alert"`. The server's own words
             below already carry the role and announce beside this sentence, and
             a second alert in the same region makes every single-alert query in
@@ -456,17 +457,29 @@ export function ReviewScreen() {
             the design doc (§6.1). The sentence is pinned by its text, and the
             absence of the role is asserted outright at both render sites -- by
             text alone the ruling held only by the code agreeing with itself. */}
-        {backendDown ? <p>The database is unavailable — nothing can be saved right now.</p> : null}
-        <p role="alert">{phase.message}</p>
-        <button type="button" onClick={() => void load()}>
+        {backendDown ? (
+          <p className={styles.explanation}>
+            The database is unavailable — nothing can be saved right now.
+          </p>
+        ) : null}
+        <p className={styles.alert} role="alert">
+          {phase.message}
+        </p>
+        <button type="button" className={styles.action} onClick={() => void load()}>
           Try again
         </button>
         {held === null || backendDown ? null : (
           <>
-            <button type="button" onClick={() => void skipHeldTask(held)}>
+            <button
+              type="button"
+              className={styles.action}
+              onClick={() => void skipHeldTask(held)}
+            >
               Skip this receipt
             </button>
-            <p>Closes this receipt&rsquo;s review task without reviewing it, and moves on.</p>
+            <p className={styles.hint}>
+              Closes this receipt&rsquo;s review task without reviewing it, and moves on.
+            </p>
           </>
         )}
       </main>
@@ -474,9 +487,9 @@ export function ReviewScreen() {
   }
   if (phase.kind === 'empty') {
     return (
-      <main>
-        <p>The review queue is empty.</p>
-        <button type="button" onClick={() => void load()}>
+      <main className={styles.notice}>
+        <p className={styles.message}>The review queue is empty.</p>
+        <button type="button" className={styles.action} onClick={() => void load()}>
           Check again
         </button>
       </main>
@@ -484,8 +497,8 @@ export function ReviewScreen() {
   }
   if (phase.kind === 'loading') {
     return (
-      <main>
-        <p>Loading…</p>
+      <main className={styles.notice}>
+        <p className={styles.message}>Loading…</p>
       </main>
     )
   }
@@ -511,7 +524,7 @@ export function ReviewScreen() {
       ? { [submit.failure.path]: submit.failure.message }
       : undefined
   return (
-    <main>
+    <main className={styles.screen}>
       <h1>{receipt.merchant_name_raw ?? 'Unknown merchant'}</h1>
       {/* Keyed on the receipt id so the pane starts clean for a new receipt
           rather than carrying over a stale link, a spent retry, or a failure. */}
@@ -535,19 +548,26 @@ export function ReviewScreen() {
           to tell which is true. `openTaskId !== null` *is* "the write landed",
           which is why it is the test. */}
       {submit.kind === 'failed' && submit.failure.kind === 'backend-down' && openTaskId === null ? (
-        <p>The database is unavailable — nothing can be saved right now.</p>
+        <p className={styles.explanation}>
+          The database is unavailable — nothing can be saved right now.
+        </p>
       ) : null}
-      {submit.kind === 'failed' ? <p role="alert">{submit.message}</p> : null}
+      {submit.kind === 'failed' ? (
+        <p className={styles.alert} role="alert">
+          {submit.message}
+        </p>
+      ) : null}
       {submit.kind === 'lost' ? (
-        <section role="alert">
-          <h2>
+        <section className={styles.terminal} role="alert">
+          <h2 className={styles.terminalHeading}>
             {submit.flavor === 'taken'
               ? 'Saved, but this task was taken over by someone else'
               : 'Saved, but this task no longer exists'}
           </h2>
-          <p>{submit.message}</p>
+          <p className={styles.message}>{submit.message}</p>
           <button
             type="button"
+            className={styles.action}
             onClick={() => {
               claimed.current = null
               clearStash()
@@ -570,12 +590,22 @@ export function ReviewScreen() {
         // reused, and focus has nowhere to carry over to.
         <StoredDifferently outcome={submit.outcome} onAcknowledge={() => void load()} />
       ) : (
-        <button type="button" onClick={() => void approve()} disabled={busy}>
+        <button
+          type="button"
+          className={`${styles.action} ${styles.primary}`}
+          onClick={() => void approve()}
+          disabled={busy}
+        >
           Approve (⌘↵)
         </button>
       )}
       {openTaskId === null ? null : (
-        <button type="button" onClick={() => void closeTaskOnly(openTaskId)} disabled={busy}>
+        <button
+          type="button"
+          className={styles.action}
+          onClick={() => void closeTaskOnly(openTaskId)}
+          disabled={busy}
+        >
           Close task
         </button>
       )}
@@ -609,16 +639,18 @@ function StoredDifferently({
   onAcknowledge: () => void
 }) {
   return (
-    <section role="alert">
+    <section className={styles.terminal} role="alert">
       {outcome.kind === 'unverified' ? (
         <>
-          <h2>Saved, but not checked</h2>
-          <p>{outcome.why}</p>
+          <h2 className={styles.terminalHeading}>Saved, but not checked</h2>
+          <p className={styles.message}>{outcome.why}</p>
         </>
       ) : (
         <>
-          <h2>Saved, but the server stored something different</h2>
-          <ul>
+          <h2 className={styles.terminalHeading}>
+            Saved, but the server stored something different
+          </h2>
+          <ul className={styles.rewrites}>
             {outcome.rewrites.map((rewrite) => (
               <li key={rewrite.path}>
                 <strong>{rewrite.path}</strong>: you entered{' '}
@@ -629,7 +661,7 @@ function StoredDifferently({
           </ul>
         </>
       )}
-      <button type="button" onClick={onAcknowledge}>
+      <button type="button" className={styles.action} onClick={onAcknowledge}>
         Next receipt
       </button>
     </section>

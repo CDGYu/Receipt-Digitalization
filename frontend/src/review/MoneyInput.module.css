@@ -41,6 +41,32 @@
   font-size: var(--text-base);
 }
 
+/* Design §4's input half, and the pair that makes a null amount *look* missing
+ * rather than merely blank.
+ *
+ * `--color-null` is the same token `ui/Value.module.css` paints the displayed
+ * mark with, so the em dash means one thing across the screen whether it is
+ * rendered or typed-into. `opacity: 1` is not redundant: Firefox's UA stylesheet
+ * gives `::placeholder` an opacity below 1, which would render the mark lighter
+ * than the token it was measured at.
+ *
+ * The hairline left border is §4's scannability half -- "a scan down the form
+ * finds every gap without reading a single value" -- reaching the editable
+ * fields, exactly as `.notExtracted` carries it for the read-only ones.
+ * `:placeholder-shown` is true precisely when the box is empty, and an empty box
+ * here IS `null`: `MoneyInput` maps `''` to `null` on the way out and `null` to
+ * `''` on the way in. A reviewer who clears a field gets the same mark, which is
+ * §4's third state and is deliberately not distinguished at the value (ADR-0027
+ * §5 -- the distinguisher belongs beside the label). */
+.input::placeholder {
+  color: var(--color-null);
+  opacity: 1;
+}
+
+.input:placeholder-shown {
+  border-left: 2px solid var(--color-null);
+}
+
 /* Colour is the *second* signal on a refused field, never the only one: the
  * server's sentence renders below in `.error` and the summary alert at the
  * bottom of the screen carries the same message (ADR-0024). */

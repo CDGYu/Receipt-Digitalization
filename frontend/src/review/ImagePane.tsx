@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import styles from './ImagePane.module.css'
 
 /** The receipt image, with the one retry its signed link needs.
  *
@@ -158,16 +159,25 @@ export function ImagePane({ receiptId, fetchUrl }: ImagePaneProps) {
   }
 
   return (
-    <div>
-      <div>
-        <button type="button" onClick={() => setZoom((current) => current * ZOOM_STEP)}>
+    <div className={styles.pane}>
+      <div className={styles.toolbar}>
+        <button
+          type="button"
+          className={styles.button}
+          onClick={() => setZoom((current) => current * ZOOM_STEP)}
+        >
           Zoom in
         </button>
-        <button type="button" onClick={() => setZoom((current) => current / ZOOM_STEP)}>
+        <button
+          type="button"
+          className={styles.button}
+          onClick={() => setZoom((current) => current / ZOOM_STEP)}
+        >
           Zoom out
         </button>
         <button
           type="button"
+          className={styles.button}
           onClick={() => setRotation((current) => (current + QUARTER_TURN) % FULL_TURN)}
         >
           Rotate
@@ -176,20 +186,26 @@ export function ImagePane({ receiptId, fetchUrl }: ImagePaneProps) {
       {failure !== null ? (
         // Only the image is replaced. The controls above survive, and so does a
         // way forward that does not cost a queue task.
-        <div>
-          <p role="alert">{failure}</p>
-          <button type="button" onClick={askForLinkAgain}>
+        <div className={styles.failure}>
+          <p className={styles.alert} role="alert">
+            {failure}
+          </p>
+          <button type="button" className={styles.button} onClick={askForLinkAgain}>
             Try loading the image again
           </button>
         </div>
       ) : source === null ? (
-        <p>Loading the receipt image…</p>
+        <p className={styles.loading}>Loading the receipt image…</p>
       ) : (
         <img
           key={source.generation}
+          className={styles.image}
           src={source.url}
           alt="Receipt"
           onError={handleError}
+          // Zoom and rotation are per-instance state, not paint: they stay
+          // inline. `tests/image-pane.test.tsx:184` reads this attribute back
+          // verbatim, so a stylesheet cannot own it.
           style={{ transform: `scale(${zoom}) rotate(${rotation}deg)` }}
         />
       )}

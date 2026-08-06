@@ -1,0 +1,245 @@
+/* The review screen's shell -- design §5, §5.8. Tokens only; no raw hex.
+ *
+ * ## Why the layout is written as child selectors
+ *
+ * The claimed screen is one `<main>` whose children are, in order: the merchant
+ * heading, the image pane, the findings panel, the confidence rail, the receipt
+ * form, the line-items table, then the submit state's messages and buttons. None
+ * of those is wrapped, and this task may not wrap them -- `className` only, plus
+ * four enumerated edits, and "if a component needs restructuring to be styleable,
+ * stop and report". Nor can a class be passed down: `ImagePane`, `FindingsPanel`,
+ * `ConfidenceRail`, `ReceiptForm` and `LineItemsTable` take no `className` prop,
+ * and giving them one is an API change, not a styling one.
+ *
+ * So the two-column shell is placed from the parent, by element:
+ *
+ *   `.screen > *`   -- everything defaults into the right-hand column.
+ *   `.screen > h1`  -- the merchant heading spans both columns, at the top.
+ *   `.screen > div` -- the image pane. It is the ONLY direct `<div>` child of
+ *                      this `<main>`: every other child renders as `h1`, `p`,
+ *                      `section`, `aside`, `table` or `button`. Verified by
+ *                      reading each component's root element.
+ *
+ * **The `span 4` on the image is counted, not guessed.** Four children after the
+ * heading are unconditional -- findings, rail, form, table -- and the submit
+ * ternary always renders a fifth (Approve, or the `lost` section, or the
+ * `held` notice). So rows 2..5 always exist and the span creates no implicit
+ * row and no stray gap. If that count ever shrinks, the symptom is one extra
+ * row gap at the bottom of the column, not a broken layout.
+ *
+ * A wrapper element around the right-hand column would make all of this
+ * structural instead of positional. That is the single restructure this
+ * stylesheet would ask for, and it is reported rather than taken.
+ *
+ * ## What the alert region must not become
+ *
+ * ADR-0024's contract is about roles, not paint, and nothing here adds, moves or
+ * removes one. Two rules of it constrain this file anyway: the backend-down
+ * sentence carries **no** `role="alert"` and must not be styled into something
+ * that reads as the alert (it is the quieter explanation beside the server's own
+ * words), and the inline field errors are **additive** -- the summary alert
+ * always renders, so both are visible at once and neither may be painted as
+ * though it replaced the other. */
+
+.screen {
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr);
+  align-content: start;
+  gap: var(--space-2xl);
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: var(--space-2xl);
+  font-family: var(--font-sans);
+  color: var(--color-foreground);
+}
+
+.screen > * {
+  grid-column: 2;
+  min-width: 0;
+}
+
+.screen > h1 {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: var(--text-2xl);
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+/* The image pane: left column, running the height of the form beside it, and
+ * sticky so the photograph stays on screen while a reviewer scrolls the
+ * line items. It is the reference truth -- a form scrolled away from its receipt
+ * is the one arrangement this screen must not produce.
+ *
+ * `align-self: start` is what gives sticky something to move within: without it
+ * the grid item stretches to fill its four-row area and has nowhere to travel.
+ * The height cap keeps a tall scan from filling more than a viewport. */
+.screen > div {
+  grid-column: 1;
+  grid-row: 2 / span 4;
+  align-self: start;
+  position: sticky;
+  top: var(--space-lg);
+  max-height: calc(100vh - 2 * var(--space-lg));
+  overflow: auto;
+}
+
+/* The loading, empty and failed phases render a different `<main>` with no
+ * receipt to put beside anything: one narrow column, centred, no grid. */
+.notice {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-lg);
+  max-width: 40rem;
+  margin: 0 auto;
+  padding: var(--space-3xl) var(--space-2xl);
+  font-family: var(--font-sans);
+  color: var(--color-foreground);
+}
+
+.message {
+  margin: 0;
+  font-size: var(--text-base);
+  line-height: 1.5;
+}
+
+/* The summary alert. Error red is reserved for exactly this kind of thing --
+ * a real failure -- and never for decoration (ADR-0027 §2). The left rule is a
+ * second, non-colour signal for the same reason the null mark carries one. */
+.alert {
+  margin: 0;
+  padding: var(--space-md) var(--space-lg);
+  border-left: 3px solid var(--color-severity-error);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-severity-error);
+  font-size: var(--text-base);
+  font-weight: 500;
+  line-height: 1.5;
+}
+
+/* "The database is unavailable" is the plain-language explanation beside the
+ * server's own words, and it deliberately carries no `role="alert"` (ADR-0024
+ * §4, a user ruling). It is painted quieter than `.alert` for the same reason:
+ * it explains, the alert announces. Muted rather than red, so that a reader
+ * scanning for the failure lands on the message that actually carries the
+ * server's words. */
+.explanation {
+  margin: 0;
+  color: var(--color-muted-foreground);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
+/* A terminal state: the task is closed or gone, the write landed, and the only
+ * thing left is to read what happened and move on. Raised and bordered because
+ * it is the one thing on screen that must not be scrolled past. */
+.terminal {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-md);
+  padding: var(--space-xl);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-raised);
+  box-shadow: var(--shadow-md);
+}
+
+.terminalHeading {
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.rewrites {
+  margin: 0;
+  padding-left: var(--space-2xl);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
+/* What was sent and what was stored, side by side. Monospaced because they are
+ * values to compare character by character -- the whole point of showing both is
+ * that a difference is visible. */
+.rewrites code {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+}
+
+/* `ui/Button.module.css`'s `.button` + `.secondary` and `.primary`, spelled
+ * again. `ReviewScreen` renders native `<button>` elements and swapping them for
+ * the `Button` primitive is a JSX change outside this task's permitted set, so
+ * the choice was between duplicating the paint and shipping browser-default
+ * controls on the screen this milestone exists to make legible. The duplication
+ * is the cost, recorded here and in the report. */
+.action {
+  min-height: 44px;
+  min-width: 44px;
+  padding: var(--space-md) var(--space-xl);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-foreground);
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  font-weight: 500;
+  line-height: 1.5;
+  cursor: pointer;
+  /* §7: 150ms ease-out, only for state the user caused; the global
+   * `prefers-reduced-motion` block in tokens.css turns it off. */
+  transition: border-color 150ms ease-out;
+}
+
+.action:hover:not(:disabled) {
+  border-color: var(--color-ring);
+}
+
+.action:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Approve is the screen's one primary action. `--color-primary` and
+ * `--color-background` invert together across the two themes, so one pair of
+ * declarations reads correctly in both. */
+.primary {
+  border-color: transparent;
+  background: var(--color-primary);
+  color: var(--color-background);
+}
+
+/* The sentence under "Skip this receipt", explaining what it spends. Not a
+ * warning colour: amber is WARN's, and this is a description of a control. */
+.hint {
+  margin: 0;
+  color: var(--color-muted-foreground);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
+/* Below the two-column breakpoint the image stops being a column and becomes the
+ * first block after the heading, in source order. Everything resets: `grid-row`
+ * as well as `grid-column`, or the pane keeps a four-row span in a one-column
+ * grid and leaves three empty rows behind it. Sticky is dropped too -- a pane
+ * that pins itself to the top of a narrow screen covers the form it is meant to
+ * be compared against. */
+@media (max-width: 1023px) {
+  .screen {
+    grid-template-columns: minmax(0, 1fr);
+    padding: var(--space-xl) var(--space-lg);
+  }
+
+  .screen > *,
+  .screen > h1,
+  .screen > div {
+    grid-column: 1;
+    grid-row: auto;
+    position: static;
+    max-height: none;
+  }
+}

@@ -2,6 +2,7 @@ import { useId, useState } from 'react'
 import { MoneyInput } from './MoneyInput'
 import type { LineItem } from '../api/types'
 import type { FieldMap } from './patch'
+import styles from './LineItemsTable.module.css'
 
 export interface LineItemsTableProps {
   readonly items: LineItem[]
@@ -22,7 +23,16 @@ export interface LineItemsTableProps {
  * These cells cannot produce a 400 today (`_coerce_text` and
  * `_coerce_optional_text` never raise), but the slot is uniform: `matchField`
  * blames whichever path it matches, and a hit with nowhere to land would render
- * the server's words nowhere at all. */
+ * the server's words nowhere at all.
+ *
+ * **`placeholder="—"` covers the three text columns of every row** -- design §4's
+ * input half, the same mark `ui/Value` renders and the same `--color-null` it is
+ * painted in. It is not the accessible name and cannot displace one: `aria-label`
+ * is above the placeholder in the accessible-name algorithm, so
+ * `getByLabelText('SKU 1')` still resolves. The mark earns its place here more
+ * than anywhere: `_coerce_text(None)` returns `''`, so `description_raw` cannot
+ * distinguish "never recorded" from "cleared" in the column either, and an
+ * unmarked empty cell would say nothing about which. */
 function TextCell({
   label,
   value,
@@ -38,14 +48,16 @@ function TextCell({
   return (
     <>
       <input
+        className={styles.cell}
         type="text"
         aria-label={label}
+        placeholder="—"
         value={value ?? ''}
         aria-describedby={error !== undefined ? errorId : undefined}
         onChange={(e) => onChange(e.target.value)}
       />
       {error !== undefined ? (
-        <p role="alert" id={errorId}>
+        <p className={styles.error} role="alert" id={errorId}>
           {error}
         </p>
       ) : null}
@@ -87,8 +99,8 @@ function TextCell({
 export function LineItemsTable({ items, fields, onChange, errors }: LineItemsTableProps) {
   const [active, setActive] = useState<number | null>(null)
   return (
-    <table>
-      <thead>
+    <table className={styles.table}>
+      <thead className={styles.head}>
         <tr>
           <th>#</th>
           <th>Description</th>
@@ -105,10 +117,28 @@ export function LineItemsTable({ items, fields, onChange, errors }: LineItemsTab
           return (
             <tr
               key={item.position}
+              className={styles.row}
               onFocus={() => setActive(item.position)}
-              style={{ background: active === item.position ? '#fffbe6' : undefined }}
+              // **The colour is the swap this task owns; the mechanism is not.**
+              // `#fffbe6` stood here, and amber is WARN's reserved colour
+              // (ADR-0027 §2) -- a yellow row on an accounting screen reads as a
+              // warning about that row's numbers rather than as "this is where
+              // you are". `--color-surface-active` is the pale blue Task 1 added
+              // for exactly this, tied to `--color-ring`.
+              //
+              // It stays an *inline* style rather than moving to
+              // `styles.rowActive`, against the brief, because the class form is
+              // measured red: `receipt-form.test.tsx:267-277` pins this highlight
+              // through `rows[1].style.background`, and with the paint moved to a
+              // class that assertion fails with `expected '' not to be ''`. That
+              // test is not this task's to edit, so the honest move is the colour
+              // swap plus a report. `.rowActive` is declared and ready for
+              // whoever is allowed to change the pin.
+              style={{
+                background: active === item.position ? 'var(--color-surface-active)' : undefined,
+              }}
             >
-              <td>{item.position}</td>
+              <td className={styles.position}>{item.position}</td>
               <td>
                 <TextCell
                   label={`Description ${item.position}`}
@@ -130,7 +160,7 @@ export function LineItemsTable({ items, fields, onChange, errors }: LineItemsTab
                   onChange={(raw) => onChange(`${at}.sku`, raw === '' ? null : raw)}
                 />
               </td>
-              <td>
+              <td className={styles.money}>
                 {/* `qty` is `_coerce_money`, not `_coerce_int`
                     (repository.py:932) -- "9.800" is a real quantity here. */}
                 <MoneyInput
@@ -148,7 +178,7 @@ export function LineItemsTable({ items, fields, onChange, errors }: LineItemsTab
                   onChange={(raw) => onChange(`${at}.unit`, raw === '' ? null : raw)}
                 />
               </td>
-              <td>
+              <td className={styles.money}>
                 <MoneyInput
                   label={`Unit price ${item.position}`}
                   value={fields[`${at}.unit_price`]}
@@ -156,7 +186,7 @@ export function LineItemsTable({ items, fields, onChange, errors }: LineItemsTab
                   onChange={(value) => onChange(`${at}.unit_price`, value)}
                 />
               </td>
-              <td>
+              <td className={styles.money}>
                 <MoneyInput
                   label={`Line total ${item.position}`}
                   value={fields[`${at}.line_total`]}

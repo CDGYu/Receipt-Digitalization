@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { ApiError, request } from './api/client'
 import { setSignedIn } from './session'
 import { clear, hasDirtyEdits } from './review/stash'
+import styles from './SignOutControl.module.css'
 
 /** Sign out, honestly.
  *
@@ -45,21 +46,34 @@ export function SignOutControl() {
 
   if (confirming) {
     return (
-      <span>
-        <span role="alert">You have unsaved edits on this receipt.</span>
-        <button type="button" disabled={busy} onClick={() => void signOut()}>
+      <span className={styles.confirm}>
+        <span className={styles.warning} role="alert">
+          You have unsaved edits on this receipt.
+        </span>
+        <button
+          type="button"
+          className={`${styles.button} ${styles.danger}`}
+          disabled={busy}
+          onClick={() => void signOut()}
+        >
           Discard edits and sign out
         </button>
-        <button type="button" disabled={busy} onClick={() => setConfirming(false)}>
+        <button
+          type="button"
+          className={styles.button}
+          disabled={busy}
+          onClick={() => setConfirming(false)}
+        >
           Cancel
         </button>
       </span>
     )
   }
   return (
-    <span>
+    <span className={styles.control}>
       <button
         type="button"
+        className={styles.button}
         disabled={busy}
         onClick={() => {
           if (hasDirtyEdits()) {
@@ -71,7 +85,11 @@ export function SignOutControl() {
       >
         Sign out
       </button>
-      {error !== null && <span role="alert">Could not sign out: {error}</span>}
+      {error !== null && (
+        <span className={styles.error} role="alert">
+          Could not sign out: {error}
+        </span>
+      )}
     </span>
   )
 }

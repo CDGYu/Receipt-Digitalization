@@ -1,0 +1,110 @@
+/* The receipt image and its controls -- design §5.5. Tokens only; no raw hex.
+ *
+ * `--color-surface-sunken` is the surround, and it is the whole point of the
+ * section: the reference truth is a photograph of *white paper*, so a white
+ * surround hides the receipt's own edge and a page-coloured one hides the pane.
+ * `#F1F5F9` is what §5.5 names, and Task 1 put exactly that value behind
+ * `--color-surface-sunken` rather than leave a raw hex for this file to spell.
+ * Sunken rather than raised: the photograph sits *in* the page, below the panel
+ * surfaces around it.
+ *
+ * **Nothing here tints, filters or overlays the image itself** (§5.5). The only
+ * declarations on `.image` are ones that decide how much room it gets; its
+ * pixels are the evidence.
+ *
+ * The `<img>`'s `transform` stays an inline style, untouched: it is the zoom and
+ * rotation state, it is per-instance, and `tests/image-pane.test.tsx:184` reads
+ * the style attribute back verbatim (`transform: scale(1) rotate(0deg);`), so
+ * moving it into CSS would be both wrong and loud. */
+
+/* The surround lives on the pane itself, not on a stage element wrapping the
+ * image: there is no such element, and adding one would be a restructure. The
+ * toolbar paints itself back to `--color-surface`, so what is left showing
+ * `--color-surface-sunken` is exactly the region the image, the loading line and
+ * the failure block occupy. */
+.pane {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-sunken);
+  overflow: hidden;
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-md);
+  padding: var(--space-md);
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+
+/* The same paint as `ui/Button.module.css`'s `.secondary`, spelled again rather
+ * than imported. `ImagePane` renders native `<button>` elements, and swapping
+ * them for the `Button` primitive is a JSX change this task is not permitted to
+ * make -- so the choice is between duplicating five declarations and shipping
+ * three browser-default controls beside a styled screen. The duplication is
+ * recorded as the cost it is: three files in this task carry it. */
+.button {
+  min-height: 44px;
+  min-width: 44px;
+  padding: var(--space-md) var(--space-lg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-foreground);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  line-height: 1.5;
+  cursor: pointer;
+  /* §7: 150ms ease-out, and only for state the user caused. The global
+   * `prefers-reduced-motion` block in tokens.css turns this off. */
+  transition: border-color 150ms ease-out;
+}
+
+.button:hover {
+  border-color: var(--color-ring);
+}
+
+/* Fit to width by default (§5.5). `max-width: 100%` is what makes that true of
+ * the *rendered* box; the zoom transform then scales that box without changing
+ * the layout, which is why zooming in does not reflow the page around it.
+ *
+ * `margin: <space> auto` is what centres it and insets it from the pane's edge,
+ * in place of the padding a stage element would have carried. A block-level
+ * replaced element has a definite used width, so `auto` side margins really do
+ * centre it. */
+.image {
+  display: block;
+  max-width: calc(100% - 2 * var(--space-lg));
+  height: auto;
+  margin: var(--space-lg) auto;
+  transform-origin: center top;
+}
+
+/* A failure replaces the image, never the pane: the toolbar above survives and
+ * the retry sits where the image was, so the reviewer is not looking for it. */
+.failure {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-md);
+  padding: var(--space-lg);
+}
+
+/* Error red on a genuine failure message, which is what ADR-0027 reserves the
+ * severity colours FOR. Never the only signal: the sentence is the signal, and
+ * it carries `role="alert"`. */
+.alert {
+  margin: 0;
+  color: var(--color-severity-error);
+  font-size: var(--text-sm);
+}
+
+.loading {
+  margin: 0;
+  padding: var(--space-2xl) var(--space-lg);
+  color: var(--color-muted-foreground);
+  font-size: var(--text-sm);
+  text-align: center;
+}

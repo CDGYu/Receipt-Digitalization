@@ -1,4 +1,6 @@
 import type { ConfidenceReason, Money } from '../api/types'
+import { Value } from '../ui/Value'
+import styles from './ConfidenceRail.module.css'
 
 /** The stored confidence score and the persisted breakdown behind it.
  *
@@ -54,27 +56,38 @@ function signPrefixFor(penalty: string): string {
 
 export function ConfidenceRail({ confidence, reasons }: ConfidenceRailProps) {
   return (
-    <aside>
-      <h2>Confidence</h2>
+    <aside className={styles.rail}>
+      <h2 className={styles.heading}>Confidence</h2>
       {/* The score as the API sent it. An em dash, not "0" or "0.00": a score
           that was never recorded is not a recorded zero (`money()` keeps that
-          distinction on the way out, review/serializers.py:65-73). */}
-      <p>{confidence ?? '—'}</p>
+          distinction on the way out, review/serializers.py:65-73).
+
+          Through `Value` rather than through a bare `{confidence ?? '—'}`, which
+          is what stood here and was an uncoordinated second copy of half of
+          design §4's rule: the same glyph, but with no accessible name, no
+          `--color-null` and no hairline border, so a screen reader heard "em
+          dash" or nothing at all and a sighted scan had nothing to find. ADR-0027
+          names this line as the one place the rule was duplicated. `confidence`
+          is `Money | null`, and `Money` is `string & {...}`, so it is assignable
+          to `Value`'s `string | null` without a cast. */}
+      <p className={styles.score}>
+        <Value value={confidence} kind="money" />
+      </p>
       {reasons === null ? (
-        <p>Breakdown not recorded for this receipt.</p>
+        <p className={styles.note}>Breakdown not recorded for this receipt.</p>
       ) : reasons.length === 0 ? (
-        <p>Nothing lowered the score.</p>
+        <p className={styles.note}>Nothing lowered the score.</p>
       ) : (
-        <ul>
+        <ul className={styles.list}>
           {reasons.map((entry, index) => (
             /* Keyed on the index as well as the text. The pipeline emits each
                reason at most once per receipt (`_signals`, score/confidence.py
                :122-195), but this is a JSONB column read verbatim -- a row that
                came from anywhere else can repeat a reason, and duplicate React
                keys are not a failure mode worth inheriting for that. */
-            <li key={`${entry.reason}-${index}`}>
-              <span>{entry.reason}</span>{' '}
-              <span>
+            <li className={styles.reason} key={`${entry.reason}-${index}`}>
+              <span className={styles.reasonText}>{entry.reason}</span>{' '}
+              <span className={styles.penalty}>
                 {signPrefixFor(entry.penalty)}
                 {/* Its own element, so the digits stay byte-identical and a test
                     asking for exactly "0.05" still finds them. */}

@@ -1,6 +1,7 @@
 import { useId } from 'react'
 import { MoneyInput } from './MoneyInput'
 import type { FieldMap } from './patch'
+import styles from './ReceiptForm.module.css'
 
 /** Free-text paths, in the order a reviewer reads a slip.
  *
@@ -139,7 +140,17 @@ export interface ReceiptFormProps {
  *  hook and the fields render from a `.map`.
  *
  *  The error paragraph is a *sibling* of the label, for the reason `MoneyInput`
- *  records: text nested inside a `<label>` becomes part of the field's name. */
+ *  records: text nested inside a `<label>` becomes part of the field's name.
+ *
+ *  **`placeholder="—"` covers all eight `TEXT_FIELDS` from one place** -- design
+ *  §4's input half, the same mark and the same `--color-null` that `ui/Value`
+ *  paints for a displayed value. Before it, a merchant name the extractor never
+ *  read rendered as an empty box, indistinguishable from a box a reviewer has
+ *  not reached yet; `placeholder` appeared **zero** times in `frontend/src`
+ *  (measured, `git grep placeholder -- frontend/src`). It cannot become the
+ *  field's accessible name: the wrapping `<label>` supplies that, and the
+ *  accessible-name algorithm reaches a placeholder only when nothing else names
+ *  the control -- `getByLabelText('Merchant')` still resolves. */
 function TextField({
   label,
   value,
@@ -154,17 +165,19 @@ function TextField({
   const errorId = useId()
   return (
     <>
-      <label>
+      <label className={styles.field}>
         {label}
         <input
+          className={styles.input}
           type="text"
+          placeholder="—"
           value={value ?? ''}
           aria-describedby={error !== undefined ? errorId : undefined}
           onChange={(e) => onChange(e.target.value === '' ? null : e.target.value)}
         />
       </label>
       {error !== undefined ? (
-        <p role="alert" id={errorId}>
+        <p className={styles.error} role="alert" id={errorId}>
           {error}
         </p>
       ) : null}
@@ -196,7 +209,7 @@ function TextField({
  */
 export function ReceiptForm({ fields, onChange, errors }: ReceiptFormProps) {
   return (
-    <section>
+    <section className={styles.form}>
       <h2>Receipt</h2>
       {TEXT_FIELDS.map(([path, label]) => (
         <TextField
@@ -221,10 +234,19 @@ export function ReceiptForm({ fields, onChange, errors }: ReceiptFormProps) {
       {/* No error slot on the three below: `_coerce_legibility` and
           `_coerce_bool` cannot be reached from a closed option list or a
           checkbox, so neither control has an invalid state to send
-          (design §1.3/§10). */}
-      <label>
+          (design §1.3/§10).
+
+          **And no `placeholder` on any of them, for the same shape of reason.**
+          A placeholder is the empty state of a free-text box; a closed option
+          list has no empty state to show one in, and a checkbox has no third
+          state at all. Design §4's mark would be a claim neither control can
+          carry. That leaves the null treatment reaching 14 of the 17 correctable
+          paths -- 8 text, 6 money -- which is the honest count, and not the 17
+          ADR-0027's Consequences implies by calling every path an `<input>`. */}
+      <label className={styles.field}>
         Legibility
         <select
+          className={styles.select}
           value={fields['meta.legibility'] ?? ''}
           onChange={(e) => onChange('meta.legibility', e.target.value)}
         >
@@ -235,17 +257,19 @@ export function ReceiptForm({ fields, onChange, errors }: ReceiptFormProps) {
           ))}
         </select>
       </label>
-      <label>
+      <label className={styles.check}>
         Handwritten
         <input
+          className={styles.checkbox}
           type="checkbox"
           checked={fields['meta.is_handwritten'] === 'true'}
           onChange={(e) => onChange('meta.is_handwritten', String(e.target.checked))}
         />
       </label>
-      <label>
+      <label className={styles.check}>
         Receipt is inconsistent
         <input
+          className={styles.checkbox}
           type="checkbox"
           checked={fields['meta.receipt_is_inconsistent'] === 'true'}
           onChange={(e) => onChange('meta.receipt_is_inconsistent', String(e.target.checked))}
