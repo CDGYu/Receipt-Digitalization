@@ -225,6 +225,36 @@ Inline error renders **beside the input, `aria-describedby`-linked, additive to
 the summary alert** (ADR-0024 — the summary always renders; the inline error
 never replaces it).
 
+> **Dated note (2026-08-06, implementation ruling — the currency prefix is
+> parked):** the paragraph above says the currency symbol "sits **outside** the
+> input as a static prefix." It never says where relative to the `<label>`, and
+> that is the gap. `MoneyInput`'s shipped markup is
+> `<label>{label}<input/></label>`, so a position that is outside the *input* is
+> still inside the *label* — and `@testing-library/dom`'s `getTextContent`
+> (`label-helpers.js`) builds a field's accessible name by walking the label's
+> subtree excluding form controls. A prefix span is not a form control, so it
+> joins the name: `Total` becomes `Total ₱`. **The prefix case was not itself
+> measured.** It is the same code path `MoneyInput.tsx:37-47` already measured
+> for a nested error paragraph, where `screen.getByLabelText('Total')` threw
+> `Unable to find a label with the text of: Total` — that outcome is measured,
+> this one is derived from it, and the derivation is what a reviewer should
+> check first.
+>
+> A second, independent reason stands beside it: **`receipt.currency` is itself
+> a correctable text field** (`TEXT_FIELDS`, `ReceiptForm.tsx:95`), edited live
+> on this same screen, so a hardcoded symbol would mislabel every money field on
+> a receipt whose currency the reviewer is in the middle of correcting. Task 2's
+> implementer refused the prefix on exactly this ground and was upheld.
+>
+> **User ruling (2026-08-06): the prefix is parked, not designed away.** The
+> review-screen task takes `autoComplete="off"` only — already in the code block
+> above — and reports the prefix as open. The browser pass (plan Task 5) is what
+> settles it: it can say whether a right-aligned tabular-mono money column
+> without a symbol actually reads wrong, which nothing argued here can. **Only
+> the prefix is parked.** Right-alignment, `--font-mono`, tabular figures and
+> the inline-error placement are unchanged and all belong to the review-screen
+> task.
+
 ### 5.2 LineItemsTable
 
 Description left, numbers right, one row per line item. Column widths fixed so
@@ -367,6 +397,12 @@ Any implementation must hold these; they are not style choices:
    already serves a history fallback (`_SpaFiles(..., html=True)`,
    `api.py:856`), so `/app/admin` survives a reload without a router. Adding
    one would be the app's third runtime dependency for one route.
+
+**Later rulings live where they bite, not here.** This list is the four
+questions that were open when the design was drafted — it is **not** an index
+of every decision taken since, and reading it as one is the mistake this
+project keeps making with prose that looks like an inventory. §5.1 carries a
+dated 2026-08-06 ruling parking the currency prefix.
 
 ### The original open questions (kept for the record)
 
