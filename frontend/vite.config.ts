@@ -11,14 +11,23 @@ import react from '@vitejs/plugin-react'
 // symptom is an HTML page arriving where JSON was expected -- so this list is
 // exhaustive rather than "the ones the review screen happens to call".
 //
-// Cross-checked against every route `create_app` registers in
-// src/receipts/review/api.py:
-//   GET  /health                              GET   /metrics
-//   GET  /receipts        GET /receipts/{id}  PATCH /receipts/{id}
-//   GET  /receipts/{id}/image                 GET   /receipts/{id}/image/blob
-//   POST /upload          GET /export/xlsx
-//   GET  /review/next     POST /review/{id}/complete
-//   POST /auth/login      POST /auth/logout
+// The list below was ENUMERATED FROM THE BUILT APP, not grepped for decorators
+// and not recalled: build `create_app`, then walk `app.routes` recursing
+// through `.original_router.routes`. That recursion is not optional --
+// `include_router` wraps the auth router in an `_IncludedRouter`, so a FLAT
+// walk yields 13 routes with ZERO /auth/* paths. This comment previously
+// claimed to be "cross-checked against every route `create_app` registers" and
+// was missing three of them, which is what a list in prose costs when it is
+// trusted instead of re-derived (review standards 17 and 20).
+//
+// Measured 2026-08-06 with DOCS_ENABLED unset: 16 routes plus the /app mount.
+//   GET  /health          GET  /metrics
+//   GET  /receipts        GET  /receipts/{id}       PATCH /receipts/{id}
+//   GET  /receipts/{id}/image                       GET   /receipts/{id}/image/blob
+//   POST /upload          GET  /export/xlsx
+//   GET  /review/next     GET  /review/tasks
+//   POST /review/{id}/complete                      POST  /review/{id}/release
+//   POST /auth/login      POST /auth/logout         GET   /auth/me
 // The SPA itself lives under /app/, which no API route uses, so nothing here
 // can collide with a client-side route.
 const API_PREFIXES = [
@@ -29,11 +38,15 @@ const API_PREFIXES = [
   '/export',
   '/health',
   '/metrics',
-  // FastAPI's own three, registered by `create_app` only when DOCS_ENABLED is
-  // true (config/settings.py defaults it to false). The SPA never fetches
-  // them, but "every prefix the API owns" includes the ones a developer opens
-  // by hand, and a dev server that answers /docs with the SPA shell instead of
-  // Swagger is the same class of confusion this list exists to prevent.
+  // FastAPI's own, registered by `create_app` only when DOCS_ENABLED is true
+  // (config/settings.py defaults it to false). **Three prefixes, four route
+  // paths** -- the same enumeration run with DOCS_ENABLED=true returns 21
+  // rather than 17, because /docs also registers /docs/oauth2-redirect. Three
+  // entries still cover all four, since this array matches by prefix. The SPA
+  // never fetches them, but "every prefix the API owns" includes the ones a
+  // developer opens by hand, and a dev server that answers /docs with the SPA
+  // shell instead of Swagger is the same class of confusion this list exists
+  // to prevent.
   '/docs',
   '/redoc',
   '/openapi.json',
