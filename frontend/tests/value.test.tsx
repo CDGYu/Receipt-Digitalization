@@ -445,6 +445,21 @@ const COMPONENTS: readonly GuardedComponent[] = [
     prop: '',
     computed: [],
   },
+  // Added 2026-08-06, after the browser pass. The login page got its first
+  // stylesheet in that round and arrived unguarded: the fix round could not add
+  // itself here, because this file was outside its permitted set. Under
+  // `css: false` a renamed class ships as `class="undefined"` with all five
+  // gates green, and the fix round proved exactly that by hand -- renaming
+  // `.form` made the card, its border and its centring vanish silently. It is
+  // the first screen every reviewer sees, so it is the worst one to leave to a
+  // hand check nobody will repeat.
+  {
+    name: 'LoginPage',
+    tsx: 'login/LoginPage.tsx',
+    css: 'login/LoginPage.module.css',
+    prop: '',
+    computed: [],
+  },
 ]
 
 describe('every class a component references exists in its stylesheet', () => {
