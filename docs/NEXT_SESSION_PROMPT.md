@@ -21,8 +21,8 @@ step is permanent.
 **`feat/review-ui-styling`**, off `main@1314485`, **pushed**. `main` is untouched
 by it and in sync with `origin/main`.
 
-The tip was `593e194` when this was written, and **this refresh rides on top of
-that**, so the real tip is at least one commit later — a document cannot name
+The tip was `5d91fb8` when this was last edited, and **the edit itself commits
+on top of that**, so the real tip is at least one commit later — a document cannot name
 the commit that writes it (ADR-0019). **Do not quote a count from this file;
 run it** (ADR-0028 §1):
 
@@ -31,14 +31,16 @@ git rev-list --count main..feat/review-ui-styling
 git log --oneline main..feat/review-ui-styling | head -5
 ```
 
-**Tasks 1, 2 and 3 of six are complete. Task 4 was DISPATCHED and this file does
-not know how it ended. Tasks 5 and 6 are not started.**
+**Tasks 1, 2, 3 and 4 of six are complete** (3 and 4 each took one fix round;
+Task 4's first implementer stalled and was finished by a second). **Tasks 5 and
+6 are not started — Task 5 is the browser pass, and it is the point of the whole
+milestone.**
 
 **First thing to run:**
 
 ```
-git log --oneline 593e194..feat/review-ui-styling    # what Task 4 landed, if anything
-git status --short                                   # dirty => a mutation may be mid-flight
+git status --short          # dirty => a mutation may be mid-flight; do not "clean" it
+git log --oneline -8
 ```
 
 **If the tree is dirty, do not "clean" it** (ADR-0023). Restore from a byte copy
@@ -111,8 +113,8 @@ after checking the ledger, never with `git checkout --`.
   ```
 
   **Empty means this prompt is current.**
-- Gates at `593e194`, controller-run: `python scripts/verify.py` **all five
-  PASS**; pytest **979**; Vitest **281 across 22 files**.
+- Gates at `5d91fb8`, controller-run: `python scripts/verify.py` **all five
+  PASS**; pytest **979**; Vitest **318 across 24 files**.
 - **`src/` CHANGED on this frontend branch** (`bbb5366`). The whole-branch
   review has one Python file in scope, and the **outside-repo import check
   applies at the merge**.
@@ -127,12 +129,27 @@ Lanes **1 → 2 → {3 ∥ 4} → 5 → 6**. Plan:
 `docs/superpowers/plans/2026-08-05-review-ui-styling.md` (read its defect log
 first).
 
-### 1.1 Close out Task 4 — the `/app/admin` surface
+### 1.1 Task 4 — the `/app/admin` surface — **DONE (`5d91fb8`)**
 
-**Dispatched 2026-08-06; outcome unknown to this file. Check git first.**
+Shipped: `route.ts` (a pathname switch, not a router), `api/admin.ts`,
+`admin/{AdminScreen,TaskTable,StatTiles}` + stylesheets, the `session.ts`
+identity widening hydrated from `/auth/me`, and the `main.tsx` wiring. Vitest
+**281 → 318 across 24 files**; all five gates PASS, controller-run.
 
-If it did not land, re-dispatch with these corrections, which **override the
-plan's Task 4 text** (they are plan defects #17–20, all the controller's):
+**It found that `main.tsx`'s admin branch was deletable with all 316 tests
+green** — `/app/admin` being reachable at all was unpinned — and closed it with
+`tests/app-admin-route.test.tsx`. Controller-reproduced: deleting the branch
+reds exactly that one test.
+
+**`Button` and `Chip` are both adopted and `Chip`'s signature did not change** —
+five hand-authored `aria-hidden` SVG glyphs, so runtime deps stay at four. Every
+chip is `neutral` except `done` → `positive`: ADR-0027 §2 reserves error red,
+warn amber and info blue, so a priority-0 row says the **word** "Urgent" rather
+than borrowing red.
+
+The plan's Task 4 text is still wrong in four places (defects #17–20, in the
+plan's dated defect log). **They were all handled in the shipped code**; they
+are recorded here only so nobody re-derives them from the plan:
 
 - **Do NOT create `ReviewTaskSummary`.** `frontend/src/api/types.ts` already
   declares **`ReviewTask`** with exactly `_task_summary`'s eight fields. Reuse
@@ -152,10 +169,28 @@ plan's Task 4 text** (they are plan defects #17–20, all the controller's):
   gets **403**, not an empty result. That is an error path, not an empty state.
 - **The empty state must name its scope** (ADR-0026): reviewer → "No open
   tasks, and none assigned to you"; admin → "No tasks".
-- **`Button` and `Chip` have zero consumers and `Chip` is unusable as typed**
-  (`icon: JSX.Element`, no icon set, runtime deps frozen at four).
-  **Controller ruling: Task 4 decides and reports** — adopt, supply an inline
-  glyph, or report that the signature should change. Do not edit `ui/Chip.tsx`.
+
+### 1.1b Task 4's residuals — reported, not fixed. Carry to the close.
+
+1. **`getByText(/carol/)` in the release round-trip is vacuous** — it passes
+   from the assignee cell alone, *before* the click. **Measured:** a visible
+   "Release from carol" button makes it throw on 2 matches; with the name on
+   `aria-label` there is exactly 1. So the test *forces* the holder-naming into
+   the accessible name, and the assertion meant to check it checks nothing.
+   **Consequence: making the confirm prompt name the holder *visibly* and
+   keeping that test are mutually exclusive.**
+2. **Nothing pins stylesheet *content* in `src/admin/`.** The guard checks only
+   that referenced classes exist; both stylesheets could be emptied to `.x{}`
+   stubs and stay green. **No test anywhere forbids raw hex outside
+   `tokens.css`** — `tokens.test.ts` covers `tokens.css`, and
+   `review-null-rule.test.tsx` scans `src/review` only.
+3. **`has_more` is reported with no way to act on it.** `fetchTasks` accepts
+   `limit`/`offset`; the screen never sends them. An operator past 50 tasks is
+   told there are more and given no control. Contract-compliant, real gap.
+4. **The metrics-failure branch and the multi-line alert region are untested** —
+   every test stubs `/metrics` 200.
+5. **`busyTaskId` locks every row's control**, not just the clicked one.
+   Deliberate and documented; uncovered.
 
 ### 1.2 Task 5 — the browser pass nobody has ever done
 
@@ -311,14 +346,17 @@ derived at the moment of writing, with its method recorded.
 
 ## Running it
 
-- Two suites: `python -m pytest` (**979**) and Vitest in `frontend/` (**281**
-  across 22 files on the branch, 221 on `main`). `npm test` does **not**
+- Two suites: `python -m pytest` (**979**) and Vitest in `frontend/` (**318**
+  across 24 files on the branch, 221 on `main`). `npm test` does **not**
   type-check — run `npm run typecheck` too. `python scripts/verify.py` is what
   "passing" means (ADR-0017).
 - **`pyproject.toml` sets `addopts = "-q"`.** So `python -m pytest -q` is `-qq`
   and prints **no pass count**; `-v` nets to dot output. **Use bare
   `python -m pytest`,** or `--junitxml`.
-- **`scripts/verify.py` exceeds a 2-minute tool timeout.** Background it.
+- **`scripts/verify.py` exceeds a 2-minute tool timeout.** Background it — and
+  **do not edit while it runs.** Backgrounded during an edit it caught a
+  half-applied refactor and reported `FAIL build` on a `TS6133` that no longer
+  existed. A phantom failure looks exactly like a real one.
 - Lint: `python -m ruff check .`. The frontend linter is **oxlint**; there is
   **no formatter config anywhere** in the tracked tree.
 - **`pytest -k` matches substrings, not words.** `-k tasks` does not match

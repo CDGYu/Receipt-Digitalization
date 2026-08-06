@@ -21,14 +21,15 @@ was written and you are reading something stale.
 ## Snapshot
 
 - **⚠️ A BRANCH IS IN FLIGHT: `feat/review-ui-styling`**, off `main@1314485`,
-  **pushed**. Its tip was `593e194` when this was written and this refresh
-  rides on top, so **run `git rev-list --count main..feat/review-ui-styling`
+  **pushed**. Its tip was `5d91fb8` when this was last edited and the edit
+  commits on top, so **run `git rev-list --count main..feat/review-ui-styling`
   rather than quoting a number from here** (ADR-0028 §1; ADR-0019 on why a
-  document cannot name the commit that writes it). **Tasks 1, 2 and 3 of six are
-  complete (3 took one fix round); Task 4 was DISPATCHED and its result is
-  unknown to this file; 5 and 6 are not started.** Vitest **281 across 22
-  files** (221 on `main`); pytest **979**; all five gates PASS at `593e194`,
-  controller-run. ADR-0027 + its 2026-08-06 correction record its decisions.
+  document cannot name the commit that writes it). **Tasks 1, 2, 3 and 4 of six
+  are complete** (3 and 4 each took one fix round; Task 4's first implementer
+  stalled at an infrastructure fault and a second finished it). **Tasks 5 and 6
+  are not started — Task 5 is the browser pass, the point of the milestone.**
+  Vitest **318 across 24 files** (221 on `main`); pytest **979**; all five
+  gates PASS at `5d91fb8`, controller-run. ADR-0027 + its 2026-08-06 correction record its decisions.
   **The plan is `docs/superpowers/plans/2026-08-05-review-ui-styling.md` —
   read its "Dated defect log" at the bottom FIRST; the ledger is
   `.superpowers/sdd/2026-08-05-review-ui-styling/progress.md` and must be read
@@ -127,9 +128,18 @@ not started.** Branch `feat/review-ui-styling` @ `593e194`, 20 commits, pushed.
   (a `<section>` scroller), 5.3 (the confidence band) and 5.4 (the findings
   disclosure) and **one universally-quantified pin** covering every rendered
   control. Vitest 258 → 281.
-- **Task 4** — the `/app/admin` surface. Dispatched 2026-08-06; **result
-  unknown to this file — check `git log` and the ledger.**
+- **Task 4** — the `/app/admin` surface (`5d91fb8`): `route.ts`, `api/admin.ts`,
+  `admin/{AdminScreen,TaskTable,StatTiles}`, the `session.ts` identity
+  hydrated from `/auth/me`, and the `main.tsx` wiring. Vitest 281 → 318.
+  **Its first implementer stalled at an infrastructure fault** with the RED
+  phase complete; the work was quarantined and a second implementer finished
+  it. **It found `main.tsx`'s admin branch deletable with all 316 tests
+  green** — `/app/admin` reachable at all was unpinned — and closed it.
+  **`Button` and `Chip` are both adopted**, `Chip` fed hand-authored
+  `aria-hidden` SVG glyphs so runtime deps stay at four.
 - **Tasks 5 and 6** — the browser pass, then a dated note recording it.
+  **Not started.** Task 5's environment is present: `playwright.config.ts`,
+  a chromium install, and `scripts/{seed,serve}_review_e2e.py`.
 
 **Two residuals carried, both reported not fixed:** §5.3's confidence band
 hardcodes `0.85`/`0.60` while `GET /metrics` ships the authoritative
