@@ -491,10 +491,30 @@ def _install_write_routes(app: FastAPI) -> None:
 
         A valid signature for a receipt whose blob is missing from storage
         (fix round 1, F5) is a 404, the same as an unknown receipt -- not an
-        unhandled ``FileNotFoundError`` surfacing as a 500. This is the one
-        unauthenticated route in the service; it must never leak a
-        traceback to a caller who only had to forge nothing but guess an
-        id.
+        unhandled ``FileNotFoundError`` surfacing as a 500. **This is the one
+        route that serves receipt data without a session**, and the signature
+        stands in for the session; it must never leak a traceback.
+
+        It is **not** the only route reachable without one. An earlier version
+        of this docstring said "this is the one unauthenticated route in the
+        service", and that was **false the day it was written**: it arrived in
+        ``130b202`` (2026-07-29), and ``GET /health`` had already been in this
+        same file since ``b7a2966`` the day before. It was never true.
+        Enumerated 2026-08-06 -- by building the app, walking ``app.routes``
+        (recursing through ``.original_router.routes``, or the auth router's
+        three are invisible), and calling every route with no cookie:
+
+        * **five** answer something other than 401 -- this route,
+          ``GET /health``, ``POST /auth/login``, ``POST /auth/logout``, and the
+          ``/app`` mount;
+        * **nine** with ``DOCS_ENABLED=true``, which adds ``/docs``,
+          ``/docs/oauth2-redirect``, ``/redoc`` and ``/openapi.json``.
+
+        The static dependant tree and the empirical call agree on both counts.
+        **Re-run that rather than trusting these numbers** -- a route added
+        later makes them wrong without touching this docstring, which is how
+        the sentence above came to be false in the first place (review
+        standards 5 and 20).
         """
         settings = request.app.state.settings
         if not verify_signature(
