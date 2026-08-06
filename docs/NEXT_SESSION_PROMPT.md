@@ -18,8 +18,18 @@ step is permanent.
 
 # ⚠️ A BRANCH IS IN FLIGHT. This is a mid-milestone handoff.
 
-**`feat/review-ui-styling`**, **20 commits** off `main@1314485`, tip `593e194`,
-**all pushed**. `main` is untouched by it and in sync with `origin/main`.
+**`feat/review-ui-styling`**, off `main@1314485`, **pushed**. `main` is untouched
+by it and in sync with `origin/main`.
+
+The tip was `593e194` when this was written, and **this refresh rides on top of
+that**, so the real tip is at least one commit later — a document cannot name
+the commit that writes it (ADR-0019). **Do not quote a count from this file;
+run it** (ADR-0028 §1):
+
+```
+git rev-list --count main..feat/review-ui-styling
+git log --oneline main..feat/review-ui-styling | head -5
+```
 
 **Tasks 1, 2 and 3 of six are complete. Task 4 was DISPATCHED and this file does
 not know how it ended. Tasks 5 and 6 are not started.**

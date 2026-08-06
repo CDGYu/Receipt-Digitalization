@@ -20,8 +20,11 @@ was written and you are reading something stale.
 
 ## Snapshot
 
-- **⚠️ A BRANCH IS IN FLIGHT: `feat/review-ui-styling`**, **20 commits** off
-  `main@1314485` at `593e194`, **all pushed**. **Tasks 1, 2 and 3 of six are
+- **⚠️ A BRANCH IS IN FLIGHT: `feat/review-ui-styling`**, off `main@1314485`,
+  **pushed**. Its tip was `593e194` when this was written and this refresh
+  rides on top, so **run `git rev-list --count main..feat/review-ui-styling`
+  rather than quoting a number from here** (ADR-0028 §1; ADR-0019 on why a
+  document cannot name the commit that writes it). **Tasks 1, 2 and 3 of six are
   complete (3 took one fix round); Task 4 was DISPATCHED and its result is
   unknown to this file; 5 and 6 are not started.** Vitest **281 across 22
   files** (221 on `main`); pytest **979**; all five gates PASS at `593e194`,
