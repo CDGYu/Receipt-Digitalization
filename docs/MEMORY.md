@@ -28,8 +28,8 @@ was written and you are reading something stale.
   are complete**; 3, 4 and 5 each took one fix round, and Task 4's first
   implementer stalled at an infrastructure fault. **Only Task 6 remains** — a
   dated note on ADR-0027 — **then the whole-branch review.**
-  Vitest **318 across 24 files** (221 on `main`); pytest **979**; all five
-  gates PASS at `1bfacb4`, controller-run.
+  Vitest **346 across 25 files** (221 on `main`); pytest **979**; all five
+  gates PASS at `8ede47e`, controller-run.
   **The browser pass ran, and found §4 invisible on money in a real browser
   while every gate was green.** Fixed; see
   `docs/superpowers/specs/2026-08-05-review-ui-browser-pass.md`.
@@ -152,10 +152,22 @@ number from here** (ADR-0028 §1).
   shrink-wrapping to the input's `size="20"` intrinsic width — **not** the
   missing `width` the controller diagnosed, which the implementer disproved by
   mutation. Fixed: `cellOverflow` 204 → 0, sub-4.5:1 contrast records 35 → 0,
-  `--color-null` 3.91 → **5.45:1** in dark. **The login page got its first
+  `--color-null` 3.91 → **5.43:1** in dark. **The login page got its first
   stylesheet — it had been in no task's file set in any of the six**, and its
   class guard was added separately because the fix round was forbidden the test
   file (plan defect #15's shape, third occurrence).
+- **THE CLOSE — whole-branch review DONE, fix wave HALF DONE, NOT MERGED.**
+  Reviewed on the strongest model: 33 commits, 54 files, +9116/−622. Verdict
+  **merge after one fix wave**; nothing found is a runtime defect. Both
+  never-reviewed items **passed** — `41d01ab..e216af4` is clean, and `api.py`'s
+  enumeration is correct (re-run both ways, outside-repo check run).
+  **C-1, the one Critical: Task 5's entire fix round was unpinned** — three
+  reverts, each green on all five gates, undoing three Criticals and a WCAG
+  failure. **Fix wave A closed it** (`8ede47e`): a gated stylesheet declaration
+  census, Vitest **318 → 346 across 25 files**, all three reverts now red.
+  **ADR-0029 records what the gates now certify and what they still cannot.**
+  **Fix wave B (the docs sweep) and the re-review and the merge are NOT done —
+  see `docs/NEXT_SESSION_PROMPT.md` §1, which carries the full scope.**
 - **Task 6** — the dated note on ADR-0027 (`31fafaf`). Body untouched, appended
   after the existing correction, zero deletions verified. It records the pass,
   the generalisation worth keeping — **a pin can be genuinely universal, proven
@@ -1157,6 +1169,35 @@ measured.**
     survived a `git grep` for its own words, because the sentence wraps
     mid-phrase across two lines. Grep for one distinctive word, never the
     phrase.
+
+21. **A citation is a claim too.** Closing a prose defect ages every sentence
+    that *cited* it — and nobody re-greps. Measured 2026-08-06: fixing
+    `vite.config.ts`'s route list aged three tracked claims, **two of them
+    inside review standard 20's own text**, which would have shipped an instance
+    of the defect inside the standard that names it; fixing `api.py`'s docstring
+    aged four more. Worse, the branch that wrote ADR-0028 §5 (*cite by symbol or
+    quoted text, never by line*) then **created four new line citations and
+    rotted five existing ones in eight days** — five of them inside ADR-0027's
+    own Correction, four lines above the sentence boasting it deliberately
+    carries none. **After changing anything a document points at, grep for every
+    sentence that cites it — by one distinctive word, never the phrase. And
+    prefer a citation that cannot rot: quote the text, name the symbol.**
+
+22. **A universal pin can still not measure what you care about.** Standard 14
+    says a pin never proven to fail is not a pin. This is the complement: **a
+    pin proven to fail can still be blind to the property it is named for,
+    because the environment it runs in cannot observe that property.** Three
+    measured instances: `placeholder="—"` was pinned over every rendered
+    control, proven red, and the em dash was still invisible in a browser
+    because the input overflowed its cell (**a jsdom assertion cannot see a
+    clipped box**); `getByLabelText` asserted an accessible name it never read
+    through the accessibility tree (`Value.tsx` records it); and a family-level
+    `@fontsource` assertion would have stayed green on precisely the mutation it
+    was asked to prove red. It is structural, not anecdotal — Vitest sets
+    `css: false`, so a green class-name guard cannot mean the paint exists, and
+    emptying every rule body in a stylesheet left the suite green. **State next
+    to each pin what a green run does not establish, and name the environment's
+    blind spot.** ADR-0029 is that statement for the gate set.
 
 And: **a green suite is not evidence that installed software works.** Anything
 with an entry point gets run from outside the repository.
