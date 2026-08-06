@@ -1,22 +1,31 @@
 /* The confidence rail -- design §5.3. Tokens only; no raw hex.
  *
- * **There is no band here, and that is a reported gap rather than an oversight.**
- * §5.3 asks for a vertical scale whose band carries an icon *and* a word
- * (`Auto-approve` / `Review` / `Low`). `ConfidenceRail.tsx` renders no band at
- * all: it prints the stored score and the persisted `(reason, penalty)` pairs.
- * Adding one would mean new markup (out of scope for a `className`-only task),
- * an icon set that is not a dependency of this project (`@phosphor-icons/react`
- * is absent from package.json -- design §6 asks for Phosphor), and a threshold
- * comparison over `confidence`, which is a `Money` string with no arithmetic
- * defined on it (ADR-0015/ADR-0001).
+ * ## The band, and the one thing this stylesheet must not do
  *
- * What this stylesheet must therefore NOT do is the half of §5.3 it could
- * reach: colour the score by how high it is. That would be colour alone -- the
- * exact High-severity failure §6 names -- with no word beside it to survive for
- * a reader who does not get the colour. The score is painted in
- * `--color-foreground` at every value, and the only colour distinction in this
- * panel is the one `Value` already owns: a score that was never recorded is
- * `--color-null`, which is a fact about the data, not a judgement of it. */
+ * §5.3 asks for a band carrying an icon *and* a word (`Auto-approve` / `Review`
+ * / `Low`). All three signals live in `ConfidenceRail.tsx`'s markup: the word is
+ * a text node, the glyph is a `role="img"` span with a name, and only the tint
+ * comes from here. That ordering is the requirement -- the tool's Colour Only
+ * rule is High severity and a red/amber/green scale is the exact failure case it
+ * names -- so **nothing below may be the sole carrier of a distinction.** Delete
+ * every rule in this file and the three bands still read correctly in words.
+ *
+ * What this stylesheet still must NOT do is colour the *score* by how high it
+ * is. That would be colour alone on a number with no word beside it. The score
+ * stays `--color-foreground` at every value, and the only colour distinction on
+ * it is the one `Value` owns: a score that was never recorded is `--color-null`,
+ * which is a fact about the data rather than a judgement of it.
+ *
+ * ## Spending the severity colours here
+ *
+ * ADR-0027 §2 reserves error red / warn amber / info blue and bans *decorative*
+ * use. A confidence band is not decoration: it is a judgement about whether the
+ * numbers on this screen can be trusted, which is the same category of signal as
+ * a finding's severity, and it is the one this panel exists to deliver. The high
+ * band takes `--color-positive` rather than a fourth colour, for the same
+ * reason. Info blue is left alone -- it belongs to `FindingsPanel`, and a third
+ * blue beside `--color-ring` and `--color-surface-active` would compete with the
+ * focus ring on the form next to it. */
 
 .rail {
   border: 1px solid var(--color-border);
@@ -41,6 +50,48 @@
   margin: 0 0 var(--space-lg);
   font-size: var(--text-xl);
   line-height: 1.3;
+}
+
+/* The band sits directly under the score it describes and reads as one unit with
+ * it: same left edge, no box of its own. `--text-sm` and the uppercase word keep
+ * it subordinate to the number -- the score is what a reviewer checks, the band
+ * is how to read it at a glance. */
+.band {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-sm);
+  margin: calc(-1 * var(--space-md)) 0 var(--space-lg);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+/* The glyph. Sized up a step so the shape is legible at `--text-sm`, and
+ * `font-family` left to the sans stack: `--font-mono` would give a check mark
+ * and a triangle the same advance width as a digit and shrink both. */
+.bandIcon {
+  flex: none;
+  font-size: var(--text-base);
+  line-height: 1;
+}
+
+.bandWord {
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* The three tones. Each one tints a word that is already in the DOM; none of
+ * them is the only thing distinguishing its band. */
+.high {
+  color: var(--color-positive);
+}
+
+.middle {
+  color: var(--color-severity-warn);
+}
+
+.low {
+  color: var(--color-severity-error);
 }
 
 /* "Breakdown not recorded" and "Nothing lowered the score" are statements about

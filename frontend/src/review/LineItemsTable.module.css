@@ -10,11 +10,13 @@
  * `table-layout: fixed` takes the widths from the header row and never
  * re-measures.
  *
- * ## What is NOT here: `overflow-x: auto`
+ * ## `overflow-x: auto` lives on `.scroller`, not on the table
  *
- * §5.2 wraps this table in a horizontal scroller. That needs an element around
- * the `<table>`, and `LineItemsTable` renders the table as its own root -- adding
- * a wrapper is a restructure, which this task must report rather than perform.
+ * §5.2 wraps this table in a horizontal scroller so the page body never scrolls
+ * sideways. `LineItemsTable` used to render the `<table>` as its own root, which
+ * is why a previous round reported this as unimplemented; the wrapper now exists
+ * and is a `<section>` -- see the component's docblock for why it is not a
+ * `<div>` (`ReviewScreen.module.css` places the image pane with `.screen > div`).
  *
  * The obvious substitute, `display: block; overflow-x: auto` on the `<table>`
  * itself, is deliberately **not** taken: browsers drop a table's implicit ARIA
@@ -22,9 +24,13 @@
  * reader navigates would silently stop being a grid. Testing Library computes
  * roles from the element, not from CSS, so `getByRole('table')` and the row
  * queries in `receipt-form.test.tsx` would stay green through exactly that
- * regression -- the shape of silent breakage this milestone keeps finding. The
- * table therefore stays `width: 100%` and lets its cells wrap instead, and the
- * scroller is reported as unimplemented.
+ * regression -- the shape of silent breakage this milestone keeps finding.
+ *
+ * The scroller is only half of it: a table that is free to squeeze never
+ * overflows, so `overflow-x` would never fire and seven columns would compress
+ * to unreadable slivers instead. `.table`'s `min-width` is what gives the
+ * scroller something to scroll, and `width: 100%` still lets it fill a wide
+ * viewport.
  *
  * ## Zebra without a tint token
  *
@@ -35,8 +41,37 @@
  * severity colour, which is the constraint that matters: a row must never read
  * as a warning about itself. */
 
+/* The horizontal scroller design §5.2 asks for.
+ *
+ * `max-width: 100%` is not redundant beside `overflow-x: auto`: this element is
+ * a grid item in `ReviewScreen`'s `.screen`, and a grid item's automatic minimum
+ * size is its content's, so without a cap it would grow the *column* to the
+ * table's `min-width` and push the whole page sideways -- which is the one thing
+ * §5.2 exists to prevent. (`.screen > *` already sets `min-width: 0` for the
+ * same reason; this makes the component's own half of it true wherever it is
+ * rendered.)
+ *
+ * `overflow-y` is deliberately left unset, and what that means is **not**
+ * "visible": CSS Overflow §3 computes a `visible` axis to `auto` whenever the
+ * other axis is not `visible`, so this box is a scroll container on both axes
+ * whatever is written here. That is harmless only because nothing constrains its
+ * height -- an auto-height scroll container has nothing to scroll vertically and
+ * clips nothing, so the `aria-describedby` error paragraph a cell renders under
+ * an invalid value stays reachable. Give this rule a `height` or a `max-height`
+ * later and that stops being true. */
+.scroller {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
 .table {
   width: 100%;
+  /* The floor that makes the scroller reachable. Seven columns whose widths are
+   * percentages of *this*, so below it the money columns stop lining up on the
+   * decimal -- the property Fira Code's tabular figures exist to make visible
+   * (§3.1) -- and a description wraps to four lines. Scrolling is the honest
+   * failure mode; squeezing is the silent one. */
+  min-width: 44rem;
   table-layout: fixed;
   border-collapse: collapse;
   border: 1px solid var(--color-border);

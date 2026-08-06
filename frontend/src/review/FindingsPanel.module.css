@@ -1,15 +1,14 @@
 /* The findings panel -- design §5.4. Tokens only; no raw hex.
  *
- * **This is a list, not the accordion §5.4 asks for.** A disclosure needs a
- * `<details>`/`<summary>` pair or a button and a controlled region, and both are
- * markup this task is not permitted to write -- Task 3's rule is `className`
- * only, plus four enumerated edits, and a restructure is a "stop and report".
- * What is styleable without new elements is everything else the section asks
- * for: the severity word carries a colour *beside the word it already renders*,
- * the `rule_id` is monospaced because it is a stored identifier a human quotes
- * back, and the message reads as prose. The `context` payload is not rendered by
- * this component at all today, so the expanded half of the accordion has no
- * content to disclose yet either.
+ * **This is the accordion §5.4 asks for**, built on a native
+ * `<details>`/`<summary>` pair. A previous round reported it as unimplementable
+ * because the task could not write markup; it can now, and the browser primitive
+ * is preferred over a button plus an `aria-expanded` region because the
+ * keyboard handling and the ARIA wiring come with it.
+ *
+ * The collapsed row carries what the flat list carried -- severity, `rule_id`,
+ * one-line message -- and only the `context` payload is disclosed, which nothing
+ * rendered before at all.
  *
  * **The severity colours are the one place this stylesheet may spend them.**
  * ADR-0027 reserves error red / warn amber / info blue for exactly this: a
@@ -60,10 +59,6 @@
  * by shadow, and a list of five bordered cards inside a bordered panel is four
  * more edges than the reader needs. */
 .finding {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: var(--space-sm);
   padding: var(--space-md) 0;
   border-top: 1px solid var(--color-border);
   font-size: var(--text-sm);
@@ -73,6 +68,75 @@
 .finding:first-child {
   border-top: none;
   padding-top: 0;
+}
+
+.disclosure {
+  /* The `<details>` fills the row it is in; the flex layout that used to live on
+   * `.finding` now belongs to `.summary`, which is the element that actually
+   * holds the severity, the id and the message. */
+  display: block;
+}
+
+/* The collapsed row. Three separate things suppress the UA's default triangle,
+ * and none of them covers every engine on its own: `display: flex` takes the
+ * element off `display: list-item`, which is what draws the marker in
+ * Chromium and Firefox; `list-style: none` is the standards-track spelling of
+ * the same suppression; and `::-webkit-details-marker` is the only one older
+ * Safari reads. The marker is *replaced*, not merely removed -- `.summary::after`
+ * draws the open/closed state at the *end* of the row, where it does not push
+ * the severity word and the id out of alignment across rows of different
+ * lengths. */
+.summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-sm);
+  list-style: none;
+  cursor: pointer;
+}
+
+.summary::-webkit-details-marker {
+  display: none;
+}
+
+.summary::after {
+  flex: none;
+  margin-left: auto;
+  color: var(--color-muted-foreground);
+  content: '+';
+}
+
+.disclosure[open] > .summary::after {
+  content: '\2212'; /* MINUS SIGN, so the two states differ in shape and width. */
+}
+
+/* The disclosed `context`, printed verbatim. Monospaced and pre-wrapped because
+ * it is a JSON payload a human reads structurally; `--color-surface-sunken`
+ * marks it as inset data rather than as prose the panel wrote.
+ *
+ * `overflow-x: auto` for the same reason §5.2 wraps the line items: a long
+ * unbroken value must scroll inside its own box rather than widen the rail and
+ * push the page sideways. */
+.context {
+  margin: var(--space-md) 0 0;
+  padding: var(--space-md);
+  max-width: 100%;
+  overflow-x: auto;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-sunken);
+  color: var(--color-foreground);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+/* Most findings record no context. The sentence is quieter than a finding, for
+ * the reason `.note` is: it describes the record rather than being one. */
+.noContext {
+  margin: var(--space-md) 0 0;
+  color: var(--color-muted-foreground);
+  font-size: var(--text-xs);
 }
 
 /* Monospaced because a `rule_id` is a stable identifier stored in the database

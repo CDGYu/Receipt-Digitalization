@@ -95,109 +95,133 @@ function TextCell({
  * Rows are the highlight unit. `onFocus` on the row rather than on each cell
  * because React's `onFocus` is the bubbling `focusin`, so one handler covers
  * every control in the row.
+ *
+ * ## The scroller, and why it is a `<section>` rather than a `<div>`
+ *
+ * Design §5.2 wraps this table in `overflow-x: auto` so a narrow viewport
+ * scrolls the table instead of squeezing seven columns into it, and so the page
+ * body never scrolls horizontally. That needs a real element around the
+ * `<table>`, which is why this component's root is no longer the table itself.
+ *
+ * **A `<div>` here is measured wrong.** `ReviewScreen.module.css` places the
+ * image pane positionally, with `.screen > div`, on the stated ground that the
+ * pane is the *only* direct `<div>` child of the review `<main>` -- and
+ * `LineItemsTable` is a direct child of that same `<main>`. A `<div>` root would
+ * therefore inherit `grid-column: 1; grid-row: 2 / span 4; position: sticky` and
+ * silently land the line items on top of the photograph, with every gate green:
+ * no rendering test can see a grid placement. `<section>` takes the default
+ * `.screen > *` slot instead, and `tests/review-null-rule.test.tsx` pins both the
+ * element and the invariant.
+ *
+ * The obvious alternative -- `display: block; overflow-x: auto` on the `<table>`
+ * itself -- stays rejected for the reason the stylesheet records: changing a
+ * table's `display` drops its implicit ARIA role in a browser, while Testing
+ * Library computes roles from the element and would never notice.
  */
 export function LineItemsTable({ items, fields, onChange, errors }: LineItemsTableProps) {
   const [active, setActive] = useState<number | null>(null)
   return (
-    <table className={styles.table}>
-      <thead className={styles.head}>
-        <tr>
-          <th>#</th>
-          <th>Description</th>
-          <th>SKU</th>
-          <th>Qty</th>
-          <th>Unit</th>
-          <th>Unit price</th>
-          <th>Line total</th>
-        </tr>
-      </thead>
-      <tbody>
-        {items.map((item) => {
-          const at = `line_items[${item.position}]`
-          return (
-            <tr
-              key={item.position}
-              className={styles.row}
-              onFocus={() => setActive(item.position)}
-              // **The colour is the swap this task owns; the mechanism is not.**
-              // `#fffbe6` stood here, and amber is WARN's reserved colour
-              // (ADR-0027 §2) -- a yellow row on an accounting screen reads as a
-              // warning about that row's numbers rather than as "this is where
-              // you are". `--color-surface-active` is the pale blue Task 1 added
-              // for exactly this, tied to `--color-ring`.
-              //
-              // It stays an *inline* style rather than moving to
-              // `styles.rowActive`, against the brief, because the class form is
-              // measured red: `receipt-form.test.tsx:267-277` pins this highlight
-              // through `rows[1].style.background`, and with the paint moved to a
-              // class that assertion fails with `expected '' not to be ''`. That
-              // test is not this task's to edit, so the honest move is the colour
-              // swap plus a report. `.rowActive` is declared and ready for
-              // whoever is allowed to change the pin.
-              style={{
-                background: active === item.position ? 'var(--color-surface-active)' : undefined,
-              }}
-            >
-              <td className={styles.position}>{item.position}</td>
-              <td>
-                <TextCell
-                  label={`Description ${item.position}`}
-                  value={fields[`${at}.description_raw`]}
-                  error={errors?.[`${at}.description_raw`]}
-                  // `description_raw` is a required column, and it is the one
-                  // text path here that does not report `null` when emptied:
-                  // measured, `_coerce_text(None)` is `''` rather than an error,
-                  // so `null` and `''` would land on the same column value and
-                  // sending the string is the honest one.
-                  onChange={(raw) => onChange(`${at}.description_raw`, raw)}
-                />
-              </td>
-              <td>
-                <TextCell
-                  label={`SKU ${item.position}`}
-                  value={fields[`${at}.sku`]}
-                  error={errors?.[`${at}.sku`]}
-                  onChange={(raw) => onChange(`${at}.sku`, raw === '' ? null : raw)}
-                />
-              </td>
-              <td className={styles.money}>
-                {/* `qty` is `_coerce_money`, not `_coerce_int`
-                    (repository.py:932) -- "9.800" is a real quantity here. */}
-                <MoneyInput
-                  label={`Qty ${item.position}`}
-                  value={fields[`${at}.qty`]}
-                  error={errors?.[`${at}.qty`]}
-                  onChange={(value) => onChange(`${at}.qty`, value)}
-                />
-              </td>
-              <td>
-                <TextCell
-                  label={`Unit ${item.position}`}
-                  value={fields[`${at}.unit`]}
-                  error={errors?.[`${at}.unit`]}
-                  onChange={(raw) => onChange(`${at}.unit`, raw === '' ? null : raw)}
-                />
-              </td>
-              <td className={styles.money}>
-                <MoneyInput
-                  label={`Unit price ${item.position}`}
-                  value={fields[`${at}.unit_price`]}
-                  error={errors?.[`${at}.unit_price`]}
-                  onChange={(value) => onChange(`${at}.unit_price`, value)}
-                />
-              </td>
-              <td className={styles.money}>
-                <MoneyInput
-                  label={`Line total ${item.position}`}
-                  value={fields[`${at}.line_total`]}
-                  error={errors?.[`${at}.line_total`]}
-                  onChange={(value) => onChange(`${at}.line_total`, value)}
-                />
-              </td>
-            </tr>
-          )
-        })}
-      </tbody>
-    </table>
+    <section className={styles.scroller}>
+      <table className={styles.table}>
+        <thead className={styles.head}>
+          <tr>
+            <th>#</th>
+            <th>Description</th>
+            <th>SKU</th>
+            <th>Qty</th>
+            <th>Unit</th>
+            <th>Unit price</th>
+            <th>Line total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {items.map((item) => {
+            const at = `line_items[${item.position}]`
+            return (
+              <tr
+                key={item.position}
+                className={styles.row}
+                onFocus={() => setActive(item.position)}
+                // **The colour is the swap this task owns; the mechanism is not.**
+                // `#fffbe6` stood here, and amber is WARN's reserved colour
+                // (ADR-0027 §2) -- a yellow row on an accounting screen reads as a
+                // warning about that row's numbers rather than as "this is where
+                // you are". `--color-surface-active` is the pale blue Task 1 added
+                // for exactly this, tied to `--color-ring`.
+                //
+                // It stays an *inline* style rather than moving to
+                // `styles.rowActive`, against the brief, because the class form is
+                // measured red: `receipt-form.test.tsx:267-277` pins this highlight
+                // through `rows[1].style.background`, and with the paint moved to a
+                // class that assertion fails with `expected '' not to be ''`. That
+                // test is not this task's to edit, so the honest move is the colour
+                // swap plus a report. `.rowActive` is declared and ready for
+                // whoever is allowed to change the pin.
+                style={{
+                  background: active === item.position ? 'var(--color-surface-active)' : undefined,
+                }}
+              >
+                <td className={styles.position}>{item.position}</td>
+                <td>
+                  <TextCell
+                    label={`Description ${item.position}`}
+                    value={fields[`${at}.description_raw`]}
+                    error={errors?.[`${at}.description_raw`]}
+                    // `description_raw` is a required column, and it is the one
+                    // text path here that does not report `null` when emptied:
+                    // measured, `_coerce_text(None)` is `''` rather than an error,
+                    // so `null` and `''` would land on the same column value and
+                    // sending the string is the honest one.
+                    onChange={(raw) => onChange(`${at}.description_raw`, raw)}
+                  />
+                </td>
+                <td>
+                  <TextCell
+                    label={`SKU ${item.position}`}
+                    value={fields[`${at}.sku`]}
+                    error={errors?.[`${at}.sku`]}
+                    onChange={(raw) => onChange(`${at}.sku`, raw === '' ? null : raw)}
+                  />
+                </td>
+                <td className={styles.money}>
+                  {/* `qty` is `_coerce_money`, not `_coerce_int`
+                      (repository.py:932) -- "9.800" is a real quantity here. */}
+                  <MoneyInput
+                    label={`Qty ${item.position}`}
+                    value={fields[`${at}.qty`]}
+                    error={errors?.[`${at}.qty`]}
+                    onChange={(value) => onChange(`${at}.qty`, value)}
+                  />
+                </td>
+                <td>
+                  <TextCell
+                    label={`Unit ${item.position}`}
+                    value={fields[`${at}.unit`]}
+                    error={errors?.[`${at}.unit`]}
+                    onChange={(raw) => onChange(`${at}.unit`, raw === '' ? null : raw)}
+                  />
+                </td>
+                <td className={styles.money}>
+                  <MoneyInput
+                    label={`Unit price ${item.position}`}
+                    value={fields[`${at}.unit_price`]}
+                    error={errors?.[`${at}.unit_price`]}
+                    onChange={(value) => onChange(`${at}.unit_price`, value)}
+                  />
+                </td>
+                <td className={styles.money}>
+                  <MoneyInput
+                    label={`Line total ${item.position}`}
+                    value={fields[`${at}.line_total`]}
+                    error={errors?.[`${at}.line_total`]}
+                    onChange={(value) => onChange(`${at}.line_total`, value)}
+                  />
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </section>
   )
 }

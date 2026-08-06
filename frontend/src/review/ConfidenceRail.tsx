@@ -54,7 +54,89 @@ function signPrefixFor(penalty: string): string {
   return penalty.startsWith('-') || penalty.startsWith('+') ? '' : '+'
 }
 
+/** The routing cut-offs, **copied** from `src/receipts/score/thresholds.py`.
+ *
+ * `AUTO_APPROVE_THRESHOLD = Decimal("0.85")` and `REVIEW_THRESHOLD =
+ * Decimal("0.60")`, and both tests are "at or above" (`cli.py:1206`:
+ * `confidence >= threshold` "is the definition of auto-approval").
+ *
+ * **This is a duplicate of a number that calibration is meant to move**, which
+ * is precisely what that module's own docstring was written to stop -- it exists
+ * because the same constants were previously spelled in four places. The
+ * authoritative pair is already on the wire: `GET /metrics` returns
+ * `thresholds: {auto_approve, review}` as strings, read from
+ * `settings.auto_approve_threshold` (`review/api.py:282-285`), so a deployment
+ * that overrides either one gets a band here that disagrees with its own
+ * routing. Fetching them is a data-flow change this task is not scoped for; the
+ * copy is reported as open rather than hidden, and the band is a reading aid for
+ * the score beside it, never a claim about what the pipeline did with it.
+ */
+const AUTO_APPROVE_AT = '0.85'
+const REVIEW_AT = '0.60'
+
+/** `left >= right` for two decimal strings, **without arithmetic**.
+ *
+ * ADR-0001 and ADR-0015 keep money -- and every column that shares `money()`'s
+ * serializer, confidence included -- a string end to end, and
+ * `tests/no-float-in-money-path.test.ts` is a source scan that fails on
+ * `Number(`, `parseFloat(` and a unary `+` anywhere under `frontend/src` --
+ * including this file, which it reads as text. So the comparison is
+ * done on the digits themselves: integer parts by length then lexically (equal
+ * length makes `'9' > '1'` the same order as the values), fraction parts padded
+ * to a common width and compared the same way. Exact for every input the
+ * predicate below admits, and no value is ever rewritten.
+ */
+function atLeast(left: string, right: string): boolean {
+  const trim = (digits: string): string => digits.replace(/^0+(?=\d)/, '')
+  const [leftWhole, leftFraction = ''] = left.split('.')
+  const [rightWhole, rightFraction = ''] = right.split('.')
+  const leftDigits = trim(leftWhole)
+  const rightDigits = trim(rightWhole)
+  if (leftDigits.length !== rightDigits.length) return leftDigits.length > rightDigits.length
+  if (leftDigits !== rightDigits) return leftDigits > rightDigits
+  const width = Math.max(leftFraction.length, rightFraction.length)
+  return leftFraction.padEnd(width, '0') >= rightFraction.padEnd(width, '0')
+}
+
+interface Band {
+  /** §5.3's word. It is the primary signal, and the colour is the redundant
+   *  one -- never the other way round. */
+  readonly word: string
+  /** A text glyph, not an icon font: there is no icon set in this project and
+   *  adding one is a new dependency. It is a *shape* distinction on top of the
+   *  word, which is what makes the band survive greyscale. */
+  readonly glyph: string
+  /** The class that paints it. Keyed here rather than at the call site so the
+   *  three arms cannot drift apart. */
+  readonly tone: 'high' | 'middle' | 'low'
+}
+
+/** Which band a stored score falls in, or `null` for no claim at all.
+ *
+ * **`null` in, `null` out, and that is the point.** A band is a judgement about
+ * a number; a receipt that was never scored has no number, and inventing "Low"
+ * for it would be exactly the null-reads-as-a-value failure design §4 exists to
+ * prevent -- on the one panel whose whole job is to report how much the machine
+ * trusted itself.
+ *
+ * Anything that is not a plain non-negative decimal also yields `null`. The
+ * column is `Numeric` and `money()` prints it with `str(Decimal)`, so that shape
+ * is what arrives; a row that came from anywhere else gets no band rather than a
+ * band derived from a string this comparator cannot order.
+ */
+function bandFor(confidence: string | null): Band | null {
+  if (confidence === null || !/^\d+(\.\d+)?$/.test(confidence)) return null
+  if (atLeast(confidence, AUTO_APPROVE_AT)) {
+    return { word: 'Auto-approve', glyph: '✓', tone: 'high' }
+  }
+  if (atLeast(confidence, REVIEW_AT)) {
+    return { word: 'Review', glyph: '!', tone: 'middle' }
+  }
+  return { word: 'Low', glyph: '▼', tone: 'low' }
+}
+
 export function ConfidenceRail({ confidence, reasons }: ConfidenceRailProps) {
+  const band = bandFor(confidence)
   return (
     <aside className={styles.rail}>
       <h2 className={styles.heading}>Confidence</h2>
@@ -73,6 +155,28 @@ export function ConfidenceRail({ confidence, reasons }: ConfidenceRailProps) {
       <p className={styles.score}>
         <Value value={confidence} kind="money" />
       </p>
+      {/* §5.3's band. **Never colour alone** -- the tool's Colour Only rule is
+          High severity and red/amber/green is the exact failure case it names,
+          so the word carries the meaning and the tone class only tints the word
+          that is already there. The glyph is a third, shape-based signal for a
+          reader who has neither.
+
+          `role="img"` with a name, for the reason `ui/Value` records: a bare
+          `<span>` is `role=generic`, for which ARIA 1.2 marks naming
+          *prohibited*, so the glyph would announce as "check mark", "down
+          triangle" or as nothing at all. The name repeats the word rather than
+          describing the shape, because what a screen reader needs from this
+          element is the band, not the decoration.
+
+          No band at all when there is no score: see `bandFor`. */}
+      {band === null ? null : (
+        <p className={`${styles.band} ${styles[band.tone]}`}>
+          <span className={styles.bandIcon} role="img" aria-label={`${band.word} band`}>
+            {band.glyph}
+          </span>
+          <span className={styles.bandWord}>{band.word}</span>
+        </p>
+      )}
       {reasons === null ? (
         <p className={styles.note}>Breakdown not recorded for this receipt.</p>
       ) : reasons.length === 0 ? (
