@@ -201,6 +201,89 @@ Measured: `_LINE_ITEM_FIELDS` has 7 keys, and the table renders 6 controls per
 row (`LineItemsTable.tsx:114-161`), holding `position` read-only because it is
 the addressing key every other edit in the row depends on.
 
+## Dated note (2026-08-06) — the browser pass ran, and what it found
+
+The Consequences section above ends: *"A browser pass is part of 'done' for this
+system (user ruling). Nothing in the token or primitive work proves anything
+**renders**."* It has now run — 97 screenshots at 375 / 1024 / 1440px in both
+themes across eleven surfaces, every one opened and read, with 64 in-page
+measurement records beside them. Full report:
+`docs/superpowers/specs/2026-08-05-review-ui-browser-pass.md`. Screenshots live
+in `var/e2e/visual/`, gitignored, because they contain receipt data.
+
+### The ruling was right, and this is the evidence
+
+**§5's null rule was asserted green in jsdom and invisible in a browser.**
+
+`placeholder="—"` was present on every money control, and the
+universally-quantified pin that guards it was correct and passing — the
+milestone spent five fix rounds converging on that pin, and it never lied. But
+`MoneyInput`'s label was `display: inline-flex`, which shrink-wraps to an
+`<input>`'s `size="20"` intrinsic width — about **246px** — inside line-item
+cells measured **92–119px**. Every money control overflowed its column by
+127–155px, painted over the neighbouring column, clipped the last one away
+entirely, and pushed the right-aligned `—` outside the visible box.
+
+**So on the line-items table, "never extracted" and "not filled in yet" looked
+identical — on money, which is the one place §5 exists to protect — with all
+five gates green.**
+
+A jsdom assertion cannot see a clipped box. That is the whole argument for the
+ruling, and it is now measured rather than argued. **A pin can be genuinely
+universal, proven to fail, and still not measure the property you care about,
+because the assertion layer cannot see what a person sees.**
+
+Fixed in the same milestone: `cellOverflow` **204 → 0** across all 64 records.
+Note the diagnosis was wrong before it was right — the controller briefed the
+cause as a missing `width`, and removing that `width` broke nothing; the
+implementer found `inline-flex` by mutation and then **removed two declarations
+it could not break** rather than ship inert armour.
+
+### Two other Criticals, both scope gaps rather than mistakes
+
+* **The login page had no stylesheet at all** and was the first screen every
+  reviewer saw: labels sharing a line with their inputs, 21px controls against
+  §6's 44px floor. **`frontend/src/login/` was in no task's file set in any of
+  the six tasks** — the plan drew boundaries around every file it thought about
+  and left the entry point out.
+* **`--color-null` measured 3.91:1 in dark**, below the 4.5:1 floor, on the one
+  glyph carrying the prime directive. It was `#64748B` in all three token
+  blocks — identical light and dark, which is exactly why it passed on white
+  and failed on `#0E1223`. Now `#7C8CA2` in both dark blocks: **5.45:1**.
+
+### What the pass confirmed is right
+
+Recorded deliberately, because three milestones shipped unseen and "this part is
+fine" was information nobody had. **Theme precedence works in both directions** —
+`:root:not([data-theme='light'])` behaves exactly as decision 1 says. **Fira
+Code's tabular figures are real**: `1111111111`, `0000000000` and `9999999999`
+each measure exactly 96px at 16px, so a transposed digit does break the column.
+**Severity colours pass in dark** (4.94 / 8.66 / 7.31) and each carries its word.
+**Nothing scrolls horizontally at 375px.** Focus rings are correct on every
+input, select and button in both themes. The two-column shell lands where
+intended, and `LineItemsTable` does have its `overflow-x` wrapper — two standing
+controller suspicions, both unfounded in this tree.
+
+### One decision this ADR made that the pass showed is incomplete
+
+**Decision 1 ships dark as a full second theme, and there is no theme control in
+the application.** The only ways into dark are the OS preference and setting
+`data-theme` by hand. That is not a defect in anything built — every token,
+every contrast ratio and the precedence rule are correct and now verified in a
+browser — but a second theme a user cannot choose is a half-delivered decision.
+**Not fixed here, and deliberately not decided here**: it needs a home for the
+control, which is a design question this ADR did not open.
+
+### Still open
+
+Five Important findings (I5 below-the-fold terminal states, I6 the inline
+error's grid distance, I7 the silent 401 swap, I8 contradictory reviewer tiles,
+I9 the doubled 503 sentence) and seven Minor, all measured and listed in the
+report's §3. **I5 and I7 touch ADR-0024's contract**, so neither is a drive-by
+fix. Also unproven: Chromium only — intrinsic input widths differ per engine, so
+the defect class above is engine-specific — and `prefers-reduced-motion` and
+`prefers-contrast` remain unexercised.
+
 ## References
 
 `docs/superpowers/specs/2026-08-05-review-ui-design-system.md` (the design,
