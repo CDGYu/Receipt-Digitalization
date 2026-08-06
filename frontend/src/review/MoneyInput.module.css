@@ -18,9 +18,39 @@
  * outline through a zero-specificity `:where()`, and overriding it by accident
  * is exactly how "never `outline: none`" gets broken. */
 
+/* **Block-level, not `inline-flex` -- and that is half of the browser pass's C1.**
+ *
+ * `MoneyInput` is shared: it renders six fields in `ReceiptForm`'s grid AND three
+ * cells per row in `LineItemsTable`. In a `<td>` an `inline-flex` label
+ * shrink-wraps to its content, and its content is an `<input>` with no `width`,
+ * which renders at the HTML default `size="20"` intrinsic width. Measured in
+ * Chromium: **246px** (247 when `:placeholder-shown` widens the left border),
+ * against money cells measured **92-119px** -- so every control overflowed its
+ * cell by **127-155px**, painted over the column beside it, and pushed its
+ * right-aligned `—` outside the clipped `.scroller`. A block-level label takes
+ * the cell's width instead, and the input fills it: the input is a flex item with
+ * an `auto` cross size, so the default `align-items: stretch` sets its border box
+ * to the container's. **That is the whole of the width fix, and it was measured
+ * rather than reasoned:** a `width: 100%; box-sizing: border-box` pair was added
+ * here first, and deleting it again changed nothing at all -- the table stayed
+ * correct, `cellOverflow` stayed empty, and the Qty control stayed 88px wide in an
+ * 88px cell. A declaration that cannot be broken is not carrying anything, so it
+ * is not here. `box-sizing` stayed for a different reason; see `.input`.
+ *
+ * **The form is unaffected, and that was measured rather than assumed.** A grid
+ * item is blockified (CSS Display 2.7), so `inline-flex` already computed to
+ * `flex` inside `.form`; the input was already stretched to the track by the
+ * default `align-items: stretch`; and the six form fields measured the same right
+ * edges before and after this change (826/1017/1208/1399 at 1440).
+ *
+ * `min-width: 0` matches `ReceiptForm.module.css`'s `.field`. It is inert while
+ * that grid's tracks are `minmax(11rem, 1fr)` -- a *fixed* min track sizing
+ * function switches the automatic minimum size off -- and is what keeps this rule
+ * true if a track ever becomes `auto`. */
 .field {
-  display: inline-flex;
+  display: flex;
   flex-direction: column;
+  min-width: 0;
   gap: var(--space-xs);
   font-family: var(--font-sans);
   font-size: var(--text-sm);
@@ -28,6 +58,19 @@
 }
 
 .input {
+  /* **`box-sizing` is here for the height, not for the width**, and the pairing
+   * with `min-height` below is the whole of it: under the default content-box
+   * sizing, `min-height: 44px` floors the *content* box, so the painted control is
+   * 44 + 8px of padding + 2px of border = **54px**. Measured both ways in the
+   * browser at 1440: 179x54 and 88x54 without this line, 179x44 and 88x44 with it,
+   * against a `Merchant` text field that has always been 179x44 because
+   * `ReceiptForm.module.css`'s `.input` already carries this declaration. Without
+   * it the six money fields stand visibly taller than every other control on the
+   * form, which is the rhythm §6's 44px floor is supposed to produce, not break.
+   *
+   * It does no work on the width: `align-items: stretch` on `.field` above sets
+   * the input's border box to the cell's whatever `box-sizing` says. */
+  box-sizing: border-box;
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
   text-align: right;

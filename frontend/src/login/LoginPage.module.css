@@ -1,0 +1,175 @@
+/* The sign-in screen -- design §3, §6. Tokens only; no raw hex.
+ *
+ * ## Why this file did not exist until the browser pass
+ *
+ * No task in the styling milestone owned `frontend/src/login/`, so this was the
+ * one surface that shipped entirely browser-default -- and it is the first screen
+ * every reviewer sees. Measured before this file existed: the `<h1>` was the UA's
+ * 2em bold, both labels and both boxes sat on **one line** with each label's text
+ * touching its box (`Username[box]Password[box][Sign in]`), the inputs measured
+ * **177x21** and the button **56.8x21** against §6's 44px floor, and at 375 the
+ * row wrapped mid-form so "Password" ended line 1 while its box began line 2 and
+ * read as belonging to the username box. Only the page colour, the body font and
+ * the focus ring were the design's, because those come from `body` and
+ * `:where(...)` in `tokens.css`.
+ *
+ * ## The shape it has to work with
+ *
+ * `LoginPage`'s root **is** the `<form>` -- `main.tsx` renders it bare, with no
+ * `<main>`, no `<header>` and no wrapper -- so this stylesheet's `.form` is both
+ * the card and the page. That is why the centring lives on it rather than on a
+ * container: there is no container, and the permitted change here was
+ * `className` only.
+ *
+ * Each field is `<label>text<input/></label>` with no element around the text.
+ * A flex column is what puts the label above its box without one: the text node
+ * is an anonymous flex item and takes the first line on its own, which is the
+ * whole of the fix for the run-together row above. Wrapping the text in a
+ * `<span>` would have been the reflex, and it is a JSX change this round may not
+ * make -- and would buy nothing, since the label must stay visible either way
+ * (§6 bans placeholder-only labelling).
+ *
+ * ## Deliberately borrowed rather than invented
+ *
+ * `.field`, `.input` and `.error` are `ReceiptForm.module.css`'s, and `.button`
+ * is `ui/Button.module.css`'s `.button` + `.primary`, spelled again. A reviewer
+ * should not learn one visual vocabulary for signing in and a second for the
+ * screen behind it. Spelled rather than shared because a CSS Module's classes do
+ * not cross files and `LoginPage` renders native elements, not the `Button`
+ * primitive -- swapping it for one is a JSX change outside this round's set. The
+ * duplication is the cost and it is recorded here rather than discovered later.
+ *
+ * There is **no `:focus` rule anywhere in this file, and no `outline: none`**:
+ * `tokens.css` already gives every input and button the 2px `--color-ring`
+ * outline at 2px offset through a zero-specificity `:where()`, and overriding
+ * that by accident is precisely how "never `outline: none`" gets broken. */
+
+/* `width` and `max-width` together: `calc(100% - 2 * var(--space-xl))` is what
+ * keeps a gutter at 375, where a bare `max-width` with `margin: auto` would give
+ * a card flush against both edges of the viewport, and `max-width` is what stops
+ * it stretching to 1440. */
+.form {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+  width: calc(100% - 2 * var(--space-xl));
+  max-width: 24rem;
+  margin: var(--space-3xl) auto;
+  padding: var(--space-2xl);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  font-family: var(--font-sans);
+  color: var(--color-foreground);
+}
+
+/* §3.1's `--text-2xl` is "page title only", and this page's title is the whole of
+ * its content. `margin: 0` because the flex `gap` above owns the rhythm; the UA's
+ * 0.67em margin would collapse against nothing here and just add a second,
+ * inconsistent gap. */
+.heading {
+  margin: 0;
+  font-size: var(--text-2xl);
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+/* `ReceiptForm.module.css`'s `.field`, to the declaration: label above, control
+ * below, one column. `--color-muted-foreground` is the darkened light value
+ * ADR-0027 §2 records (#475569, ~8:1 on white). */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  min-width: 0;
+  color: var(--color-muted-foreground);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+}
+
+/* `min-height: 44px` is §6's floor, and is the declaration that answers the
+ * measured 21px controls: reverted on its own, the two boxes go back to 29px and
+ * the button to 42px, all three under the floor again.
+ *
+ * `box-sizing: border-box` is what makes that 44px mean the *painted* box rather
+ * than the content box. Reverted on its own and measured on this page rather than
+ * inferred from the sibling file: 293x54 at 375 and 334x54 at 1024/1440, against
+ * 293x44 and 334x44 with it. Same arithmetic as `MoneyInput.module.css`'s note --
+ * 44 + 8px of padding + 2px of border.
+ *
+ * **There is deliberately no `width: 100%` here.** `ReceiptForm.module.css`'s
+ * `.input` carries one and this rule was copied from it with the same line, and
+ * then it was reverted and measured: the boxes are 293x44 at 375 and 334x44 at
+ * 1024/1440 either way, because `.field` and `.form` are both column flex
+ * containers and the default `align-items: stretch` has already set the input's
+ * border box to the card's content width twice over. A declaration that cannot be
+ * broken is not carrying anything. Whoever gives `.field` or `.form` an
+ * `align-items` other than `stretch` is the one who needs it back, and this note
+ * is what tells them so.
+ *
+ * No `placeholder` reaches these two and none should: §4's em-dash mark says "the
+ * machine never extracted this", and a password nobody has typed yet was never
+ * extracted from anything. This is a credential form, not a receipt. */
+.input {
+  min-height: 44px;
+  box-sizing: border-box;
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-foreground);
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+}
+
+/* The API's own sentence for a refused sign-in, painted exactly as
+ * `ReceiptForm.module.css` and `MoneyInput.module.css` paint a refused field.
+ * Error red is reserved for real failures (ADR-0027 §2) and a rejected credential
+ * is one. The `role="alert"` on this paragraph is ADR-0024's and is untouched
+ * here -- this rule adds paint and nothing else. */
+.error {
+  margin: 0;
+  color: var(--color-severity-error);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+}
+
+/* `ui/Button.module.css`'s `.button` + `.primary`. `--color-primary` and
+ * `--color-background` invert together across the two themes (#0F172A on #F8FAFC
+ * light, #F8FAFC on #020617 dark), so one pair of declarations reads correctly in
+ * both without a dark override.
+ *
+ * `align-self: start` keeps the button its own width instead of stretching the
+ * full card: it is one action, not a field. `min-width: 44px` is §6's other axis,
+ * and the text is wider than that anyway.
+ *
+ * §7: 150ms ease-out, and only for state the user caused. `tokens.css`'s global
+ * `prefers-reduced-motion: reduce` block turns it off. */
+.button {
+  align-self: start;
+  min-height: 44px;
+  min-width: 44px;
+  padding: var(--space-md) var(--space-xl);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: var(--color-primary);
+  color: var(--color-background);
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  font-weight: 500;
+  line-height: 1.5;
+  cursor: pointer;
+  transition: background-color 150ms ease-out, border-color 150ms ease-out;
+}
+
+.button:hover:not(:disabled) {
+  border-color: var(--color-ring);
+}
+
+/* The submit is disabled while the request is in flight, which is §7's "each step
+ * needs a visible pending state" for the one step this screen has. */
+.button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
