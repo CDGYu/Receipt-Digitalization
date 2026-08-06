@@ -156,6 +156,46 @@ The five error states' appearance, the admin surface's layout, and whether
 any of it is legible. Those need the browser pass, which had not run when
 this was written.
 
+## Correction (2026-08-06)
+
+**The Consequences section's "Every one of the 17 correctable paths is an
+`<input>`" is false, and the operative half of that sentence is narrower than
+it reads.** Found in the review-screen task's pre-flight, before any styling
+was written.
+
+Answered by enumerating rather than by arguing (review standard 17). The 17
+paths are exactly the keys of `_RECEIPT_FIELDS`
+(`src/receipts/persist/repository.py`) — measured, 17 — and `ReceiptForm.tsx`
+renders one control for each:
+
+| Source | Count | Element |
+|---|---|---|
+| `TEXT_FIELDS` (`ReceiptForm.tsx:95`) | 8 | `<input type="text">` |
+| `MONEY_FIELDS` (`:113`), via `MoneyInput` | 6 | `<input type="text" inputMode="decimal">` |
+| `meta.legibility` (`:227`) | 1 | **`<select>`** |
+| `meta.is_handwritten` (`:240`), `meta.receipt_is_inconsistent` (`:248`) | 2 | **`<input type="checkbox">`** |
+
+So the surface is **sixteen `<input>` elements and one `<select>`**, not
+seventeen inputs.
+
+**What this changes in practice: `placeholder="—"` reaches 14 of the 17.** A
+`<select>` bound to a closed option list has no empty state, and a checkbox has
+no third state — `ReceiptForm.tsx:221-224` already records both, and records
+why: a column that is `NULL` today stays `NULL` until the reviewer actually
+clicks it, at which point they have made a real edit. Neither element honours
+`placeholder` at all. Followed literally, the uncorrected sentence puts a
+placeholder on a checkbox.
+
+**The claim the sentence was written to make is untouched and still stands:**
+none of these 17 controls is a `Value`, every one is a form control, so §4's
+null rule cannot reach this screen through the primitive — and a null total
+still renders as a blank box until the review-screen task closes it.
+
+The line-items table is a **separate** surface and is not part of the 17.
+Measured: `_LINE_ITEM_FIELDS` has 7 keys, and the table renders 6 controls per
+row (`LineItemsTable.tsx:114-161`), holding `position` read-only because it is
+the addressing key every other edit in the row depends on.
+
 ## References
 
 `docs/superpowers/specs/2026-08-05-review-ui-design-system.md` (the design,
