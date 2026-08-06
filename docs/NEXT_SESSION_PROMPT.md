@@ -140,11 +140,17 @@ report rather than reshaping markup the tests assert against.
 **Three carry-forwards this task MUST honour** (all in the ledger):
 
 1. **`Value` has no consumer, and structurally cannot deliver §4 on this
-   screen** — every one of the 17 correctable paths is an `<input>`. §4
-   specifies the input half separately as `value=""` **with
+   screen** — every one of the 17 correctable paths is a form *control*, never
+   a `Value`. §4 specifies the input half separately as `value=""` **with
    `placeholder="—"`**, and `placeholder` appears **zero** times in
    `frontend/src`. **A null total renders as a blank box today.** Closing this
    is the first job of the task.
+   **The 17 are sixteen `<input>`s and one `<select>`** — 8 text, 6 money, one
+   `<select>` (Legibility), two checkboxes — so `placeholder` reaches **14** of
+   them: a closed option list and a checkbox have no empty state. ADR-0027's
+   body says "is an `<input>`" and is **wrong**; it carries a dated correction
+   (2026-08-06). `ReceiptForm.tsx:175` had it right all along — "seventeen
+   *controls*".
 2. **`ConfidenceRail.tsx:62` already renders `{confidence ?? '—'}`** with no
    accessible name, no `--color-null` and no border — an uncoordinated second
    copy of half the rule. Convert it to `Value` first.
