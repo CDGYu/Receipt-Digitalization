@@ -1014,6 +1014,55 @@ measured.**
     guard (`require_role` → `require_user`) is invisible at runtime too; it
     is plain Python, not a nested `Depends`.
 
+18. **A substring can answer for a declaration.** Three times in one milestone:
+    `--color-surface-raised` satisfied `toContain('--color-surface')`, so
+    deleting every `--color-surface:` declaration left the suite green; and
+    `border-left: 2px solid var(--color-null)` satisfied
+    `toContain('var(--color-null)')`, so deleting `color: var(--color-null)` —
+    §4's headline visual signal — left it green too. Assert on declarations,
+    exact equality, or set membership. Never on containment.
+
+19. **An enumerated defence never converges.** Four consecutive fix rounds on
+    the review-UI styling branch each closed the shapes that had been found and
+    re-asserted the class was closed; each assertion was falsified by the next
+    round. **The recurring defect was the assertion, not the code.** What broke
+    it: state one bounded, checkable property, enforce it at both ends, move the
+    enumerations into the tests as examples, and **report further shapes rather
+    than fixing them**. A round has converged when it adds a
+    *universally-quantified accept-side* assertion that fails on the previous
+    round's defect without anyone having thought of that defect.
+
+20. **A list in prose is read as complete, so writing one is a claim.** Four
+    instances measured in this tree, three closed 2026-08-06 and two of those
+    found only because a task's pre-flight went looking:
+
+    * ADR-0027's "every one of the 17 correctable paths is an `<input>`" —
+      sixteen inputs and one `<select>`, and the consequence it licensed
+      (`placeholder`) reaches **fourteen**. Corrected `46eb965`.
+    * The design spec's "Rulings — all four settled 2026-08-05", which reads as
+      an index of every decision taken and is in fact the four questions open
+      at drafting. Corrected `ae4b782`.
+    * `vite.config.ts:14-23`'s "Cross-checked against every route `create_app`
+      registers" — **missing three** since 2026-08-04. **Still open**; the
+      admin-surface task owns it.
+    * `api.py:494` — "This is the one unauthenticated route in the service."
+      Five, or nine with `DOCS_ENABLED=true`. **Still open**, on `main` since
+      `130b202`.
+
+    Standard 17 governs how to *answer* such a claim. This one governs
+    **writing** it: an enumeration in prose inherits the authority of the thing
+    it enumerates, so it gets trusted rather than re-derived — one of these
+    misled an explicit standard-12 re-read. **Either enumerate from the code at
+    the moment you write it and name what you ran, or write a sentence that does
+    not quantify.** "A route that serves receipt data without a session" costs
+    nothing and cannot rot; "the one unauthenticated route" rots the first time
+    anyone adds a route.
+
+    **And searching for one is harder than it looks:** `api.py:494`'s claim
+    survived a `git grep` for its own words, because the sentence wraps
+    mid-phrase across two lines. Grep for one distinctive word, never the
+    phrase.
+
 And: **a green suite is not evidence that installed software works.** Anything
 with an entry point gets run from outside the repository.
 

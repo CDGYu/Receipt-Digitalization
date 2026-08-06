@@ -437,6 +437,25 @@ right test for the wrong reason proves nothing), plus:
     converged when it adds a *universally-quantified accept-side* assertion that
     fails on the previous round's defect without anyone having thought of it.
 
+20. **A list in prose is read as complete, so writing one is a claim.** Four
+    instances measured in this tree, three closed 2026-08-06:
+    ADR-0027's "every one of the 17 correctable paths is an `<input>`" (sixteen
+    inputs and one `<select>`; `placeholder` reaches **fourteen**) — corrected
+    `46eb965`; the design spec's "Rulings — all four settled" (an index of every
+    decision, it reads; the four open at drafting, it is) — corrected `ae4b782`;
+    **`vite.config.ts:14-23`'s "Cross-checked against every route `create_app`
+    registers", missing three** — still open, Task 4 owns it; and
+    **`api.py:494`'s "This is the one unauthenticated route in the service"** —
+    five, or nine with `DOCS_ENABLED=true` — still open (§3).
+    Standard 17 governs how to *answer* such a claim; this one governs
+    **writing** it. An enumeration in prose inherits the authority of what it
+    enumerates, so it is trusted rather than re-derived — one of these misled an
+    explicit standard-12 re-read. **Either enumerate from the code as you write
+    it and name what you ran, or write a sentence that does not quantify.**
+    And searching for one is harder than it looks: `api.py:494` survived a
+    `git grep` for its own words because the sentence wraps mid-phrase. **Grep
+    one distinctive word, never the phrase.**
+
 And: **a green suite is not evidence that installed software works** — run entry
 points from outside the repository.
 
