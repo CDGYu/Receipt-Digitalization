@@ -31,10 +31,10 @@ git rev-list --count main..feat/review-ui-styling
 git log --oneline main..feat/review-ui-styling | head -5
 ```
 
-**Tasks 1 through 5 of six are complete.** 3, 4 and 5 each took one fix round;
-Task 4's first implementer stalled and a second finished it. **Only Task 6
-remains** — a dated note on ADR-0027 recording what the browser pass found —
-**and then the whole-branch review.**
+**ALL SIX TASKS ARE COMPLETE.** 3, 4 and 5 each took one fix round; Task 4's
+first implementer stalled and a second finished it; Task 6 landed at `31fafaf`.
+**What remains is the close: whole-branch review → ONE fix wave → one scoped
+re-review → ff-merge → refresh this pair → ask before pushing `main`.**
 
 **First thing to run:**
 
@@ -92,8 +92,8 @@ after checking the ledger, never with `git checkout --`.
 5. **`docs/superpowers/plans/2026-08-05-review-ui-styling.md`** — the plan under
    execution. **Read its "Dated defect log" at the bottom FIRST.** Twenty-five
    defects, all the controller's; several are still wrong in the body above it,
-   and the log is appended mid-milestone precisely so Task 6 does not re-derive
-   them.
+   and the log was appended mid-milestone precisely so the close does not
+   re-derive them from the body.
 6. **`.kiro/steering/receipt-system.md`** — always-on rules (gitignored,
    untracked, still on disk).
 7. **`IMPLEMENTATION_PLAN.md`** · **`docs/KNOWN_ISSUES.md`** (ISSUE-001 — do not
@@ -224,11 +224,17 @@ rather than ship inert armour.
 
 **Five Importants and every Minor remain open** — see §7.
 
-### 1.3 Task 6 — absorb the findings
+### 1.3 Task 6 — absorb the findings — **DONE (`31fafaf`)**
 
-**ADR-0027 is already written, Accepted, and already carries one dated
-correction.** Task 6 is therefore: **append a dated note recording what the
-browser pass found.** Do **not** edit 0027's body.
+ADR-0027 now carries a second dated note recording the pass: what it found, what
+was fixed, what it confirmed is *right*, and one decision the pass showed is
+incomplete — **decision 1 ships dark as a full second theme and the application
+has no theme control.** The only ways into dark are the OS preference and
+setting `data-theme` by hand. Not a defect in anything built; a half-delivered
+decision, deliberately left undecided because it needs a home for the control.
+**Surface it at the close.**
+
+Body untouched, appended after the existing correction; zero deletions verified.
 
 ### 1.4 Then close the milestone
 
