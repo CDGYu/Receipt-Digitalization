@@ -1,4 +1,6 @@
 import { onUnauthorized } from './api/client'
+import { fetchMe } from './api/admin'
+import type { Identity } from './api/admin'
 
 /** Whether the reviewer is signed in, as module state rather than component state.
  *
@@ -31,12 +33,15 @@ export function setSignedIn(next: boolean): void {
     return
   }
   signedIn = next
-  for (const listener of listeners) {
-    listener()
-  }
+  notify()
 }
 
-/** Subscribe to changes. Returns the unsubscribe `useSyncExternalStore` needs. */
+/** Subscribe to changes. Returns the unsubscribe `useSyncExternalStore` needs.
+ *
+ * One subscription covers both the boolean and the identity: they change
+ * together far more often than not (a 401 clears both), and a second listener
+ * set would be a second thing every consumer had to remember to subscribe to.
+ */
 export function subscribe(listener: () => void): () => void {
   listeners.add(listener)
   return () => {
@@ -44,4 +49,75 @@ export function subscribe(listener: () => void): () => void {
   }
 }
 
-onUnauthorized(() => setSignedIn(false))
+function notify(): void {
+  for (const listener of listeners) {
+    listener()
+  }
+}
+
+/** Who the caller is, or `null` while that is still unknown.
+ *
+ * **`null` here means "not yet answered", not "not an admin".** The boolean
+ * above starts as a *guess* off the URL; this starts as an honest absence,
+ * because there is nothing about a pathname that could suggest a username or a
+ * role. A consumer that treated `null` as a role decision would show an admin a
+ * refusal for as long as one round trip takes.
+ */
+let identity: Identity | null = null
+
+export function currentIdentity(): Identity | null {
+  return identity
+}
+
+/** Set (or clear) the identity, notifying only on a real change.
+ *
+ * The equality check is not an optimisation. `useSyncExternalStore` requires
+ * `getSnapshot` to return a cached value -- a fresh object per read makes React
+ * re-render forever -- so `hydrateIdentity` being called twice (which
+ * `StrictMode` guarantees in development) must not install a second, equal
+ * object and announce it as news.
+ */
+export function setIdentity(next: Identity | null): void {
+  const same =
+    next === null
+      ? identity === null
+      : identity !== null && identity.username === next.username && identity.role === next.role
+  if (same) {
+    return
+  }
+  identity = next
+  notify()
+}
+
+/** Replace the pathname guess with what the server says. **Never rejects.**
+ *
+ * `GET /auth/me` answers **401** when signed out (ADR-0026 decision 1, chosen
+ * over `200 {"user": null}`), and `request` fires the global unauthorized
+ * handler *and then throws*. The side effect is exactly what is wanted -- the
+ * handler registered at the foot of this module flips `signedIn` to false, so a
+ * signed-out user deep-linking to `/app/` is corrected with no new logic -- but
+ * the rejection is not caught by anything else in the tree: `ErrorBoundary`
+ * catches a throw during *render*, never a rejected promise. So it is caught
+ * here, and this function resolves whatever happened.
+ *
+ * Every other failure (the API unreachable, a 500, a body that will not parse)
+ * leaves the identity `null`, which is the honest answer: still unknown. It is
+ * deliberately not retried -- a screen that needs an identity says so, and a
+ * retry loop against a route that answers 401 by design would be an infinite
+ * one.
+ */
+export async function hydrateIdentity(): Promise<void> {
+  try {
+    setIdentity(await fetchMe())
+  } catch {
+    setIdentity(null)
+  }
+}
+
+// A 401 on ANY request ends the session, so it clears both halves of it. The
+// identity goes first: a listener woken by the boolean must not be able to read
+// a stale username back out of this module.
+onUnauthorized(() => {
+  setIdentity(null)
+  setSignedIn(false)
+})

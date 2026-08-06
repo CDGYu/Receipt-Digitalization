@@ -1,0 +1,75 @@
+/* The queue at a glance -- design section 5.7. Tokens only; no raw hex.
+ *
+ * ## Four tiles, and none of them is a severity
+ *
+ * A statistics tile reports a count, not a judgement. ADR-0027 section 2
+ * reserves error red, warn amber and info blue outright, so nothing here paints
+ * a backlog amber because it looks large -- the number is the signal, and the
+ * threshold at which it becomes a problem is not a fact this component has.
+ * `ui/Value` supplies the one colour that does carry meaning: `--color-null` on
+ * a rate the API never defined.
+ *
+ * ## Placed by class
+ *
+ * `.tiles` is a grid and `.tile` is its item. Nothing selects a child by
+ * position, so the day a fifth tile lands -- or the four are reordered -- the
+ * layout is unchanged. `ReviewScreen.module.css` records what the other approach
+ * costs.
+ *
+ * `auto-fit` with a `minmax` floor rather than a fixed `repeat(4, 1fr)`: four
+ * tiles at 1fr each on a narrow window squeeze "Auto-approval rate" onto three
+ * lines under a two-character number. The floor is what makes them wrap to two
+ * rows instead, and it is expressed in `rem` so it follows the reader's text
+ * size rather than fighting it. */
+
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  gap: var(--space-xl);
+  margin: 0;
+  padding: 0;
+}
+
+.tile {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  box-sizing: border-box;
+  padding: var(--space-xl);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+}
+
+/* The label above the figure, not below it: a reader scanning four tiles reads
+ * what a number is before reading the number. Design section 3.1's label
+ * treatment -- small, muted, tracked -- so the figure is unmistakably the thing
+ * being reported. */
+.label {
+  color: var(--color-muted-foreground);
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  line-height: 1.3;
+  text-transform: uppercase;
+}
+
+/* The figure. `--font-mono` and tabular figures are inherited by whatever
+ * `ui/Value` renders inside -- including the em-dash mark, which then occupies
+ * the same advance width as a digit, so a tile that has no number does not
+ * change the height or the rhythm of the row it sits in.
+ *
+ * `--text-xl` rather than `--text-2xl`: `auto_approval_rate` arrives as the
+ * decimal string the server quantized ("0.500"), never as a percentage --
+ * converting it would mean arithmetic on a decimal, which is the one thing
+ * ADR-0001 forbids -- and five glyphs at 2rem overflow a 12rem tile. */
+.figure {
+  color: var(--color-foreground);
+  font-family: var(--font-mono);
+  font-size: var(--text-xl);
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  line-height: 1.3;
+}

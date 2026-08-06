@@ -1,0 +1,106 @@
+/* The admin screen's shell -- design sections 5.6, 5.7 and 5.8. Tokens only; no
+ * raw hex.
+ *
+ * ## Placed by class, never by position
+ *
+ * `ReviewScreen.module.css` lays its two-column grid out with `.screen > *`,
+ * `.screen > h1` and `.screen > div`, and its own docstring says why it had to:
+ * that task could add `className` and nothing else, so the image pane could only
+ * be addressed as "the only direct `<div>` child". The cost is recorded there
+ * too -- the rule paints whatever happens to be a `<div>` next, so a wrapper
+ * added in good faith drops the line-items table onto the receipt photograph
+ * with every gate green.
+ *
+ * This screen owns its own markup, so nothing here is positional: every element
+ * it places carries a class, and every selector below names one. That also means
+ * the vertical rhythm survives a component being reordered, which a
+ * `> *` + `nth-child` stack would not.
+ *
+ * ## A single column
+ *
+ * The review screen is two columns because a reviewer reads a form against a
+ * photograph. There is no photograph here: statistics, then the queue, read top
+ * to bottom, and a second column would only widen the distance between a task's
+ * priority and its release control. */
+
+.screen {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-2xl);
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: var(--space-2xl);
+  color: var(--color-foreground);
+  font-family: var(--font-sans);
+}
+
+.heading {
+  margin: 0;
+  font-size: var(--text-2xl);
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+/* Who the server says the caller is. It sits under the heading rather than in a
+ * corner because it is the answer to "why am I seeing these rows and not
+ * others" -- the scope question ADR-0026 creates. `--space-2xl` of flex gap
+ * would divorce it from the heading it belongs to, so the gap is pulled back. */
+.who {
+  margin: calc(var(--space-2xl) * -1 + var(--space-xs)) 0 0;
+  color: var(--color-muted-foreground);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
+/* The one alert region (ADR-0024, design section 5.8). Error red is legitimate
+ * here and nowhere else on this screen: this IS the severity, not decoration
+ * borrowing its colour (ADR-0027 section 2).
+ *
+ * The left border does the work a background tint would, without inventing a
+ * tint token -- the same move `ui/Value` makes for the null mark. */
+.alert {
+  margin: 0;
+  padding: var(--space-lg) var(--space-xl);
+  border: 1px solid var(--color-severity-error);
+  border-left-width: 4px;
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-severity-error);
+  font-size: var(--text-base);
+  line-height: 1.5;
+}
+
+/* One line per failure. Three things can fail independently on this screen and
+ * the region holds all of them at once, so they must not run together into a
+ * single sentence a reader has to parse apart. */
+.alertLine {
+  margin: 0;
+}
+
+.alertLine + .alertLine {
+  margin-top: var(--space-md);
+}
+
+/* The identity wait. Deliberately quiet and deliberately not an alert: nothing
+ * has failed, the answer has not arrived yet. */
+.waiting {
+  margin: 0;
+  padding: var(--space-2xl);
+  color: var(--color-muted-foreground);
+  font-size: var(--text-base);
+  line-height: 1.5;
+  text-align: center;
+}
+
+/* `has_more` is a fact about the page, not a failure, so it is muted rather than
+ * painted with a severity colour -- the reservation in ADR-0027 section 2 cuts
+ * both ways, and an amber "there is more" here would read as a warning about the
+ * queue's contents. */
+.truncated {
+  margin: 0;
+  color: var(--color-muted-foreground);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
