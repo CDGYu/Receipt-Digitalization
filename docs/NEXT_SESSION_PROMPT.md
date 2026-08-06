@@ -21,20 +21,20 @@ step is permanent.
 **`feat/review-ui-styling`**, off `main@1314485`, **pushed**. `main` is untouched
 by it and in sync with `origin/main`.
 
-The tip was `5d91fb8` when this was last edited, and **the edit itself commits
-on top of that**, so the real tip is at least one commit later — a document cannot name
-the commit that writes it (ADR-0019). **Do not quote a count from this file;
-run it** (ADR-0028 §1):
+The tip was `1bfacb4` when this was last edited, and **the edit itself commits
+on top of that**, so the real tip is at least one commit later — a document
+cannot name the commit that writes it (ADR-0019). **Do not quote a count from
+this file; run it** (ADR-0028 §1):
 
 ```
 git rev-list --count main..feat/review-ui-styling
 git log --oneline main..feat/review-ui-styling | head -5
 ```
 
-**Tasks 1, 2, 3 and 4 of six are complete** (3 and 4 each took one fix round;
-Task 4's first implementer stalled and was finished by a second). **Tasks 5 and
-6 are not started — Task 5 is the browser pass, and it is the point of the whole
-milestone.**
+**Tasks 1 through 5 of six are complete.** 3, 4 and 5 each took one fix round;
+Task 4's first implementer stalled and a second finished it. **Only Task 6
+remains** — a dated note on ADR-0027 recording what the browser pass found —
+**and then the whole-branch review.**
 
 **First thing to run:**
 
@@ -90,8 +90,10 @@ after checking the ledger, never with `git checkout --`.
    the currency prefix**; §9's rulings (and its note that §9 is *not* an index
    of every decision since).
 5. **`docs/superpowers/plans/2026-08-05-review-ui-styling.md`** — the plan under
-   execution. **Read its "Dated defect log" at the bottom FIRST.** Twenty
-   defects; several are still wrong in the body above it.
+   execution. **Read its "Dated defect log" at the bottom FIRST.** Twenty-five
+   defects, all the controller's; several are still wrong in the body above it,
+   and the log is appended mid-milestone precisely so Task 6 does not re-derive
+   them.
 6. **`.kiro/steering/receipt-system.md`** — always-on rules (gitignored,
    untracked, still on disk).
 7. **`IMPLEMENTATION_PLAN.md`** · **`docs/KNOWN_ISSUES.md`** (ISSUE-001 — do not
@@ -113,7 +115,7 @@ after checking the ledger, never with `git checkout --`.
   ```
 
   **Empty means this prompt is current.**
-- Gates at `5d91fb8`, controller-run: `python scripts/verify.py` **all five
+- Gates at `1bfacb4`, controller-run: `python scripts/verify.py` **all five
   PASS**; pytest **979**; Vitest **318 across 24 files**.
 - **`src/` CHANGED on this frontend branch** (`bbb5366`). The whole-branch
   review has one Python file in scope, and the **outside-repo import check
@@ -192,22 +194,35 @@ are recorded here only so nobody re-derives them from the plan:
 5. **`busyTaskId` locks every row's control**, not just the clicked one.
    Deliberate and documented; uncovered.
 
-### 1.2 Task 5 — the browser pass nobody has ever done
+### 1.2 Task 5 — the browser pass — **DONE (`d85e5e3`), plus a fix round (`205d77a`, `1bfacb4`)**
 
-**Nobody has opened any of this UI in a browser.** Build, seed, serve, and
-capture every surface at **375 / 1024 / 1440px** in **both themes**: login; the
-review screen with null fields; findings at all three severities; each of the
-five ADR-0024 error states; the admin surface with tasks; and the admin surface
-empty, as a reviewer.
+**This UI has now been looked at.** 97 screenshots at 375 / 1024 / 1440px in
+both themes across eleven surfaces, every one opened and read, with 64 in-page
+measurement records beside them. Report:
+`docs/superpowers/specs/2026-08-05-review-ui-browser-pass.md`. Screenshots live
+in `var/e2e/visual/` — **gitignored, and they stay that way.**
 
-**Report findings; do not fix them.** **Lay down no pixel baselines** — a
-first-ever pass has nothing to diff against, and a baseline from unreviewed
-output pins whatever is broken.
+**It found three Criticals, and one of them invalidated the property this
+milestone spent five fix rounds pinning.** `§4`'s null rule was *asserted green
+in jsdom and invisible in a browser*: `placeholder="—"` was on every money
+control — the pin was correct and passing — but the input overflowed its table
+cell and the em dash was clipped out of sight. **A jsdom assertion cannot see a
+clipped box.** Read that before trusting any green suite about appearance.
 
-Check specifically: is a **null field visibly different from a zero**? Is the
-money column aligned on the decimal at every width? Do severity colours survive
-dark mode at 4.5:1? Does anything scroll horizontally at 375px? Are focus rings
-visible in both themes? Is the receipt image legible against its surround?
+**The fix round closed all three Criticals plus the dark-mode contrast failure**
+(`--color-null` 3.91:1 → **5.45:1**; `cellOverflow` 204 → 0; sub-4.5:1 records
+35 → 0). §4 is now visible on money, confirmed by re-opening the screenshots.
+The login page got its first stylesheet — it had been in **no task's file set in
+any of the six tasks**.
+
+**Its diagnosis lesson is worth more than its fix:** the controller briefed the
+cause as "the input has no `width`". Wrong — removing `width` broke nothing. The
+real cause was `.field { display: inline-flex }`, which shrink-wraps a label to
+the input's `size="20"` intrinsic width. The implementer found it by mutating
+rather than by trusting, and **removed two declarations it could not break**
+rather than ship inert armour.
+
+**Five Importants and every Minor remain open** — see §7.
 
 ### 1.3 Task 6 — absorb the findings
 
@@ -231,7 +246,7 @@ pushing `main`.**
   happened twice in one session, and twice the stale citations were inside the
   standard that names the defect.
 
-### 1.5 Two residuals carried into the close — reported, not fixed
+### 1.5 Residuals carried into the close — reported, not fixed
 
 1. **§5.3's confidence band hardcodes `0.85` / `0.60`** while `GET /metrics`
    ships the authoritative `auto_approve_threshold` / `review_threshold`. A
@@ -239,10 +254,21 @@ pushing `main`.**
    routing. Documented at the constant.
 2. **`ReviewScreen.module.css` places the image pane with `.screen > div`** — a
    *positional* selector that works only because the pane is the sole direct
-   `<div>` child. A `<div>` scroll wrapper would have dropped the line-items
-   table onto the photograph **with all gates green**; it was avoided with a
-   `<section>` and pinned from both ends. One wrapper element fixes it
-   structurally.
+   `<div>` child. **The browser pass confirmed the shell lands correctly**, so
+   this is a maintainability hazard, not a live defect: a future `<div>` would
+   break the layout with all gates green. One wrapper element fixes it.
+3. **Nothing pins the money-input width fix.** `visual.spec.ts` *records*
+   `cellOverflow`, never asserts it — the spec gates nothing, by design. The
+   regression that hid `—` behind a clipped box would return silently.
+4. **The per-row labels ("Qty 0") duplicate the column headers inside cells.**
+   Visible in the screenshots and slightly noisy; hiding them violates §6, and
+   changing them needs a `MoneyInput` API change.
+5. **`--color-null`'s 5.45:1 holds on `--color-surface` only.** On
+   `--color-surface-active` (`#1E293B`) it would be **4.27:1** — not live today
+   because a focused row's input paints its own surface, but one
+   `background: transparent` away from being live.
+6. **Chromium only, and no `prefers-reduced-motion` / `prefers-contrast` pass.**
+   Intrinsic input widths differ per engine, so the C1 class is engine-specific.
 
 ---
 
@@ -292,13 +318,28 @@ pre-printed template rows (sibling of R052).
 
 ## 7. Deferred, with rulings
 
-- **From this branch:** the two residuals in §1.5; the class-name guard's three
+- **From this branch:** the six residuals in §1.5; the class-name guard's three
   parked selector-axis leaks (harmless-but-inexact `:is`/`:where`,
   harmful-but-absurd self-contradictory `:not`, loud-and-safe `@import`);
   token *values* unpinned in the light block; `block()` assumes flat rule
   bodies; **`receipt-form.test.tsx` pins the row highlight through
   `rows[1].style.background`** — the *mechanism*, not the behaviour — which
   actively blocks moving it to a class.
+- **The browser pass's five open Importants**, each measured, in
+  `docs/superpowers/specs/2026-08-05-review-ui-browser-pass.md` §3:
+  **I5** terminal states, the summary alert and Approve sit **below the fold at
+  1440×900**, so a failing ⌘↵ produces no visible change; **I6** the inline
+  field error renders three grid columns from the field it blames; **I7** a 401
+  swaps in the login form with no message and repaints restored edits
+  identically to stored data; **I8** the admin tiles tell a reviewer "9 open"
+  directly above "No open tasks"; **I9** the 503 says the same sentence twice.
+  Every Minor (m10–m16) is also untouched. **I5 and I7 touch ADR-0024's
+  contract**, so neither is a drive-by fix.
+- **From Task 4:** `getByText(/carol/)` in the release round-trip is **vacuous**
+  — it passes from the assignee cell before the click — and fixing the confirm
+  to name the holder *visibly* is **mutually exclusive** with keeping that test
+  (measured). Nothing pins stylesheet *content* in `src/admin/`; `has_more` is
+  reported with no control to act on it; `busyTaskId` locks every row.
 - **From the admin-UI-routes milestone:** 20 Minor findings triaged as safe.
   `GET /receipts`' `has_more` is **unpinned in the `True` direction** — a
   constant `has_more: False` survives all 979 tests.
@@ -361,8 +402,14 @@ derived at the moment of writing, with its method recorded.
   **no formatter config anywhere** in the tracked tree.
 - **`pytest -k` matches substrings, not words.** `-k tasks` does not match
   `test_an_admin_sees_a_task_assigned_to_someone_else`.
-- **The working tree is CRLF.** A mutation anchored on `\n` matches nothing and
-  still reports success. And a non-empty `git diff --stat` is not enough —
+- **The working tree is MIXED, not uniformly CRLF.** `tokens.css` and
+  `LineItemsTable.module.css` are CRLF; `ReceiptForm.module.css` is LF.
+  `core.autocrlf=true` keeps the index content identical so diffs stay
+  line-level — but a script that assumes *either* ending matches nothing and
+  still reports success. **Read the bytes before anchoring on them.** (This
+  bullet used to say the tree was simply CRLF; a mutation anchored on that
+  assumption failed silently while this very file was being corrected.)
+  And a non-empty `git diff --stat` is not enough —
   `api.py` carries `limit=limit + 1` twice, and two runs landed on the **wrong
   route** and reported the suite passing. Confirm it landed **where you meant**.
 - **Grep one distinctive word, never the phrase.** `git grep "one
@@ -443,7 +490,7 @@ implementer correctly refused to widen scope rather than edit a test.
 **Probe before dispatching.** Plan-defect count by milestone: Phase 5 eleven;
 PAN hardening five; PAN grouping six; currency bound two; failure-egress two;
 review-UI error recovery four; admin release seven; admin UI backend routes
-nine; **review-UI styling twenty so far**. Every one across nine milestones was
+nine; **review-UI styling twenty-five**. Every one across nine milestones was
 the controller's, and every one was caught by an implementer or reviewer who
 checked instead of trusting. **The plan's prose is reliable; its claims about
 existing artefacts are not.**
@@ -493,8 +540,16 @@ points from outside the repository.
 8. **`main` push** — the next one needs a fresh ask.
 
 **Today's goal:** <FILL THIS IN — the default is **finish the in-flight
-milestone** (§1). Start by checking what Task 4 landed (`git log --oneline
-593e194..feat/review-ui-styling`), then Task 5 — the browser pass nobody has
-ever done, and the point of the whole milestone — then Task 6 and the
-whole-branch review. If you would rather pause the branch, it is committed,
-pushed and green at every step; say so and I will stop.>
+milestone** (§1), and only Task 6 is left before the close: append a dated note
+to ADR-0027 recording what the browser pass found, **without editing 0027's
+body**. Then the whole-branch review on the strongest model → ONE fix wave →
+one scoped re-review → ff-merge → refresh this pair → **ask before pushing
+`main`**.
+
+**The close is not routine this time.** It must explicitly cover
+`41d01ab..e216af4` (never reviewed), `src/receipts/review/api.py` (a Python
+file on a frontend branch, so the outside-repo import check applies), and the
+six residuals in §1.5 plus the browser pass's five open Importants in §7.
+
+If you would rather pause the branch, it is committed, pushed and green at
+every step; say so and I will stop.>

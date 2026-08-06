@@ -21,15 +21,19 @@ was written and you are reading something stale.
 ## Snapshot
 
 - **⚠️ A BRANCH IS IN FLIGHT: `feat/review-ui-styling`**, off `main@1314485`,
-  **pushed**. Its tip was `5d91fb8` when this was last edited and the edit
+  **pushed**. Its tip was `1bfacb4` when this was last edited and the edit
   commits on top, so **run `git rev-list --count main..feat/review-ui-styling`
   rather than quoting a number from here** (ADR-0028 §1; ADR-0019 on why a
-  document cannot name the commit that writes it). **Tasks 1, 2, 3 and 4 of six
-  are complete** (3 and 4 each took one fix round; Task 4's first implementer
-  stalled at an infrastructure fault and a second finished it). **Tasks 5 and 6
-  are not started — Task 5 is the browser pass, the point of the milestone.**
+  document cannot name the commit that writes it). **Tasks 1 through 5 of six
+  are complete**; 3, 4 and 5 each took one fix round, and Task 4's first
+  implementer stalled at an infrastructure fault. **Only Task 6 remains** — a
+  dated note on ADR-0027 — **then the whole-branch review.**
   Vitest **318 across 24 files** (221 on `main`); pytest **979**; all five
-  gates PASS at `5d91fb8`, controller-run. ADR-0027 + its 2026-08-06 correction record its decisions.
+  gates PASS at `1bfacb4`, controller-run.
+  **The browser pass ran, and found §4 invisible on money in a real browser
+  while every gate was green.** Fixed; see
+  `docs/superpowers/specs/2026-08-05-review-ui-browser-pass.md`.
+  ADR-0027 + its 2026-08-06 correction record its decisions.
   **The plan is `docs/superpowers/plans/2026-08-05-review-ui-styling.md` —
   read its "Dated defect log" at the bottom FIRST; the ledger is
   `.superpowers/sdd/2026-08-05-review-ui-styling/progress.md` and must be read
