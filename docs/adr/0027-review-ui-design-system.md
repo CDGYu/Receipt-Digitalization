@@ -180,7 +180,12 @@ seventeen inputs.
 
 **What this changes in practice: `placeholder="—"` reaches 14 of the 17.** A
 `<select>` bound to a closed option list has no empty state, and a checkbox has
-no third state — `ReceiptForm.tsx:221-224` already records both, and records
+no third state — `ReceiptForm.tsx` already records both (search it for "A
+checkbox has no third state" and for the no-`placeholder` note beside the
+`<select>`; **this citation deliberately carries no line numbers** — it named
+`:221-224` when written on 2026-08-06 and that had already rotted by the end of
+the same day, when the review-screen task inserted the placeholder and its
+comment above them, review standard 5), and records
 why: a column that is `NULL` today stays `NULL` until the reviewer actually
 clicks it, at which point they have made a real edit. Neither element honours
 `placeholder` at all. Followed literally, the uncorrected sentence puts a
