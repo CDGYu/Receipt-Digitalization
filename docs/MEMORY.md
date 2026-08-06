@@ -154,8 +154,15 @@ not started.** Branch `feat/review-ui-styling` @ `593e194`, 20 commits, pushed.
   stylesheet — it had been in no task's file set in any of the six**, and its
   class guard was added separately because the fix round was forbidden the test
   file (plan defect #15's shape, third occurrence).
-- **Task 6** — a dated note on ADR-0027 recording what the pass found.
-  **Not started.** Do not edit 0027's body.
+- **Task 6** — the dated note on ADR-0027 (`31fafaf`). Body untouched, appended
+  after the existing correction, zero deletions verified. It records the pass,
+  the generalisation worth keeping — **a pin can be genuinely universal, proven
+  to fail, and still not measure the property you care about, because the
+  assertion layer cannot see what a person sees** — and **one decision the pass
+  showed is incomplete: dark ships as a full second theme and the application
+  has no theme control.** Surface that at the close.
+
+**ALL SIX TASKS ARE COMPLETE. What remains is the close.**
 
 **Two residuals carried, both reported not fixed:** §5.3's confidence band
 hardcodes `0.85`/`0.60` while `GET /metrics` ships the authoritative
