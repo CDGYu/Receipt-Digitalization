@@ -6,9 +6,10 @@ continuity protocol itself — what lives where, and why this snapshot must be
 verified rather than trusted — is **ADR-0019**, extended by **ADR-0021** (whose
 2026-08-02 dated correction widened the freshness check after a docs-only task
 proved invisible to it).
-Last updated: **2026-08-05 (mid-milestone: `feat/review-ui-styling` IN FLIGHT)**,
-at **`main @ 1314485`**, which the branch does not touch. A stamp cannot name
-the commit that writes it, so the check is this:
+Last updated: **2026-08-06 (mid-milestone: `feat/review-ui-styling` IN FLIGHT,
+Task 4 dispatched and unfinished)**, at **`main @ 1314485`**, which the branch
+still does not touch. A stamp cannot name the commit that writes it, so the
+check is this:
 
 ```
 git log --oneline 1314485..main -- src tests frontend docs ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
@@ -19,18 +20,27 @@ was written and you are reading something stale.
 
 ## Snapshot
 
-- **⚠️ A BRANCH IS IN FLIGHT: `feat/review-ui-styling`**, eight commits off
-  `main@1314485`. **Tasks 1 and 2 of six are complete; 3, 4, 5, 6 are not
-  started.** Vitest **258** on the branch (221 on `main`); pytest **979**
-  unchanged (no Python touched); all five gates PASS at every commit.
-  ADR-0027 records its decisions. **The plan is
-  `docs/superpowers/plans/2026-08-05-review-ui-styling.md`; the ledger is
+- **⚠️ A BRANCH IS IN FLIGHT: `feat/review-ui-styling`**, **20 commits** off
+  `main@1314485` at `593e194`, **all pushed**. **Tasks 1, 2 and 3 of six are
+  complete (3 took one fix round); Task 4 was DISPATCHED and its result is
+  unknown to this file; 5 and 6 are not started.** Vitest **281 across 22
+  files** (221 on `main`); pytest **979**; all five gates PASS at `593e194`,
+  controller-run. ADR-0027 + its 2026-08-06 correction record its decisions.
+  **The plan is `docs/superpowers/plans/2026-08-05-review-ui-styling.md` —
+  read its "Dated defect log" at the bottom FIRST; the ledger is
   `.superpowers/sdd/2026-08-05-review-ui-styling/progress.md` and must be read
   before touching the branch.**
+- **`src/` CHANGED on this frontend branch** (`bbb5366`, `api.py`'s docstring).
+  So the whole-branch review has one Python file in scope and the
+  outside-repo import check applies at the merge.
 - **Round 5 of Task 2's fix loop hit the cap (`e216af4`) and its scoped
   re-review was NOT run** — the session ended on a wrap-up instruction while
   it was in flight. **The whole-branch review must cover `41d01ab..e216af4`
   explicitly**; it is the one diff on this branch no reviewer has seen.
+- **Twenty plan defects so far this milestone, every one the controller's.**
+  #1–9 during Tasks 1–2; #10–14 in Task 3's pre-flight; #15–16 at Task 3's
+  review; #17–20 in Task 4's pre-flight. All are in the plan's dated defect
+  log and the ledger.
 
 - **`main` @ `e0577ab`, pushed, in sync with `origin/main`.** The milestone
   was first merged locally with no push; the user then authorized the push
@@ -93,6 +103,42 @@ was written and you are reading something stale.
   searching the tracked tree — open ledgers by path.**
 - **The repo is PUBLIC.** Verified 2026-07-31 via the GitHub API. See
   "Environment / provider" for what that exposes.
+
+## Review-UI styling — IN FLIGHT (2026-08-05 → )
+
+Six tasks, lanes 1 → 2 → {3 ∥ 4} → 5 → 6. **1, 2, 3 done; 4 dispatched; 5, 6
+not started.** Branch `feat/review-ui-styling` @ `593e194`, 20 commits, pushed.
+
+- **Task 1** — `tokens.css` (35 tokens, three blocks), self-hosted fonts via
+  `@fontsource` (never a CDN), light default with `:root:not([data-theme='light'])`
+  load-bearing inside the `prefers-color-scheme` block. One fix round.
+- **Task 2** — `ui/Value.tsx`, `Button.tsx`, `Chip.tsx`. **Five fix rounds**,
+  and the milestone's lesson (review standard 19) came out of them.
+  **`Button` and `Chip` still have ZERO consumers**; `Chip` is unusable as
+  typed — `icon: JSX.Element` with no icon set in the tree and runtime deps
+  frozen at four. Task 4 owns that decision.
+- **Task 3** — seven stylesheets, the review screen styled, `placeholder="—"`
+  on the 14 applicable controls, `ConfidenceRail` converted to `Value`,
+  `autoComplete="off"`, and the focused row moved off raw `#fffbe6` to
+  `--color-surface-active`. One fix round, which also landed design §§5.2
+  (a `<section>` scroller), 5.3 (the confidence band) and 5.4 (the findings
+  disclosure) and **one universally-quantified pin** covering every rendered
+  control. Vitest 258 → 281.
+- **Task 4** — the `/app/admin` surface. Dispatched 2026-08-06; **result
+  unknown to this file — check `git log` and the ledger.**
+- **Tasks 5 and 6** — the browser pass, then a dated note recording it.
+
+**Two residuals carried, both reported not fixed:** §5.3's confidence band
+hardcodes `0.85`/`0.60` while `GET /metrics` ships the authoritative
+thresholds, so an overriding deployment gets a band disagreeing with its own
+routing; and `ReviewScreen.module.css` places the image pane with the
+**positional** selector `.screen > div`, which nearly dropped the line-items
+table onto the photograph with all gates green.
+
+**Also on this branch, folded in rather than branched for:** `api.py`'s false
+"one unauthenticated route" docstring (`bbb5366`), `vite.config.ts`'s stale
+route list (`2689635`), ADR-0027's own correction and its de-numbered citation,
+**ADR-0028**, and ADR-0023's 2026-08-06 correction.
 
 ## Admin UI backend routes — complete and merged (2026-08-05)
 

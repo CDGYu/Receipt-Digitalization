@@ -33,6 +33,7 @@ Accepted; supersede it with a new ADR rather than editing history.
 | [0025](0025-admin-release-for-a-claimed-task.md) | Admin release for a claimed review task | Accepted |
 | [0026](0026-admin-ui-backend-routes.md) | The admin UI's backend routes: whoami, and a scoped task listing | Accepted |
 | [0027](0027-review-ui-design-system.md) | The review UI's design system: tokens, themes, fonts, and `null` ≠ `0` | Accepted |
+| [0028](0028-claims-about-the-tree-are-re-derived.md) | Claims about the tree are re-derived, not restated | Accepted |
 
 Read **0001** first: it is the invariant everything else defers to. **0007** is
 the one to read before touching anything that writes card data or money, and
@@ -46,7 +47,11 @@ because every existing `OPEN`-producer clears or never sets `assigned_to`, and
 nothing in the schema enforces that. **0027** is the one to read before writing
 any CSS or rendering any extracted value: it carries the token vocabulary, the
 light/dark contract, and the rule that `null` must never look like `0` — the
-prime directive reaching the last inch of the UI.
+prime directive reaching the last inch of the UI. **0028** is the one to read
+before writing any sentence that quantifies over this codebase — *every*, *the
+only*, *all N*, *none*. Four such claims were found false in one day, three of
+them written by someone who *had* checked and had asked the wrong question; it
+records the enumeration methods and why citations here carry no line numbers.
 
 Primary sources these build on: `RECEIPT_SYSTEM_SPEC.md` (build spec),
 `README.md` (§5 design decisions), `VLM_AND_DATA.md`, and the always-on

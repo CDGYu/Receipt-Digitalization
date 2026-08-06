@@ -139,3 +139,30 @@ in the rules above, both found by executing them.
    every end-of-task offer with a refusal, and treat any wake-up from an
    agent outside the active dispatch as a claim to verify against `git`
    before acting on it** — which is exactly what surfaced this one.
+
+---
+
+**Dated correction (2026-08-06, the controller's):** rule 2 serialises on
+**files**, and that is not sufficient. Two agents can share zero files and still
+sabotage each other through a **shared global success criterion**.
+
+Measured on the review-UI-styling milestone. Task 4 and Task 3's fix round have
+disjoint file sets — the fix round holds `frontend/src/review/*` plus one new
+test file; Task 4 holds `frontend/src/admin/*`, `api/admin.ts`, `route.ts`,
+`main.tsx`, `session.ts` and its own test file. Rule 2 permits them in parallel.
+
+But Task 4's plan requires it to **write failing tests and run them** ("Expected:
+all fail on the modules not existing"), so `admin-screen.test.tsx` sits red on
+disk for a stretch. The fix round's bound was literally *"all 258 existing tests
+pass, unmodified"*, and it runs `npm test` — the whole suite — repeatedly. It
+would have read a peer's deliberate reds as its own regression, with no way to
+tell the difference.
+
+**Rule 2 is widened: serialise on files _or_ on a shared global gate.** Two
+tasks may run in parallel only if their file sets are disjoint **and** neither
+one's definition of done is a whole-suite result the other can move. In
+practice that means a task whose plan includes a deliberate RED phase runs
+alone.
+
+The dispatch was held for exactly this reason and no work was lost; this is
+recorded as a hazard identified before it fired rather than after.
