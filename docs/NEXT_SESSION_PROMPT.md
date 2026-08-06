@@ -236,18 +236,30 @@ pushing `main`.**
    e2e-scoped — inheriting a deployment policy from an e2e launcher is the
    mistake to avoid. **The only item that can start with no ruling.**
 
-## 3. THE ONE RESIDUAL — pre-existing, known false, NOT fixed
+## 3. THE ONE RESIDUAL — **FIXED 2026-08-06 (`bbb5366`)**
 
-**`src/receipts/review/api.py`'s signed-blob handler claims: "This is the one
-unauthenticated route in the service."** False. Measured by building the route
-table from `create_app` and reading each route's resolved dependant tree:
-`GET /health`, `POST /auth/login`, `POST /auth/logout` and the `/app` mount are
-also reachable with no session — **five**, or **nine** with `DOCS_ENABLED=true`.
+`src/receipts/review/api.py`'s signed-blob handler claimed "This is the one
+unauthenticated route in the service." It was one of five. **Now narrowed to
+the claim that is true and stable** — it is the one route that serves *receipt
+data* without a session, and the HMAC signature stands in for the session —
+with the real set named beside it and the method recorded.
 
-Same defect class as ADR-0026's own Important #9, in the very file that finding
-cited. Pre-existing on `main` since `130b202`. **Fix with the next legitimate
-edit of `api.py`; do not open a branch for it.** Apply review standard 17 when
-you do — answer the universal by enumerating, not by arguing.
+Enumerated by **two independent methods required to agree**: a static walk of
+each route's resolved dependant tree (detecting `require_role`'s closure by
+qualname, since it calls `require_user` in plain Python and is invisible as a
+nested `Depends`), and an empirical call of every route with no cookie. Both
+return the same **five** — the blob route, `GET /health`, `POST /auth/login`,
+`POST /auth/logout`, the `/app` mount — and the same **nine** with
+`DOCS_ENABLED=true`.
+
+**It was never true**, which the fix records: the sentence arrived in `130b202`
+(2026-07-29) and `GET /health` had been in that file since `b7a2966` the day
+before. Docstring only, no behaviour; pytest 979, ruff clean, outside-repo
+import check run.
+
+**Nothing is owed here any more.** Kept as the worked example of review
+standard 20 — and note it was folded into a *frontend* branch, so the
+whole-branch review at the close has one Python file in scope.
 
 ## 4. Phase 6 — merchants & few-shot (P6.T1)
 
@@ -450,7 +462,8 @@ right test for the wrong reason proves nothing), plus:
     registers" (13 of 16) — closed `2689635` by re-deriving from the built app,
     not by editing the list; and **`api.py:494`'s "This is the one
     unauthenticated route in the service"** — five, or nine with
-    `DOCS_ENABLED=true` — **still open** (§3), the last of the four.
+    `DOCS_ENABLED=true` — closed `bbb5366` (§3). **All four are now closed**,
+    each by re-deriving rather than by editing the claim in place.
     Standard 17 governs how to *answer* such a claim; this one governs
     **writing** it. An enumeration in prose inherits the authority of what it
     enumerates, so it is trusted rather than re-derived — one of these misled an

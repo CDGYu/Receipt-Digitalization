@@ -789,13 +789,15 @@ measured.**
   triaged by the whole-branch reviewer as safe to ship.** They live in
   `.superpowers/sdd/2026-08-05-admin-ui-backend-routes/progress.md` with
   per-item rulings. The ones a future editor will actually trip over:
-  - **`api.py`'s signed-blob docstring says it "is the one unauthenticated
-    route in the service". FALSE and PRE-EXISTING** (on `main` since
-    `130b202`): `/health`, `/auth/login`, `/auth/logout` and the `/app`
-    mount are also reachable with no session — five, or nine with
-    `DOCS_ENABLED=true`. **Same defect class as the close's own Important
-    #9**, in the very file that finding cited. Fix it with the next
-    legitimate edit of `api.py`.
+  - ~~**`api.py`'s signed-blob docstring says it "is the one unauthenticated
+    route in the service"**~~ — **FIXED 2026-08-06 (`bbb5366`)**, folded into
+    the review-UI-styling branch. It was one of five (nine with
+    `DOCS_ENABLED=true`); now narrowed to "the one route that serves receipt
+    data without a session", with the real set named, the method recorded, and
+    the reader told to re-run it. Two independent enumerations — static
+    dependant tree and empirical no-cookie call — agreed on both counts. It
+    was **never** true: the sentence arrived at `130b202` (2026-07-29) and
+    `/health` had been in that file since `b7a2966` the day before.
   - `tests/test_api_read.py:507-508`'s block comment ("each of these is a
     bare GET against `receipt_id`") is false for two of its three rows —
     `/review/next` and `/export/xlsx` take no `receipt_id`. Pre-existing.
@@ -1048,9 +1050,15 @@ measured.**
       comment now records the method and the date so the next reader re-runs
       it. It listed exactly 13 because a *flat* walk of `app.routes` yields
       13 — the same trap standard 17 records.
-    * `api.py:494` — "This is the one unauthenticated route in the service."
-      Five, or nine with `DOCS_ENABLED=true`. **Still open**, on `main` since
-      `130b202`.
+    * `api.py`'s "This is the one unauthenticated route in the service" —
+      five, or nine with `DOCS_ENABLED=true`. **Closed `bbb5366`**, by two
+      independent enumerations (static dependant tree, empirical no-cookie
+      call) required to agree. Dated in the fix because it was **never** true:
+      the sentence arrived a day *after* `/health` was already in the file.
+
+    **All four are now closed**, each by re-deriving the claim rather than
+    editing it in place. The pattern that found every one: ask where the claim
+    could be checked, then run that — not read the claim again.
 
     Standard 17 governs how to *answer* such a claim. This one governs
     **writing** it: an enumeration in prose inherits the authority of the thing
