@@ -562,17 +562,40 @@ points from outside the repository.
    undersized hit targets, and a way to establish a first baseline without
    pinning current defects.
 
-**Today's goal:** <FILL THIS IN — the default is **close the milestone** (§1),
-and it is three concrete steps, in order:
+## Today's goal
 
-1. **Fix wave B** — the documentation sweep, §1.2. Six items, all measured, none
-   requiring a decision from me. It is a *sweep*: de-number citations rather than
-   repoint them, and re-grep after every change (standard 21).
-2. **One scoped re-review** of wave B's diff **plus `8ede47e`**, which only its
-   author and the controller have seen.
-3. **The ff-merge**, then refresh this pair in the same session, then **ask me
-   before pushing `main`**. `src/` changed on this branch, so run the
-   outside-repo import check at the merge.
+**Close the milestone.** It is three steps, in order, and none of them needs a
+decision from me before you start.
 
-If you would rather not close it, the branch is committed, pushed and green at
-every step — say so and I will stop.>
+**1. Fix wave B — the documentation sweep (§1.2).** Six items, every one
+measured and located. Treat it as a *sweep*, not a list of spot fixes:
+**de-number citations rather than repoint them** (repointing only schedules the
+next rot), and **re-grep after every change**, because closing a prose defect
+ages every sentence that cited it — standard 21, learned the hard way on this
+branch. Two of the six are corrections to my own ADRs and I would rather they
+were fixed than softened: **D-2**, where ADR-0028's motivating story is
+falsified by ADR-0028's own §3, and **D-1**, five stale citations inside
+ADR-0027's Correction four lines above the sentence boasting it carries none.
+
+**2. One scoped re-review** — wave B's diff **plus `8ede47e`**, which only its
+author and I have seen. Wave A rewrote the meaning of a green run, so it should
+not merge on two readers.
+
+**3. The ff-merge**, then refresh this pair in the same session, then **ask me
+before pushing `main`.** `src/` changed on this branch (`bbb5366`), so the
+**outside-repo import check applies at the merge** — run the entry points from
+outside the repository, per the standing rule that a green suite is not evidence
+installed software works.
+
+**Then surface, do not guess:** the three questions in "Blocked on me" that this
+milestone created — the theme control ADR-0027 deliberately left undecided, the
+currency prefix whose designated resolver was spent, and whether the Playwright
+visual run becomes a sixth gate (ADR-0029 leaves it open).
+
+**If anything in this document disagrees with the repo, the repo wins.** This
+file has been wrong at the start of several sessions, including one where the
+correct version was in git and the stale one was in the working tree. Verify
+before trusting, and say what you found.
+
+**If you would rather not close it**, the branch is committed, pushed and green
+at every step — say so and I will stop.
