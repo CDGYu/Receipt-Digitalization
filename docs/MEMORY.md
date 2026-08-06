@@ -141,9 +141,21 @@ not started.** Branch `feat/review-ui-styling` @ `593e194`, 20 commits, pushed.
   green** — `/app/admin` reachable at all was unpinned — and closed it.
   **`Button` and `Chip` are both adopted**, `Chip` fed hand-authored
   `aria-hidden` SVG glyphs so runtime deps stay at four.
-- **Tasks 5 and 6** — the browser pass, then a dated note recording it.
-  **Not started.** Task 5's environment is present: `playwright.config.ts`,
-  a chromium install, and `scripts/{seed,serve}_review_e2e.py`.
+- **Task 5** — the browser pass (`d85e5e3`) and its fix round (`205d77a`,
+  `1bfacb4`). 97 screenshots at three widths in both themes, every one opened;
+  3 Criticals, 6 Importants. **It found §4's null rule asserted green in jsdom
+  and invisible in a browser**: `placeholder="—"` was on every money control
+  and the pin was correct, but the input overflowed its cell and the em dash
+  was clipped out of sight. The real cause was `.field { display: inline-flex }`
+  shrink-wrapping to the input's `size="20"` intrinsic width — **not** the
+  missing `width` the controller diagnosed, which the implementer disproved by
+  mutation. Fixed: `cellOverflow` 204 → 0, sub-4.5:1 contrast records 35 → 0,
+  `--color-null` 3.91 → **5.45:1** in dark. **The login page got its first
+  stylesheet — it had been in no task's file set in any of the six**, and its
+  class guard was added separately because the fix round was forbidden the test
+  file (plan defect #15's shape, third occurrence).
+- **Task 6** — a dated note on ADR-0027 recording what the pass found.
+  **Not started.** Do not edit 0027's body.
 
 **Two residuals carried, both reported not fixed:** §5.3's confidence band
 hardcodes `0.85`/`0.60` while `GET /metrics` ships the authoritative
