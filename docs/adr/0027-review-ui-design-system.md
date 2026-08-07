@@ -86,10 +86,14 @@ it is the property that makes a misread number *look* wrong.
 ### 4. A pathname switch, not React Router
 
 Runtime dependencies are exactly `react` and `react-dom`; the only pathname
-read in the app is `session.ts:21`; and the backend already serves a history
-fallback (`_SpaFiles(..., html=True)`, `api.py`), so `/app/admin` survives a
-reload without a router. Adding one would be the app's third runtime
-dependency for a single route.
+read in the app is `session.ts`'s signed-in guess; and the backend already
+serves a history fallback (`_SpaFiles(..., html=True)`, `api.py`), so
+`/app/admin` survives a reload without a router. Adding one would be the app's
+third runtime dependency for a single route.
+
+> **Correction (2026-08-07): two of the three clauses above are false as
+> written.** See `## Correction (2026-08-07)` at the foot of this ADR. The
+> *decision* — a pathname switch, not a router — is unaffected and stands.
 
 ### 5. `null` must never look like `0`, and neither may look like "empty"
 
@@ -170,10 +174,15 @@ renders one control for each:
 
 | Source | Count | Element |
 |---|---|---|
-| `TEXT_FIELDS` (`ReceiptForm.tsx:95`) | 8 | `<input type="text">` |
-| `MONEY_FIELDS` (`:113`), via `MoneyInput` | 6 | `<input type="text" inputMode="decimal">` |
-| `meta.legibility` (`:227`) | 1 | **`<select>`** |
-| `meta.is_handwritten` (`:240`), `meta.receipt_is_inconsistent` (`:248`) | 2 | **`<input type="checkbox">`** |
+| `TEXT_FIELDS` | 8 | `<input type="text">` |
+| `MONEY_FIELDS`, via `MoneyInput` | 6 | `<input type="text" inputMode="decimal">` |
+| `meta.legibility` | 1 | **`<select>`** |
+| `meta.is_handwritten`, `meta.receipt_is_inconsistent` | 2 | **`<input type="checkbox">`** |
+
+*(Every row above names a symbol to search `ReceiptForm.tsx` for. It carried
+line numbers when written and all five had rotted by 2026-08-07; they are
+removed rather than repointed — **ADR-0028 §5**, review standard 21. The table's
+counts are re-derivable: `_RECEIPT_FIELDS`' keys, and the four literals above.)*
 
 So the surface is **sixteen `<input>` elements and one `<select>`**, not
 seventeen inputs.
@@ -197,9 +206,10 @@ null rule cannot reach this screen through the primitive — and a null total
 still renders as a blank box until the review-screen task closes it.
 
 The line-items table is a **separate** surface and is not part of the 17.
-Measured: `_LINE_ITEM_FIELDS` has 7 keys, and the table renders 6 controls per
-row (`LineItemsTable.tsx:114-161`), holding `position` read-only because it is
-the addressing key every other edit in the row depends on.
+Measured: `_LINE_ITEM_FIELDS` has 7 keys, and `LineItemsTable` renders 6 controls
+per row, holding `position` read-only because it is the addressing key every
+other edit in the row depends on — search that file for **"`position` is
+read-only"**, which states the rule and the reason.
 
 ## Dated note (2026-08-06) — the browser pass ran, and what it found
 
@@ -249,7 +259,9 @@ it could not break** rather than ship inert armour.
 * **`--color-null` measured 3.91:1 in dark**, below the 4.5:1 floor, on the one
   glyph carrying the prime directive. It was `#64748B` in all three token
   blocks — identical light and dark, which is exactly why it passed on white
-  and failed on `#0E1223`. Now `#7C8CA2` in both dark blocks: **5.45:1**.
+  and failed on `#0E1223`. Now `#7C8CA2` in both dark blocks: **5.43:1**
+  (corrected 2026-08-07 from `5.45`, a hand computation with a wrong green
+  luminance; the browser reports 5.43 across 26 records).
 
 ### What the pass confirmed is right
 
@@ -283,6 +295,73 @@ report's §3. **I5 and I7 touch ADR-0024's contract**, so neither is a drive-by
 fix. Also unproven: Chromium only — intrinsic input widths differ per engine, so
 the defect class above is engine-specific — and `prefers-reduced-motion` and
 `prefers-contrast` remain unexercised.
+
+## Correction (2026-08-07) — decision 4's two counts, and a finding against decision 2 that does not survive
+
+The whole-branch review at this milestone's close raised three counts here.
+**Two are real and are corrected below. The third is not a defect, and the
+finding against it is itself an instance of the defect ADR-0028 names** — which
+is why it is recorded rather than quietly dropped. Every number below was
+re-derived on 2026-08-07 before being written (**ADR-0028** rule 1), with its
+method (rule 2). **No decision changes.**
+
+### Corrected: decision 4 is wrong twice in one sentence
+
+| The claim | Measured 2026-08-07 | Method |
+|---|---|---|
+| "Runtime dependencies are exactly `react` and `react-dom`", and a router "would be the app's **third**" | **Four**, so a router would be the **fifth**: `react`, `react-dom`, `@fontsource/fira-sans`, `@fontsource/fira-code`. **Decision 3 on this same page already says so** — "runtime dependencies go from two to four". | `python -c "import json;print(list(json.load(open('frontend/package.json'))['dependencies']))"` |
+| "the **only** pathname read in the app" | **Two.** `session.ts` holds the signed-in guess; `route.ts`'s `currentRoute` takes `window.location.pathname` as a live default parameter. `route.ts`'s own docstring has it right — "the only *other* pathname read in the app is `session.ts`". | `git grep -n "location.pathname" -- frontend/src` — three hits, of which `main.tsx`'s is a comment describing `currentRoute`, not a read. |
+
+**Neither touches the decision.** A pathname switch rather than React Router is
+still right: the argument is that a router is a *new* dependency for a handful of
+paths, and that holds at four exactly as it held at two.
+
+### Not corrected: "35 custom properties" is right, and the finding against it is not
+
+The review reported decision 2's "one file with **35 custom properties** in three
+blocks" as false, measuring **54 declarations / 24 unique names**, and explained
+the 35 as borrowed from decision 3's "the built CSS carries 35 `@font-face`
+rules" further down this page.
+
+**Re-derived: the ADR is correct and the finding is wrong.**
+
+```
+python -c "import re,pathlib; \
+ t=re.sub(r'/\*.*?\*/','',pathlib.Path('frontend/src/styles/tokens.css').read_text(encoding='utf-8'),flags=re.S); \
+ d=re.findall(r'(--[A-Za-z0-9-]+)\s*:',t); print(len(d),'declarations,',len(set(d)),'unique')"
+```
+
+**65 declarations, 35 unique names** — and the three theme blocks are `:root`,
+`:root[data-theme='dark']`, and `:root:not([data-theme='light'])` inside the
+`prefers-color-scheme` query. The arithmetic checks: 15 colour tokens declared in
+each of the three blocks, plus 20 non-colour tokens declared once, is 65
+declarations over 35 names.
+
+**Where 54 / 24 came from.** A line-anchored pattern — `^\s*--[a-z]` — counts
+only declarations that *begin* a line, and misses the eleven that share a line
+with a neighbour (`--text-sm`, `--text-base`, `--text-xl`, `--text-2xl`,
+`--space-sm`, `--space-md`, `--space-lg`, `--space-2xl`, `--space-3xl`,
+`--radius-md`, `--radius-lg`). 54 + 11 = 65; 24 + 11 = 35. The unique count was
+additionally deduplicated *with* its leading whitespace, so identically-named
+tokens at different indentation counted twice.
+
+**And the two 35s are unrelated.** `tokens.css` contains **zero** `@font-face`
+rules; decision 3's 35 is a count of the *built* CSS, where `@fontsource` emits
+them. Two true numbers about two different artefacts happened to coincide, and a
+causal story was built on the coincidence — **the same mistake, in the same
+review, that ADR-0028's own correction records for the "two different 13s"**. A
+matching count is not evidence of a shared origin. That the reviewer hunting this
+defect committed it while hunting it is the strongest argument this repository
+has for ADR-0028 rule 1 applying to *findings* as well as to claims.
+
+### Citations
+
+**Every line-number citation in this ADR has been removed rather than
+repointed** — including the five in the 2026-08-06 Correction's table, which sat
+a few lines above that correction's own sentence explaining why *it* deliberately
+carries none. Review standard 21 (*a citation is a claim too*) failed inside the
+document that best knew better. ADR-0028 §5 is the rule: quote the text, or name
+the symbol.
 
 ## References
 

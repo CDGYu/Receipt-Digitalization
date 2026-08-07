@@ -204,8 +204,9 @@ export function ImagePane({ receiptId, fetchUrl }: ImagePaneProps) {
           alt="Receipt"
           onError={handleError}
           // Zoom and rotation are per-instance state, not paint: they stay
-          // inline. `tests/image-pane.test.tsx:184` reads this attribute back
-          // verbatim, so a stylesheet cannot own it.
+          // inline. `tests/image-pane.test.tsx` reads this attribute back
+          // verbatim (grep it for `transform: scale(1) rotate(0deg);`), so a
+          // stylesheet cannot own it.
           style={{ transform: `scale(${zoom}) rotate(${rotation}deg)` }}
         />
       )}

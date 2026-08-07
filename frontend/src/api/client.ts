@@ -86,8 +86,8 @@ async function errorMessage(response: Response): Promise<string> {
  * `await response.json()`, which throws a **`SyntaxError`, not an `ApiError`**,
  * for two responses that really happen:
  *
- * * `POST /auth/logout` returns 204 with no body at all
- *   (src/receipts/review/auth.py:183 is `return Response(status_code=204)`);
+ * * `POST /auth/logout` returns 204 with no body at all -- its handler in
+ *   `src/receipts/review/auth.py` ends `return Response(status_code=204)`;
  * * a proxy answering 200 with an HTML error page.
  *
  * Every consumer that discriminates on `ApiError` -- `LoginPage`'s catch today,

@@ -24,10 +24,12 @@ was written and you are reading something stale.
   **pushed**. Its tip was `1bfacb4` when this was last edited and the edit
   commits on top, so **run `git rev-list --count main..feat/review-ui-styling`
   rather than quoting a number from here** (ADR-0028 §1; ADR-0019 on why a
-  document cannot name the commit that writes it). **Tasks 1 through 5 of six
-  are complete**; 3, 4 and 5 each took one fix round, and Task 4's first
-  implementer stalled at an infrastructure fault. **Only Task 6 remains** — a
-  dated note on ADR-0027 — **then the whole-branch review.**
+  document cannot name the commit that writes it). **ALL SIX TASKS ARE
+  COMPLETE**; 3, 4 and 5 each took one fix round, and Task 4's first
+  implementer stalled at an infrastructure fault. **The whole-branch review is
+  done and fix wave A is done; wave B, one scoped re-review and the merge are
+  what remain** — see the "Review-UI styling" section below, which is
+  authoritative for this milestone.
   Vitest **346 across 25 files** (221 on `main`); pytest **979**; all five
   gates PASS at `8ede47e`, controller-run.
   **The browser pass ran, and found §4 invisible on money in a real browser
@@ -45,22 +47,38 @@ was written and you are reading something stale.
   re-review was NOT run** — the session ended on a wrap-up instruction while
   it was in flight. **The whole-branch review must cover `41d01ab..e216af4`
   explicitly**; it is the one diff on this branch no reviewer has seen.
-- **Twenty plan defects so far this milestone, every one the controller's.**
+- **TWENTY-FIVE plan defects this milestone, every one the controller's.**
   #1–9 during Tasks 1–2; #10–14 in Task 3's pre-flight; #15–16 at Task 3's
-  review; #17–20 in Task 4's pre-flight. All are in the plan's dated defect
-  log and the ledger.
+  review; #17–20 in Task 4's pre-flight; #21–24 in Task 5's; #25 at Task 5's
+  review. All are in the ledger. **Derive it rather than quoting it** —
+  `grep -n "PLAN DEFECT #"` over the ledger. This count read **20** here, **14**
+  in the plan's own defect log and **25** in the handoff for a day, while all
+  three told the reader to open the plan's log first (corrected 2026-08-07).
 
-- **`main` @ `e0577ab`, pushed, in sync with `origin/main`.** The milestone
-  was first merged locally with no push; the user then authorized the push
-  explicitly ("merge all of the branches with the main and push it"), and
-  that one-time authorization was consumed by it. The standing ask-first
-  rule for `main` continues — every push needs its own fresh ask.
+- **`main` @ `1314485`, pushed, in sync with `origin/main`**, and untouched by
+  the branch in flight. **Verify, do not quote** (ADR-0028 §1):
+  `git rev-parse main origin/main`. An earlier milestone's push was authorized
+  explicitly ("merge all of the branches with the main and push it") and that
+  one-time authorization **was consumed by it**. The standing ask-first rule
+  for `main` continues — every push needs its own fresh ask.
   pytest on `main`: **979**; Vitest **221**.
-- **All 13 `feat/*` branches are ancestors of `main` and all are pushed.**
-  Audited 2026-08-05: `git branch --no-merged main` is empty and every
-  branch adds **+0** commits, so "merge all branches" was already a no-op —
-  they are historical merge points, kept per the standing rule.
-- **NO branch in flight.** Empty is the signal (ADR-0021).
+- **All 13 merged `feat/*` branches are ancestors of `main` and all are
+  pushed.** Audited 2026-08-05: `git branch --no-merged main` named none of
+  them and every one adds **+0** commits, so "merge all branches" was already a
+  no-op — they are historical merge points, kept per the standing rule.
+  `feat/review-ui-styling` is the fourteenth and is the one **not** yet merged.
+
+> **Corrected 2026-08-07.** Three of the bullets above disagreed with the rest
+> of this file and one disagreed with `git`: this said `main @ e0577ab` while
+> the stamp at the top said `1314485`; it said "Tasks 1 through 5" while the
+> milestone section said all six were done; it said "`Button` and `Chip` still
+> have ZERO consumers" while the Task 4 bullet says both are adopted; and it
+> ended **"NO branch in flight"** directly beneath a bullet announcing one.
+> The commit immediately before the review, `a96165c`, was titled *"unrot the
+> milestone header"* and left every one of them — **a header can be unrotted
+> while the body it summarises stays stale, and fixing the visible half is what
+> makes the rest look checked.** ADR-0028 rule 1 applies to a document's
+> internal consistency, not only to its claims about code.
 - **The admin UI's backend routes are complete and merged** (2026-08-05,
   true fast-forward `7aa0a22` → `b59f164`; 9 branch commits: design, plan, a
   plan correction, three tasks, one task fix, and a two-item close fix wave).
@@ -124,9 +142,12 @@ number from here** (ADR-0028 §1).
   load-bearing inside the `prefers-color-scheme` block. One fix round.
 - **Task 2** — `ui/Value.tsx`, `Button.tsx`, `Chip.tsx`. **Five fix rounds**,
   and the milestone's lesson (review standard 19) came out of them.
-  **`Button` and `Chip` still have ZERO consumers**; `Chip` is unusable as
-  typed — `icon: JSX.Element` with no icon set in the tree and runtime deps
-  frozen at four. Task 4 owns that decision.
+  **`Button` and `Chip` had ZERO consumers when Task 2 shipped them**, and
+  `Chip` was unusable as typed — `icon: JSX.Element` with no icon set in the
+  tree and runtime deps frozen at four. **Task 4 adopted both** (see its bullet):
+  `Chip` is fed hand-authored `aria-hidden` SVG glyphs, so the dependency count
+  is unchanged. *(Corrected 2026-08-07 — this bullet still said "still have ZERO
+  consumers" two bullets above the one recording that they do not.)*
 - **Task 3** — seven stylesheets, the review screen styled, `placeholder="—"`
   on the 14 applicable controls, `ConfidenceRail` converted to `Value`,
   `autoComplete="off"`, and the focused row moved off raw `#fffbe6` to
@@ -207,9 +228,9 @@ inventing a 200-with-null shape. It returns a bare `dict[str, str]`; **no
 Pydantic model**, because `POST /auth/login` has returned this exact body
 since session auth first shipped (`d255750`) and a model on one side only
 would be asymmetric. A **drift test** pins the two bodies equal. This exists
-because `session.ts:21` holds one boolean whose initial value is a *guess*
-and `LoginPage.tsx:15` discards the login body, so a reloaded page cannot
-learn its role.
+because `session.ts` held one boolean whose initial value was a *guess*
+(its `signedIn` module state) and `LoginPage` discarded the login body, so a
+reloaded page could not learn its role.
 
 **`GET /review/tasks`** (`api.py`'s `_install_read_routes`, backed by
 `list_tasks` in `review/queue.py`) is the queue as rows, so an admin can
@@ -778,17 +799,19 @@ the "Write routes (P4.T5)" banner was wrong once a read route consumed it.
    light-vs-dark default, CSS Modules vs Tailwind vs plain CSS (recommended:
    CSS Modules + one `tokens.css`), whether a browser pass is part of "done",
    and whether the admin surface gets its own route shell.
-2. **The admin UI's FRONTEND half is the committed next milestone.** Its two
-   backend contracts shipped 2026-08-05 (ADR-0026) and **nothing under
-   `frontend/` consumes either one yet.** What remains: read `/auth/me` on
-   mount, widen `session.ts` from one boolean to an identity (today
-   `session.ts:21` guesses "signed in unless the URL says otherwise"), give
-   `LoginPage` somewhere to put the role it currently discards, and build a
-   new `/app` admin surface that lists tasks via `GET /review/tasks` and
-   drives `POST /review/{task_id}/release` from a browser. **Nobody has
-   viewed ANY of the review UI in a browser** — that risk is inherited, not
-   new, and is called out in the design's §8 so the frontend design does not
-   absorb it silently.
+2. ~~**The admin UI's FRONTEND half is the committed next milestone.**~~
+   **DONE 2026-08-06 on `feat/review-ui-styling`, Task 4 (`5d91fb8`)** — this
+   entry described it as unstarted for a day after it shipped. All four items
+   landed: `/auth/me` is read on mount, `session.ts` was widened from one
+   boolean to an identity, `route.ts` routes `/app/admin`, and
+   `admin/{AdminScreen,TaskTable,StatTiles}` lists tasks via `GET /review/tasks`
+   and drives `POST /review/{task_id}/release` from a browser.
+   ~~**Nobody has viewed ANY of the review UI in a browser.**~~ **Also closed:**
+   Task 5's browser pass ran on 2026-08-06 — 97 screenshots at three widths in
+   both themes, every one opened — and found three Criticals and six Importants
+   that every gate was green on. See
+   `docs/superpowers/specs/2026-08-05-review-ui-browser-pass.md`, ADR-0027's
+   dated note, and ADR-0029.
 3. **Phase 6** — merchants & few-shot. **Phase 7** — self-consistency wired into
    the pipeline, gated on `triage.is_handwritten`. **Phase 8** — calibration and
    eval-harness honesty.
@@ -881,6 +904,19 @@ measured.**
 
 ## Deferred follow-ups / known minors (non-blocking)
 
+- **~70 line-number citations survive in live files, all currently accurate,
+  all in the form ADR-0028 §5 forbids.** Measured 2026-08-07 by fix wave B,
+  which closed the ~25 that were **stale** (the five in ADR-0027's Correction,
+  eight in `frontend/src`, seven this branch created, and the rest in
+  `docs/MEMORY.md`, the design spec and the plan) and stopped there rather than
+  rewriting seventy comments in files this milestone never opened. **They are a
+  standing rot source, not a defect today.** The method that finds them: extract
+  every `path:NNN` from the tracked tree, resolve the path, print the line it
+  points at, and read whether it still says what the citing sentence claims —
+  a bare grep cannot tell accurate from stale. **Whether this becomes a script
+  in the repo is a user decision**, alongside ADR-0029's open question about the
+  Playwright run becoming a sixth gate; ADR-0028 deliberately did not propose a
+  CI check for prose.
 - **Shipped from the admin-UI-routes close (2026-08-05): 20 Minor findings,
   triaged by the whole-branch reviewer as safe to ship.** They live in
   `.superpowers/sdd/2026-08-05-admin-ui-backend-routes/progress.md` with
@@ -1110,7 +1146,12 @@ measured.**
     `app.routes` yields 13 routes with **zero** `/auth/*` paths — recurse
     through `.original_router.routes` for the real 17. A transitively-called
     guard (`require_role` → `require_user`) is invisible at runtime too; it
-    is plain Python, not a nested `Depends`.
+    is plain Python, not a nested `Depends`. **There are THREE guard qualnames,
+    not two** (added 2026-08-07): `require_user`,
+    `require_role.<locals>.dependency` and **`require_upload`**. Match
+    `require_` and print what you find — hard-coding the two obvious ones is
+    what made ADR-0028 §4's "two independent methods agreed" fail to reproduce
+    (6 and 10 instead of 5 and 9), and a fourth guard would do it again.
 
 18. **A substring can answer for a declaration.** Three times in one milestone:
     `--color-surface-raised` satisfied `toContain('--color-surface')`, so
@@ -1144,8 +1185,15 @@ measured.**
       registers" — listed 13 of 16. **Closed `2689635`**, by re-deriving the
       list from the built app rather than editing the list in place; the
       comment now records the method and the date so the next reader re-runs
-      it. It listed exactly 13 because a *flat* walk of `app.routes` yields
-      13 — the same trap standard 17 records.
+      it. **It listed 13 because there were exactly 13 routes on 2026-07-30
+      when it was written; three more arrived on 2026-08-04 and 2026-08-05.
+      The list was correct and then rotted** — corrected 2026-08-07. This
+      bullet used to say it listed 13 "because a *flat* walk of `app.routes`
+      yields 13", which cannot be true: the old list contains `/auth/login`
+      and `/auth/logout` and a flat walk yields **zero** `/auth/*` paths. Two
+      different 13s. The derivation is in ADR-0028's `## Correction
+      (2026-08-07)`; the same false sentence was ADR-0028's own motivating
+      story and is withdrawn there.
     * `api.py`'s "This is the one unauthenticated route in the service" —
       five, or nine with `DOCS_ENABLED=true`. **Closed `bbb5366`**, by two
       independent enumerations (static dependant tree, empirical no-cookie
@@ -1165,10 +1213,12 @@ measured.**
     nothing and cannot rot; "the one unauthenticated route" rots the first time
     anyone adds a route.
 
-    **And searching for one is harder than it looks:** `api.py:494`'s claim
+    **And searching for one is harder than it looks:** the `api.py` claim
     survived a `git grep` for its own words, because the sentence wraps
     mid-phrase across two lines. Grep for one distinctive word, never the
-    phrase.
+    phrase. **`git log -S` fails on the same class of string too** — measured
+    2026-08-07, hunting three route registrations it could not find; `-G` found
+    all three.
 
 21. **A citation is a claim too.** Closing a prose defect ages every sentence
     that *cited* it — and nobody re-greps. Measured 2026-08-06: fixing

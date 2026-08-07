@@ -118,8 +118,9 @@ export function fieldsFromReceipt(receipt: ReceiptDetail): FieldMap {
 /** Only what changed.
  *
  * The server distinguishes "never mentioned" from "explicitly null" -- the route
- * reads the body with `model_dump(exclude_unset=True, mode="json")`
- * (review/api.py:392) -- so an untouched field must be **absent** rather than
+ * reads the body with `patch.model_dump(exclude_unset=True, mode="json")`
+ * (search `review/api.py` for `exclude_unset`) -- so an untouched field must be
+ * **absent** rather than
  * sent as its current value, and a cleared one must be **present and null**.
  * Sending every field instead would still be accepted, because
  * `_plan_change` writes no `corrections` row for a path whose stored value

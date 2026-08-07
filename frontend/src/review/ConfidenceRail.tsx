@@ -142,7 +142,7 @@ export function ConfidenceRail({ confidence, reasons }: ConfidenceRailProps) {
       <h2 className={styles.heading}>Confidence</h2>
       {/* The score as the API sent it. An em dash, not "0" or "0.00": a score
           that was never recorded is not a recorded zero (`money()` keeps that
-          distinction on the way out, review/serializers.py:65-73).
+          distinction on the way out -- see `money()` in review/serializers.py).
 
           Through `Value` rather than through a bare `{confidence ?? '—'}`, which
           is what stood here and was an uncoordinated second copy of half of

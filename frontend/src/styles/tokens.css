@@ -100,7 +100,7 @@
    * extracted".
    *
    * `#7C8CA2` is the midpoint of slate-500 and slate-400 in sRGB and measures
-   * **5.45:1** on `#0E1223` -- margin over the floor, and still clearly quieter
+   * **5.43:1** on `#0E1223` -- margin over the floor, and still clearly quieter
    * than `--color-muted-foreground` `#94A3B8` (7.25:1), so an absent value does
    * not start reading as a label. Off the Tailwind ramp on purpose, exactly as
    * `--color-muted-foreground` is in light (ADR-0027 §2): contrast decides these
@@ -147,7 +147,7 @@
     --color-severity-info: #60A5FA;
     --color-positive: #22C55E;
     /* The dark lift, spelled identically to the block above -- see the note
-     * there for the measurement. 5.45:1 on `--color-surface`, against 3.91:1
+     * there for the measurement. 5.43:1 on `--color-surface`, against 3.91:1
      * for the `#64748B` this replaces. */
     --color-null: #7C8CA2;
   }

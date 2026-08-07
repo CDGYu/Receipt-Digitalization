@@ -43,7 +43,7 @@ import styles from './ReviewScreen.module.css'
  *
  * **`fetchNext` is a claiming write, so this component may call it at most once
  * per task in hand.** `next_task` sets `assigned_to` and flips the row to
- * `IN_PROGRESS` (queue.py:198-199) and the route commits (api.py:517). Nothing
+ * `IN_PROGRESS` (see `queue.py`'s `next_task`) and the route commits. Nothing
  * in the review API puts an `IN_PROGRESS` row back to `OPEN` -- `_claim_stmt`
  * only ever selects `state == OPEN`, and `QueueStats.by_priority` counts open
  * tasks -- so a task claimed and then abandoned leaves the queue silently and

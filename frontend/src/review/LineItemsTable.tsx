@@ -151,7 +151,8 @@ export function LineItemsTable({ items, fields, onChange, errors }: LineItemsTab
                 //
                 // It stays an *inline* style rather than moving to
                 // `styles.rowActive`, against the brief, because the class form is
-                // measured red: `receipt-form.test.tsx:267-277` pins this highlight
+                // measured red: `receipt-form.test.tsx`'s "highlights the whole row
+                // when any cell in it takes focus" pins this highlight
                 // through `rows[1].style.background`, and with the paint moved to a
                 // class that assertion fails with `expected '' not to be ''`. That
                 // test is not this task's to edit, so the honest move is the colour
@@ -184,8 +185,9 @@ export function LineItemsTable({ items, fields, onChange, errors }: LineItemsTab
                   />
                 </td>
                 <td className={styles.money}>
-                  {/* `qty` is `_coerce_money`, not `_coerce_int`
-                      (repository.py:932) -- "9.800" is a real quantity here. */}
+                  {/* `qty` is `_coerce_money`, not `_coerce_int` -- grep
+                      `repository.py` for `"qty": ("qty", _coerce_money)`.
+                      "9.800" is a real quantity here. */}
                   <MoneyInput
                     label={`Qty ${item.position}`}
                     value={fields[`${at}.qty`]}

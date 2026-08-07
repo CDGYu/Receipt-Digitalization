@@ -267,14 +267,29 @@ export function TaskTable({
                             name the current holder; the row's own "Assigned to"
                             cell already prints it two columns to the left, and
                             repeating it here as visible text would put the same
-                            name in two elements of one table. Measured, not
-                            assumed: `getByText(/carol/)` then throws "Found
-                            multiple elements", which is what
-                            `admin-screen.test.tsx` asks of the confirmed row. So
-                            the name travels on `aria-label`, where it reaches a
-                            screen reader that cannot see the adjacent cell -- and
-                            it *contains* the visible word "Release", which is
-                            what WCAG 2.5.3 (Label in Name) requires. */}
+                            name in two elements of one table. So the name
+                            travels on `aria-label`, where it reaches a screen
+                            reader that cannot see the adjacent cell -- and it
+                            *contains* the visible word "Release", which is what
+                            WCAG 2.5.3 (Label in Name) requires.
+
+                            **Nothing in the test suite constrains this choice,
+                            and an earlier version of this comment said it did.**
+                            Corrected 2026-08-07 at the milestone's close. That
+                            version claimed the release round-trip in
+                            `admin-screen.test.tsx` asks `getByText(/carol/)` of
+                            the *confirmed row*, so naming the holder visibly
+                            would throw "Found multiple elements". Measured: the
+                            query is scoped to `within(table)`, not to the
+                            confirm, and the assignee cell two columns left
+                            already satisfies it -- so it passes whether or not
+                            the confirm names anybody, and passes even if it is
+                            moved above the click. A scoped query, or
+                            `getAllByText(...).length === 2`, would satisfy a
+                            visible name and the test at once. **The choice above
+                            is a design judgement about not printing one name
+                            twice in one table. It is not forced, and it should
+                            not be defended as if it were.** */}
                         <Button
                           variant="danger"
                           aria-label={`Release from ${holder}`}

@@ -148,7 +148,8 @@
  * specificity.
  *
  * NOTE: **this class is not referenced by anything today**, and that is a
- * measurement rather than an oversight. `receipt-form.test.tsx:267-277` pins the
+ * measurement rather than an oversight. `receipt-form.test.tsx`'s
+ * "highlights the whole row when any cell in it takes focus" pins the
  * highlight through `rows[1].style.background`; with the paint moved to this
  * class and the inline style removed -- which is what the task brief asked for --
  * that test fails with `AssertionError: expected '' not to be ''` (run, read,

@@ -241,7 +241,7 @@ never replaces it).
 > check first.
 >
 > A second, independent reason stands beside it: **`receipt.currency` is itself
-> a correctable text field** (`TEXT_FIELDS`, `ReceiptForm.tsx:95`), edited live
+> a correctable text field** (`TEXT_FIELDS` in `ReceiptForm.tsx`), edited live
 > on this same screen, so a hardcoded symbol would mislabel every money field on
 > a receipt whose currency the reviewer is in the middle of correcting. Task 2's
 > implementer refused the prefix on exactly this ground and was upheld.
@@ -393,10 +393,24 @@ Any implementation must hold these; they are not style choices:
    the standing gap where two UI milestones shipped without anyone looking.
 4. **A ~20-line pathname switch, not React Router** — controller's call,
    flagged. Runtime dependencies today are exactly `react` and `react-dom`;
-   the only pathname read in the app is `session.ts:21`; and the backend
-   already serves a history fallback (`_SpaFiles(..., html=True)`,
-   `api.py:856`), so `/app/admin` survives a reload without a router. Adding
-   one would be the app's third runtime dependency for one route.
+   the only pathname read in the app is `session.ts`'s signed-in guess; and the
+   backend already serves a history fallback (`_SpaFiles(..., html=True)` in
+   `src/receipts/review/api.py`), so `/app/admin` survives a reload without a
+   router. Adding one would be the app's third runtime dependency for one route.
+
+   > **[Dated note, 2026-08-07 — three of the supporting facts above are wrong;
+   > the ruling is not.]** Re-derived at the milestone's close, with
+   > **ADR-0027**'s `## Correction (2026-08-07)` carrying the full method.
+   > Runtime dependencies are **four**, not two — `react`, `react-dom`,
+   > `@fontsource/fira-sans`, `@fontsource/fira-code` — so a router would be the
+   > **fifth**, not the third. There are **two** pathname reads, not one:
+   > `session.ts`'s signed-in guess and `route.ts`'s `currentRoute` default
+   > parameter. And both citations have rotted — the pathname read moved, and
+   > `_SpaFiles` moved — so they are **de-numbered rather than repointed**
+   > (ADR-0028 §5): search `session.ts` for `location.pathname`, and
+   > `src/receipts/review/api.py` for `_SpaFiles`. **The decision stands**: a
+   > router is still a new dependency for a handful of paths, and that argument
+   > does not depend on whether the count is two or four.
 
 **Later rulings live where they bite, not here.** This list is the four
 questions that were open when the design was drafted — it is **not** an index

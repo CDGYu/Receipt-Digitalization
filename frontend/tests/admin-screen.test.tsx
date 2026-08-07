@@ -411,8 +411,21 @@ describe('the admin screen drives POST /review/{id}/release', () => {
     const table = await screen.findByRole('table')
     expect(cellUnder(bodyRows(table)[0], table, 'Assigned to').textContent).toContain('carol')
 
-    // The confirm is inline and names the current holder: this is a destructive
-    // act on somebody else's work (design section 5.6).
+    // The confirm is inline: this is a destructive act on somebody else's work
+    // (design section 5.6).
+    //
+    // **The `getByText(/carol/)` below does not pin that the confirm names the
+    // holder, and this comment used to say it did.** Corrected 2026-08-07.
+    // The query is scoped to `within(table)`, and the assertion two lines up
+    // has already established that the assignee cell says "carol" -- so it
+    // passes from that cell alone and would pass with the confirm naming
+    // nobody. Measured: moved above the click it is still green. It is left in
+    // place because the *next* line is the real pin -- `Release from carol` is
+    // the confirm's own accessible name and exists only after the click.
+    // Making this line mean something needs a query scoped to the confirm, or
+    // `getAllByText(/carol/).length === 2`; that is a deferred follow-up, not a
+    // documentation fix, so the wave that corrected the comment left the
+    // assertion alone rather than change a test in a docs sweep.
     await user.click(within(table).getByRole('button', { name: 'Release' }))
     expect(within(table).getByText(/carol/)).toBeDefined()
     await user.click(within(table).getByRole('button', { name: 'Release from carol' }))

@@ -568,9 +568,19 @@ admin-ui-backend-routes plan's log records what happens otherwise: one of its
 defects reached the shipped tree because it was re-derived from the plan
 instead of checked against the code.
 
-Fourteen plan defects so far, all the plan author's (the controller). Nine were
-found during Tasks 1–2 and are recorded in the SDD ledger; five more were found
-in Task 3's pre-flight on 2026-08-06 and are below.
+Fourteen plan defects **as at 2026-08-06 when this log was opened**, all the plan
+author's (the controller). Nine were found during Tasks 1–2 and are recorded in
+the SDD ledger; five more were found in Task 3's pre-flight on 2026-08-06 and are
+below.
+
+> **Updated 2026-08-07 at the close: the final count is TWENTY-FIVE**, #1–#25, all
+> the controller's, all in the ledger. The eleven after #14 were found in Task 4's
+> pre-flight (#17–#20), Task 5's (#21–#24) and Task 5's review (#25, a scope gap).
+> **Derive it, do not quote it** — `grep -n "PLAN DEFECT #"` over
+> `.superpowers/sdd/2026-08-05-review-ui-styling/progress.md`. This number was
+> given as **14** here, **20** in `docs/MEMORY.md` and **25** in the handoff, by
+> three documents that each told the reader to open this log first. All three are
+> now derived from the ledger.
 
 | # | Where | The defect | Status |
 |---|---|---|---|
@@ -639,10 +649,19 @@ missing `GET /auth/me`, `GET /review/tasks` and `POST /review/{id}/release`.
 It was fixed by **re-deriving the list from the built app**, not by editing the
 list in place: construct `create_app`, walk `app.routes`, recursing through
 `.original_router.routes`. **The plan's own Step 1 prescribes grepping
-decorators instead** — which works here but is the weaker method, and the
-comment listed exactly 13 because a *flat* walk of `app.routes` returns 13 with
-zero `/auth/*` paths. The comment now records the method and the date so the
-next reader re-runs it rather than trusting it.
+decorators instead** — which works here but is the weaker method. The comment
+now records the method and the date so the next reader re-runs it rather than
+trusting it.
+
+> **Corrected 2026-08-07.** This paragraph used to end: *"and the comment listed
+> exactly 13 because a flat walk of `app.routes` returns 13 with zero `/auth/*`
+> paths."* **That is false**, and the same sentence in ADR-0028 was this
+> milestone's headline documentation defect. The old list *contains*
+> `/auth/login` and `/auth/logout`, so a flat walk — which yields zero `/auth/*`
+> — cannot have produced it. Two different 13s. And the list was **correct when
+> written**: `e692070` (2026-07-30) registered exactly the 13 it names, and the
+> three it lacks arrived on 2026-08-04 and 2026-08-05. The defect was **rot**,
+> not a wrong query. Full derivation in ADR-0028's `## Correction (2026-08-07)`.
 
 Second correction in the same file: its DOCS_ENABLED note said "FastAPI's own
 **three**". Three *prefixes*, **four** route paths — `/docs` also registers
@@ -657,6 +676,14 @@ set. Tasks 3 and 4 now share no file at all.
 **Review standard 19** came out of Task 2's five fix rounds: *an enumerated
 defence never converges.* **Review standard 20** came out of Task 3's
 pre-flight: *a list in prose is read as complete, so writing one is a claim* —
-#13, design §9's "all four settled", this file's route comment, and
-`api.py:494`'s "the one unauthenticated route" are four instances, of which
-only the last is still open.
+#13, design §9's "all four settled", this file's route comment, and `api.py`'s
+"the one unauthenticated route" are four instances.
+
+> **Updated 2026-08-07.** The sentence used to end *"of which only the last is
+> still open"*; **all four are now closed**, the last by `bbb5366`, which
+> replaced the claim with "the one route that serves receipt data without a
+> session" and an enumeration beside it. The citation that read `api.py:494` is
+> **de-numbered rather than repointed** — search that file for "serves receipt
+> data without a session". Closing a defect ages every sentence that cited it,
+> which is review standard **21**, promoted 2026-08-06; standard **22** was
+> promoted with it. This milestone therefore added three standards, not one.

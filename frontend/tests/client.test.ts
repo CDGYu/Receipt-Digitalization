@@ -61,7 +61,8 @@ describe('request', () => {
 
 describe('request on a success with no JSON to parse', () => {
   it('resolves for a 204, which POST /auth/logout really returns', async () => {
-    // src/receipts/review/auth.py:183 is `return Response(status_code=204)`.
+    // The logout handler in `src/receipts/review/auth.py` ends
+    // `return Response(status_code=204)`.
     // `.json()` on an empty body throws SyntaxError, which is not an ApiError,
     // so every consumer that discriminates on ApiError loses the status.
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(null, { status: 204 })))

@@ -159,8 +159,8 @@
 
 /* Painted by `styles[finding.severity]`, and the server's vocabulary is
  * lowercase: `Severity(str, Enum)` is `ERROR = "error"`, `WARN = "warn"`,
- * `INFO = "info"` (src/receipts/validate/report.py:16-19), which is what
- * `review-screen.test.tsx:141`'s fixture sends. A value outside those three
+ * `INFO = "info"` (the `Severity` enum in src/receipts/validate/report.py), which
+ * is what `review-screen.test.tsx`'s findings fixture sends. A value outside those three
  * paints nothing and still reads as a word. */
 .error {
   color: var(--color-severity-error);

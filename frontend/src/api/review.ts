@@ -20,9 +20,9 @@ export function fetchNext(): Promise<ReviewNextResponse> {
  *  breakdown that `receipt_summary` leaves out.
  *
  *  `id` is encoded even though every id this app holds came from the API as a
- *  UUID: the parameter's type is `string`, and the route parses it as
- *  `uuid.UUID` (review/api.py:202), so anything that is not one is a 422 rather
- *  than a path this function helped build.
+ *  UUID: the parameter's type is `string`, and every receipt route in
+ *  `review/api.py` declares `receipt_id: uuid.UUID`, so anything that is not one
+ *  is a 422 rather than a path this function helped build.
  */
 export function fetchReceipt(id: string): Promise<ReceiptDetail> {
   return request(`/receipts/${encodeURIComponent(id)}`)

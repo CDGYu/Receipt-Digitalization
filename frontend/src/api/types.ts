@@ -31,7 +31,7 @@ export interface ConfidenceReason {
 /** An item-level discount, promo, or adjustment printed under a line item.
  *
  * `amount` is SIGNED: discounts negative, surcharges positive. It arrives as a
- * string -- `repository.py:452` stores `Modifier.model_dump(mode="json")`, and
+ * string -- `repository.py` stores `modifier.model_dump(mode="json")`, and
  * pydantic's JSON mode renders a `Decimal` as a string (verified by execution:
  * `Decimal("-2.50")` -> `"-2.50"`).
  */

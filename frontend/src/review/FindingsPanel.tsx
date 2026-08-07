@@ -83,8 +83,8 @@ export function FindingsPanel({ findings }: FindingsPanelProps) {
                   <strong className={styles.ruleId}>{finding.rule_id}</strong>{' '}
                   {/* The severity word is always rendered; the class only paints
                       it. `styles[...]` is keyed on the server's own lowercase
-                      vocabulary (`error`/`warn`/`info`,
-                      validate/report.py:16-19) and paints nothing for anything
+                      vocabulary (`error`/`warn`/`info` -- the `Severity` enum
+                      in validate/report.py) and paints nothing for anything
                       else, so an unknown severity degrades to the word alone
                       rather than to a wrong colour. */}
                   <em className={`${styles.severity} ${styles[finding.severity] ?? ''}`}>

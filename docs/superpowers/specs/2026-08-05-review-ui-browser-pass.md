@@ -24,8 +24,18 @@ that way — they are pictures of receipt data). Measurements alongside them in
 findings panel, the line-items table and the whole admin surface have been
 verified entirely through Vitest against jsdom. That proves structure and
 accessibility wiring. It cannot see a colour, a box, an overlap or a font, and
-**every defect in section 3 below is invisible to it** — the suite is green at
-318 tests across 24 files with all of them present.
+**every defect in section 3 below was invisible to it** — the suite was green
+with all of them present.
+
+**[Corrected 2026-08-07 — that sentence has a shelf life, and it has expired.**
+It was written when nothing pinned a declaration. `8ede47e` added a gated
+stylesheet declaration census, and the census *can* now see C1, C3 and I4: each
+of the three reverts that used to leave the suite green now reds it. What jsdom
+still cannot see is the layout half — `cellOverflow` lives in the ungated
+Playwright run, and a width regression expressed as a *length* rather than a
+keyword would still pass. **ADR-0029** states the boundary. The suite count that
+stood here has been removed rather than repointed: it rots on every commit that
+adds a test, and review standard 5 says it does not belong in the sentence.**]**
 
 97 screenshots were taken at **375, 1024 and 1440px**, in **light and dark**,
 across eleven surfaces. **Every one of them was opened and read.** Numbers that
@@ -60,14 +70,14 @@ and the "review screen" capture is a picture of the login page.
 
 | Question | Answer |
 |---|---|
-| **Is a null field visibly different from a zero?** | **In the form, yes — unmistakably, in both themes.** `0.0000` in `--color-foreground` against a grey `—` with a hairline left border. **In the line-items table, no: a null amount is invisible** (finding C2). |
+| **Is a null field visibly different from a zero?** | **In the form, yes — unmistakably, in both themes.** `0.0000` in `--color-foreground` against a grey `—` with a hairline left border. ~~**In the line-items table, no: a null amount is invisible** (finding C2).~~ **[Corrected 2026-08-07 — this half is no longer true. C2 was fixed in the pass's own fix round; the table's null amounts now show the right-aligned `—`. See the status note at the head of §3.]** |
 | Is the money column aligned on the decimal at every width? | **Only at 375.** The form is a 1/2/4-column grid at 375/1024/1440, so the six amounts sit in different columns at the two larger widths (measured right edges at 1440: 826, 1017, 1208, 1399). Alignment holds *within* a column. Fira Code's tabular figures are real and measured: `1111111111`, `0000000000` and `9999999999` each measure **exactly 96px** at 16px. |
 | Do severity colours survive dark mode at 4.5:1? | **Yes.** error 4.94:1, warn 8.66:1, info 7.31:1 on `--color-surface`. Light: 4.83 / 5.02 / 6.70. Each carries the word as well as the colour. |
 | Does anything scroll horizontally at 375px? | **No.** `documentElement.scrollWidth` never exceeded `clientWidth` on any of the 64 records. The line-items table scrolls inside its own `overflow-x` wrapper, as §5.2 asks. |
 | Are focus rings visible on every interactive element, in both themes? | **On every input, select and button: yes** — `2px solid var(--color-ring)` at 2px offset, `:focus-visible` matching under keyboard traversal (26 stops walked on the review screen). **`<summary>` is the exception** and keeps the browser's own ring (finding m10). |
 | Do the five error states read as sentences a reviewer can act on? | **The words do; the placement does not.** Every message is the server's own and every state offers exactly one workable exit. But the terminal states, the summary alert and Approve are all below the fold at a real window height (finding I5), and the 503's two sentences say the same thing twice (finding I9). |
 | Is the receipt image legible against its surround? | **Yes** — judged against an intercepted receipt-shaped image, because the seeded blob is one transparent pixel. White paper on `--color-surface-sunken`, paper edge clearly visible, nothing tinted or overlaid. §5.5 delivered. |
-| Are touch targets 44×44 in practice? | **On the review and admin screens, yes.** Every input/select/button measured ≥44 tall. The two checkboxes are 20×20 **but their wrapping label measures 317×44 / 250×44 / 179×44**, so the row is the target, as `.check` claims. **Not on login (21px controls) and not on the findings disclosure rows (21px).** |
+| Are touch targets 44×44 in practice? | **On the review and admin screens, yes.** Every input/select/button measured ≥44 tall. The two checkboxes are 20×20 **but their wrapping label measures 317×44 / 250×44 / 179×44**, so the row is the target, as `.check` claims. ~~**Not on login (21px controls) and not on the findings disclosure rows (21px).**~~ **[Corrected 2026-08-07 — the login half is no longer true: C3's fix took all three login controls past 44px in both themes at all three widths. The findings disclosure rows are still 21px (m10's neighbourhood) and are unfixed.]** |
 | Does the light/dark switch work, and does explicit light beat an OS dark preference? | **Yes, both directions.** OS dark + `data-theme="light"` → light page *and* light UA widgets. OS light + `data-theme="dark"` → dark both. `:root:not([data-theme='light'])` behaves exactly as ADR-0027 says. **There is no theme control in the app**, so the only ways in are the OS preference and setting the attribute by hand. |
 
 ---
@@ -103,6 +113,33 @@ is information nobody had.
 
 ## 3. Findings
 
+> **Status note — 2026-08-07, added by the milestone's closing fix wave.**
+> This section was written as a snapshot on the day of the pass and then shipped
+> unchanged while its findings were being closed, so for a day it advertised four
+> fixed defects as open. It is corrected in place rather than rewritten: the
+> findings keep their original text, and each carries a dated verdict line.
+>
+> | Finding | Verdict |
+> |---|---|
+> | C1, C2 | **FIXED** — `205d77a`. `MoneyInput.module.css`'s `.field` went `inline-flex` → `flex`; `cellOverflow` 204 records → 0. |
+> | C3 | **FIXED** — `205d77a`. `frontend/src/login/` got its first stylesheet; all three controls clear 44px. |
+> | I4 | **FIXED** — `205d77a`. `--color-null` → `#7C8CA2` in both dark blocks; sub-4.5:1 records 35 → 0. |
+> | **I5** | **RE-TRIAGED TO CRITICAL, NOT FIXED** (user ruling, 2026-08-06). See its own entry. |
+> | I6, I7, I8, I9 | **OPEN**, unchanged. |
+> | m10–m16 | **OPEN**, unchanged. |
+>
+> **The fixes were pinned only afterwards, and that is the milestone's headline
+> lesson.** All three of `205d77a`'s changes were independently revertible with
+> every gate green until `8ede47e` added a gated stylesheet declaration census.
+> **ADR-0029** records what a green run now certifies and what it still cannot —
+> read it before treating anything in this report as gate-protected.
+>
+> One defect in this list was found *after* the pass, by that census, because no
+> capture puts it on screen: **`SignOutControl.module.css`'s `.error` renders
+> inside `.confirm`, which paints `--color-surface-raised` — 4.39:1 in dark,
+> below AA.** Recorded here with its measurement; not fixed, because it is a
+> source change.
+
 ### Critical
 
 **C1 — The line-items table's three money columns are unreadable, at every
@@ -123,6 +160,11 @@ there is no decimal column.
 column widths: `frontend/src/review/LineItemsTable.module.css`.
 *Evidence:* `review-real-table--*`, `review-null-table--*`,
 `measurements.json` → `cellOverflow`.
+***FIXED 2026-08-06 (`205d77a`).*** The diagnosis above is right about the
+symptom and wrong about the cause: the missing `width` was measured inert, and
+the real cause was `.field { display: inline-flex }` shrink-wrapping to the
+input's `size="20"` intrinsic width. `display: flex` fixed it; `cellOverflow`
+went 204 records → 0. **Pinned only at `8ede47e`** — see the status note above.
 
 **C2 — A null amount in the line-items table is invisible.** A direct §4
 failure, and a consequence of C1: the `—` placeholder is right-aligned inside a
@@ -133,6 +175,8 @@ human decides, a never-extracted amount and a box nobody has typed in yet look
 identical.
 *Owning file:* as C1.
 *Evidence:* `review-null-table--1440-light.png`, `review-null-table--1024-light.png`.
+***FIXED 2026-08-06 (`205d77a`), with C1.*** The null row's Qty / Unit price /
+Line total now render the right-aligned `—` with its hairline border.
 
 **C3 — The login page is entirely unstyled, and it is the first screen every
 reviewer sees.** `frontend/src/login/LoginPage.tsx` has no stylesheet and no
@@ -149,6 +193,11 @@ come from the design system, because they come from `body`/`:where(...)` in
 `LoginPage.module.css` to fix).
 *Evidence:* `login--375-light.png`, `login--1440-light.png`, `login--1440-dark.png`,
 `login--1024-dark.png`, and the same page again at `error-401-login--*`.
+***FIXED 2026-08-06 (`205d77a`).*** `LoginPage.module.css` now exists, built from
+`ReceiptForm`'s and `ui/Button`'s rules; all three controls clear 44px in both
+themes at all three widths. Its class names were guarded separately at `1bfacb4`
+because the fix round was forbidden the test file — plan defect #15's shape,
+third occurrence — and its *declarations* only at `8ede47e`.
 
 ### Important
 
@@ -160,6 +209,18 @@ in all three theme blocks. It paints the em-dash mark **and every
 almost no margin. Everything else on every surface measured ≥4.5:1; this is the
 only failure in 64 records.
 *Owning file:* `frontend/src/styles/tokens.css`.
+***FIXED 2026-08-06 (`205d77a`).*** `--color-null` is `#7C8CA2` in both dark
+blocks — **5.43:1**, browser-measured across 26 records. Sub-4.5:1 contrast
+records went 35 → 0. (An earlier hand computation of `5.45` had a wrong green
+luminance and propagated; `5.43` is the measured value.)
+
+> **I5 was re-triaged to Critical on 2026-08-06 (user ruling) and is NOT fixed.**
+> It is left in this section under its original heading so its finding id keeps
+> meaning what the captures and `measurements.json` call it. Severity, not
+> position, is the ruling: a 403 or a 404 is the case where *the write landed and
+> the task is gone*, and the reviewer sees nothing at all. Fixing it means
+> reopening **ADR-0024**'s error-recovery contract — which is why it was not
+> taken as a drive-by.
 
 **I5 — At a real window height the outcome of pressing ⌘↵ is off-screen.**
 At 1440×900 the review screen's last visible element is the middle of the form:

@@ -772,9 +772,12 @@ describe('every class a component references exists in its stylesheet', () => {
 })
 
 describe('Button', () => {
-  // Measured in src/: sixteen buttons, fifteen explicitly `type="button"` and
-  // one explicitly `type="submit"` -- LoginPage's, inside the app's only
-  // `<form>`. The platform default is `submit`, so a primitive that did not
+  // Re-measured in frontend/src on 2026-08-07, comments stripped: seventeen
+  // buttons -- fifteen explicitly `type="button"`, one explicitly
+  // `type="submit"` (LoginPage's, inside the app's only `<form>`), and `Button`'s
+  // own element, which spells neither because it *is* the default. The earlier
+  // "sixteen" omitted that last one while reading as a total.
+  // The platform default is `submit`, so a primitive that did not
   // override it would post a half-keyed receipt the day anyone wraps the receipt
   // fields the way LoginPage already wraps its two.
   it('defaults to type="button" rather than the platform submit', () => {
