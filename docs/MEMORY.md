@@ -6,13 +6,12 @@ continuity protocol itself — what lives where, and why this snapshot must be
 verified rather than trusted — is **ADR-0019**, extended by **ADR-0021** (whose
 2026-08-02 dated correction widened the freshness check after a docs-only task
 proved invisible to it).
-Last updated: **2026-08-06 (`feat/review-ui-styling` IN FLIGHT — all six tasks
-complete, the close not yet run)**, at **`main @ 1314485`**, which the branch
-still does not touch. A stamp cannot name the commit that writes it, so the
-check is this:
+Last updated: **2026-08-07 (`feat/review-ui-styling` MERGED — the milestone is
+closed; NO branch in flight)**, at **`main @ be6d7c0`**, which is the merge tip
+itself. A stamp cannot name the commit that writes it, so the check is this:
 
 ```
-git log --oneline 1314485..main -- src tests frontend docs ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
+git log --oneline be6d7c0..main -- src tests frontend docs ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
 ```
 
 **Empty means this file is current.** Any output means the tree moved after it
@@ -20,33 +19,44 @@ was written and you are reading something stale.
 
 ## Snapshot
 
-- **⚠️ A BRANCH IS IN FLIGHT: `feat/review-ui-styling`**, off `main@1314485`,
-  **pushed**. Its tip was `1bfacb4` when this was last edited and the edit
-  commits on top, so **run `git rev-list --count main..feat/review-ui-styling`
-  rather than quoting a number from here** (ADR-0028 §1; ADR-0019 on why a
-  document cannot name the commit that writes it). **ALL SIX TASKS ARE
-  COMPLETE**; 3, 4 and 5 each took one fix round, and Task 4's first
-  implementer stalled at an infrastructure fault. **The whole-branch review is
-  done and fix wave A is done; wave B, one scoped re-review and the merge are
-  what remain** — see the "Review-UI styling" section below, which is
-  authoritative for this milestone.
-  Vitest **346 across 25 files** (221 on `main`); pytest **979**; all five
-  gates PASS at `8ede47e`, controller-run.
+- **NO BRANCH IN FLIGHT. Empty is the signal (ADR-0021.)**
+  `git branch --no-merged main` must name nothing.
+- **The review-UI styling milestone is COMPLETE AND MERGED** (2026-08-07, true
+  fast-forward `1314485` → `be6d7c0`, single parent, 38 branch commits).
+  `feat/review-ui-styling` is kept at its merge point and pushed.
+  Vitest **346 across 25 files** (221 before); pytest **979**; all five gates
+  PASS on `main` at the merge, controller-run.
   **The browser pass ran, and found §4 invisible on money in a real browser
-  while every gate was green.** Fixed; see
-  `docs/superpowers/specs/2026-08-05-review-ui-browser-pass.md`.
-  ADR-0027 + its 2026-08-06 correction record its decisions.
+  while every gate was green.** Fixed, then *pinned* — the fixes were
+  independently revertible with every gate green until `8ede47e` added a gated
+  stylesheet declaration census. **ADR-0029** states what a green run certifies.
+  ADR-0027 + its **two** corrections (2026-08-06, 2026-08-07) record its
+  decisions.
   **The plan is `docs/superpowers/plans/2026-08-05-review-ui-styling.md` —
   read its "Dated defect log" at the bottom FIRST; the ledger is
-  `.superpowers/sdd/2026-08-05-review-ui-styling/progress.md` and must be read
-  before touching the branch.**
-- **`src/` CHANGED on this frontend branch** (`bbb5366`, `api.py`'s docstring).
-  So the whole-branch review has one Python file in scope and the
-  outside-repo import check applies at the merge.
-- **Round 5 of Task 2's fix loop hit the cap (`e216af4`) and its scoped
-  re-review was NOT run** — the session ended on a wrap-up instruction while
-  it was in flight. **The whole-branch review must cover `41d01ab..e216af4`
-  explicitly**; it is the one diff on this branch no reviewer has seen.
+  `.superpowers/sdd/2026-08-05-review-ui-styling/progress.md`.**
+- **The close ran the full protocol**: whole-branch review → fix wave A
+  (`8ede47e`, the census) → fix wave B (`072bfc2`, the documentation sweep) →
+  one scoped re-review → fix (`be6d7c0`, + **ADR-0030**) → ff-merge.
+  **The re-review's verdict was MERGE AFTER FIXES and the fixes were made.**
+- **TWO OF THE SIX FINDINGS WAVE B WAS HANDED WERE FALSE**, and wave B's own
+  commit message then made two unmeasured claims of its own, both caught by the
+  re-review. That is **ADR-0030** and **review standard 23**: a finding is a
+  claim, a fix wave verifies before it fixes, and *"this finding is wrong"* is a
+  valid resolution. **ADR-0027's "35 custom properties" is correct** and was
+  left alone; **ADR-0028's motivating story was false** and is withdrawn in its
+  own `## Correction (2026-08-07)`.
+- **`src/` CHANGED on this frontend branch** (`bbb5366`, `api.py`'s docstring),
+  so the **outside-repo import check was run at the merge** from `C:\Users`:
+  `python -m receipts.cli --help` exit 0; `create_app`, `build_auth_router` and
+  `receipts.review.list_tasks` all import clean and resolve through the
+  installed package. **One gap found and NOT a regression from this branch:**
+  `pyproject.toml` declares `[project.scripts] receipts = …` and the
+  distribution records the entry point, but **no generated wrapper exists in
+  `C:\Python314\Scripts`, so `receipts --help` does not run as a command here.**
+  `_console_main` itself imports fine. Earlier records claiming `receipts --help`
+  exits 0 are **not reproducible in this environment** — use
+  `python -m receipts.cli` for the check until the install state is settled.
 - **TWENTY-FIVE plan defects this milestone, every one the controller's.**
   #1–9 during Tasks 1–2; #10–14 in Task 3's pre-flight; #15–16 at Task 3's
   review; #17–20 in Task 4's pre-flight; #21–24 in Task 5's; #25 at Task 5's
@@ -55,18 +65,19 @@ was written and you are reading something stale.
   in the plan's own defect log and **25** in the handoff for a day, while all
   three told the reader to open the plan's log first (corrected 2026-08-07).
 
-- **`main` @ `1314485`, pushed, in sync with `origin/main`**, and untouched by
-  the branch in flight. **Verify, do not quote** (ADR-0028 §1):
-  `git rev-parse main origin/main`. An earlier milestone's push was authorized
-  explicitly ("merge all of the branches with the main and push it") and that
-  one-time authorization **was consumed by it**. The standing ask-first rule
-  for `main` continues — every push needs its own fresh ask.
-  pytest on `main`: **979**; Vitest **221**.
-- **All 13 merged `feat/*` branches are ancestors of `main` and all are
-  pushed.** Audited 2026-08-05: `git branch --no-merged main` named none of
-  them and every one adds **+0** commits, so "merge all branches" was already a
-  no-op — they are historical merge points, kept per the standing rule.
-  `feat/review-ui-styling` is the fourteenth and is the one **not** yet merged.
+- **`main` @ `be6d7c0`. ⚠️ MERGED LOCALLY AND *NOT* PUSHED** as of 2026-08-07 —
+  `origin/main` is still at `1314485`, one milestone behind. **Verify, do not
+  quote** (ADR-0028 §1): `git rev-parse main origin/main`. An earlier
+  milestone's push was authorized explicitly ("merge all of the branches with
+  the main and push it") and that one-time authorization **was consumed by it**.
+  The standing ask-first rule for `main` continues — **every push needs its own
+  fresh ask, and one is outstanding.**
+  pytest on `main`: **979**; Vitest **346 across 25 files**.
+- **All 14 merged `feat/*` branches are ancestors of `main`, and all are
+  pushed** — including `feat/review-ui-styling` at `be6d7c0`. Audited
+  2026-08-05 for the first 13: `git branch --no-merged main` named none of them
+  and every one adds **+0** commits, so they are historical merge points, kept
+  per the standing rule.
 
 > **Corrected 2026-08-07.** Three of the bullets above disagreed with the rest
 > of this file and one disagreed with `git`: this said `main @ e0577ab` while
@@ -130,12 +141,12 @@ was written and you are reading something stale.
 - **The repo is PUBLIC.** Verified 2026-07-31 via the GitHub API. See
   "Environment / provider" for what that exposes.
 
-## Review-UI styling — IN FLIGHT (2026-08-05 → )
+## Review-UI styling — complete and merged (2026-08-05 → 2026-08-07)
 
-Six tasks, lanes 1 → 2 → {3 ∥ 4} → 5 → 6. **All six complete; the close
-remains.** Branch `feat/review-ui-styling`, pushed — **run
-`git rev-list --count main..feat/review-ui-styling` rather than quoting a
-number from here** (ADR-0028 §1).
+Six tasks, lanes 1 → 2 → {3 ∥ 4} → 5 → 6. **All six complete, the close ran in
+full, and the milestone merged** by true fast-forward `1314485` → `be6d7c0`,
+38 branch commits, single parent. `feat/review-ui-styling` is kept at its merge
+point and pushed.
 
 - **Task 1** — `tokens.css` (35 tokens, three blocks), self-hosted fonts via
   `@fontsource` (never a CDN), light default with `:root:not([data-theme='light'])`
@@ -177,18 +188,30 @@ number from here** (ADR-0028 §1).
   stylesheet — it had been in no task's file set in any of the six**, and its
   class guard was added separately because the fix round was forbidden the test
   file (plan defect #15's shape, third occurrence).
-- **THE CLOSE — whole-branch review DONE, fix wave HALF DONE, NOT MERGED.**
-  Reviewed on the strongest model: 33 commits, 54 files, +9116/−622. Verdict
-  **merge after one fix wave**; nothing found is a runtime defect. Both
-  never-reviewed items **passed** — `41d01ab..e216af4` is clean, and `api.py`'s
-  enumeration is correct (re-run both ways, outside-repo check run).
+- **THE CLOSE — RAN IN FULL AND MERGED.** Whole-branch review on the strongest
+  model: 33 commits, 54 files, +9116/−622. Verdict **merge after one fix wave**;
+  nothing found is a runtime defect. Both never-reviewed items **passed** —
+  `41d01ab..e216af4` is clean, and `api.py`'s enumeration is correct.
   **C-1, the one Critical: Task 5's entire fix round was unpinned** — three
   reverts, each green on all five gates, undoing three Criticals and a WCAG
   failure. **Fix wave A closed it** (`8ede47e`): a gated stylesheet declaration
   census, Vitest **318 → 346 across 25 files**, all three reverts now red.
   **ADR-0029 records what the gates now certify and what they still cannot.**
-  **Fix wave B (the docs sweep) and the re-review and the merge are NOT done —
-  see `docs/NEXT_SESSION_PROMPT.md` §1, which carries the full scope.**
+  **Fix wave B** (`072bfc2`): the documentation sweep — 24 files, zero lines of
+  behaviour. **Two of its six findings did not survive measurement** and were
+  recorded as falsified rather than applied; see the bullet above and ADR-0030.
+  **The scoped re-review** covered `8ede47e` + `072bfc2` and returned **MERGE
+  AFTER FIXES**: it confirmed both refutations independently, ran all three of
+  wave A's reverts red, proved `072bfc2` behaviour-free across 18 files — and
+  found six stale citations plus two false claims in wave B's own commit
+  message. **`be6d7c0` answered all of it** and added **ADR-0030** +
+  **review standard 23**.
+  **Three things a mutation proved and no gate catches, all reported not fixed:**
+  the census is **silent** on a value containing `;` or `{}` (`content: '+'` →
+  `content: '+;XX'` ships a changed glyph with 346/346 green — **ADR-0029 §4 does
+  not list this**); the duplicate-selector guard is not exercised by the test
+  named for it (`if (false)` leaves it green); and **rule source-order is
+  unpinned** (swapping two equal-specificity rules passes all five gates).
 - **Task 6** — the dated note on ADR-0027 (`31fafaf`). Body untouched, appended
   after the existing correction, zero deletions verified. It records the pass,
   the generalisation worth keeping — **a pin can be genuinely universal, proven
@@ -197,7 +220,7 @@ number from here** (ADR-0028 §1).
   showed is incomplete: dark ships as a full second theme and the application
   has no theme control.** Surface that at the close.
 
-**ALL SIX TASKS ARE COMPLETE. What remains is the close.**
+**ALL SIX TASKS ARE COMPLETE AND THE MILESTONE IS MERGED.**
 
 **Two residuals carried, both reported not fixed:** §5.3's confidence band
 hardcodes `0.85`/`0.60` while `GET /metrics` ships the authoritative
@@ -208,8 +231,20 @@ table onto the photograph with all gates green.
 
 **Also on this branch, folded in rather than branched for:** `api.py`'s false
 "one unauthenticated route" docstring (`bbb5366`), `vite.config.ts`'s stale
-route list (`2689635`), ADR-0027's own correction and its de-numbered citation,
-**ADR-0028**, and ADR-0023's 2026-08-06 correction.
+route list (`2689635`), ADR-0027's two corrections, **ADR-0028** and its
+2026-08-07 correction, **ADR-0029**, **ADR-0030**, ADR-0023's 2026-08-06
+correction, and review standards **21, 22 and 23**.
+
+**What the close is owed next, and by whom:** three questions this milestone
+created and deliberately did not answer — **the theme control** (ADR-0027 ships
+dark as a full second theme and the app has no way to choose it), **the currency
+prefix** (parked in design §5.1 with the browser pass named as its resolver; the
+pass ran and never addressed it, so its designated resolver is spent), and
+**whether the Playwright visual run becomes a sixth gate** (ADR-0029 leaves it
+open). Two more from the re-review: **whether the census parser is replaced**
+given its silent semicolon/brace blind spot, and **whether the citation sweep
+becomes a repo script**. All five are user decisions and are listed in
+`docs/NEXT_SESSION_PROMPT.md` under "Blocked on me".
 
 ## Admin UI backend routes — complete and merged (2026-08-05)
 
