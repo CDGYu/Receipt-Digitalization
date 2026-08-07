@@ -209,7 +209,8 @@ export function ReviewScreen() {
       if (task === null) {
         const next = await fetchNext()
         // `?? null` rather than `=== null`: an empty queue is `{"task": null}`
-        // (review/api.py:511), but `request` is an unchecked cast, so a body that
+        // (see `GET /review/next` in review/api.py), but `request` is an
+        // unchecked cast, so a body that
         // omits the key must take the same branch instead of reaching
         // `task.receipt_id` and throwing.
         task = next?.task ?? null

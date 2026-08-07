@@ -139,8 +139,20 @@ interface Rule {
  *  What this is **not** is a CSS parser. It assumes a value carries no braces
  *  and no semicolons, which holds for these sixteen files -- the only `content`
  *  values in the tree are `'+'` and `'\2212'` -- and is not claimed beyond them.
- *  A value that broke the assumption would split a declaration in two and show
- *  up as a census mismatch, which is loud rather than silent. */
+ *
+ *  **A value that breaks the assumption is SILENT, not loud.** Corrected
+ *  2026-08-07; this said such a value "would split a declaration in two and show
+ *  up as a census mismatch, which is loud rather than silent." Falsified by
+ *  mutation at the milestone's close: changing `.summary::after`'s
+ *  `content: '+'` to `content: '+;XX'` splits on the embedded `;` into
+ *  `content: '+` -- whose census key is still the quantity `content` -- and a
+ *  fragment with no colon, which is dropped. The census entry comes out
+ *  byte-identical, **346/346 stayed green, typecheck and build passed, and the
+ *  changed glyph shipped to `dist`.** So the bound above is a real blind spot,
+ *  not a graceful degradation. ADR-0029 section 4 does not list it: it is
+ *  neither layout, nor cascade, nor one of the three narrower surfaces. Treat a
+ *  semicolon or brace inside a value as **unpinned**, and if one is ever
+ *  introduced, this parser must be replaced rather than trusted to complain. */
 function rulesIn(css: string): Rule[] {
   const code = css.replace(/\/\*[\s\S]*?\*\//g, '')
   const rules: Rule[] = []
@@ -522,7 +534,16 @@ describe('the census reads what is there, not what it hopes for', () => {
 
   it('refuses a stylesheet that declares one selector twice', () => {
     // Two rules for one selector would collapse to one census entry and hide a
-    // whole rule. Proven on a synthetic file through the same code path.
+    // whole rule.
+    //
+    // **This test does NOT exercise the guard, and this comment used to say it
+    // did.** Corrected 2026-08-07: it said "proven on a synthetic file through
+    // the same code path", but the call below is `rulesIn`, not `censusFor` --
+    // and `censusFor` is where the duplicate check lives. Measured: replacing
+    // that check's condition with `if (false)` leaves this test green. What is
+    // asserted here is the weaker, true thing -- that `rulesIn` surfaces both
+    // rules rather than merging them, which is the precondition the guard needs.
+    // The guard itself is still reached by the `it.each` over the real files.
     const twice = rulesIn('.x { color: red }\n.x { display: block }')
     expect(twice).toHaveLength(2)
     expect(twice[0].selector).toBe(twice[1].selector)

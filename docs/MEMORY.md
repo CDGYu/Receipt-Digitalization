@@ -904,19 +904,26 @@ measured.**
 
 ## Deferred follow-ups / known minors (non-blocking)
 
-- **~70 line-number citations survive in live files, all currently accurate,
-  all in the form ADR-0028 §5 forbids.** Measured 2026-08-07 by fix wave B,
-  which closed the ~25 that were **stale** (the five in ADR-0027's Correction,
-  eight in `frontend/src`, seven this branch created, and the rest in
-  `docs/MEMORY.md`, the design spec and the plan) and stopped there rather than
-  rewriting seventy comments in files this milestone never opened. **They are a
-  standing rot source, not a defect today.** The method that finds them: extract
-  every `path:NNN` from the tracked tree, resolve the path, print the line it
-  points at, and read whether it still says what the citing sentence claims —
-  a bare grep cannot tell accurate from stale. **Whether this becomes a script
-  in the repo is a user decision**, alongside ADR-0029's open question about the
-  Playwright run becoming a sixth gate; ADR-0028 deliberately did not propose a
-  CI check for prose.
+- **71 line-number citations survive in live files** (`frontend/src`,
+  `frontend/tests`, `docs/adr`, `docs/MEMORY.md`), all in the form ADR-0028 §5
+  forbids. Re-derived 2026-08-07. **32 are in files the close never opened; 39
+  are in files it did.** Fix wave B closed ~25 stale ones plus 6 more the scoped
+  re-review found; **the rest are unaudited, and "unaudited" is not "accurate"**
+  — the re-review resolved 15 of them and 6 were stale, so the stale share of
+  what remains is unknown rather than zero.
+  **This entry previously claimed the survivors were "accurate" and lived only
+  in "files this milestone never opened". Both halves were false**, and the
+  re-review falsified them by resolving citations inside `tokens.css` — a file
+  wave B had itself edited — where the comment also asserted a *present-tense*
+  fact ("the #fffbe6 yellow presently inline", "Task 3 owns the swap") that Task
+  3 had already made false. Stating an unmeasured bound is the defect this wave
+  existed to close, committed in the sentence recording the close.
+  The method that finds them: extract every `path:NNN`, resolve the path, print
+  the line it points at, and read whether it still says what the citing sentence
+  claims — **a bare grep cannot tell accurate from stale.** Whether this becomes
+  a script in the repo is a user decision, alongside ADR-0029's open question
+  about the Playwright run becoming a sixth gate; ADR-0028 deliberately did not
+  propose a CI check for prose.
 - **Shipped from the admin-UI-routes close (2026-08-05): 20 Minor findings,
   triaged by the whole-branch reviewer as safe to ship.** They live in
   `.superpowers/sdd/2026-08-05-admin-ui-backend-routes/progress.md` with
@@ -1248,6 +1255,23 @@ measured.**
     emptying every rule body in a stylesheet left the suite green. **State next
     to each pin what a green run does not establish, and name the environment's
     blind spot.** ADR-0029 is that statement for the gate set.
+
+23. **A finding is a claim, and a fix wave verifies before it fixes.** ADR-0028
+    binds sentences *in* the codebase; a review's sentences *about* them owe the
+    same derivation, and arrive with more authority — they look like the output
+    of a check, they carry a number, and their reader is braced to be wrong.
+    **Measured 2026-08-07: two of six findings handed to one fix wave were
+    false**, and applying the first would have edited a correct sentence in an
+    Accepted ADR to match a wrong measurement. **"This finding is wrong" is a
+    valid resolution**; record it in the tracked tree with the measurement rather
+    than dropping it, or the next reader re-raises it. Two corollaries, both
+    earned here: **check membership, not cardinality** — two counts matching is
+    the weakest possible evidence of a shared cause and reads as the strongest
+    (two different 13s, two different 35s); and **state a query's anchor beside
+    its number** — `^\s*--[a-z]` answers "how many *begin a line*", which is 54,
+    not 65. The rule binds the wave's own prose immediately: this one's commit
+    message miscounted its files and stated an unmeasured residual bound, both
+    caught by the scoped re-review. **ADR-0030.**
 
 And: **a green suite is not evidence that installed software works.** Anything
 with an entry point gets run from outside the repository.

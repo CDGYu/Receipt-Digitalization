@@ -135,12 +135,12 @@ export interface ReceiptSummary {
  * Two nulls, both load-bearing and both distinct from each other:
  *
  * * `task: null` is an **empty queue**, returned as 200 with a body rather than
- *   204 (review/api.py:496-500), so it is a state to render and not an error to
+ *   204 (see `GET /review/next` in review/api.py), so it is a state to render and not an error to
  *   catch. On that branch the route returns `{"task": None}` and **no `receipt`
  *   key at all** -- hence `receipt` is optional here, not merely nullable.
  * * `receipt: null` alongside a **non-null** task: the route serialises
  *   `receipt_summary(receipt) if receipt is not None else None`
- *   (review/api.py:504), so a claimed task whose receipt row cannot be loaded
+ *   (grep review/api.py for `receipt_summary`), so a claimed task whose receipt row cannot be loaded
  *   arrives with the task present and the receipt missing. `ReviewScreen` does
  *   not read this field -- it re-fetches the full `ReceiptDetail` from
  *   `task.receipt_id`, because the summary carries no line items and no findings.

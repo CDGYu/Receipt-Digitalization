@@ -53,9 +53,13 @@
    * forbidden raw hex:
    *
    * `--color-surface-active` is the current/focused row. Deliberately a pale
-   * blue tied to `--color-ring`, NOT the #fffbe6 yellow presently inline at
-   * `LineItemsTable.tsx:109` -- amber is reserved for WARN severity (§3.2), so
-   * a yellow row reads as a warning about that row. Task 3 owns the swap.
+   * blue tied to `--color-ring`, NOT the #fffbe6 yellow it replaced -- amber is
+   * reserved for WARN severity (§3.2), so a yellow row reads as a warning about
+   * that row. **The swap is done**: `LineItemsTable` paints
+   * `var(--color-surface-active)` and records the old value as history (grep it
+   * for "stood here"). Corrected 2026-08-07 -- this said "presently inline at
+   * `LineItemsTable.tsx:109`" and "Task 3 owns the swap" for a day after Task 3
+   * did it, in a file the documentation sweep itself edited.
    *
    * `--color-surface-sunken` is the ImagePane surround, which design §5.5
    * specifies as #F1F5F9 without naming a token for it. Sunken rather than

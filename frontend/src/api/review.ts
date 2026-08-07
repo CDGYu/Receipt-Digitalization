@@ -6,7 +6,7 @@ import type { FieldMap, Rewrite } from '../review/patch'
 /** Claim the next review task for the signed-in reviewer.
  *
  * `{"task": null}` on an empty queue is **200 with a body**, not 204
- * (review/api.py:496-500), so there is one shape to parse and no empty-body
+ * (see `GET /review/next` in review/api.py), so there is one shape to parse and no empty-body
  * special case -- see `ReviewNextResponse` for what each of its two nulls means.
  *
  * Not idempotent: `next_task` assigns the task to the caller and commits

@@ -6,7 +6,7 @@ import styles from './FindingsPanel.module.css'
  * These are history, not current state, and the heading says so rather than
  * implying a freshness the data does not have. `save_findings` is the only
  * writer of `validation_findings`, and its only two callers are in the
- * extraction pipeline (pipeline.py:674 and :682) -- verified with
+ * extraction pipeline (both in pipeline.py) -- verified with
  * `grep -rn "save_findings" src/ tests/`, which finds no call from
  * `apply_corrections` or from any review route. So the moment a reviewer
  * corrects a total, this list still describes the receipt as it arrived: the

@@ -626,8 +626,8 @@ scope**.
 than argued (review standard 17): `_RECEIPT_FIELDS` has exactly 17 keys, and
 `ReceiptForm` renders 8 `TEXT_FIELDS` + 6 `MONEY_FIELDS` + one `<select>` + two
 checkboxes — **sixteen inputs and one select**, so `placeholder` reaches
-**fourteen** of the 17. `ReceiptForm.tsx:175` had it right all along
-("seventeen *controls*"); the ADR generalised a precise word into a wrong one.
+**fourteen** of the 17. `ReceiptForm.tsx` had it right all along — grep it for
+"seventeen *controls*"; the ADR generalised a precise word into a wrong one.
 ADR-0027 carries a dated correction (`46eb965`) and the handoff was fixed in
 place (`459cd87`).
 
