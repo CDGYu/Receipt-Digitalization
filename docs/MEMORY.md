@@ -65,14 +65,14 @@ was written and you are reading something stale.
   in the plan's own defect log and **25** in the handoff for a day, while all
   three told the reader to open the plan's log first (corrected 2026-08-07).
 
-- **`main` @ `be6d7c0`. ⚠️ MERGED LOCALLY AND *NOT* PUSHED** as of 2026-08-07 —
-  `origin/main` is still at `1314485`, one milestone behind. **Verify, do not
-  quote** (ADR-0028 §1): `git rev-parse main origin/main`. An earlier
-  milestone's push was authorized explicitly ("merge all of the branches with
-  the main and push it") and that one-time authorization **was consumed by it**.
-  The standing ask-first rule for `main` continues — **every push needs its own
-  fresh ask, and one is outstanding.**
-  pytest on `main`: **979**; Vitest **346 across 25 files**.
+- **`main` merged AND PUSHED 2026-08-07**, in sync with `origin/main`. The
+  milestone merged at `be6d7c0`; the continuity refresh commits on top, so the
+  tip is later — **a document cannot name the commit that writes it (ADR-0019).
+  Verify, do not quote** (ADR-0028 §1): `git rev-parse main origin/main`.
+  The push was authorized explicitly at the close and **that one-time
+  authorization was consumed by it**. The standing ask-first rule for `main`
+  continues — **the next push needs its own fresh ask.**
+  pytest on `main`: **979**; Vitest **346 across 25 files**; five gates PASS.
 - **All 14 merged `feat/*` branches are ancestors of `main`, and all are
   pushed** — including `feat/review-ui-styling` at `be6d7c0`. Audited
   2026-08-05 for the first 13: `git branch --no-merged main` named none of them

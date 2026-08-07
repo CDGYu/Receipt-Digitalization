@@ -29,18 +29,17 @@ fast-forward. **Do not quote a hash or a count from this file; run it**
 ```
 git status --short                        # must be empty
 git log --oneline -6
-git rev-parse --short=7 main origin/main  # THESE TWO DIFFER — see below
+git rev-parse main origin/main            # must be identical
 git branch --no-merged main               # must name nothing
 ```
 
-## ⚠️ ONE THING IS OUTSTANDING AND IT NEEDS YOU TO ASK ME
+## `main` is merged AND PUSHED — nothing is outstanding
 
-**`main` is merged locally and NOT pushed.** `main` is at the merge tip;
-`origin/main` is still at `1314485`, one whole milestone behind. Every `main`
-push needs its own fresh ask and the previous one-time authorization was
-consumed. **Ask me before pushing.** Nothing else is blocked by it — all 14
-`feat/*` branches including `feat/review-ui-styling` are pushed, so no work is
-at risk on this machine only.
+The milestone merged at `be6d7c0` and `main` was pushed on 2026-08-07 with
+explicit authorization, **which that push consumed**. All 14 `feat/*` branches
+including `feat/review-ui-styling` are pushed too. **The next `main` push needs
+its own fresh ask.** `main` and `origin/main` should be identical — run
+`git rev-parse main origin/main` rather than believing this sentence.
 
 **Freshness check**, using the commit named in `docs/MEMORY.md`'s "Last updated"
 line:
@@ -393,7 +392,8 @@ so is a sentence *about* one.
 
 Default branch **`main`**; `origin` → `CDGYu/Receipt-Digitalization`, **public**.
 **Pushing `feat/*` is authorised; ask before pushing `main`** (every `main` push
-authorization is one-time, and **one ask is outstanding right now**). Merged
+authorization is one-time, and the 2026-08-07 one **was consumed by that
+push**). Merged
 `feat/*` branches and SDD workspaces are **kept, never cleaned up** — this
 overrides the superpowers skills, which would delete both. `.kiro/`,
 `.github/workflows/`, `.superpowers/`, `var/`, `eval/golden/images/` are
@@ -479,38 +479,36 @@ points from outside the repository. §1.6 is the current example.
 
 ## Blocked on me (the user) — surface these, do not guess
 
-1. **`main` push** — merged locally, `origin/main` a milestone behind. **Due
-   now.**
-2. **Re-confirm the `corrections` auth ruling** — answered 2026-08-05, never
+1. **Re-confirm the `corrections` auth ruling** — answered 2026-08-05, never
    confirmed (gates §2.1).
-3. **A hosted tool-capable provider + freshly rotated key** (ISSUE-001 → all
+2. **A hosted tool-capable provider + freshly rotated key** (ISSUE-001 → all
    calibration, and Phase 6's success metric).
-4. **The theme control.** ADR-0027 ships dark as a full second theme and **the
+3. **The theme control.** ADR-0027 ships dark as a full second theme and **the
    application has no way for a user to choose it** — the only routes in are the
    OS preference and setting `data-theme` by hand. Every token and the
    precedence rule are correct and browser-verified; the decision is
    half-delivered. It needs a home for the control, which ADR-0027 deliberately
    did not open.
-5. **The currency prefix**, parked in design §5.1 with *the browser pass* named
+4. **The currency prefix**, parked in design §5.1 with *the browser pass* named
    as its resolver. **The pass ran and never addressed it** — grepping the
    report for "currency", "prefix" or "symbol" returns nothing. **Its designated
    resolver has been spent; it needs a new one.**
-6. **Should the Playwright visual run become a sixth gate?** ADR-0029 leaves it
+5. **Should the Playwright visual run become a sixth gate?** ADR-0029 leaves it
    open. It would need a headless-stable config, a policy for the 43 recorded
    undersized hit targets, and a way to establish a first baseline without
    pinning current defects.
-7. **Does the census parser get replaced?** §1.1 item 1: a `;` or `{}` inside a
+6. **Does the census parser get replaced?** §1.1 item 1: a `;` or `{}` inside a
    value is silently mis-parsed and ships. Replacing it is real work; adding a
    bullet to ADR-0029 §4 is honest but leaves the hole.
-8. **Should the citation sweep become a repo script?** §1.2. ADR-0028
+7. **Should the citation sweep become a repo script?** §1.2. ADR-0028
    deliberately declined to propose a CI check for prose, and that stands until
    you say otherwise.
-9. **Do the public golden labels need scrubbing?** (Real third-party names,
+8. **Do the public golden labels need scrubbing?** (Real third-party names,
    TINs, addresses — also the values the PAN silent-case tests pin.)
-10. **R060/R061 grounding (P2.T2)** — also gates bbox highlighting.
-11. **GitHub Actions again?** If yes, the workflow calls `scripts/verify.py`.
-12. **Close the PAN grouping residual?** Which priced route?
-13. **Narrow the `{1,2}` separator** now that its surface is measured?
+9. **R060/R061 grounding (P2.T2)** — also gates bbox highlighting.
+10. **GitHub Actions again?** If yes, the workflow calls `scripts/verify.py`.
+11. **Close the PAN grouping residual?** Which priced route?
+12. **Narrow the `{1,2}` separator** now that its surface is measured?
 
 ## Today's goal
 
@@ -522,8 +520,10 @@ and deployment story — and §1.6 sits right beside it: the declared `receipts`
 console script is not installed, so the packaging story is unfinished in a way
 that is now measured rather than suspected.
 
-**If you would rather clear the decision backlog first**, items 4–8 above are all
-consequences of the last milestone and all of them are one answer each.
+**If you would rather clear the decision backlog first**, items 3–7 above are all
+consequences of the last milestone and all of them are one answer each: the theme
+control, the currency prefix, Playwright as a sixth gate, the census parser, and
+the citation sweep.
 
 **If anything in this document disagrees with the repo, the repo wins.** This
 file has been wrong at the start of several sessions, including one where the
