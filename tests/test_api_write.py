@@ -1100,3 +1100,33 @@ def test_a_line_item_position_that_does_not_exist_is_a_400_naming_path_and_recei
             )
         }
     }
+
+
+def test_a_pan_never_reaches_the_corrections_route(reviewer_client, receipt_id, task_id):
+    """The fourth place, and it did not exist until the corrections route did.
+
+    ``test_a_dotted_pan_is_masked_in_the_row_the_body_and_the_audit_copy`` reads
+    ``corrections.value_after`` straight out of the database. That was the only
+    way to reach it. This route serves the same column over HTTP, so the
+    masking now has a network egress it never had, and the guarantee has to be
+    asserted where a client actually sees it.
+
+    Takes the existing ``task_id`` fixture for its **side effect**, not its
+    value: it enqueues the seeded receipt and claims it for alice, which is what
+    entitles her to read the history. Without it this test would get a 403 and
+    assert nothing about redaction -- see Step 9, where that is exactly the
+    wrong-reason failure to watch for.
+
+    Goes red if ``_plan_change``'s ``after = redact_pan(after)`` is removed.
+    """
+    typed = "VISA 4111111111111111"
+    assert reviewer_client.patch(
+        f"/receipts/{receipt_id}", json={"payment": {"method": typed}}
+    ).status_code == 200
+
+    response = reviewer_client.get(f"/receipts/{receipt_id}/corrections")
+
+    assert response.status_code == 200
+    assert "4111111111111111" not in response.text
+    assert typed not in response.text
+    assert [row["value_after"] for row in response.json()["items"]] == ["VISA ************1111"]
