@@ -256,18 +256,29 @@ bypassing `_plan_change` would not be covered.
 the reason and the accepted cost (the order is no longer total).
 
 **The third page envelope earned its base:** `_PageResponse` in
-`review/schemas.py`, with all three named subclasses reparented and proven
+`review/schemas.py`, with the **two shipped** envelopes reparented onto it and
+`CorrectionListResponse` born on it — three named subclasses in all, proven
 wire-neutral two independent ways. That closes the deferred follow-up carried
 since the admin-UI-routes close.
 
 **How execution actually went, because it is the milestone's real output —
-ADR-0032 and review standard 24.** Nine fix rounds ran, and **not one of the
-defects they fixed was behaviour**: every gate passed at every point. All of
-them were sentences — a number or a universal nobody ran a command for.
-**Five of the nine were written *while fixing* one of the other four**, in four
-consecutive rounds of Task 4, and each was caught only because every round ends
-in a scoped re-review. The ledger numbers the last four explicitly
-(`grep -oE "INSTANCE [A-Z]+" progress.md`).
+ADR-0032 and review standard 24.** **Nine fix rounds** ran, and they fixed real
+work as well as prose: Task 1's changed the route's `ORDER BY` on a user ruling
+and added 80 lines of tests, Task 2's replaced a fixture that could not
+discriminate what it claimed to pin.
+
+Separately — and this is the part worth carrying — the milestone recorded **nine
+false-claim instances**, and every one was a sentence rather than a defect in
+behaviour: a number or a universal nobody ran a command for, with every gate
+green throughout. **Five of the nine instances were written *while fixing* one
+of the other four**, in four consecutive rounds of Task 4, and each was caught
+only because every round ends in a scoped re-review. The ledger numbers the last
+four explicitly (`grep -oE "INSTANCE [A-Z]+" progress.md`).
+
+**Two different nines, and they are not the same nine** — rounds and instances.
+An earlier version of this paragraph merged them into "nine rounds fixed nine
+defects, not one behaviour", which is false of the rounds. Corrected 2026-08-10
+by an audit that ran `git show 9f44864 -- src/receipts/review/queue.py`.
 
 What converged it was **deleting** the self-describing sentences rather than
 rewriting them, after rounds 1–3 each fixed one and produced another in the
@@ -303,14 +314,19 @@ Task 4's fix round follows `2909d57` and leaves the count at **1004** — it edi
 two test docstrings and no test logic. **Extend this list; do not re-derive the
 range from it**, because it is anchored at a SHA rather than at "the branch".
 
-**An earlier version of this line said "at each commit" and listed nine of the
-twelve then on the branch** — the three it dropped were two docs-only commits
-and `2df3be1`, a `feat` commit that moved the count from 988 to 989. Review
-standard 20: listing is claiming. Bare `python -m pytest`: **1004 passed**.
-Vitest untouched — no frontend file is in any task's file set.
+Review standard 20: listing is claiming. Bare `python -m pytest`: **1004
+passed**. Vitest untouched — no frontend file is in any task's file set.
 
-**SIX plan defects, every one the controller's**, all in the plan's dated defect
-log with the measurement beside each. The two worth carrying forward: the Task 1
+**Nine controller defects by the end of the milestone**, every one the
+controller's. **The plan's dated defect log records the first SIX** — it was
+written at Task 3's close and plans here do not self-amend — and **#7, #8 and #9
+were found afterwards** and live in the ledger only. Derive rather than quote:
+`grep -oE "(PLAN|DESIGN|CONTROLLER) DEFECT #[0-9]+" progress.md`. *(Two numbers
+for one milestone is not a contradiction but it reads as one: an earlier version
+of this file said "SIX" here and "Nine" twelve lines above, with nothing
+reconciling them. Corrected 2026-08-10.)*
+
+The two worth carrying forward: the Task 1
 **mutation was worthless** — deleting the scope predicate left all five
 plan-supplied tests green, because the discriminating case (a task belonging to a
 *different* reviewer) was in none of them, so the plan would have shipped a 403

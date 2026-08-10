@@ -16,16 +16,29 @@ The corrections-read-route milestone shipped one route, four tasks, and
 **nine fix rounds** — one on Task 1, one on Task 2, two on Task 3, five on
 Task 4 (`grep -cE "^Task [0-9]: fix round [0-9]/5 \(" progress.md` → 9).
 
-**Not one of the defects those rounds fixed was behaviour.** Every gate passed
-at every point. All nine were sentences: a number, or a universal, that nobody
-had run a command to check.
+Those rounds fixed real work as well as prose: Task 1's changed the route's
+`ORDER BY` on a user ruling and added 80 lines of tests; Task 2's replaced a
+fixture that could not discriminate what it claimed to pin. **Rounds are not the
+unit this ADR is about.**
 
-Their distribution is the finding. The ledger numbers the last four explicitly
+The unit is the **false-claim instance**, and the milestone recorded nine. Every
+one was a sentence — a number, or a universal, that nobody had run a command to
+check — and **none of the nine was a defect in behaviour**: every gate passed
+throughout. The ledger numbers the last four explicitly
 (`grep -oE "INSTANCE [A-Z]+" progress.md` → SIX, SEVEN, EIGHT, NINE); the first
-five were counted as they were found during Task 3. **Five of the nine were
-written *while fixing* one of the other four**, in four consecutive rounds of
-one task. The process built to catch false claims became the place they were
-produced.
+five were counted as they were found during Task 3.
+
+**Five of the nine instances were written *while fixing* one of the other
+four**, in four consecutive rounds of one task. The process built to catch false
+claims became the place they were produced.
+
+> **Corrected 2026-08-10, before this ADR was a day old.** This section first
+> read *"nine fix rounds fixed nine defects and not one was behaviour"* — which
+> conflates two different nines (rounds and instances) and is false of the
+> first. An audit ran `git show 9f44864 -- src/receipts/review/queue.py` and
+> found the `ORDER BY` change. **That is rule 5 below, committed by the document
+> that states it:** two counts matched, and a causal story got built on the
+> coincidence.
 
 ADR-0030 already says a finding is a claim. This ADR is about the *next* layer:
 the prose a fix wave writes about the fix, and the prose a document writes
@@ -142,8 +155,16 @@ one ships its own prose unreviewed, and the prose is where the defects are.
 - **The escalation worked, and the deletion is what converged it.** Round 5
   introduced no new claim — the first round of five that did not.
 - **Documentation-only is not low-risk on a branch whose deliverable is
-  documentation.** Nine of this branch's 18 commits are `docs:`
-  (`git log --oneline e2ec316..HEAD | grep -cE "docs:"` → 9).
+  documentation.** Most of this branch's commits are `docs:` — count them with
+  `git log --oneline e2ec316..feat/corrections-read-route | grep -cE "docs:"`
+  rather than reading a number here.
+
+  > **Corrected 2026-08-10.** This bullet first read *"Nine of this branch's 18
+  > commits are `docs:`"* with `e2ec316..HEAD` as its stated method. Both
+  > numbers were right when derived and **were falsified by the commit that
+  > carried them**, because `HEAD` is a moving ref — the exact defect §3 below
+  > forbids, committed in the ADR that forbids it. The count is now a command,
+  > and the command is anchored to the branch rather than to `HEAD`.
 - **Twelve minor findings were deferred rather than fixed**
   (`grep -cE "minor \(deferred\)" progress.md` → 12), under review standard 19's
   report-don't-fix. They are in the ledger with rulings, and the whole-branch

@@ -87,8 +87,11 @@ pushing `main`. See §0.
    **`.superpowers/` is gitignored — open ledgers by path; nothing in them is
    findable by searching the tracked tree.**
 3. **`docs/adr/README.md`, then the ADRs (0001–0032** — count the files rather
-   than trusting that range; it read `0001–0026` for five ADRs**).** Mandatory
-   before touching the matching area:
+   than trusting that range**).** *This* file's range has tracked each ADR as it
+   landed; it was **`docs/MEMORY.md`'s** copy that sat at `0001–0026` while four
+   more ADRs shipped, and it was corrected on 2026-08-10. Derived per-commit
+   with `git show <sha>:docs/NEXT_SESSION_PROMPT.md | grep -oE "0001.00[23][0-9]"`.
+   Mandatory before touching the matching area:
    - **0032** — *a document cannot certify itself, and a derived claim can rot
      inside its own commit.* **Read before writing a fix wave's prose, or any
      sentence about how well something was checked.** Five of nine false-claim
@@ -626,9 +629,13 @@ reason proves nothing), plus:
     the strongest. **State a query's anchor beside its number** — `^\s*--[a-z]`
     answers "how many *begin a line*".
 24. **A document cannot certify itself, and a derived claim can rot inside its
-    own commit.** ADR-0032. Nine fix rounds on the last branch fixed nine
-    defects and **not one was behaviour** — all were sentences, and **five were
-    written while fixing the other four**. Three rules: a sentence whose subject
+    own commit.** ADR-0032. The last branch recorded **nine false-claim
+    instances**, every one a sentence rather than a defect in behaviour, with
+    every gate green throughout — and **five of the nine were written while
+    fixing one of the other four**. *(Do not confuse that nine with the nine
+    fix **rounds**; those changed real behaviour and added real tests. Merging
+    the two nines was itself one of the corrected claims.)* Three rules: a
+    sentence whose subject
     is the document's own trustworthiness gets **deleted, not corrected**
     (rewriting it is the enumerated defence, and **headings are sentences**); a
     correctly-derived claim can be falsified by the very commit that carries it;
