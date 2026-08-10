@@ -38,6 +38,7 @@ Accepted; supersede it with a new ADR rather than editing history.
 | [0030](0030-a-finding-is-a-claim.md) | A finding is a claim, and a fix wave verifies before it fixes | Accepted |
 | [0031](0031-the-corrections-read-route.md) | The corrections read route: who may see a receipt's attribution | Accepted |
 | [0032](0032-a-document-cannot-certify-itself.md) | A document cannot certify itself, and a derived claim can rot inside its own commit | Accepted |
+| [0033](0033-the-handoff-pair-goes-last-and-alone.md) | The handoff pair goes last and alone, and a correction goes to every copy | Accepted |
 
 Read **0001** first: it is the invariant everything else defers to. **0007** is
 the one to read before touching anything that writes card data or money, and
@@ -74,6 +75,11 @@ consecutive rounds of one task. It gives the bounded property that closed it —
 a sentence stays only if its subject is the system and a reader can check it
 without trusting the author — and records how a correctly-derived claim rotted
 inside the commit that carried it.
+**0033** is the one to read before refreshing the handoff pair or fixing a
+sentence that appears more than once: the pair is committed **last and alone**
+(three repair commits in one session are why), a correction goes to **every**
+copy — `docs/MEMORY.md` states the current milestone twice by design — and a
+count anchored to the ledger is falsified by recording a finding about it there.
 
 Primary sources these build on: `RECEIPT_SYSTEM_SPEC.md` (build spec),
 `README.md` (§5 design decisions), `VLM_AND_DATA.md`, and the always-on
