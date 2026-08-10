@@ -41,8 +41,10 @@ git log --oneline @{u}..feat/corrections-read-route        # expect empty
 `main` and `origin/main` are both at the commit `docs/MEMORY.md`'s stamp names,
 and the review-UI styling milestone merged into it at `be6d7c0` on 2026-08-07,
 pushed with an explicit authorization **that push consumed**. **The next `main`
-push needs its own fresh ask** — and the corrections milestone is **not ready to
-ask**, because it has had no whole-branch review and no merge.
+push needs its own fresh ask** — and the corrections milestone **is now ready to
+ask**: its whole-branch review ran on 2026-08-10, all three fix rounds are
+closed and scope-re-reviewed, and the only step left before the ask is the
+fast-forward itself.
 
 **`feat/corrections-read-route` was pushed at the 2026-08-10 session close**
 under the standing `feat/*` authorisation (ADR-0021 decision 4), so the work no
@@ -745,14 +747,13 @@ points from outside the repository. §1.6 is the current example.
 ## Today's goal
 
 **Something IS in flight: `feat/corrections-read-route` — four tasks done, all
-five gates PASS at the tip, pushed, no whole-branch review, not merged.**
-**§0 is the work.** Finishing it is the default first move and the only item
-here with work already banked.
+five gates PASS at the tip, pushed, whole-branch review RUN and its fix rounds
+closed, NOT merged.** **§0 is the work, and §0 is now one step: the
+fast-forward.** It is the only item here with work already banked.
 
-`verify.py` was run at the tip `983f57c` at the last session's close, so unless
-the tree has moved you do not need to re-run it before the review — **but run
-the freshness commands in `docs/MEMORY.md`'s stamp first, and if either lists
-anything, re-run the gates before trusting any of this.**
+**Run the freshness commands in `docs/MEMORY.md`'s stamp before trusting any of
+this.** If either lists anything, the tree moved after this was written — re-run
+`python scripts/verify.py` and re-read §0 before acting.
 
 **Only then** pick from §2.2 onward, or answer the questions above and let that
 pick for you.

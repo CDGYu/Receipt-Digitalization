@@ -46,8 +46,9 @@ commits landed on top of that merge, so the merge SHA is not the tip.)*
   read "NO BRANCH IN FLIGHT" from the moment the branch was cut until Task 4
   edited it** — true when written on 2026-08-07 and rotted three days later,
   which is why the answer is the command and never the sentence. The milestone
-  is **NOT merged and has had no whole-branch review** — see "Corrections read
-  route" below.
+  is **reviewed and NOT merged**: the whole-branch review ran on 2026-08-10 and
+  its fix rounds are closed; the fast-forward has not been done. See "Corrections
+  read route" below.
 - **The review-UI styling milestone is COMPLETE AND MERGED** (2026-08-07, true
   fast-forward `1314485` → `be6d7c0`, single parent, 38 branch commits).
   `feat/review-ui-styling` is kept at its merge point and pushed.
@@ -179,11 +180,21 @@ Decision: **ADR-0031**. Ledger:
 
 **Status, stated first because the other sections in this file all say
 "merged".** Four tasks, strictly serial — **all four are complete, each with a
-task review and a scoped re-review**. Nine fix rounds ran in total: one on
-Task 1, one on Task 2, two on Task 3, five on Task 4 (the cap).
+task review and a scoped re-review**. Nine fix rounds ran **across the four
+tasks**: one on Task 1, one on Task 2, two on Task 3, five on Task 4 (the cap).
+**Three more ran at the close**, on the whole-branch review's findings, each
+scope-re-reviewed in turn.
 
-**What has NOT happened, and is the whole of what remains: no whole-branch
-review, no close fix wave, and no merge.** The branch **is** pushed —
+**The whole-branch review HAS run** (2026-08-10, strongest model): verdict
+**MERGE AFTER FIXES**, no Critical, every finding prose. It ran 17 mutations and
+killed 15 — the two survivors were one equivalent mutant and the known
+`GET /receipts` `has_more` gap on a different route — confirmed the PAN pin
+holds end-to-end and the scope fails closed, and triaged every deferred minor as
+*ships*. **Three fix rounds followed, each scope-re-reviewed, the last returning
+"no sixteenth false claim" and a verdict of MERGE.**
+
+**What has NOT happened: the merge.** `main` is untouched and the branch is a
+true fast-forward away from it. The branch **is** pushed —
 `git branch --no-merged main` names it, and `git ls-remote --heads origin
 feat/corrections-read-route` returns a SHA. `main` has not moved: `e2ec316` is
 `main`, `origin/main` and the branch point alike.
