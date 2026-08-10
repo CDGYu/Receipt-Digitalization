@@ -14,19 +14,39 @@ injected session, no flush, no commit, no `ValueError`), ADR-0012 (identity and
 roles), ADR-0028 (every claim below was derived at the moment it was written,
 with the method beside it).
 
-Every enumeration and number in this record was re-derived on 2026-08-10 against
-`feat/corrections-read-route @ 20d9bb9`, and the query is named beside it.
-Re-run them rather than quoting them.
+The enumerations and numbers in this record were derived on 2026-08-10 against
+`feat/corrections-read-route @ 20d9bb9` — the branch's last commit to touch
+`src/`, which has not moved since — and each names the query that produced it.
+**Re-run them rather than quoting them**, and note that this sentence used to
+read *"every enumeration and number in this record was re-derived"*: a universal
+about the document's own rigour, which review then falsified twice, in the two
+places that had in fact been copied rather than run. Both are corrected in place
+below, each with the copy it came from named. **A document cannot certify itself;
+the queries are here so you can.**
 
 ## Context
 
 `corrections` has been written since Phase 3 and read by nothing since.
 Measured at the branch point: `git grep -nE 'select\(\s*Correction' e2ec316 --
 src` returns **no matches**, and `git grep -noE '\bCorrection\b' e2ec316 -- src`
-(minus `CorrectionPatch`) returns six mentions — two re-exports in
-`persist/__init__.py`, the class in `persist/models.py`, and three in
-`persist/repository.py` (the import, the `session.add_all` construction inside
-`apply_corrections`, and its `__all__` entry). None of the six is a read. At
+(minus `CorrectionPatch`) returns six mentions. **None of the six is a read**,
+and one of them is not about this table at all:
+
+| where | what it is |
+|---|---|
+| `persist/__init__.py` | the re-export import |
+| `persist/__init__.py` | its `__all__` entry |
+| `persist/models.py` | the class definition |
+| `persist/repository.py` | the import |
+| `persist/repository.py` | **a false positive** — the comment *"Recorded in ADR-0020's Correction (2026-08-02)"*, where "Correction" means a dated correction to an ADR |
+| `persist/repository.py` | the `Correction(...)` construction inside `apply_corrections`' `add_all` |
+
+The design spec's §1.1 breaks the same six down as *"the import, the
+`session.add_all` construction inside `apply_corrections`, and its `__all__`
+entry"*. **The count is right and that third item is wrong**: `repository.py`'s
+`__all__` does not contain `Correction` — checked directly, it holds
+`apply_corrections`, which `\bCorrection\b` does not match. The spec carries a
+dated note. At
 `HEAD` the same first query returns exactly one hit, `select(Correction)` in
 `review/queue.py`.
 
@@ -317,15 +337,18 @@ sufficient for this scope.
 - **`corrections.value_after` is now HTTP-readable.** See decision 6. Any future
   writer of that column inherits an egress it did not have before.
 - **`RECEIPT_SYSTEM_SPEC.md` §14.9's route inventory is OUTSTANDING, not
-  updated.** Verified 2026-08-10: `grep -n "corrections" RECEIPT_SYSTEM_SPEC.md`
-  returns nine hits and none of them is a route entry — §14.9's table carries
-  `PATCH /receipts/{id} -> apply corrections` and no
-  `GET /receipts/{id}/corrections`. **This ADR does not do it and does not
-  claim to.** It is deliberately deferred rather than folded in: the same
-  header also heads three routes that live in `auth.py`, which
-  `docs/MEMORY.md` already records as wrong, and the design's follow-up puts
-  both in remit together *"if that line is edited"*. Whoever takes that edit
-  takes both. No prose count is written to replace the row — ADR-0015's and
+  updated.** Verified 2026-08-10 by reading the table under §14.9's
+  `# api.py  (FastAPI routes)` header: **it has no
+  `GET /receipts/{id}/corrections` row.** The only line in it mentioning
+  corrections is `PATCH /receipts/{id} -> apply corrections`, which is the
+  *write* route and was already there. **This ADR does not add the row and does
+  not claim to.** It is deliberately deferred rather than folded in: that same
+  header also heads `POST /auth/login`, `GET /auth/me` and `POST /auth/logout`,
+  all three of which live in `auth.py`'s `build_auth_router()` rather than in
+  `api.py` — `docs/MEMORY.md` already records that as wrong — and the design's
+  follow-up puts both in remit together *"if that line is edited"*. Whoever
+  takes that edit takes both. No prose count is written to replace the row —
+  ADR-0015's and
   ADR-0016's dated notes (2026-08-04) already generalised that the route list
   in the source is the durable reference, not a number in prose.
 - **No frontend.** Nothing under `frontend/` was touched and Vitest did not

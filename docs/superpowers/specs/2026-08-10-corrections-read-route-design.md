@@ -28,6 +28,22 @@ Six mentions under `src/`, none of them a read: two re-exports in
 `apply_corrections`, and its `__all__` entry). The `corrections` table has been
 written since Phase 3 and read by nothing since.
 
+> **Dated note (2026-08-10, Task 4's second fix round) — the count above is
+> right; the third `repository.py` item is wrong.** `repository.py`'s `__all__`
+> does **not** contain `Correction`. Checked directly at `e2ec316`: that list
+> holds `apply_corrections`, and `\bCorrection\b` does not match it. The third
+> hit in that file is the comment *"Recorded in ADR-0020's Correction
+> (2026-08-02); narrowing the cap to the …"*, where "Correction" means **a dated
+> correction to an ADR** — a false positive of the grep, and about the PAN
+> separator cap rather than about this table at all.
+>
+> The `__all__` entry that does exist is `persist/__init__.py`'s, which is the
+> second of the "two re-exports" above; that half is correct. **Both load-bearing
+> claims survive** — there are six mentions, and none of them is a read. Only the
+> breakdown was wrong, and it was wrong because a grep's hits were characterised
+> from the symbol name rather than from the lines. ADR-0031's Context carries the
+> corrected six-row table.
+
 Two consequences, both stated in `docs/NEXT_SESSION_PROMPT.md` §2.1: a reviewer
 cannot see the correction history of the receipt they are correcting, and an
 auditor needs database access. This milestone closes the first and narrows the

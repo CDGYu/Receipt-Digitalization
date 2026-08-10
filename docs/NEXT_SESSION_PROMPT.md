@@ -279,9 +279,11 @@ branch.
 
    **Two things this milestone deliberately did not do**, both recorded rather
    than forgotten: `RECEIPT_SYSTEM_SPEC.md` §14.9's route inventory has **no**
-   entry for the new route (verified — the table carries only
-   `PATCH /receipts/{id} -> apply corrections`), and the same header wrongly
-   heads three routes that live in `auth.py`; the design puts both in remit
+   `GET /receipts/{id}/corrections` row (verified by reading the table — its
+   only corrections-mentioning line is `PATCH /receipts/{id} -> apply
+   corrections`, the write route, already there), and the same
+   `# api.py  (FastAPI routes)` header also heads `/auth/login`, `/auth/me` and
+   `/auth/logout`, which live in `auth.py`; the design puts both in remit
    together whenever that line is next edited. And the offset defect below.
 
 2. **An ASGI entry point / deployment story.** `create_app` is a factory nothing

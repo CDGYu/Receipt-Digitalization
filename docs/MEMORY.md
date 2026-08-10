@@ -179,12 +179,14 @@ has run, no fix wave, no merge, and the branch is UNPUSHED** —
 `main`, `origin/main` and the branch point alike.
 
 **Deliberately NOT done, so it is not mistaken for an oversight:**
-`RECEIPT_SYSTEM_SPEC.md` §14.9's route inventory has **no** entry for
-`GET /receipts/{receipt_id}/corrections` — verified, its table carries only
-`PATCH /receipts/{id} -> apply corrections`. That same `# api.py (FastAPI
-routes)` header also wrongly heads three routes living in `auth.py`, already
-recorded below; the design puts both in remit together whenever that line is
-next edited.
+`RECEIPT_SYSTEM_SPEC.md` §14.9's route inventory has **no**
+`GET /receipts/{receipt_id}/corrections` row — verified by reading the table.
+Its only corrections-mentioning line is `PATCH /receipts/{id} -> apply
+corrections`, the *write* route, which was already there. That same
+`# api.py  (FastAPI routes)` header also heads `POST /auth/login`,
+`GET /auth/me` and `POST /auth/logout`, all three of which live in `auth.py`,
+already recorded below; the design puts both in remit together whenever that
+line is next edited.
 
 **What shipped — Phase 5 follow-up #1, the one that was blocked on a ruling.**
 `GET /receipts/{receipt_id}/corrections` returns one receipt's correction
