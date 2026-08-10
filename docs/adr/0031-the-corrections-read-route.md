@@ -114,7 +114,9 @@ disclosure decision 4 says this scope exists to prevent.
 raises the cost of reaching an unclaimed receipt's attribution; it does not
 deny it. `GET /review/next` converts an `OPEN` task into one assigned to the
 caller (`next_task` sets `task.assigned_to = assignee`), and `close_task` never
-clears it (ADR-0025), so the access is **permanent** once taken. Measured
+clears it (ADR-0025), so the access **survives completion** — it ends only if
+one of decision 3's two clearing paths runs, which nothing the reviewer controls
+will trigger. Measured
 2026-08-10 at the whole-branch review, on three queued receipts whose
 corrections were attributed to another reviewer: a reviewer holding nothing got
 `403 / 403 / 403`; after looping `GET /review/next` → read → `POST

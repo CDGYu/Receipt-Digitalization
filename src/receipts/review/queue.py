@@ -510,7 +510,12 @@ def list_corrections(
     Scope deliberately **excludes** the ``state == OPEN`` half of
     :func:`list_tasks`' reviewer scope. That half exists to show a reviewer the
     backlog they may claim; correction history is not backlog, and including it
-    would disclose every unclaimed receipt's attribution to every reviewer.
+    would put every unclaimed receipt's attribution one request away for every
+    reviewer. **That raises the cost rather than denying the access**, and
+    ADR-0031 decision 2 states the limit: :func:`next_task` assigns an ``OPEN``
+    task to whoever asks, and :func:`close_task` never clears the name, so a
+    reviewer who claims a receipt keeps its history until something else clears
+    ``assigned_to``.
 
     Ordered ``created_at`` then ``field_path``. Ties are the normal case here,
     not the edge case: :func:`~receipts.persist.repository.apply_corrections`

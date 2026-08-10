@@ -81,8 +81,8 @@ pushing `main`. See §0.
 2. **The ledgers** — `.superpowers/sdd/*/progress.md`, one per milestone.
    **`.superpowers/sdd/2026-08-10-corrections-read-route/progress.md` is the one
    that matters now**: it holds the nine fix rounds, the nine controller
-   defects, every ruling, **the thirteen deferred minor findings and the
-   whole-branch review's triage of them** (all thirteen: ships). The review-UI
+   defects, every ruling, **the deferred minor findings and the whole-branch
+   review's triage of them** (every one: ships). The review-UI
    styling one records twenty-five plan defects and "THE CLOSE".
    **`.superpowers/` is gitignored — open ledgers by path; nothing in them is
    findable by searching the tracked tree.**
@@ -175,22 +175,21 @@ what remains is:
    2026-08-07 one was consumed. Pushing `feat/*` is standing-authorised and
    this branch is already pushed; keep it that way as the close adds commits.
 
-### 0.1 The thirteen deferred minors — ALL TRIAGED AS *SHIPS*
+### 0.1 The deferred minors — ALL TRIAGED AS *SHIPS*
 
 Recorded under review standard 19's report-don't-fix, with rulings, in the
-ledger (`grep -cE "minor \(deferred" progress.md` → 13 — **without** the closing
-`\)`, which drops one). **The whole-branch review triaged every one as *ships*;
-none blocks the merge.** Two were already resolved before it ran. Kept here
-because they are real and someone should still know them:
+ledger. **The whole-branch review triaged every one as *ships*; none blocks the
+merge.** **No count is given here** — two anchors were tried and both were
+wrong, the second because the ledger's record of that very finding quotes the
+phrase it searched for. Read the ledger's list.
+
+Some were resolved before or during the review; those below are the ones still
+open, and they are real:
 
 - **The `offset` 500 — the only one that is a live defect.** See §7 and
   "Blocked on me": it is pre-existing on three routes and needs **your** call,
   not the reviewer's.
-- **`"exactly one task row"` in `queue.py` and ADR-0031 decision 3 disagrees
-  with `api.py`'s `"at most one"`, three lines apart.** `unique=True` permits
-  zero, and zero is the case the route 403s, so "at most one" is the correct
-  one. Pre-existing wording, found at the last re-review.
-- The **inverse** null/empty direction (`""` → `None`) is unpinned in
+- The **inverse** null/empty direction is unpinned in
   `correction_summary` — a different shape from the closed class; belongs with
   the column's write-time contract.
 - `created_at` is exercised only with `UTC` tzinfo.

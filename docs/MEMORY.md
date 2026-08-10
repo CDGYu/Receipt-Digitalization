@@ -272,8 +272,11 @@ false-claim instances**, and every one was a sentence rather than a defect in
 behaviour: a number or a universal nobody ran a command for, with every gate
 green throughout. **Five of the nine instances were written *while fixing* one
 of the other four**, in four consecutive rounds of Task 4, and each was caught
-only because every round ends in a scoped re-review. The ledger numbers the last
-four explicitly (`grep -oE "INSTANCE [A-Z]+" progress.md`).
+only because every round ends in a scoped re-review. **More were found after
+execution**, at the session close and by the whole-branch review. The ledger
+numbers them from SIX onward — `grep -oE "INSTANCES? [A-Z]+" progress.md`, and
+**the plural is load-bearing**: the singular form drops the entry that reads
+`INSTANCES TEN THROUGH THIRTEEN`.
 
 **Two different nines, and they are not the same nine** — rounds and instances.
 An earlier version of this paragraph merged them into "nine rounds fixed nine
@@ -295,10 +298,16 @@ proved nothing because all five of its own tests shared a fixture that could not
 discriminate the predicate; and **#7**, a verification grep anchored to
 `src/*.py` that reported "all three files fixed" while two more sat in `tests/`.
 
-**Thirteen minor findings were deferred, not fixed** (`grep -cE "minor \(deferred"
-progress.md`), under review standard 19's report-don't-fix. **The whole-branch
-review triaged all thirteen as SHIP** — none blocks the merge. Its rulings are
-in the ledger under "WHOLE-BRANCH REVIEW".
+**Minor findings were deferred, not fixed**, under review standard 19's
+report-don't-fix, and **the whole-branch review triaged every one as SHIP** —
+none blocks the merge. Its rulings are in the ledger under "WHOLE-BRANCH
+REVIEW".
+
+**No count is written here, and that is the point.** Two anchors were tried and
+both were wrong: `minor \(deferred\)` drops the entry written `minor (deferred,
+found by …)`, and `minor \(deferred` then matches the ledger's own record of
+that finding. **A count anchored to a document that records findings about the
+count is falsified by the act of recording one.** Read the ledger's list.
 
 **Counts, measured 2026-08-10 by `pytest --collect-only` at every commit from
 the base through `2909d57`** — thirteen SHAs, enumerated from
@@ -923,10 +932,14 @@ API path moves.
   `IN_PROGRESS`-only was rejected (ADR-0025 leaves `assigned_to` set on a
   `DONE` task, so narrowing would cost a reviewer the history of what they just
   did) and mirroring `list_tasks`' `OPEN`-inclusive scope was rejected (that
-  half exists to show claimable backlog, and including it would disclose every
-  unclaimed receipt's attribution to every reviewer). Out of scope is **403**,
-  not 404 and not an empty 200. **The limit is real and stated:**
-  `review_tasks.receipt_id` is UNIQUE, so a receipt has one task row, and both
+  half exists to show claimable backlog, and including it would put every
+  unclaimed receipt's attribution one request away for every reviewer —
+  **though excluding it raises the cost rather than denying the access**, since
+  `GET /review/next` assigns the task to the caller and `close_task` never
+  clears the name; ADR-0031 decision 2 states that limit). Out of scope is
+  **403**, not 404 and not an empty 200. **The limit is real and stated:**
+  `review_tasks.receipt_id` is UNIQUE, so a receipt has **at most one** task
+  row — UNIQUE permits zero, which is the 403 case — and both
   `release_task` and `enqueue_review`'s reopen branch **clear** `assigned_to` —
   a reviewer whose task was released or reopened loses access to corrections
   they made themselves.

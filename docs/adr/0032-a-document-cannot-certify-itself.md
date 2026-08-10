@@ -179,11 +179,15 @@ one ships its own prose unreviewed, and the prose is where the defects are.
   > and the command is anchored to the branch rather than to `HEAD`.
 - **Minor findings were deferred rather than fixed**, under review standard 19's
   report-don't-fix. They are in the ledger with rulings, and the whole-branch
-  review is where they get triaged. Count them with
-  `grep -cE "minor \(deferred" progress.md` — **without** a closing `\)`, which
-  drops the entry written as `minor (deferred, found by …)` and returns 12
-  instead of 13. This ADR shipped the narrower anchor, and the review brief
-  built on it inherited the same undercount.
+  review is where they get triaged, and it triaged every one as *ships*.
+
+  **No count is given, after two anchors were tried and both were wrong.**
+  `minor \(deferred\)` drops the entry written `minor (deferred, found by …)`;
+  dropping the `\)` to fix that then matches the ledger's *own record of that
+  finding*, which quotes the phrase. **A count anchored to a document that
+  records findings about the count is falsified by the act of recording one** —
+  measured here, where the second anchor was already wrong at the moment it was
+  written. Read the ledger's list rather than counting it.
 - **This ADR is subject to its own rules.** Its counts are closed to
   `feat/corrections-read-route` at 2026-08-10 with their queries named. It makes
   no claim about how carefully it was checked, and it should not acquire one.
