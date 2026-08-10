@@ -1359,3 +1359,83 @@ def test_list_corrections_orders_oldest_first(engine: sa.Engine):
         rows = list_corrections(session, receipt.id)
 
         assert [row.field_path for row in rows] == ["first", "second"]
+
+
+def test_list_corrections_returns_only_the_receipt_asked_for(engine: sa.Engine):
+    """The pin on ``.where(Correction.receipt_id == receipt_id)``.
+
+    Every other test in this group puts corrections on one receipt only, so
+    deleting that predicate leaves all of them green while the function hands
+    each permitted caller **every** receipt's history -- the same cross-receipt
+    disclosure the ``assigned_to`` scope exists to prevent, one line lower down.
+    Two receipts, each carrying a correction, is the smallest case that sees it.
+    """
+    with Session(engine) as session:
+        asked_for = _receipt(session)
+        other = _receipt(session)
+        _correction(session, asked_for.id, "receipt.total", before="900", after="1000")
+        _correction(session, other.id, "merchant.name", before="Acme", after="Acme Ltd")
+        session.commit()
+
+        rows = list_corrections(session, asked_for.id)
+
+        assert rows is not None
+        field_paths = [row.field_path for row in rows]
+        assert field_paths == ["receipt.total"]
+        assert "merchant.name" not in field_paths
+
+
+def test_list_corrections_breaks_a_created_at_tie_by_field_path(engine: sa.Engine):
+    """One patch, one ``created_at``, one stable order -- the 2026-08-10 ruling.
+
+    ``apply_corrections`` writes a whole patch in a single ``add_all``, so every
+    row of it shares a timestamp: ties are the normal case here, not an edge
+    one. ``field_path`` is what orders them, and it reproduces that function's
+    own write order, ``sorted(flatten(patch).items())``. Ordering by ``id``
+    instead would arrange them differently on every write -- ``id`` is a
+    ``uuid4`` and carries neither time nor write order -- which is an order no
+    test could honestly pin. Inserted deliberately out of order below, so a
+    passing assertion means the query sorted rather than that it got lucky.
+    """
+    shared = datetime(2026, 7, 3, 9, 0, 0, tzinfo=UTC)
+    with Session(engine) as session:
+        receipt = _receipt(session)
+        for field_path in ("totals.total", "merchant.name", "totals.subtotal"):
+            _correction(session, receipt.id, field_path, before=None, after="x", at=shared)
+        session.commit()
+
+        rows = list_corrections(session, receipt.id)
+
+        assert rows is not None
+        assert [row.field_path for row in rows] == [
+            "merchant.name",
+            "totals.subtotal",
+            "totals.total",
+        ]
+
+
+def test_list_corrections_paginates_with_limit_and_offset(engine: sa.Engine):
+    """Both pagination arguments, exercised at non-default values.
+
+    Task 3 builds a paginated route straight on top of these and passes them
+    through untouched. With no test supplying either, dropping
+    ``.limit(limit).offset(offset)`` from the query left every other test in
+    this file green.
+    """
+    shared = datetime(2026, 7, 3, 9, 0, 0, tzinfo=UTC)
+    with Session(engine) as session:
+        receipt = _receipt(session)
+        for field_path in ("a", "b", "c", "d"):
+            _correction(session, receipt.id, field_path, before=None, after="x", at=shared)
+        session.commit()
+
+        def paths(**kwargs) -> list[str]:
+            rows = list_corrections(session, receipt.id, **kwargs)
+            assert rows is not None
+            return [row.field_path for row in rows]
+
+        assert paths() == ["a", "b", "c", "d"]
+        assert paths(limit=2) == ["a", "b"]
+        assert paths(limit=2, offset=2) == ["c", "d"]
+        assert paths(offset=1) == ["b", "c", "d"]
+        assert paths(limit=10, offset=4) == []

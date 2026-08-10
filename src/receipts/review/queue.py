@@ -479,11 +479,24 @@ def list_corrections(
 
     ``visible_to=None`` is unrestricted -- the admin case, spelled explicitly at
     the call site rather than as a bare boolean, exactly as :func:`list_tasks`
-    spells it. A username scopes to receipts that caller **holds or has held**:
-    any ``review_tasks`` row assigned to them, in any state. ``close_task``
-    leaves ``assigned_to`` set on a ``DONE`` task (ADR-0025), which is what makes
-    "has held" expressible at all, and what lets a reviewer see the corrections
-    they themselves just made.
+    spells it. A username scopes to receipts whose review task **currently names
+    that caller**: a ``review_tasks`` row with ``assigned_to == visible_to``, in
+    any state. ``close_task`` leaves ``assigned_to`` set on a ``DONE`` task
+    (ADR-0025), which is what lets a reviewer still read the corrections they
+    themselves just made.
+
+    **That is narrower than "holds or has ever held", and the gap is real rather
+    than pedantic.** ``review_tasks.receipt_id`` is UNIQUE, so a receipt has
+    exactly one task row -- there is no record of prior holders to consult, and
+    "has ever held" is not a question this schema can answer. Two paths clear
+    ``assigned_to`` on that single row, and each one silently revokes a
+    reviewer's access to corrections they made themselves:
+    :func:`release_task`, which returns a claimed task to the queue, and
+    :func:`enqueue_review`'s reopen branch, which clears the name as a ``DONE``
+    task becomes ``OPEN`` again. A reviewer whose task was released or reopened
+    is refused exactly as a stranger is. Widening the scope to match the wider
+    phrase would need history this schema does not keep, so the phrase is what
+    gives way here, not the code.
 
     **Two different negatives, deliberately not merged.** ``None`` means the
     caller may not read this receipt's history; ``[]`` means they may and there
@@ -498,10 +511,18 @@ def list_corrections(
     backlog they may claim; correction history is not backlog, and including it
     would disclose every unclaimed receipt's attribution to every reviewer.
 
-    Ordered ``created_at`` then ``id``. ``id`` is a UUID and carries no time, so
-    it is a tiebreaker only -- but a necessary one: one ``apply_corrections``
-    call writes every row of a patch in a single flush, so ties are the normal
-    case.
+    Ordered ``created_at`` then ``field_path``. Ties are the normal case here,
+    not the edge case: :func:`~receipts.persist.repository.apply_corrections`
+    writes every row of a patch in one ``add_all``, so a whole patch shares a
+    single ``created_at``. ``field_path`` breaks those ties **in the order the
+    rows were planned** -- that function iterates
+    ``sorted(flatten(patch).items())`` -- so what a reader sees reproduces the
+    write order and is identical on every read.
+
+    ``id`` was the obvious tiebreaker and is the wrong one. It is a ``uuid4``,
+    carrying neither a time nor a write order, so within a single patch it would
+    arrange the rows differently on every write -- an order no test could
+    honestly pin, because there would be nothing stable to assert about it.
 
     A pure read: no flush, no commit, no ``ValueError``. The route validates
     ``limit`` and ``offset`` before this is reached.
@@ -519,7 +540,7 @@ def list_corrections(
     query = (
         select(Correction)
         .where(Correction.receipt_id == receipt_id)
-        .order_by(Correction.created_at, Correction.id)
+        .order_by(Correction.created_at, Correction.field_path)
     )
     return list(session.scalars(query.limit(limit).offset(offset)))
 
