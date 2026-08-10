@@ -6,49 +6,46 @@ continuity protocol itself — what lives where, and why this snapshot must be
 verified rather than trusted — is **ADR-0019**, extended by **ADR-0021** (whose
 2026-08-02 dated correction widened the freshness check after a docs-only task
 proved invisible to it).
-Last updated: **2026-08-10, MID-MILESTONE (ADR-0021)**, at the end of the
-session that built the corrections read route. **Both positions, because
-mid-branch there are two** and ADR-0021 decision 2 requires both:
-**`main @ e2ec316`** (= `origin/main`, = the branch point) and
-**`feat/corrections-read-route @ 69429aa`, PUSHED** — `git ls-remote --heads
-origin feat/corrections-read-route` confirmed it. A stamp cannot name the commit
-that writes it, so the test is a command, not a commit and not a count:
+Last updated: **2026-08-10**, at the close of the session that built **and
+merged** the corrections read route. **One position again, because nothing is in
+flight: `main @ 7b08941`, UNPUSHED.** A stamp cannot name the commit that writes
+it, so the test is a command, not a commit and not a count:
 
 ```
-git log --oneline 69429aa..feat/corrections-read-route -- src tests frontend docs ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
-git log --oneline e2ec316..main -- src tests frontend docs ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
-git log --oneline @{u}..feat/corrections-read-route          # unpushed commits, if any
+git log --oneline 7b08941..main -- src tests frontend docs ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
+git rev-parse main refs/remotes/origin/main    # EXPECTED TO DIFFER: main is unpushed
 ```
 
-**Both empty means current.** Anything in either list means the tree moved after
-this was written and you are reading something stale.
+**Empty means current.** Anything listed means the tree moved after this was
+written and you are reading something stale.
 
-**No characterisation of `983f57c` is written here on purpose** — an earlier
-version of this stamp called its SHA "the last *code* commit", and the next
-commit falsified that by editing a docstring under `src/`. That is **ADR-0032
-§2**: a claim can be derived correctly and rot inside the commit that carries
-it. The SHA plus the command cannot rot; a sentence about what the SHA *is*
-can.
+**No characterisation of `7b08941` is written here on purpose** — an earlier
+stamp called its SHA "the last *code* commit", and the next commit falsified
+that by editing a docstring under `src/`. **ADR-0032 §2**: a claim can be
+derived correctly and rot inside the commit that carries it. The SHA plus the
+command cannot rot; a sentence about what the SHA *is* can.
 
-ADR-0021's 2026-08-02 correction records that a commit touching `docs/` *beside*
-the handoff pair is deliberately visible to this check; only a commit touching
-the pair **alone** is invisible.
+**This refresh touches the pair and nothing else — ADR-0033 §1.** The freshness
+check excludes exactly these two files and watches `docs` otherwise, so a commit
+bundling them with an ADR or an index row lists itself as stale. That happened
+three times in the session that wrote ADR-0033. Everything substantive was
+committed first; `7b08941` is the last of it.
 
 *(The previous stamp was 2026-08-07 at `main @ be6d7c0`, the
-`feat/review-ui-styling` merge tip. `main` is `e2ec316` now — two continuity
-commits landed on top of that merge, so the merge SHA is not the tip.)*
+`feat/review-ui-styling` merge tip.)*
 
 ## Snapshot
 
-- **ONE BRANCH IN FLIGHT: `feat/corrections-read-route` (since 2026-08-10).**
-  `git branch --no-merged main` names it and nothing else, verified 2026-08-10;
-  `main`, `origin/main` and the branch point are all `e2ec316`. **This bullet
-  read "NO BRANCH IN FLIGHT" from the moment the branch was cut until Task 4
-  edited it** — true when written on 2026-08-07 and rotted three days later,
-  which is why the answer is the command and never the sentence. The milestone
-  is **reviewed and NOT merged**: the whole-branch review ran on 2026-08-10 and
-  its fix rounds are closed; the fast-forward has not been done. See "Corrections
-  read route" below.
+- **NO BRANCH IN FLIGHT. `git branch --no-merged main` must name nothing** —
+  run it rather than believing this bullet, which **read "NO BRANCH IN FLIGHT"
+  for three days while one existed**: true when written on 2026-08-07, rotted
+  the moment the corrections branch was cut, and corrected only when Task 4
+  edited the file. **The answer is the command, never the sentence.**
+- **`main` is AHEAD of `origin/main` and needs a push authorization.** The
+  corrections read route merged by true fast-forward on 2026-08-10; the
+  2026-08-07 authorization was consumed by that day's push. `git rev-parse main
+  refs/remotes/origin/main` will differ until the next ask is granted. See
+  "Corrections read route" below.
 - **The review-UI styling milestone is COMPLETE AND MERGED** (2026-08-07, true
   fast-forward `1314485` → `be6d7c0`, single parent, 38 branch commits).
   `feat/review-ui-styling` is kept at its merge point and pushed.
@@ -170,7 +167,7 @@ commits landed on top of that merge, so the merge SHA is not the tip.)*
 - **The repo is PUBLIC.** Verified 2026-07-31 via the GitHub API. See
   "Environment / provider" for what that exposes.
 
-## Corrections read route — IN FLIGHT, NOT MERGED (2026-08-10)
+## Corrections read route — COMPLETE AND MERGED (2026-08-10)
 
 Design + plan: `docs/superpowers/{specs,plans}/2026-08-10-corrections-read-route*`
 (the design carries a **2026-08-10 dated note**; the plan carries a **dated
@@ -185,7 +182,7 @@ tasks**: one on Task 1, one on Task 2, two on Task 3, five on Task 4 (the cap).
 **Three more ran at the close**, on the whole-branch review's findings, each
 scope-re-reviewed in turn.
 
-**The whole-branch review HAS run** (2026-08-10, strongest model): verdict
+**The whole-branch review ran** (2026-08-10, strongest model): verdict
 **MERGE AFTER FIXES**, no Critical, every finding prose. It ran 17 mutations and
 killed 15 — the two survivors were one equivalent mutant and the known
 `GET /receipts` `has_more` gap on a different route — confirmed the PAN pin
@@ -193,10 +190,17 @@ holds end-to-end and the scope fails closed, and triaged every deferred minor as
 *ships*. **Three fix rounds followed, each scope-re-reviewed, the last returning
 "no sixteenth false claim" and a verdict of MERGE.**
 
-**What has NOT happened: the merge.** `main` is untouched and the branch is a
-true fast-forward away from it. The branch **is** pushed —
-`git branch --no-merged main` names it, and `git ls-remote --heads origin
-feat/corrections-read-route` returns a SHA. `main` has not moved: `e2ec316` is
+**MERGED by true fast-forward, single parent, zero merge commits**, after a
+pre-merge check that re-derived each task's deliverable from the built app
+rather than from the ledger: `list_corrections` exported with the right
+signature, the three envelopes all on `_PageResponse`, **the route present in a
+recursed 17-route walk**, both ADRs and their index rows in place, and the
+outside-repo import check green from `C:\Users` (`src/` changed on this branch,
+so ADR-0021's rule applied).
+
+**`main` is NOT pushed.** The merge moved `main` past `origin/main`, and the
+2026-08-07 push authorization was consumed by that push. **The next one needs
+its own fresh ask.** `main` has not moved: `e2ec316` is
 `main`, `origin/main` and the branch point alike.
 
 **Gates at the branch tip `983f57c`, controller-run 2026-08-10:
@@ -1617,6 +1621,29 @@ measured.**
       Where a stamp is genuinely needed, hand over **the command, not the
       answer** — which is what ADR-0019 already does for this file's own stamp.
 
+25. **The handoff pair goes last and alone, and a correction goes to every
+    copy.** ADR-0033, earned at the corrections-read-route close, where three
+    defects landed in the continuity documents *after* the branch's own work was
+    finished and reviewed.
+
+    * **Commit `docs/MEMORY.md` and `docs/NEXT_SESSION_PROMPT.md` last, in a
+      commit that touches nothing else.** The freshness check excludes exactly
+      those two paths and watches `docs` otherwise, so a commit carrying the
+      pair **plus** any other `docs/` change lists itself in its own check and
+      tells the next session the pair is stale. **Three repair commits in one
+      session.** The one refresh that touched only the pair needed none.
+    * **Find every copy before fixing one.** `docs/MEMORY.md` states the current
+      milestone **twice** by design — the snapshot and the decisions list, often
+      ~700 lines apart — and a claim usually has a third home in the handoff and
+      a fourth in a docstring. **Search for the claim, not the phrasing:** the
+      copy that survives is the one worded differently. The **review standards
+      list is the highest-risk copy**, because the reading order sends every
+      session here.
+    * **A count anchored to the ledger falsifies itself**, because the ledger
+      records the findings about the counts it sources. Point at the list.
+    * **A decision that states a boundary names what enforces it** — or says
+      plainly that it is friction. ADR-0031 decision 2 is the worked example.
+
 And: **a green suite is not evidence that installed software works.** Anything
 with an entry point gets run from outside the repository.
 
@@ -1628,8 +1655,8 @@ with an entry point gets run from outside the repository.
 - `docs/NEXT_SESSION_PROMPT.md` — the ordered task list and reading order.
 - `IMPLEMENTATION_PLAN.md` · `README.md` (§5 design decisions) · `VLM_AND_DATA.md`
 - **`docs/KNOWN_ISSUES.md`** — ISSUE-001 with its diagnosis and resume steps.
-- **`docs/adr/` — 0001–0032** (re-derived 2026-08-10 at the session close:
-  `ls docs/adr/*.md` minus `README.md` counts **32**, and the four-digit
+- **`docs/adr/` — 0001–0033** (re-derived at the merge:
+  `ls docs/adr/*.md` minus `README.md` counts **33**, and the four-digit
   prefixes are contiguous from
   0001); see `docs/adr/README.md`. **This range read `0001–0026` until
   2026-08-10** — it was written at ADR-0026 and never touched again while 0027,

@@ -20,54 +20,53 @@ it to "fix" a correct sentence in an Accepted ADR to match a wrong measurement.
 
 ---
 
-# ONE BRANCH IN FLIGHT: `feat/corrections-read-route`. PUSHED, NOT merged, NOT reviewed.
+# NO BRANCH IN FLIGHT. `main` is MERGED and UNPUSHED — that is the one loose end.
 
-**This header said "NO BRANCH IN FLIGHT" for three days while that branch
-existed** — true when written on 2026-08-07 and rotted on 2026-08-10, which is
-the failure mode the paragraphs above describe, happening again. **Do not quote
-a hash or a count from this file; run it** (ADR-0028 §1):
+**This header said "NO BRANCH IN FLIGHT" for three days while a branch existed**
+— true when written, rotted the moment the branch was cut. It is true again now,
+and that is exactly why you run the commands rather than reading the sentence
+(ADR-0028 §1):
 
 ```
-git status --short                        # must be empty
+git status --short                                # must be empty
 git log --oneline -6
-git rev-parse main origin/main            # must be identical
-git branch --no-merged main               # names feat/corrections-read-route, and nothing else
-git ls-remote --heads origin feat/corrections-read-route   # pushed: expect a SHA
-git log --oneline @{u}..feat/corrections-read-route        # expect empty
+git branch --no-merged main                       # must name NOTHING
+git rev-parse main                                # merged tip
+git rev-parse refs/remotes/origin/main            # EXPECTED TO DIFFER: main is unpushed
+git log --oneline refs/remotes/origin/main..main  # what the pending push would send
 ```
 
-## `main` is merged and pushed. The BRANCH is neither.
+## `main` is merged. `main` is NOT pushed. Everything else is done.
 
-`main` and `origin/main` are both at the commit `docs/MEMORY.md`'s stamp names,
-and the review-UI styling milestone merged into it at `be6d7c0` on 2026-08-07,
-pushed with an explicit authorization **that push consumed**. **The next `main`
-push needs its own fresh ask** — and the corrections milestone **is now ready to
-ask**: its whole-branch review ran on 2026-08-10, all three fix rounds are
-closed and scope-re-reviewed, and the only step left before the ask is the
-fast-forward itself.
+The corrections read route **merged by true fast-forward on 2026-08-10** —
+single parent, zero merge commits, `git branch --no-merged main` names nothing.
+It went in only after its whole-branch review, three fix rounds and a final
+scoped re-review returning **MERGE** and *"no sixteenth false claim"*.
 
-**`feat/corrections-read-route` was pushed at the 2026-08-10 session close**
-under the standing `feat/*` authorisation (ADR-0021 decision 4), so the work no
-longer exists on one machine only. **Run the two commands above rather than
-believing this sentence** — if the refresh commit that wrote it is ahead of
-`origin`, push it.
+**The one outstanding action is a `main` push, and it needs YOUR authorization.**
+Every authorization is one-time and the 2026-08-07 one was consumed by that
+day's push. `feat/corrections-read-route` is pushed and kept at its merge point.
 
-**Freshness check.** `docs/MEMORY.md`'s stamp now names **two** positions,
-because mid-branch there are two. Run both forms it gives; both must be empty
-except for the single docs commit that writes the pair.
+**Freshness check.** `docs/MEMORY.md`'s stamp names **one** position again now
+that nothing is in flight:
 
 ```
-git log --oneline <BRANCH-STAMP>..feat/corrections-read-route -- src tests frontend docs ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
-git log --oneline <MAIN-STAMP>..main -- src tests frontend docs ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
+git log --oneline <STAMP>..main -- src tests frontend docs ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
 ```
 
-Gates on `main` at the styling merge, controller-run: `python scripts/verify.py`
-**all five PASS**; pytest **979**; Vitest **346 across 25 files**.
+**Empty means this pair is current.** Anything listed means the tree moved after
+it was written.
 
-**On the branch: `python scripts/verify.py` — all five gates PASS at the tip
-`983f57c`, controller-run 2026-08-10 at the session close.** pytest **1004**;
-Vitest **346 across 25 files, unmoved**, because no frontend file is in any
-task's file set.
+**Gates on `main` after the merge, controller-run: `python scripts/verify.py` —
+all five PASS.** pytest **1004** (was 979 before this milestone); Vitest **346
+across 25 files, unmoved**, because no frontend file was in any task's file set.
+
+**And the pre-merge check re-derived each task's deliverable from the built app
+rather than from the ledger:** `list_corrections` exported with the right
+signature, the three envelopes all on `_PageResponse`, the new route present in
+a **recursed 17-route walk** (a flat walk still yields no `/auth/*` — review
+standard 17), both ADRs and their index rows in place, and the outside-repo
+import check green from `C:\Users`.
 
 **All four tasks are complete**, each with a task review and a scoped
 re-review. **What remains is the close and nothing else:** whole-branch review →
@@ -79,7 +78,7 @@ pushing `main`. See §0.
 ## Reading order
 
 1. **`docs/MEMORY.md`** — state, decisions already made, environment, blockers,
-   deferred items, and **review standards 1–24**.
+   deferred items, and **review standards 1–25**.
 2. **The ledgers** — `.superpowers/sdd/*/progress.md`, one per milestone.
    **`.superpowers/sdd/2026-08-10-corrections-read-route/progress.md` is the one
    that matters now**: it holds the nine fix rounds, the nine controller
@@ -88,12 +87,18 @@ pushing `main`. See §0.
    styling one records twenty-five plan defects and "THE CLOSE".
    **`.superpowers/` is gitignored — open ledgers by path; nothing in them is
    findable by searching the tracked tree.**
-3. **`docs/adr/README.md`, then the ADRs (0001–0032** — count the files rather
+3. **`docs/adr/README.md`, then the ADRs (0001–0033** — count the files rather
    than trusting that range**).** *This* file's range has tracked each ADR as it
    landed; it was **`docs/MEMORY.md`'s** copy that sat at `0001–0026` while four
    more ADRs shipped, and it was corrected on 2026-08-10. Derived per-commit
    with `git show <sha>:docs/NEXT_SESSION_PROMPT.md | grep -oE "0001.00[23][0-9]"`.
    Mandatory before touching the matching area:
+   - **0033** — *the handoff pair goes last and alone, and a correction goes to
+     every copy.* **Read before refreshing this pair, or fixing any sentence
+     that appears more than once.** Bundling the pair with any other `docs/`
+     change false-alarms its own freshness check (three repair commits in one
+     session); `docs/MEMORY.md` states the current milestone **twice** by
+     design, so search for the *claim*, not the phrasing.
    - **0032** — *a document cannot certify itself, and a derived claim can rot
      inside its own commit.* **Read before writing a fix wave's prose, or any
      sentence about how well something was checked.** Five of nine false-claim
@@ -156,37 +161,37 @@ pushing `main`. See §0.
 
 # THE WORK, IN ORDER
 
-## 0. FIRST — close `feat/corrections-read-route`. Nothing else starts until this does.
+## 0. The corrections read route is DONE and MERGED. One action outstanding.
 
-The branch is **built, fully task-reviewed, and green at the tip**. It has had
-**a whole-branch review, which HAS now run** on the strongest model, 2026-08-10.
+**`main` is unpushed and the push needs the user's fresh authorization.** That
+is the entire remainder of the last milestone. Ask; do not assume — every
+authorization is one-time and the 2026-08-07 one was consumed by that day's
+push.
 
-**Verdict: MERGE AFTER FIXES. No Critical. Every finding was prose — nothing in
-behaviour.** It ran **17 mutations, 15 killed**; one survivor was equivalent and
-one was the known `GET /receipts` `has_more` gap on a different route. It
-confirmed the PAN pin holds end-to-end and that the scope fails closed.
+The close ran in full: whole-branch review on the strongest model → **MERGE
+AFTER FIXES**, no Critical, every finding prose → three fix rounds, each
+scope-re-reviewed → a final re-review returning **MERGE** and *"no sixteenth
+false claim"* → a pre-merge re-derivation of every task's deliverable from the
+built app → true fast-forward, single parent.
 
-**The three Important findings were fixed in the same session** (see §0.2), so
-what remains is:
-
-1. **One scoped re-review of that fix wave.** It touched `queue.py`'s docstring,
-   ADR-0031, ADR-0032 and `docs/MEMORY.md` — no logic.
-2. **ff-merge to `main`**, kept as a true fast-forward with a single parent.
-3. **Refresh this pair in the same session** (ADR-0019 + ADR-0021).
-4. **Ask before pushing `main`.** Every authorization is one-time and the
-   2026-08-07 one was consumed. Pushing `feat/*` is standing-authorised and
-   this branch is already pushed; keep it that way as the close adds commits.
+**What the review established, so nobody re-does it:** 17 mutations run, 15
+killed for the right reason; the two survivors were one equivalent mutant
+(dropping `.limit(1)` from a subquery on a UNIQUE column) and the known
+`GET /receipts` `has_more` gap on a *different* route. **The PAN pin holds
+end-to-end** — three card shapes round-tripped through `PATCH` and came back
+masked in `value_before`, `value_after` and the receipt body. **The scope fails
+closed**: a role that is neither `reviewer` nor `admin` gets 403.
 
 ### 0.1 The deferred minors — ALL TRIAGED AS *SHIPS*
 
-Recorded under review standard 19's report-don't-fix, with rulings, in the
-ledger. **The whole-branch review triaged every one as *ships*; none blocks the
-merge.** **No count is given here** — two anchors were tried and both were
-wrong, the second because the ledger's record of that very finding quotes the
-phrase it searched for. Read the ledger's list.
+Recorded under review standard 19's report-don't-fix, with rulings, in
+`.superpowers/sdd/2026-08-10-corrections-read-route/progress.md`. **The
+whole-branch review triaged every one as *ships*; none blocked the merge.**
+**No count is given here** — two anchors were tried and both were wrong, the
+second because the ledger's record of that very finding quotes the phrase it
+searched for (ADR-0033 §3). Read the ledger's list.
 
-Some were resolved before or during the review; those below are the ones still
-open, and they are real:
+The ones still open and worth knowing:
 
 - **The `offset` 500 — the only one that is a live defect.** See §7 and
   "Blocked on me": it is pre-existing on three routes and needs **your** call,
@@ -675,6 +680,16 @@ reason proves nothing), plus:
     and **anchors are where rot lives**, so prefer no number to a well-anchored
     one, and where a stamp is genuinely needed hand over **the command, not the
     answer**.
+25. **The handoff pair goes last and alone, and a correction goes to every
+    copy.** ADR-0033. Commit `docs/MEMORY.md` and `docs/NEXT_SESSION_PROMPT.md`
+    **in a commit touching nothing else** — the freshness check excludes exactly
+    those two paths and watches `docs` otherwise, so bundling them with an ADR
+    or an index row makes the pair list itself as stale (**three repair commits
+    in one session**). And **find every copy before fixing one**:
+    `docs/MEMORY.md` states the current milestone **twice** by design, ~700
+    lines apart, so **search for the claim, not the phrasing** — the copy that
+    survives is the one worded differently. The **review standards list is the
+    highest-risk copy**, because the reading order sends every session here.
 
 And: **a green suite is not evidence that installed software works** — run entry
 points from outside the repository. §1.6 is the current example.
@@ -746,17 +761,18 @@ points from outside the repository. §1.6 is the current example.
 
 ## Today's goal
 
-**Something IS in flight: `feat/corrections-read-route` — four tasks done, all
-five gates PASS at the tip, pushed, whole-branch review RUN and its fix rounds
-closed, NOT merged.** **§0 is the work, and §0 is now one step: the
-fast-forward.** It is the only item here with work already banked.
+**Nothing is in flight and nothing is half-done.** The corrections read route is
+merged; `git branch --no-merged main` should name nothing.
 
-**Run the freshness commands in `docs/MEMORY.md`'s stamp before trusting any of
-this.** If either lists anything, the tree moved after this was written — re-run
+**§0 is one action and it is the user's: authorize the `main` push.** Ask for it
+first — it is the only thing carried over, and it costs one sentence.
+
+**Run the freshness command in `docs/MEMORY.md`'s stamp before trusting any of
+this.** If it lists anything, the tree moved after this was written — re-run
 `python scripts/verify.py` and re-read §0 before acting.
 
-**Only then** pick from §2.2 onward, or answer the questions above and let that
-pick for you.
+**Then** pick from §2.2 onward, or answer the questions above and let that pick
+for you.
 
 **The one item that needs no ruling from anybody** is §2.2, the ASGI entry point
 and deployment story — and §1.6 sits right beside it: the declared `receipts`
