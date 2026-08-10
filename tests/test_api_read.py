@@ -974,3 +974,55 @@ def test_corrections_paginate_in_both_directions(session_factory, admin_client, 
     second = admin_client.get(f"/receipts/{receipt_id}/corrections?limit=1&offset=1").json()
     assert [row["field_path"] for row in second["items"]] == ["payment.method"]
     assert second["has_more"] is False
+
+
+# --------------------------------------------------------------------------- #
+# Three clauses the eight tests above left decorative, found by mutating each
+# clause of the route one at a time. Each of these three mutants survived the
+# **full** suite, not just this module.
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.parametrize("actor", ["reviewer", "admin"])
+def test_an_unknown_receipt_is_404_for_every_signed_in_role(clients, actor):
+    """"Existence before scope" is the route's contract, and an admin cannot
+    see the order.
+
+    ``test_an_unknown_receipt_is_404_even_for_an_admin`` asks the one role that
+    cannot tell: an admin's ``visible_to`` is ``None``, so ``list_corrections``
+    returns ``[]`` and never ``None``, and the 404 comes back whichever side of
+    the scope call the existence check sits on. Measured -- moving that check
+    below the ``rows is None`` branch left all 998 tests green.
+
+    A reviewer separates them. An id that names no receipt has no
+    ``review_tasks`` row either, so the scope call returns ``None`` and the
+    swapped order answers **403** -- telling a caller "not yours" about a
+    receipt that does not exist, and making an absent receipt distinguishable
+    by status code from a real one they may not read. That is the disclosure
+    the ordering exists to prevent, so the property is pinned for every role
+    that can reach the route.
+    """
+    unknown = uuid.uuid4()
+
+    assert clients[actor].get(f"/receipts/{unknown}/corrections").status_code == 404
+
+
+@pytest.mark.parametrize("query", ["limit=0", "limit=201", "offset=-1"])
+def test_the_corrections_paging_window_is_refused_outside_its_bounds(
+    admin_client, receipt_id, query
+):
+    """``Query(50, ge=1, le=200)`` and ``Query(0, ge=0)`` were decorative.
+
+    Measured separately: dropping ``ge=1, le=200`` from ``limit``, and dropping
+    ``ge=0`` from ``offset``, each left all 998 tests green. Unbounded,
+    ``?limit=100000`` reaches ``list_corrections`` and asks SQLite for 100001
+    rows in one query. ``GET /receipts`` has had this pinned since P4.T4
+    (``test_list_caps_the_page_size``); this route inherited the declaration
+    without the pin.
+
+    One property, three shapes: a paging argument outside the declared window
+    is refused by request validation, before any query runs.
+    """
+    response = admin_client.get(f"/receipts/{receipt_id}/corrections?{query}")
+
+    assert response.status_code == 422

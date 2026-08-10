@@ -1130,3 +1130,25 @@ def test_a_pan_never_reaches_the_corrections_route(reviewer_client, receipt_id, 
     assert "4111111111111111" not in response.text
     assert typed not in response.text
     assert [row["value_after"] for row in response.json()["items"]] == ["VISA ************1111"]
+
+
+def test_a_configured_api_key_cannot_read_a_correction_history(key_client, receipt_id):
+    """The machine key authorizes upload and nothing else (spec section 5.3).
+
+    ``test_corrections_require_a_session[api_key]`` in ``tests/test_api_read.py``
+    cannot say this. That module never sets ``RECEIPTS_API_KEY``, so its
+    ``api_key`` client carries a header no configured key matches and is
+    indistinguishable from an anonymous one -- it pins "an unrecognised header
+    is 401", not "the machine key may not read an audit trail". This module
+    configures a real key, which is what makes the question askable.
+
+    Measured: with this route's dependency changed from ``require_user`` to
+    ``require_upload`` -- the dependency ``POST /upload`` itself uses -- all 998
+    tests stayed green while a valid machine key reached one receipt's
+    correction history.
+    """
+    response = key_client.get(
+        f"/receipts/{receipt_id}/corrections", headers={"X-API-Key": "s3cret-machine-key"}
+    )
+
+    assert response.status_code == 401
