@@ -1142,10 +1142,21 @@ def test_a_configured_api_key_cannot_read_a_correction_history(key_client, recei
     is 401", not "the machine key may not read an audit trail". This module
     configures a real key, which is what makes the question askable.
 
-    Measured: with this route's dependency changed from ``require_user`` to
-    ``require_upload`` -- the dependency ``POST /upload`` itself uses -- all 998
-    tests stayed green while a valid machine key reached one receipt's
-    correction history.
+    Measured, and the measurement is not what the mutant first looked like.
+    With this route's dependency changed from ``require_user`` to
+    ``require_upload`` -- the one ``POST /upload`` itself uses -- all 998 tests
+    stayed green. But a machine key does **not** reach a served history:
+    ``require_upload`` returns ``None`` for a valid key (a machine, not a
+    person, see its docstring), so ``user.role`` on the route's first line
+    raises ``AttributeError: 'NoneType' object has no attribute 'role'`` and the
+    caller gets a 500. What that mutant exposes is that **nothing in the suite
+    told the two dependencies apart at all** -- not that one of them served the
+    audit trail.
+
+    Which is why this asserts the status code rather than the absence of a body:
+    401 fails against the 500 that mutant produces today, and would equally fail
+    against a 200 if some later change ever handed a machine key a real
+    ``SessionUser``. Both are the same defect reaching the caller differently.
     """
     response = key_client.get(
         f"/receipts/{receipt_id}/corrections", headers={"X-API-Key": "s3cret-machine-key"}

@@ -502,7 +502,7 @@ def list_corrections(
     caller may not read this receipt's history; ``[]`` means they may and there
     is none. A single ``list`` return would make the route unable to answer 403
     at all, and would answer "there are no corrections" -- which is false -- to
-    someone who simply is not entitled to know. That is ADR-0027 section 4's
+    someone who simply is not entitled to know. That is ADR-0027 section 5's
     ``null`` is not ``0`` is not empty, one layer below the UI, and
     ``test_refusal_and_emptiness_are_different_answers`` is its pin.
 

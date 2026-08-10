@@ -260,7 +260,7 @@ def _install_read_routes(app: FastAPI) -> None:
         a legitimate reviewer. And 403 rather than an empty 200 because an
         in-scope receipt with no corrections **is** an empty 200, and that is a
         true and useful answer: "you may not see this" is not "there is
-        nothing here" (ADR-0027 section 4).
+        nothing here" (ADR-0027 section 5).
 
         This route makes ``corrections.value_after`` readable over HTTP for the
         first time. It adds no redaction: ``_plan_change`` masks every coerced

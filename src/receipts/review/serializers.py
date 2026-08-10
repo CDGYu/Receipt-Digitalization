@@ -153,7 +153,7 @@ def correction_summary(correction: Correction) -> dict[str, Any]:
     the columns are ``Text``; re-parsing a stored string to re-render it would
     invent precision the audit trail never recorded, and most ``field_path``
     values are not money at all. ``None`` means the field had no value on that
-    side of the change -- not ``"0"``, not empty (ADR-0027 section 4).
+    side of the change -- not ``"0"``, not empty (ADR-0027 section 5).
     """
     return {
         "id": str(correction.id),

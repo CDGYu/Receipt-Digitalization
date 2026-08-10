@@ -1020,8 +1020,26 @@ def test_the_corrections_paging_window_is_refused_outside_its_bounds(
     (``test_list_caps_the_page_size``); this route inherited the declaration
     without the pin.
 
-    One property, three shapes: a paging argument outside the declared window
-    is refused by request validation, before any query runs.
+    **What this closes:** ``limit`` in both directions, and ``offset`` below
+    zero. Those three are refused by request validation, before any query runs.
+
+    **What it does not close, and the measurement rather than the reasoning:**
+    ``offset`` has no declared ceiling, so ``?offset=9223372036854775808``
+    (``2**63``) satisfies ``ge=0``, reaches SQLite, and raises ``OverflowError:
+    Python int too large to convert to SQLite INTEGER``. That is an unhandled
+    **500** on an auth-scoped route, reachable by any signed-in caller. Measured
+    by calling the route: ``2**63 - 1`` (9223372036854775807) is the largest
+    offset that still answers 200, and the 500 body is Starlette's plain
+    ``Internal Server Error``, not this service's ``{"error": {"message": ...}}``
+    shape -- no handler in ``_install_error_handlers`` catches ``OverflowError``,
+    so the failure escapes the error-body contract as well as the status one.
+
+    **Left open on purpose.** The identical input answers 500 on ``GET
+    /receipts`` and ``GET /review/tasks`` too -- verified by calling all three,
+    not inferred from their sharing a declaration. This route copied that
+    declaration verbatim from its brief, so the defect is pre-existing and
+    three-instanced: report, do not fix (standard 19). A fix belongs with all
+    three at once.
     """
     response = admin_client.get(f"/receipts/{receipt_id}/corrections?{query}")
 
