@@ -220,7 +220,9 @@ written**. Each was verified before being acted on (ADR-0030); none was refuted.
   including `OPEN` in the scope "would disclose every unclaimed receipt's
   attribution to every reviewer" — but `GET /review/next` converts an `OPEN`
   task into one assigned to the caller, and `close_task` never clears
-  `assigned_to`, so the access is **permanent** once taken. Measured: a reviewer
+  `assigned_to`, so the access **survives completion** — it ends only if one of
+  decision 3's two clearing paths runs, and neither is reachable by the
+  reviewer (`release_task` is admin-only). Measured: a reviewer
   holding nothing got `403/403/403`; after looping next → read → complete three
   times, `200/200/200`, retained. **Fixed by stating the limit**: the difference
   is friction and an audit trail, not confidentiality.

@@ -207,7 +207,7 @@ fact about controllers or about the role is not settled by one branch.
 ## References
 
 `.superpowers/sdd/2026-08-10-corrections-read-route/progress.md` (the ledger:
-every instance, every fix round, every ruling, and the twelve deferred minors);
+every instance, every fix round, every ruling, and the deferred minors);
 `docs/adr/0031-the-corrections-read-route.md`;
 `docs/adr/0030-a-finding-is-a-claim.md`;
 `docs/adr/0028-claims-about-the-tree-are-re-derived.md` and its

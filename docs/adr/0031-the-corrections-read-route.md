@@ -133,6 +133,8 @@ otherwise take decision 2 as a boundary. **Closing it properly would need a
 scope that is not derivable from `assigned_to` alone, which is the same shape of
 limit decision 3 records.**
 
+### 3. The stated limit: the schema cannot answer "has ever held"
+
 The design said "held **or previously held**". The schema cannot express that,
 and the shipped scope is narrower than the phrase.
 
