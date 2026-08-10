@@ -40,7 +40,7 @@ from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from ..persist.models import Receipt, ReviewState, ReviewTask
+from ..persist.models import Correction, Receipt, ReviewState, ReviewTask
 from ..persist.repository import redact_pan
 
 __all__ = [
@@ -48,6 +48,7 @@ __all__ = [
     "close_review_for_receipt",
     "close_task",
     "enqueue_review",
+    "list_corrections",
     "list_tasks",
     "next_task",
     "queue_stats",
@@ -463,6 +464,63 @@ def list_tasks(
     if state is not None:
         query = query.where(ReviewTask.state == state)
     query = query.order_by(ReviewTask.priority, ReviewTask.opened_at, ReviewTask.id)
+    return list(session.scalars(query.limit(limit).offset(offset)))
+
+
+def list_corrections(
+    session: Session,
+    receipt_id: uuid.UUID,
+    *,
+    visible_to: str | None = None,
+    limit: int = 50,
+    offset: int = 0,
+) -> list[Correction] | None:
+    """One receipt's correction history, or ``None`` if this caller may not see it.
+
+    ``visible_to=None`` is unrestricted -- the admin case, spelled explicitly at
+    the call site rather than as a bare boolean, exactly as :func:`list_tasks`
+    spells it. A username scopes to receipts that caller **holds or has held**:
+    any ``review_tasks`` row assigned to them, in any state. ``close_task``
+    leaves ``assigned_to`` set on a ``DONE`` task (ADR-0025), which is what makes
+    "has held" expressible at all, and what lets a reviewer see the corrections
+    they themselves just made.
+
+    **Two different negatives, deliberately not merged.** ``None`` means the
+    caller may not read this receipt's history; ``[]`` means they may and there
+    is none. A single ``list`` return would make the route unable to answer 403
+    at all, and would answer "there are no corrections" -- which is false -- to
+    someone who simply is not entitled to know. That is ADR-0027 section 4's
+    ``null`` is not ``0`` is not empty, one layer below the UI, and
+    ``test_refusal_and_emptiness_are_different_answers`` is its pin.
+
+    Scope deliberately **excludes** the ``state == OPEN`` half of
+    :func:`list_tasks`' reviewer scope. That half exists to show a reviewer the
+    backlog they may claim; correction history is not backlog, and including it
+    would disclose every unclaimed receipt's attribution to every reviewer.
+
+    Ordered ``created_at`` then ``id``. ``id`` is a UUID and carries no time, so
+    it is a tiebreaker only -- but a necessary one: one ``apply_corrections``
+    call writes every row of a patch in a single flush, so ties are the normal
+    case.
+
+    A pure read: no flush, no commit, no ``ValueError``. The route validates
+    ``limit`` and ``offset`` before this is reached.
+    """
+    if visible_to is not None:
+        held = session.scalar(
+            select(ReviewTask.id)
+            .where(ReviewTask.receipt_id == receipt_id)
+            .where(ReviewTask.assigned_to == visible_to)
+            .limit(1)
+        )
+        if held is None:
+            return None
+
+    query = (
+        select(Correction)
+        .where(Correction.receipt_id == receipt_id)
+        .order_by(Correction.created_at, Correction.id)
+    )
     return list(session.scalars(query.limit(limit).offset(offset)))
 
 

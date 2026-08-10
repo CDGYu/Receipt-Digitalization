@@ -32,13 +32,14 @@ from sqlalchemy import create_engine, event, select
 from sqlalchemy.dialects import postgresql, sqlite
 from sqlalchemy.orm import Session
 
-from receipts.persist import Receipt, ReviewState, ReviewTask
+from receipts.persist import Correction, Receipt, ReviewState, ReviewTask
 from receipts.persist.models import Base
 from receipts.review import (
     QueueStats,
     close_review_for_receipt,
     close_task,
     enqueue_review,
+    list_corrections,
     list_tasks,
     next_task,
     queue_stats,
@@ -1229,3 +1230,132 @@ def test_skip_locked_guard_is_on_for_postgresql_and_off_for_sqlite(engine: sa.En
     assert _supports_skip_locked(SimpleNamespace(dialect=SimpleNamespace(name="postgresql")))
     assert not _supports_skip_locked(SimpleNamespace(dialect=SimpleNamespace(name="sqlite")))
     assert not _supports_skip_locked(None)
+
+
+def _correction(
+    session: Session,
+    receipt_id: uuid.UUID,
+    field_path: str,
+    *,
+    before: str | None,
+    after: str | None,
+    by: str = "alice",
+    at: datetime | None = None,
+) -> Correction:
+    """One audit row. ``at`` is explicit where ordering is under test, because
+    SQLite's CURRENT_TIMESTAMP resolves only to the second."""
+    row = Correction(
+        receipt_id=receipt_id,
+        field_path=field_path,
+        value_before=before,
+        value_after=after,
+        corrected_by=by,
+    )
+    if at is not None:
+        row.created_at = at
+    session.add(row)
+    session.flush()
+    return row
+
+
+def test_list_corrections_is_unrestricted_for_the_admin_case(engine: sa.Engine):
+    """``visible_to=None`` needs no review task at all -- an auto-approved
+    receipt that was never queued still has readable history for an admin."""
+    with Session(engine) as session:
+        receipt = _receipt(session)
+        _correction(session, receipt.id, "receipt.total", before="900", after="1000")
+        session.commit()
+
+        rows = list_corrections(session, receipt.id)
+
+        assert rows is not None
+        assert [row.field_path for row in rows] == ["receipt.total"]
+
+
+def test_list_corrections_refuses_a_receipt_the_reviewer_never_held(engine: sa.Engine):
+    with Session(engine) as session:
+        receipt = _receipt(session)
+        _correction(session, receipt.id, "receipt.total", before="900", after="1000")
+        session.commit()
+
+        assert list_corrections(session, receipt.id, visible_to="carol") is None
+
+
+def test_list_corrections_refuses_a_receipt_held_by_a_different_reviewer(engine: sa.Engine):
+    """The pin on ``assigned_to == visible_to`` itself.
+
+    Every other refusal case here uses a receipt with **no review task at all**,
+    so all of them stay green if the scope predicate is deleted outright: a bare
+    existence check on the receipt's task would refuse those receipts too, for
+    the wrong reason. Only a receipt whose task belongs to *someone else* tells
+    the two apart -- and that is the case that matters, because without the
+    predicate every receipt in the queue discloses its correction history, and
+    its attribution, to every reviewer.
+    """
+    with Session(engine) as session:
+        receipt = _receipt(session)
+        session.add(
+            ReviewTask(receipt_id=receipt.id, reason="quick verify", assigned_to="dave",
+                       state=ReviewState.IN_PROGRESS)
+        )
+        _correction(session, receipt.id, "receipt.total", before="900", after="1000")
+        session.commit()
+
+        assert list_corrections(session, receipt.id, visible_to="carol") is None
+
+
+def test_refusal_and_emptiness_are_different_answers(engine: sa.Engine):
+    """The pin that keeps 403 reachable.
+
+    ``None`` is "you may not see this"; ``[]`` is "you may, and there is
+    none". Flattening the return type to ``list[Correction]`` -- returning
+    ``[]`` for both -- turns the route's 403 into an indistinguishable empty
+    200, which is ADR-0027 section 4's collapse one layer below the UI. This
+    test is the one that goes red for it.
+    """
+    with Session(engine) as session:
+        held = _receipt(session)
+        session.add(
+            ReviewTask(receipt_id=held.id, reason="quick verify", assigned_to="carol",
+                       state=ReviewState.DONE)
+        )
+        never_held = _receipt(session)
+        session.commit()
+
+        assert list_corrections(session, held.id, visible_to="carol") == []
+        assert list_corrections(session, never_held.id, visible_to="carol") is None
+
+
+def test_a_closed_task_still_grants_its_holder_the_history(engine: sa.Engine):
+    """"Held **or previously held**" -- the 2026-08-10 ruling.
+
+    ``close_task`` deliberately leaves ``assigned_to`` set on a ``DONE`` task
+    (ADR-0025), so a reviewer keeps the history of what they reviewed. Goes red
+    if the scope narrows to ``state == IN_PROGRESS``.
+    """
+    with Session(engine) as session:
+        receipt = _receipt(session)
+        session.add(
+            ReviewTask(receipt_id=receipt.id, reason="quick verify", assigned_to="carol",
+                       state=ReviewState.DONE)
+        )
+        _correction(session, receipt.id, "receipt.total", before="900", after="1000")
+        session.commit()
+
+        rows = list_corrections(session, receipt.id, visible_to="carol")
+
+        assert rows is not None and len(rows) == 1
+
+
+def test_list_corrections_orders_oldest_first(engine: sa.Engine):
+    with Session(engine) as session:
+        receipt = _receipt(session)
+        _correction(session, receipt.id, "second", before=None, after="b",
+                    at=datetime(2026, 7, 3, 9, 0, 1, tzinfo=UTC))
+        _correction(session, receipt.id, "first", before=None, after="a",
+                    at=datetime(2026, 7, 3, 9, 0, 0, tzinfo=UTC))
+        session.commit()
+
+        rows = list_corrections(session, receipt.id)
+
+        assert [row.field_path for row in rows] == ["first", "second"]
