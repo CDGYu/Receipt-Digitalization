@@ -85,7 +85,10 @@ class ReceiptListResponse(_PageResponse):
 
 
 class ReviewTaskListResponse(_PageResponse):
-    """One page of ``_task_summary`` rows (``GET /review/tasks``)."""
+    """One page of ``_task_summary`` rows (``GET /review/tasks``).
+
+    ``has_more`` is read off the extra row a ``limit + 1`` fetch returns.
+    """
 
 
 class CorrectionListResponse(_PageResponse):

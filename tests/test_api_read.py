@@ -773,14 +773,42 @@ def test_the_literal_tasks_path_is_not_captured_by_a_task_id_route(admin_client)
     assert admin_client.get("/review/tasks").status_code == 200
 
 
-def test_correction_summary_renders_a_row_without_inventing_precision():
-    """``value_before``/``value_after`` are already text -- ``_as_text`` rendered
+def test_correction_summary_reads_every_key_off_the_row_it_was_given():
+    """Every key is read from the row, and ``null`` is not ``""`` on either side.
+
+    ``value_before``/``value_after`` are already text -- ``_as_text`` rendered
     them at write time. Re-parsing them as ``Decimal`` to re-render would invent
     precision the audit trail never recorded, and would fail outright on the
     ``field_path``s that are not money. ``None`` stays ``None``: the field had no
     value on that side of the change, which is not ``"0"`` and not ``""``.
+
+    **Two rows, because one cannot tell a key that is read from a key that is
+    hardcoded to that one row's own value.** Against a lone fixture holding
+    ``value_before=None`` and ``corrected_by="alice"``, the constants
+    ``"value_before": None`` and ``"corrected_by": "alice"`` both pass -- as
+    does ``correction.value_after or ""``, which only reveals itself on a row
+    whose ``value_after`` *is* ``None``. Three such mutants survived a
+    single-row version of this test.
+
+    So: row A and row B differ in **every** rendered value, and they carry the
+    null on **opposite** text fields -- A has no ``value_before``, B has no
+    ``value_after``. That exercises each text field as both null and text, in
+    both directions, which is what pins ADR-0027 section 4 for both of them
+    rather than for ``value_before`` alone.
+
+    The last two assertions are the bound, and they guard the *fixtures*, not
+    the code:
+
+      * no key may render the same value for both rows -- otherwise a constant
+        would satisfy both dicts above;
+      * no row may render the same value under two keys -- otherwise a key
+        reading the wrong attribute of the right row would still pass.
+
+    Together those make "every key is read off the row it was given" hold for
+    every key in the dict, including keys added later, instead of for the
+    handful anyone thought to check by hand.
     """
-    row = Correction(
+    row_a = Correction(
         id=uuid.UUID("00000000-0000-0000-0000-0000000000aa"),
         receipt_id=RECEIPT_B,
         field_path="receipt.total",
@@ -789,8 +817,20 @@ def test_correction_summary_renders_a_row_without_inventing_precision():
         corrected_by="alice",
         created_at=datetime(2026, 7, 3, 9, 0, 0, tzinfo=UTC),
     )
+    row_b = Correction(
+        id=uuid.UUID("00000000-0000-0000-0000-0000000000bb"),
+        receipt_id=RECEIPT_A,
+        field_path="line_items[0].qty",
+        value_before="900",
+        value_after=None,
+        corrected_by="bob",
+        created_at=datetime(2026, 7, 4, 17, 30, 5, tzinfo=UTC),
+    )
 
-    assert correction_summary(row) == {
+    rendered_a = correction_summary(row_a)
+    rendered_b = correction_summary(row_b)
+
+    assert rendered_a == {
         "id": "00000000-0000-0000-0000-0000000000aa",
         "field_path": "receipt.total",
         "value_before": None,
@@ -798,3 +838,24 @@ def test_correction_summary_renders_a_row_without_inventing_precision():
         "corrected_by": "alice",
         "created_at": "2026-07-03T09:00:00+00:00",
     }
+    assert rendered_b == {
+        "id": "00000000-0000-0000-0000-0000000000bb",
+        "field_path": "line_items[0].qty",
+        "value_before": "900",
+        "value_after": None,
+        "corrected_by": "bob",
+        "created_at": "2026-07-04T17:30:05+00:00",
+    }
+
+    constant_keys = sorted(key for key in rendered_a if rendered_a[key] == rendered_b[key])
+    assert not constant_keys, (
+        f"{constant_keys} render the same for both rows, so a hardcoded constant "
+        "would satisfy both dicts above -- give the two fixtures different values"
+    )
+
+    for label, rendered in (("A", rendered_a), ("B", rendered_b)):
+        values = list(rendered.values())
+        assert len(set(values)) == len(values), (
+            f"row {label} renders one value under two keys, so a key reading the "
+            f"wrong attribute would still satisfy its dict above: {rendered}"
+        )
