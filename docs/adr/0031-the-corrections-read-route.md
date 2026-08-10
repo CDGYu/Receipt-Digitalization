@@ -13,8 +13,8 @@ writer, which is the invariant this route reads through), ADR-0006 (pure read:
 injected session, no flush, no commit, no `ValueError`), ADR-0012 (identity and
 roles), ADR-0028 (claims about the tree are re-derived, not restated).
 
-Derived 2026-08-10, against `feat/corrections-read-route`; `src/` has not moved
-since `bc67c31`. **Re-derive rather than quote** (ADR-0028 rule 1).
+Derived 2026-08-10, against `feat/corrections-read-route`. **Re-derive rather
+than quote** (ADR-0028 rule 1).
 
 ## Context
 
@@ -38,7 +38,7 @@ The `__all__` entry in that table is `persist/__init__.py`'s.
 `apply_corrections`, which `\bCorrection\b` does not match. **The design spec's
 §1.1 breaks the same six down differently, and its breakdown is wrong there** —
 it gives `repository.py` an `__all__` entry — so read §1.1's dated note, which
-says so, before taking anything from that paragraph. At `HEAD` the same first
+says so, before taking anything from that paragraph. At `f5fe40a` the same first
 query returns exactly one hit, `select(Correction)` in `review/queue.py`.
 
 So a reviewer could not see the correction history of the receipt they were
