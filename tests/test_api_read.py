@@ -39,12 +39,13 @@ from fastapi.testclient import TestClient  # noqa: E402
 from config.settings import Settings  # noqa: E402
 from receipts.extract.schema import Legibility  # noqa: E402
 from receipts.ingest.storage import LocalStorage  # noqa: E402
-from receipts.persist.models import Base, Receipt, ValidationFinding  # noqa: E402
+from receipts.persist.models import Base, Correction, Receipt, ValidationFinding  # noqa: E402
 from receipts.persist.repository import _RECEIPT_FIELDS  # noqa: E402
 from receipts.persist.session import make_engine, make_session_factory  # noqa: E402
 from receipts.persist.users import ROLE_ADMIN, ROLE_REVIEWER, create_user  # noqa: E402
 from receipts.review.api import create_app  # noqa: E402
 from receipts.review.queue import close_task, enqueue_review, next_task  # noqa: E402
+from receipts.review.serializers import correction_summary  # noqa: E402
 from receipts.score.confidence import ReceiptStatus  # noqa: E402
 from receipts.validate.report import Severity  # noqa: E402
 
@@ -770,3 +771,30 @@ def test_the_literal_tasks_path_is_not_captured_by_a_task_id_route(admin_client)
     outcome rather than the absence, so it keeps guarding if one is added.
     """
     assert admin_client.get("/review/tasks").status_code == 200
+
+
+def test_correction_summary_renders_a_row_without_inventing_precision():
+    """``value_before``/``value_after`` are already text -- ``_as_text`` rendered
+    them at write time. Re-parsing them as ``Decimal`` to re-render would invent
+    precision the audit trail never recorded, and would fail outright on the
+    ``field_path``s that are not money. ``None`` stays ``None``: the field had no
+    value on that side of the change, which is not ``"0"`` and not ``""``.
+    """
+    row = Correction(
+        id=uuid.UUID("00000000-0000-0000-0000-0000000000aa"),
+        receipt_id=RECEIPT_B,
+        field_path="receipt.total",
+        value_before=None,
+        value_after="1000",
+        corrected_by="alice",
+        created_at=datetime(2026, 7, 3, 9, 0, 0, tzinfo=UTC),
+    )
+
+    assert correction_summary(row) == {
+        "id": "00000000-0000-0000-0000-0000000000aa",
+        "field_path": "receipt.total",
+        "value_before": None,
+        "value_after": "1000",
+        "corrected_by": "alice",
+        "created_at": "2026-07-03T09:00:00+00:00",
+    }

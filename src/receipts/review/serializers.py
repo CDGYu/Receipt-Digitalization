@@ -43,13 +43,14 @@ from ..extract.schema import LineItem as ExtractLineItem
 from ..extract.schema import Merchant as ExtractMerchant
 from ..extract.schema import Modifier as ExtractModifier
 from ..extract.schema import Payment as ExtractPayment
-from ..persist.models import LineItem, Receipt, ReviewTask, ValidationFinding
+from ..persist.models import Correction, LineItem, Receipt, ReviewTask, ValidationFinding
 from ..score.confidence import ReceiptStatus
 from ..validate.report import Severity
 from .signing import sign_url
 
 __all__ = [
     "build_export_rows",
+    "correction_summary",
     "money",
     "query_export_receipts",
     "receipt_detail",
@@ -138,6 +139,29 @@ def _finding(finding: ValidationFinding) -> dict[str, Any]:
         "message": finding.message,
         "context": finding.context,
         "resolved_by_repair": finding.resolved_by_repair,
+    }
+
+
+def correction_summary(correction: Correction) -> dict[str, Any]:
+    """One ``corrections`` row as JSON (``GET /receipts/{id}/corrections``).
+
+    ``receipt_id`` is deliberately absent: the route is nested under the
+    receipt, so every row on a page shares the id already in the request path.
+
+    ``value_before``/``value_after`` pass through as text and do **not** go
+    through :func:`money`. They were rendered by ``_as_text`` at write time and
+    the columns are ``Text``; re-parsing a stored string to re-render it would
+    invent precision the audit trail never recorded, and most ``field_path``
+    values are not money at all. ``None`` means the field had no value on that
+    side of the change -- not ``"0"``, not empty (ADR-0027 section 4).
+    """
+    return {
+        "id": str(correction.id),
+        "field_path": correction.field_path,
+        "value_before": correction.value_before,
+        "value_after": correction.value_after,
+        "corrected_by": correction.corrected_by,
+        "created_at": correction.created_at.isoformat(),
     }
 
 

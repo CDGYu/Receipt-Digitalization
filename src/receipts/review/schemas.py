@@ -29,6 +29,7 @@ from typing import Annotated, Any
 from pydantic import BaseModel, BeforeValidator, ConfigDict, StrictInt
 
 __all__ = [
+    "CorrectionListResponse",
     "CorrectionPatch",
     "ErrorBody",
     "ErrorDetail",
@@ -57,29 +58,42 @@ class ErrorBody(BaseModel):
     error: ErrorDetail
 
 
-class ReceiptListResponse(BaseModel):
+class _PageResponse(BaseModel):
+    """One page of rows, plus whether another exists.
+
+    Three routes share this body. Each keeps its **own** subclass rather than
+    reusing this one directly, because distinct response models give distinct
+    OpenAPI schema names -- that was the recorded reason the bodies were
+    duplicated, and subclassing preserves it while removing the copy.
+
+    ``items`` stays ``dict[str, Any]``: the payload's real shape is proven
+    against the serializers in ``tests/test_api_read.py``, and redeclaring it
+    here would be one more place for the two to drift silently. See this
+    module's docstring.
+    """
+
+    items: list[dict[str, Any]]
+    has_more: bool
+
+
+class ReceiptListResponse(_PageResponse):
     """One page of :func:`receipt_summary` rows (``GET /receipts``).
 
     ``has_more`` is read off the extra row a ``limit + 1`` fetch returns, not
     a ``COUNT(*)`` -- see ``_install_read_routes``.
     """
 
-    items: list[dict[str, Any]]
-    has_more: bool
+
+class ReviewTaskListResponse(_PageResponse):
+    """One page of ``_task_summary`` rows (``GET /review/tasks``)."""
 
 
-class ReviewTaskListResponse(BaseModel):
-    """One page of ``_task_summary`` rows (``GET /review/tasks``).
+class CorrectionListResponse(_PageResponse):
+    """One page of :func:`correction_summary` rows
+    (``GET /receipts/{receipt_id}/corrections``).
 
-    Same envelope-typed / payload-untyped split as
-    :class:`ReceiptListResponse`, for the reason the module docstring gives:
-    redeclaring a task's fields here would be a second place for the shape to
-    drift from ``_task_summary``, silently, until one field disagreed.
-    ``has_more`` is read off the extra row a ``limit + 1`` fetch returns.
+    A page here is one receipt's audit trail, oldest first.
     """
-
-    items: list[dict[str, Any]]
-    has_more: bool
 
 
 class QueueStatsOut(BaseModel):
