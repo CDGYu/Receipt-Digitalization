@@ -59,27 +59,38 @@ git log --oneline <MAIN-STAMP>..main -- src tests frontend docs ":(exclude)docs/
 Gates on `main` at the styling merge, controller-run: `python scripts/verify.py`
 **all five PASS**; pytest **979**; Vitest **346 across 25 files**.
 
-**On the branch, pytest is 1004** and Vitest is unmoved — no frontend file is in
-any task's file set. **What has been run where, stated exactly rather than as
-"the gates pass" (ADR-0029):** all five gates PASS were run at `df83715`; at
-`bc67c31`, `20d9bb9` and the Task 4 docs commits only **pytest and ruff** were
-re-run, both clean. `scripts/verify.py` has not been run at the branch tip. Run
-it as part of the close.
+**On the branch: `python scripts/verify.py` — all five gates PASS at the tip
+`983f57c`, controller-run 2026-08-10 at the session close.** pytest **1004**;
+Vitest **346 across 25 files, unmoved**, because no frontend file is in any
+task's file set.
+
+**All four tasks are complete**, each with a task review and a scoped
+re-review. **What remains is the close and nothing else:** whole-branch review →
+fix wave → one scoped re-review → ff-merge → refresh this pair → ask before
+pushing `main`. See §0.
 
 ---
 
 ## Reading order
 
 1. **`docs/MEMORY.md`** — state, decisions already made, environment, blockers,
-   deferred items, and **review standards 1–23**.
-2. **The ledgers** — `.superpowers/sdd/*/progress.md`, one per milestone. The
-   review-UI styling one records **twenty-five** plan defects, every mutation,
-   every controller ruling, and "THE CLOSE". **`.superpowers/` is gitignored —
-   open ledgers by path; nothing in them is findable by searching the tracked
-   tree.**
-3. **`docs/adr/README.md`, then the ADRs (0001–0031** — count the files rather
+   deferred items, and **review standards 1–24**.
+2. **The ledgers** — `.superpowers/sdd/*/progress.md`, one per milestone.
+   **`.superpowers/sdd/2026-08-10-corrections-read-route/progress.md` is the one
+   that matters now**: it holds the nine fix rounds, the nine controller
+   defects, every ruling, and — most importantly — **the twelve deferred minor
+   findings that are the whole-branch review's triage list.** The review-UI
+   styling one records twenty-five plan defects and "THE CLOSE".
+   **`.superpowers/` is gitignored — open ledgers by path; nothing in them is
+   findable by searching the tracked tree.**
+3. **`docs/adr/README.md`, then the ADRs (0001–0032** — count the files rather
    than trusting that range; it read `0001–0026` for five ADRs**).** Mandatory
    before touching the matching area:
+   - **0032** — *a document cannot certify itself, and a derived claim can rot
+     inside its own commit.* **Read before writing a fix wave's prose, or any
+     sentence about how well something was checked.** Five of nine false-claim
+     defects on the last branch were introduced *by fix rounds*. Gives the bound
+     that closed it, and why an anchor is where the next rot lives.
    - **0031** — the corrections read route. **Read before changing who can see
      correction attribution, and before scoping `GET /receipts/{receipt_id}`:
      that route being *unscoped* is the premise its 403-not-404 rests on.** It
@@ -115,6 +126,10 @@ it as part of the close.
      integrity · **0006** the ValueError boundary · **0017** the gate runner ·
      **0019 + 0021** session continuity.
 4. **`docs/superpowers/specs/`** — the design docs.
+   **`2026-08-10-corrections-read-route-design.md` is the current one** — read
+   its **three dated notes** (§1.1's wrong membership breakdown, §2.3/§8's
+   ADR-0027 section number, §2.4's superseded tiebreaker) **before re-deriving
+   anything from its body.**
    `2026-08-05-review-ui-design-system.md` (§2's three overrides, §4's null
    rule, **§5.1's dated note parking the currency prefix**, §9's rulings and its
    note that §9 is *not* an index of every decision since, and a 2026-08-07
@@ -133,7 +148,83 @@ it as part of the close.
 
 # THE WORK, IN ORDER
 
-## 1. What the last milestone left behind
+## 0. FIRST — close `feat/corrections-read-route`. Nothing else starts until this does.
+
+The branch is **built, fully task-reviewed, and green at the tip**. It has had
+**no whole-branch review**. That review is the only thing standing between it
+and `main`, and this project's whole-branch reviews have twice found a Critical
+that every gate was green on — including a milestone's headline deliverable
+being deletable outright.
+
+**The close, in order:**
+
+1. **Whole-branch review on the strongest model.** Diff `e2ec316..HEAD`: 18
+   commits, 14 files, +3028/−87 (re-derive with `git diff --stat e2ec316..HEAD`).
+   Point it at the ledger's deferred and parked lines so it can triage them.
+   **Brief it to mutate**, not to read: three surviving mutants were found in
+   `list_corrections` across two passes, and three more in `correction_summary`
+   — in both cases every clause nobody deliberately mutated proved decorative.
+2. **One fix wave**, briefed to **verify before it fixes** (ADR-0030) and to
+   **delete self-describing prose rather than rewrite it** (ADR-0032). On this
+   branch, five of nine false-claim defects were produced *by fix rounds*.
+3. **One scoped re-review** of the fix wave.
+4. **ff-merge to `main`**, kept as a true fast-forward with a single parent.
+5. **Refresh this pair in the same session** (ADR-0019 + ADR-0021).
+6. **Ask before pushing `main`.** Every authorization is one-time and the
+   2026-08-07 one was consumed. **Pushing `feat/*` is standing-authorised, and
+   this branch is still UNPUSHED** — push it regardless of the merge.
+
+### 0.1 The twelve deferred minors — the review's triage list
+
+Recorded under review standard 19's report-don't-fix, with rulings, in the
+ledger (`grep -cE "minor \(deferred\)" progress.md` → 12). **Two are already
+resolved** — the route docstring's forward reference to ADR-0031 (which now
+exists) and MEMORY.md's "third page envelope" item (closed by Task 4). The rest
+need a *ships / blocks merge* decision from the whole-branch review:
+
+- **The `offset` 500 — the only one that is a live defect.** See §7 and
+  "Blocked on me": it is pre-existing on three routes and needs **your** call,
+  not the reviewer's.
+- **`"exactly one task row"` in `queue.py` and ADR-0031 decision 3 disagrees
+  with `api.py`'s `"at most one"`, three lines apart.** `unique=True` permits
+  zero, and zero is the case the route 403s, so "at most one" is the correct
+  one. Pre-existing wording, found at the last re-review.
+- The **inverse** null/empty direction (`""` → `None`) is unpinned in
+  `correction_summary` — a different shape from the closed class; belongs with
+  the column's write-time contract.
+- `created_at` is exercised only with `UTC` tzinfo.
+- The fixture guard's `set(values)` assumes hashable rendered values — degrades
+  the diagnostic, not the guarantee.
+- Six new queue tests omit the `-> None` annotation their siblings carry.
+- `test_an_unknown_receipt_is_404_even_for_an_admin` is subsumed verbatim by a
+  later parametrised case; only the `[reviewer]` half is load-bearing.
+- The `require_user`-vs-`require_upload` pin is the **third** per-route example
+  of a universal claim; the converging form is a table over every non-upload
+  route.
+- Two suite counts anchored to a milestone *name* rather than a SHA
+  (`tests/test_api_read.py`'s "all 979", and ADR-0031's `has_more` sentence),
+  plus a pre-existing "all 116" in `tests/test_api_write.py`. **All three are
+  currently true**; the objection is the anchor, per ADR-0032 §3.
+- `items: list[dict]` loosened to `list[Any]` survives, and envelope field order
+  is unpinned — both **pre-existing**, inherited by the reparent.
+- **Tree-wide, not this branch's:** every `__all__` entry in `src/` is
+  unkillable by any test, because the tree has **zero star-imports**. 182 names
+  across 21 modules. Needs its own decision if anyone wants it closed.
+
+### 0.2 Two things the branch deliberately did not do
+
+- **`RECEIPT_SYSTEM_SPEC.md` §14.9's route inventory has no
+  `GET /receipts/{receipt_id}/corrections` row.** Marked OUTSTANDING in three
+  documents rather than done. That same `# api.py  (FastAPI routes)` header also
+  heads three routes that live in `auth.py` — the design puts both in remit
+  together whenever that line is next edited.
+- **No frontend.** The reviewer-facing view of correction history is its own
+  milestone, and will need ADR-0027's token vocabulary and its decision 5 null
+  rule for the `value_before is None` case.
+
+---
+
+## 1. What the styling milestone left behind
 
 Nothing here blocks on a ruling except where marked. All of it is measured.
 
@@ -531,6 +622,16 @@ reason proves nothing), plus:
     two matching counts are the weakest evidence of a shared cause and read as
     the strongest. **State a query's anchor beside its number** — `^\s*--[a-z]`
     answers "how many *begin a line*".
+24. **A document cannot certify itself, and a derived claim can rot inside its
+    own commit.** ADR-0032. Nine fix rounds on the last branch fixed nine
+    defects and **not one was behaviour** — all were sentences, and **five were
+    written while fixing the other four**. Three rules: a sentence whose subject
+    is the document's own trustworthiness gets **deleted, not corrected**
+    (rewriting it is the enumerated defence, and **headings are sentences**); a
+    correctly-derived claim can be falsified by the very commit that carries it;
+    and **anchors are where rot lives**, so prefer no number to a well-anchored
+    one, and where a stamp is genuinely needed hand over **the command, not the
+    answer**.
 
 And: **a green suite is not evidence that installed software works** — run entry
 points from outside the repository. §1.6 is the current example.
@@ -602,13 +703,15 @@ points from outside the repository. §1.6 is the current example.
 
 ## Today's goal
 
-**Something IS in flight: `feat/corrections-read-route`, four tasks done, no
-whole-branch review, not merged, not pushed.** Finishing it is the default
-first move, and it is the only item here with work already banked. In order:
-push the branch (standing `feat/*` authorisation, ADR-0021 decision 4) →
-`python scripts/verify.py` at the tip → whole-branch review on the strongest
-model → one consolidated fix wave → one scoped re-review → ff-merge → refresh
-this pair in the same session → **ask before pushing `main`**.
+**Something IS in flight: `feat/corrections-read-route` — four tasks done, all
+five gates PASS at the tip, no whole-branch review, not merged, not pushed.**
+**§0 is the work.** Finishing it is the default first move and the only item
+here with work already banked.
+
+`verify.py` was run at the tip `983f57c` at the last session's close, so unless
+the tree has moved you do not need to re-run it before the review — **but run
+the freshness commands in `docs/MEMORY.md`'s stamp first, and if either lists
+anything, re-run the gates before trusting any of this.**
 
 **Only then** pick from §2.2 onward, or answer the questions above and let that
 pick for you.

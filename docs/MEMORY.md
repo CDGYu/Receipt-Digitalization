@@ -6,28 +6,31 @@ continuity protocol itself — what lives where, and why this snapshot must be
 verified rather than trusted — is **ADR-0019**, extended by **ADR-0021** (whose
 2026-08-02 dated correction widened the freshness check after a docs-only task
 proved invisible to it).
-Last updated: **2026-08-10, MID-MILESTONE (ADR-0021)**. **Both positions, because
+Last updated: **2026-08-10, MID-MILESTONE (ADR-0021)**, at the end of the
+session that built the corrections read route. **Both positions, because
 mid-branch there are two** and ADR-0021 decision 2 requires both:
 **`main @ e2ec316`** (= `origin/main`, = the branch point) and
-**`feat/corrections-read-route @ 20d9bb9`, 11 commits ahead, UNPUSHED**, where
-`20d9bb9` is the last *code* commit — a stamp cannot name the commit that writes
-it. The freshness test is a command, not a commit count:
+**`feat/corrections-read-route @ 983f57c`, UNPUSHED**. A stamp cannot name the
+commit that writes it, so the test is a command, not a commit and not a count:
 
 ```
-git log --oneline 20d9bb9..feat/corrections-read-route -- src tests frontend docs ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
+git log --oneline 983f57c..feat/corrections-read-route -- src tests frontend docs ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
 git log --oneline e2ec316..main -- src tests frontend docs ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
 ```
 
-**Empty means current.** The second was empty when this was written. The first
-lists **Task 4's commits and nothing else** — `2909d57` (ADR-0031, the index,
-this file, dated notes on the spec and plan) and its fix rounds, one of which
-also corrects two test **docstrings**, so `tests/` legitimately appears in that
-range with no test logic changed. **The count is deliberately not written here:
-it went stale within one commit when it was, since every fix round adds to it.**
+**Both empty means current.** Anything in either list means the tree moved after
+this was written and you are reading something stale.
+
+**No characterisation of `983f57c` is written here on purpose** — an earlier
+version of this stamp called its SHA "the last *code* commit", and the next
+commit falsified that by editing a docstring under `src/`. That is **ADR-0032
+§2**: a claim can be derived correctly and rot inside the commit that carries
+it. The SHA plus the command cannot rot; a sentence about what the SHA *is*
+can.
+
 ADR-0021's 2026-08-02 correction records that a commit touching `docs/` *beside*
-the handoff pair is deliberately visible here; only a commit touching the pair
-**alone** is invisible. **Anything else in either list means the tree moved
-after this was written and you are reading something stale.**
+the handoff pair is deliberately visible to this check; only a commit touching
+the pair **alone** is invisible.
 
 *(The previous stamp was 2026-08-07 at `main @ be6d7c0`, the
 `feat/review-ui-styling` merge tip. `main` is `e2ec316` now — two continuity
@@ -173,11 +176,20 @@ Decision: **ADR-0031**. Ledger:
 `.superpowers/sdd/2026-08-10-corrections-read-route/progress.md`.
 
 **Status, stated first because the other sections in this file all say
-"merged".** Four tasks, strictly serial. Tasks 1–3 are complete and reviewed;
-Task 4 is the documentation commit plus one fix round. **No whole-branch review
-has run, no fix wave, no merge, and the branch is UNPUSHED** —
+"merged".** Four tasks, strictly serial — **all four are complete, each with a
+task review and a scoped re-review**. Nine fix rounds ran in total: one on
+Task 1, one on Task 2, two on Task 3, five on Task 4 (the cap).
+
+**What has NOT happened, and is the whole of what remains: no whole-branch
+review, no close fix wave, no merge, and the branch is UNPUSHED** —
 `git branch --no-merged main` names it. `main` has not moved: `e2ec316` is
 `main`, `origin/main` and the branch point alike.
+
+**Gates at the branch tip `983f57c`, controller-run 2026-08-10:
+`python scripts/verify.py` — all five PASS.** pytest **1004**; Vitest **346
+across 25 files, unmoved**, because no frontend file is in any task's file set.
+This is the tip result, not a mid-branch one: earlier records in this file that
+say "`verify.py` has not been run at the tip" are superseded by this line.
 
 **Deliberately NOT done, so it is not mistaken for an oversight:**
 `RECEIPT_SYSTEM_SPEC.md` §14.9's route inventory has **no**
@@ -243,6 +255,34 @@ the reason and the accepted cost (the order is no longer total).
 `review/schemas.py`, with all three named subclasses reparented and proven
 wire-neutral two independent ways. That closes the deferred follow-up carried
 since the admin-UI-routes close.
+
+**How execution actually went, because it is the milestone's real output —
+ADR-0032 and review standard 24.** Nine fix rounds ran, and **not one of the
+defects they fixed was behaviour**: every gate passed at every point. All of
+them were sentences — a number or a universal nobody ran a command for.
+**Five of the nine were written *while fixing* one of the other four**, in four
+consecutive rounds of Task 4, and each was caught only because every round ends
+in a scoped re-review. The ledger numbers the last four explicitly
+(`grep -oE "INSTANCE [A-Z]+" progress.md`).
+
+What converged it was **deleting** the self-describing sentences rather than
+rewriting them, after rounds 1–3 each fixed one and produced another in the
+same place. Rounds 4–5 escalated to a fresh implementer on a stronger model per
+ADR-0023's dispatch rule; round 5 introduced nothing new — the first of the five
+that did not — and found a `HEAD`-anchored claim the review had missed, which
+the ADR's own recorded follow-up would eventually have falsified.
+
+**Nine plan/design/controller defects, every one the controller's**, which
+matches all nine previous milestones. Derive them rather than quoting:
+`grep -oE "(PLAN|DESIGN|CONTROLLER) DEFECT #[0-9]+" progress.md`. Two are worth
+knowing before writing another plan: **#1**, a mutation the plan prescribed that
+proved nothing because all five of its own tests shared a fixture that could not
+discriminate the predicate; and **#7**, a verification grep anchored to
+`src/*.py` that reported "all three files fixed" while two more sat in `tests/`.
+
+**Twelve minor findings were deferred, not fixed** (`grep -cE "minor \(deferred\)"
+progress.md`), under review standard 19's report-don't-fix. **They are the
+whole-branch review's triage list and have not been triaged.**
 
 **Counts, measured 2026-08-10 by `pytest --collect-only` at every commit from
 the base through `2909d57`** — thirteen SHAs, enumerated from
@@ -1497,6 +1537,31 @@ measured.**
     message miscounted its files and stated an unmeasured residual bound, both
     caught by the scoped re-review. **ADR-0030.**
 
+24. **A document cannot certify itself, and a derived claim can rot inside its
+    own commit.** ADR-0032. The corrections milestone ran **nine fix rounds**
+    and every defect they fixed was a sentence, not behaviour — a number or a
+    universal nobody ran a command for. **Five of the nine were written *while
+    fixing* one of the other four**, in four consecutive rounds of one task.
+    Three things came out of it:
+
+    * **A sentence whose subject is the document's own trustworthiness gets
+      deleted, not corrected.** Rewriting it more carefully is standard 19's
+      enumerated defence — each description is a fresh claim that can be wrong,
+      so the surface never closes. The bound: *a sentence stays only if its
+      subject is the system and a reader can check it without trusting the
+      author.* **Headings are sentences** — one sweep left two headings carrying
+      the claim it had just deleted from the body two lines below.
+    * **A correctly-derived claim can rot inside the commit that carries it.**
+      A header read "`src/` has not moved since `bc67c31`", which was true when
+      written and was falsified by the same commit editing `api.py`. Derivation
+      is a property of a sentence *at a commit*, and the commit boundary is not
+      a safe unit.
+    * **Anchors are where rot lives, so prefer no number to a well-anchored
+      one.** Closed anchors (a fixed SHA) are true forever; open ones (`HEAD`, a
+      growing range, a milestone *name*) rot silently with nothing going red.
+      Where a stamp is genuinely needed, hand over **the command, not the
+      answer** — which is what ADR-0019 already does for this file's own stamp.
+
 And: **a green suite is not evidence that installed software works.** Anything
 with an entry point gets run from outside the repository.
 
@@ -1508,8 +1573,9 @@ with an entry point gets run from outside the repository.
 - `docs/NEXT_SESSION_PROMPT.md` — the ordered task list and reading order.
 - `IMPLEMENTATION_PLAN.md` · `README.md` (§5 design decisions) · `VLM_AND_DATA.md`
 - **`docs/KNOWN_ISSUES.md`** — ISSUE-001 with its diagnosis and resume steps.
-- **`docs/adr/` — 0001–0031** (re-derived 2026-08-10: `ls docs/adr/*.md` minus
-  `README.md` counts **31**, and the four-digit prefixes are contiguous from
+- **`docs/adr/` — 0001–0032** (re-derived 2026-08-10 at the session close:
+  `ls docs/adr/*.md` minus `README.md` counts **32**, and the four-digit
+  prefixes are contiguous from
   0001); see `docs/adr/README.md`. **This range read `0001–0026` until
   2026-08-10** — it was written at ADR-0026 and never touched again while 0027,
   0028, 0029 and 0030 landed. **Count the files; do not trust the range**, and

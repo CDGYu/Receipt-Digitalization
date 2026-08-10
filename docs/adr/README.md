@@ -37,6 +37,7 @@ Accepted; supersede it with a new ADR rather than editing history.
 | [0029](0029-what-the-gates-certify.md) | What the gates certify, and what they cannot | Accepted |
 | [0030](0030-a-finding-is-a-claim.md) | A finding is a claim, and a fix wave verifies before it fixes | Accepted |
 | [0031](0031-the-corrections-read-route.md) | The corrections read route: who may see a receipt's attribution | Accepted |
+| [0032](0032-a-document-cannot-certify-itself.md) | A document cannot certify itself, and a derived claim can rot inside its own commit | Accepted |
 
 Read **0001** first: it is the invariant everything else defers to. **0007** is
 the one to read before touching anything that writes card data or money, and
@@ -66,6 +67,13 @@ or before scoping `GET /receipts/{receipt_id}`, whose being *unscoped* is the
 premise its 403-not-404 rests on. It also records the limit the schema forces:
 `review_tasks.receipt_id` is UNIQUE, so a released or reopened task takes a
 reviewer's own correction history away from them.
+**0032** is the one to read before writing a fix wave's prose, or any sentence
+about how well a document was checked: on one milestone, five of nine
+false-claim defects were introduced *by fix rounds*, four of them in
+consecutive rounds of one task. It gives the bounded property that closed it —
+a sentence stays only if its subject is the system and a reader can check it
+without trusting the author — and records how a correctly-derived claim rotted
+inside the commit that carried it.
 
 Primary sources these build on: `RECEIPT_SYSTEM_SPEC.md` (build spec),
 `README.md` (§5 design decisions), `VLM_AND_DATA.md`, and the always-on
