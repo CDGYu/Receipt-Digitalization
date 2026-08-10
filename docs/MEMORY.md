@@ -10,13 +10,12 @@ Last updated: **2026-08-10, MID-MILESTONE (ADR-0021)**, at the end of the
 session that built the corrections read route. **Both positions, because
 mid-branch there are two** and ADR-0021 decision 2 requires both:
 **`main @ e2ec316`** (= `origin/main`, = the branch point) and
-**`feat/corrections-read-route @ 73a1576`, PUSHED** — `git ls-remote --heads
-origin feat/corrections-read-route` confirmed it at that SHA. A stamp cannot
-name the commit that writes it, so the test is a command, not a commit and not
-a count:
+**`feat/corrections-read-route @ df7aed7`, PUSHED** — `git ls-remote --heads
+origin feat/corrections-read-route` confirmed it. A stamp cannot name the commit
+that writes it, so the test is a command, not a commit and not a count:
 
 ```
-git log --oneline 73a1576..feat/corrections-read-route -- src tests frontend docs ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
+git log --oneline df7aed7..feat/corrections-read-route -- src tests frontend docs ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
 git log --oneline e2ec316..main -- src tests frontend docs ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
 git log --oneline @{u}..feat/corrections-read-route          # unpushed commits, if any
 ```
