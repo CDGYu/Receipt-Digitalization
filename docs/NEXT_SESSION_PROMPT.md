@@ -81,8 +81,8 @@ pushing `main`. See §0.
 2. **The ledgers** — `.superpowers/sdd/*/progress.md`, one per milestone.
    **`.superpowers/sdd/2026-08-10-corrections-read-route/progress.md` is the one
    that matters now**: it holds the nine fix rounds, the nine controller
-   defects, every ruling, and — most importantly — **the twelve deferred minor
-   findings that are the whole-branch review's triage list.** The review-UI
+   defects, every ruling, **the thirteen deferred minor findings and the
+   whole-branch review's triage of them** (all thirteen: ships). The review-UI
    styling one records twenty-five plan defects and "THE CLOSE".
    **`.superpowers/` is gitignored — open ledgers by path; nothing in them is
    findable by searching the tracked tree.**
@@ -157,36 +157,31 @@ pushing `main`. See §0.
 ## 0. FIRST — close `feat/corrections-read-route`. Nothing else starts until this does.
 
 The branch is **built, fully task-reviewed, and green at the tip**. It has had
-**no whole-branch review**. That review is the only thing standing between it
-and `main`, and this project's whole-branch reviews have twice found a Critical
-that every gate was green on — including a milestone's headline deliverable
-being deletable outright.
+**a whole-branch review, which HAS now run** on the strongest model, 2026-08-10.
 
-**The close, in order:**
+**Verdict: MERGE AFTER FIXES. No Critical. Every finding was prose — nothing in
+behaviour.** It ran **17 mutations, 15 killed**; one survivor was equivalent and
+one was the known `GET /receipts` `has_more` gap on a different route. It
+confirmed the PAN pin holds end-to-end and that the scope fails closed.
 
-1. **Whole-branch review on the strongest model.** Diff `e2ec316..HEAD`: 18
-   commits, 14 files, +3028/−87 (re-derive with `git diff --stat e2ec316..HEAD`).
-   Point it at the ledger's deferred and parked lines so it can triage them.
-   **Brief it to mutate**, not to read: three surviving mutants were found in
-   `list_corrections` across two passes, and three more in `correction_summary`
-   — in both cases every clause nobody deliberately mutated proved decorative.
-2. **One fix wave**, briefed to **verify before it fixes** (ADR-0030) and to
-   **delete self-describing prose rather than rewrite it** (ADR-0032). On this
-   branch, five of nine false-claim defects were produced *by fix rounds*.
-3. **One scoped re-review** of the fix wave.
-4. **ff-merge to `main`**, kept as a true fast-forward with a single parent.
-5. **Refresh this pair in the same session** (ADR-0019 + ADR-0021).
-6. **Ask before pushing `main`.** Every authorization is one-time and the
+**The three Important findings were fixed in the same session** (see §0.2), so
+what remains is:
+
+1. **One scoped re-review of that fix wave.** It touched `queue.py`'s docstring,
+   ADR-0031, ADR-0032 and `docs/MEMORY.md` — no logic.
+2. **ff-merge to `main`**, kept as a true fast-forward with a single parent.
+3. **Refresh this pair in the same session** (ADR-0019 + ADR-0021).
+4. **Ask before pushing `main`.** Every authorization is one-time and the
    2026-08-07 one was consumed. Pushing `feat/*` is standing-authorised and
    this branch is already pushed; keep it that way as the close adds commits.
 
-### 0.1 The twelve deferred minors — the review's triage list
+### 0.1 The thirteen deferred minors — ALL TRIAGED AS *SHIPS*
 
 Recorded under review standard 19's report-don't-fix, with rulings, in the
-ledger (`grep -cE "minor \(deferred\)" progress.md` → 12). **Two are already
-resolved** — the route docstring's forward reference to ADR-0031 (which now
-exists) and MEMORY.md's "third page envelope" item (closed by Task 4). The rest
-need a *ships / blocks merge* decision from the whole-branch review:
+ledger (`grep -cE "minor \(deferred" progress.md` → 13 — **without** the closing
+`\)`, which drops one). **The whole-branch review triaged every one as *ships*;
+none blocks the merge.** Two were already resolved before it ran. Kept here
+because they are real and someone should still know them:
 
 - **The `offset` 500 — the only one that is a live defect.** See §7 and
   "Blocked on me": it is pre-existing on three routes and needs **your** call,
@@ -217,7 +212,42 @@ need a *ships / blocks merge* decision from the whole-branch review:
   unkillable by any test, because the tree has **zero star-imports**. 182 names
   across 21 modules. Needs its own decision if anyone wants it closed.
 
-### 0.2 Two things the branch deliberately did not do
+### 0.2 What the whole-branch review found, and what was done about it
+
+Three Important, all prose, **all fixed 2026-08-10 before the handoff was
+written**. Each was verified before being acted on (ADR-0030); none was refuted.
+
+- **ADR-0031 decision 2 claimed a boundary the queue does not hold.** It said
+  including `OPEN` in the scope "would disclose every unclaimed receipt's
+  attribution to every reviewer" — but `GET /review/next` converts an `OPEN`
+  task into one assigned to the caller, and `close_task` never clears
+  `assigned_to`, so the access is **permanent** once taken. Measured: a reviewer
+  holding nothing got `403/403/403`; after looping next → read → complete three
+  times, `200/200/200`, retained. **Fixed by stating the limit**: the difference
+  is friction and an audit trail, not confidentiality.
+- **`docs/MEMORY.md`'s review standard 24 was the last surviving copy of the
+  rounds-vs-instances conflation** — the milestone summary and the handoff had
+  both been corrected, and the standards list, which is where every session is
+  sent, had not. **Fixed.**
+- **`"exactly one task row"` was in three shipped places, not the two the
+  handoff named** (`queue.py`, ADR-0031 decision 3, `docs/MEMORY.md`), while
+  `api.py` correctly said "at most one" — `unique=True` permits **zero**, and
+  zero is the case the route 403s. **All three fixed.**
+
+Minors it raised that were also fixed: ADR-0032's own instance count used the
+anchor `INSTANCE [A-Z]+`, which silently drops the ledger's plural `INSTANCES
+TEN THROUGH THIRTEEN`; and its deferred-minor count used `minor \(deferred\)`,
+whose closing `\)` drops one entry. **Both were wrong anchors in the ADR that
+legislates about anchors**, and this brief inherited the second one.
+
+Minors it raised and left standing, worth knowing: `mypy` is configured in
+`pyproject.toml` but **invoked by nothing in the tree**, so the "killed by mypy"
+claim in ADR-0031 names a check no gate runs; and `created_at` reaches the wire
+**without a timezone offset** on SQLite, while Postgres would emit one — every
+fixture supplies an explicit tz-aware value, so the shape a deployment actually
+emits is unasserted.
+
+### 0.3 Two things the branch deliberately did not do
 
 - **`RECEIPT_SYSTEM_SPEC.md` §14.9's route inventory has no
   `GET /receipts/{receipt_id}/corrections` row.** Marked OUTSTANDING in three

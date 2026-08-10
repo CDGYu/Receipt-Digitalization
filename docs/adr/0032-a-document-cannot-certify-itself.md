@@ -21,12 +21,24 @@ Those rounds fixed real work as well as prose: Task 1's changed the route's
 fixture that could not discriminate what it claimed to pin. **Rounds are not the
 unit this ADR is about.**
 
-The unit is the **false-claim instance**, and the milestone recorded nine. Every
-one was a sentence — a number, or a universal, that nobody had run a command to
-check — and **none of the nine was a defect in behaviour**: every gate passed
-throughout. The ledger numbers the last four explicitly
-(`grep -oE "INSTANCE [A-Z]+" progress.md` → SIX, SEVEN, EIGHT, NINE); the first
-five were counted as they were found during Task 3.
+The unit is the **false-claim instance**. **Nine were found during execution**,
+and more afterwards — count them rather than reading a number here, and mind the
+anchor:
+
+```
+grep -oE "INSTANCES? [A-Z]+" progress.md      # the plural marker is load-bearing
+```
+
+Every instance was a sentence — a number, or a universal, that nobody had run a
+command to check — and **not one was a defect in behaviour**: every gate passed
+throughout. The ledger numbers them from SIX onward; the first five were counted
+as they were found during Task 3.
+
+> **The singular anchor `INSTANCE [A-Z]+` is wrong** and this ADR carried it.
+> The ledger's post-close entry reads `INSTANCES TEN THROUGH THIRTEEN`, which
+> the singular form silently drops — so the stated method returned the number
+> the author expected. Corrected 2026-08-10 by the whole-branch review. Rule 3
+> below, and ADR-0030 §6, in one line.
 
 **Five of the nine instances were written *while fixing* one of the other
 four**, in four consecutive rounds of one task. The process built to catch false
@@ -165,10 +177,13 @@ one ships its own prose unreviewed, and the prose is where the defects are.
   > carried them**, because `HEAD` is a moving ref — the exact defect §3 below
   > forbids, committed in the ADR that forbids it. The count is now a command,
   > and the command is anchored to the branch rather than to `HEAD`.
-- **Twelve minor findings were deferred rather than fixed**
-  (`grep -cE "minor \(deferred\)" progress.md` → 12), under review standard 19's
+- **Minor findings were deferred rather than fixed**, under review standard 19's
   report-don't-fix. They are in the ledger with rulings, and the whole-branch
-  review is where they get triaged.
+  review is where they get triaged. Count them with
+  `grep -cE "minor \(deferred" progress.md` — **without** a closing `\)`, which
+  drops the entry written as `minor (deferred, found by …)` and returns 12
+  instead of 13. This ADR shipped the narrower anchor, and the review brief
+  built on it inherited the same undercount.
 - **This ADR is subject to its own rules.** Its counts are closed to
   `feat/corrections-read-route` at 2026-08-10 with their queries named. It makes
   no claim about how carefully it was checked, and it should not acquire one.

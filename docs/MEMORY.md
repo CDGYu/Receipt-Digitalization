@@ -230,7 +230,8 @@ caller and a 404 here would hide nothing. **If that route is ever scoped, the
 
 **The limit is real, was found by review rather than by design, and is stated
 rather than narrowed away.** `review_tasks.receipt_id` is UNIQUE, so a receipt
-has exactly one task row and there is no record of prior holders. Both
+has **at most one** task row — UNIQUE permits zero, which is the case the route
+403s — and there is no record of prior holders. Both
 `release_task` and `enqueue_review`'s reopen branch **clear** `assigned_to`, so a
 reviewer whose task was released or reopened is refused exactly as a stranger is
 — they lose access to corrections they made themselves.
@@ -294,9 +295,10 @@ proved nothing because all five of its own tests shared a fixture that could not
 discriminate the predicate; and **#7**, a verification grep anchored to
 `src/*.py` that reported "all three files fixed" while two more sat in `tests/`.
 
-**Twelve minor findings were deferred, not fixed** (`grep -cE "minor \(deferred\)"
-progress.md`), under review standard 19's report-don't-fix. **They are the
-whole-branch review's triage list and have not been triaged.**
+**Thirteen minor findings were deferred, not fixed** (`grep -cE "minor \(deferred"
+progress.md`), under review standard 19's report-don't-fix. **The whole-branch
+review triaged all thirteen as SHIP** — none blocks the merge. Its rulings are
+in the ledger under "WHOLE-BRANCH REVIEW".
 
 **Counts, measured 2026-08-10 by `pytest --collect-only` at every commit from
 the base through `2909d57`** — thirteen SHAs, enumerated from
@@ -1557,10 +1559,20 @@ measured.**
     caught by the scoped re-review. **ADR-0030.**
 
 24. **A document cannot certify itself, and a derived claim can rot inside its
-    own commit.** ADR-0032. The corrections milestone ran **nine fix rounds**
-    and every defect they fixed was a sentence, not behaviour — a number or a
-    universal nobody ran a command for. **Five of the nine were written *while
+    own commit.** ADR-0032. The corrections milestone recorded **nine
+    false-claim instances**, every one a sentence rather than a defect in
+    behaviour — a number or a universal nobody ran a command for, with every
+    gate green throughout. **Five of the nine instances were written *while
     fixing* one of the other four**, in four consecutive rounds of one task.
+
+    **Do not confuse that nine with the nine fix *rounds*.** The rounds changed
+    real behaviour and added real tests — Task 1's changed the route's
+    `ORDER BY` on a user ruling and added 80 lines. Merging the two nines was
+    itself one of the corrected claims, and **this entry was the last surviving
+    copy of it**: the whole-branch review found it here after the milestone
+    summary and the handoff had both been fixed. The standards list is where
+    every session is sent, so it is the copy that matters most.
+
     Three things came out of it:
 
     * **A sentence whose subject is the document's own trustworthiness gets

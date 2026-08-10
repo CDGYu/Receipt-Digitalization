@@ -487,7 +487,8 @@ def list_corrections(
 
     **That is narrower than "holds or has ever held", and the gap is real rather
     than pedantic.** ``review_tasks.receipt_id`` is UNIQUE, so a receipt has
-    exactly one task row -- there is no record of prior holders to consult, and
+    **at most one** task row -- UNIQUE permits zero, and zero is exactly the
+    case this function refuses -- so there is no record of prior holders, and
     "has ever held" is not a question this schema can answer. Two paths clear
     ``assigned_to`` on that single row, and each one silently revokes a
     reviewer's access to corrections they made themselves:

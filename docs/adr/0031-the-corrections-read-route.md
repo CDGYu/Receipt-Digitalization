@@ -110,14 +110,35 @@ would disclose every unclaimed receipt's attribution — which named colleague
 changed which field — to every reviewer in the system, which is precisely the
 disclosure decision 4 says this scope exists to prevent.
 
-### 3. The stated limit: the schema cannot answer "has ever held"
+**The stated limit on that rejection, and it is not small.** Excluding `OPEN`
+raises the cost of reaching an unclaimed receipt's attribution; it does not
+deny it. `GET /review/next` converts an `OPEN` task into one assigned to the
+caller (`next_task` sets `task.assigned_to = assignee`), and `close_task` never
+clears it (ADR-0025), so the access is **permanent** once taken. Measured
+2026-08-10 at the whole-branch review, on three queued receipts whose
+corrections were attributed to another reviewer: a reviewer holding nothing got
+`403 / 403 / 403`; after looping `GET /review/next` → read → `POST
+/review/{task}/complete` three times, `200 / 200 / 200`, and the access
+persisted after completion.
+
+So the difference between the shipped scope and the rejected one is **not
+confidentiality but friction and accountability**: reaching that set costs three
+HTTP calls per receipt, consumes the queue serially, and leaves the reviewer's
+name in `review_tasks.assigned_to` on every receipt they touched. That is a real
+and defensible difference — an audit trail rather than a silent read — but it is
+a different claim from the one the paragraph above makes, and a reader would
+otherwise take decision 2 as a boundary. **Closing it properly would need a
+scope that is not derivable from `assigned_to` alone, which is the same shape of
+limit decision 3 records.**
 
 The design said "held **or previously held**". The schema cannot express that,
 and the shipped scope is narrower than the phrase.
 
 `ReviewTask.receipt_id` carries `unique=True` (`src/receipts/persist/models.py`),
-so a receipt has exactly **one** task row. There is no history of prior holders
-to consult — "has ever held" is not a question this schema can answer.
+so a receipt has **at most one** task row — `unique=True` permits **zero**, and
+zero is precisely the case the route answers 403 for. There is no history of
+prior holders to consult; "has ever held" is not a question this schema can
+answer.
 
 Two paths clear `assigned_to` on that single row. Both were re-verified by
 reading every hit of `git grep -n "assigned_to" -- src/receipts/review/queue.py`
