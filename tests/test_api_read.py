@@ -979,7 +979,9 @@ def test_corrections_paginate_in_both_directions(session_factory, admin_client, 
 # --------------------------------------------------------------------------- #
 # Three clauses the eight tests above left decorative, found by mutating each
 # clause of the route one at a time. Each of these three mutants survived the
-# **full** suite, not just this module.
+# **full** suite -- not just this module -- as that suite stood at `6536d0f`,
+# the commit before these tests. Each is killed by the test beside it now, so
+# read every "survived" below as history, not as a live property.
 # --------------------------------------------------------------------------- #
 
 
@@ -992,7 +994,10 @@ def test_an_unknown_receipt_is_404_for_every_signed_in_role(clients, actor):
     cannot tell: an admin's ``visible_to`` is ``None``, so ``list_corrections``
     returns ``[]`` and never ``None``, and the 404 comes back whichever side of
     the scope call the existence check sits on. Measured -- moving that check
-    below the ``rows is None`` branch left all 998 tests green.
+    below the ``rows is None`` branch left the whole suite green as it stood at
+    ``6536d0f``, the commit before this test existed. This test is what closes
+    it, so re-running that mutation today is expected to fail *here*; a count
+    would rot, and a present-tense "survives" is now simply false.
 
     A reviewer separates them. An id that names no receipt has no
     ``review_tasks`` row either, so the scope call returns ``None`` and the
@@ -1014,7 +1019,8 @@ def test_the_corrections_paging_window_is_refused_outside_its_bounds(
     """``Query(50, ge=1, le=200)`` and ``Query(0, ge=0)`` were decorative.
 
     Measured separately: dropping ``ge=1, le=200`` from ``limit``, and dropping
-    ``ge=0`` from ``offset``, each left all 998 tests green. Unbounded,
+    ``ge=0`` from ``offset``, each left the whole suite green as it stood at
+    ``6536d0f``, the commit before these cases existed. Unbounded,
     ``?limit=100000`` reaches ``list_corrections`` and asks SQLite for 100001
     rows in one query. ``GET /receipts`` has had this pinned since P4.T4
     (``test_list_caps_the_page_size``); this route inherited the declaration
@@ -1026,20 +1032,37 @@ def test_the_corrections_paging_window_is_refused_outside_its_bounds(
     **What it does not close, and the measurement rather than the reasoning:**
     ``offset`` has no declared ceiling, so ``?offset=9223372036854775808``
     (``2**63``) satisfies ``ge=0``, reaches SQLite, and raises ``OverflowError:
-    Python int too large to convert to SQLite INTEGER``. That is an unhandled
-    **500** on an auth-scoped route, reachable by any signed-in caller. Measured
-    by calling the route: ``2**63 - 1`` (9223372036854775807) is the largest
-    offset that still answers 200, and the 500 body is Starlette's plain
+    Python int too large to convert to SQLite INTEGER`` -- an unhandled **500**.
+    Measured by calling the route: ``2**63 - 1`` (9223372036854775807) is the
+    largest offset that still answers 200, and the 500 body is Starlette's plain
     ``Internal Server Error``, not this service's ``{"error": {"message": ...}}``
-    shape -- no handler in ``_install_error_handlers`` catches ``OverflowError``,
-    so the failure escapes the error-body contract as well as the status one.
+    shape. ``OverflowError`` is an ``ArithmeticError``, not a ``ValueError``, so
+    none of the three handlers in ``_install_error_handlers`` catches it and the
+    failure escapes the error-body contract as well as the status one.
+
+    **Who reaches it here is narrower than "any signed-in caller", and this
+    route's scope check is the difference.** Measured, every caller class at
+    offsets 0, ``2**63 - 1`` and ``2**63``:
+
+      * anonymous -- 401, 401, 401;
+      * a configured machine key -- 401, 401, 401;
+      * a reviewer with **no** ``review_tasks`` row -- **403, 403, 403**: the
+        scope call returns ``None`` and the 403 is raised before the offset is
+        ever handed to SQLite, so the ceiling is unreachable for them;
+      * a reviewer **holding** the receipt -- 200, 200, 500;
+      * an admin -- 200, 200, 500.
+
+    So the 500 is reachable by exactly the callers already entitled to read this
+    history, and by no one else -- a strictly smaller set than the sibling
+    routes expose, and smaller *because* scope is checked before the query.
 
     **Left open on purpose.** The identical input answers 500 on ``GET
-    /receipts`` and ``GET /review/tasks`` too -- verified by calling all three,
-    not inferred from their sharing a declaration. This route copied that
-    declaration verbatim from its brief, so the defect is pre-existing and
-    three-instanced: report, do not fix (standard 19). A fix belongs with all
-    three at once.
+    /receipts`` and ``GET /review/tasks``, and **there** it really is reachable
+    by any signed-in caller -- reviewer and admin alike, measured the same way --
+    because neither route refuses anybody before its query runs. Three instances
+    of one pre-existing defect, in a declaration this route copied verbatim from
+    its brief: report, do not fix (standard 19). A fix belongs with all three at
+    once, and the two siblings are the more exposed pair.
     """
     response = admin_client.get(f"/receipts/{receipt_id}/corrections?{query}")
 

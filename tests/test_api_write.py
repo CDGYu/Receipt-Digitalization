@@ -1144,8 +1144,12 @@ def test_a_configured_api_key_cannot_read_a_correction_history(key_client, recei
 
     Measured, and the measurement is not what the mutant first looked like.
     With this route's dependency changed from ``require_user`` to
-    ``require_upload`` -- the one ``POST /upload`` itself uses -- all 998 tests
-    stayed green. But a machine key does **not** reach a served history:
+    ``require_upload`` -- the one ``POST /upload`` itself uses -- the whole suite
+    stayed green as it stood at ``6536d0f``, the commit before this test existed;
+    this test is what closes it, so that mutation is expected to fail *here*
+    now. (Dated rather than counted: a bare suite total rots without its
+    sentence changing, and read as present tense it would be false.) But a
+    machine key does **not** reach a served history:
     ``require_upload`` returns ``None`` for a valid key (a machine, not a
     person, see its docstring), so ``user.role`` on the route's first line
     raises ``AttributeError: 'NoneType' object has no attribute 'role'`` and the
