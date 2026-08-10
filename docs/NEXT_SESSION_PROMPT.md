@@ -20,7 +20,7 @@ it to "fix" a correct sentence in an Accepted ADR to match a wrong measurement.
 
 ---
 
-# ONE BRANCH IN FLIGHT: `feat/corrections-read-route`. NOT merged, NOT pushed.
+# ONE BRANCH IN FLIGHT: `feat/corrections-read-route`. PUSHED, NOT merged, NOT reviewed.
 
 **This header said "NO BRANCH IN FLIGHT" for three days while that branch
 existed** — true when written on 2026-08-07 and rotted on 2026-08-10, which is
@@ -32,7 +32,8 @@ git status --short                        # must be empty
 git log --oneline -6
 git rev-parse main origin/main            # must be identical
 git branch --no-merged main               # names feat/corrections-read-route, and nothing else
-git rev-parse --short origin/feat/corrections-read-route   # expected to FAIL: unpushed
+git ls-remote --heads origin feat/corrections-read-route   # pushed: expect a SHA
+git log --oneline @{u}..feat/corrections-read-route        # expect empty
 ```
 
 ## `main` is merged and pushed. The BRANCH is neither.
@@ -43,9 +44,11 @@ pushed with an explicit authorization **that push consumed**. **The next `main`
 push needs its own fresh ask** — and the corrections milestone is **not ready to
 ask**, because it has had no whole-branch review and no merge.
 
-**`feat/corrections-read-route` is UNPUSHED**, which ADR-0021 decision 4 says
-should not be true of an in-flight branch: pushing `feat/*` is standing-
-authorised, so push it. Until then the work exists on one machine only.
+**`feat/corrections-read-route` was pushed at the 2026-08-10 session close**
+under the standing `feat/*` authorisation (ADR-0021 decision 4), so the work no
+longer exists on one machine only. **Run the two commands above rather than
+believing this sentence** — if the refresh commit that wrote it is ahead of
+`origin`, push it.
 
 **Freshness check.** `docs/MEMORY.md`'s stamp now names **two** positions,
 because mid-branch there are two. Run both forms it gives; both must be empty
@@ -171,8 +174,8 @@ being deletable outright.
 4. **ff-merge to `main`**, kept as a true fast-forward with a single parent.
 5. **Refresh this pair in the same session** (ADR-0019 + ADR-0021).
 6. **Ask before pushing `main`.** Every authorization is one-time and the
-   2026-08-07 one was consumed. **Pushing `feat/*` is standing-authorised, and
-   this branch is still UNPUSHED** — push it regardless of the merge.
+   2026-08-07 one was consumed. Pushing `feat/*` is standing-authorised and
+   this branch is already pushed; keep it that way as the close adds commits.
 
 ### 0.1 The twelve deferred minors — the review's triage list
 
@@ -704,7 +707,7 @@ points from outside the repository. §1.6 is the current example.
 ## Today's goal
 
 **Something IS in flight: `feat/corrections-read-route` — four tasks done, all
-five gates PASS at the tip, no whole-branch review, not merged, not pushed.**
+five gates PASS at the tip, pushed, no whole-branch review, not merged.**
 **§0 is the work.** Finishing it is the default first move and the only item
 here with work already banked.
 

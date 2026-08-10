@@ -10,12 +10,15 @@ Last updated: **2026-08-10, MID-MILESTONE (ADR-0021)**, at the end of the
 session that built the corrections read route. **Both positions, because
 mid-branch there are two** and ADR-0021 decision 2 requires both:
 **`main @ e2ec316`** (= `origin/main`, = the branch point) and
-**`feat/corrections-read-route @ 983f57c`, UNPUSHED**. A stamp cannot name the
-commit that writes it, so the test is a command, not a commit and not a count:
+**`feat/corrections-read-route @ 73a1576`, PUSHED** — `git ls-remote --heads
+origin feat/corrections-read-route` confirmed it at that SHA. A stamp cannot
+name the commit that writes it, so the test is a command, not a commit and not
+a count:
 
 ```
-git log --oneline 983f57c..feat/corrections-read-route -- src tests frontend docs ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
+git log --oneline 73a1576..feat/corrections-read-route -- src tests frontend docs ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
 git log --oneline e2ec316..main -- src tests frontend docs ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
+git log --oneline @{u}..feat/corrections-read-route          # unpushed commits, if any
 ```
 
 **Both empty means current.** Anything in either list means the tree moved after
@@ -181,8 +184,9 @@ task review and a scoped re-review**. Nine fix rounds ran in total: one on
 Task 1, one on Task 2, two on Task 3, five on Task 4 (the cap).
 
 **What has NOT happened, and is the whole of what remains: no whole-branch
-review, no close fix wave, no merge, and the branch is UNPUSHED** —
-`git branch --no-merged main` names it. `main` has not moved: `e2ec316` is
+review, no close fix wave, and no merge.** The branch **is** pushed —
+`git branch --no-merged main` names it, and `git ls-remote --heads origin
+feat/corrections-read-route` returns a SHA. `main` has not moved: `e2ec316` is
 `main`, `origin/main` and the branch point alike.
 
 **Gates at the branch tip `983f57c`, controller-run 2026-08-10:
