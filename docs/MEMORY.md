@@ -19,10 +19,11 @@ git log --oneline e2ec316..main -- src tests frontend docs ":(exclude)docs/MEMOR
 ```
 
 **Empty means current.** The second was empty when this was written. The first
-lists **exactly two** commits, both Task 4's: `2909d57` (ADR-0031, the index,
-this file, and dated notes on the spec and plan) and the Task 4 **fix round**
-that writes this sentence — which also corrects two test **docstrings**, so
-`tests/` legitimately appears in that range with no test logic changed.
+lists **Task 4's commits and nothing else** — `2909d57` (ADR-0031, the index,
+this file, dated notes on the spec and plan) and its fix rounds, one of which
+also corrects two test **docstrings**, so `tests/` legitimately appears in that
+range with no test logic changed. **The count is deliberately not written here:
+it went stale within one commit when it was, since every fix round adds to it.**
 ADR-0021's 2026-08-02 correction records that a commit touching `docs/` *beside*
 the handoff pair is deliberately visible here; only a commit touching the pair
 **alone** is invisible. **Anything else in either list means the tree moved
