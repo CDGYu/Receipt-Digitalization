@@ -801,7 +801,7 @@ def test_correction_summary_reads_every_key_off_the_row_it_was_given():
     So: row A and row B differ in **every** rendered value, and they carry the
     null on **opposite** text fields -- A has no ``value_before``, B has no
     ``value_after``. That exercises each text field as both null and text, in
-    both directions, which is what pins ADR-0027 section 4 for both of them
+    both directions, which is what pins ADR-0027 section 5 for both of them
     rather than for ``value_before`` alone.
 
     The last two assertions are the bound, and they guard the *fixtures*, not

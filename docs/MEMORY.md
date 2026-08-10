@@ -19,12 +19,14 @@ git log --oneline e2ec316..main -- src tests frontend docs ":(exclude)docs/MEMOR
 ```
 
 **Empty means current.** The second was empty when this was written. The first
-lists **exactly one** commit — this milestone's Task 4, which writes this file
-alongside `docs/adr/0031`, the ADR index, and dated notes on this milestone's
-spec and plan. ADR-0021's 2026-08-02 correction records that a commit touching
-`docs/` *beside* the handoff pair is deliberately visible here; only a commit
-touching the pair **alone** is invisible. **Anything else in either list means
-the tree moved after this was written and you are reading something stale.**
+lists **exactly two** commits, both Task 4's: `2909d57` (ADR-0031, the index,
+this file, and dated notes on the spec and plan) and the Task 4 **fix round**
+that writes this sentence — which also corrects two test **docstrings**, so
+`tests/` legitimately appears in that range with no test logic changed.
+ADR-0021's 2026-08-02 correction records that a commit touching `docs/` *beside*
+the handoff pair is deliberately visible here; only a commit touching the pair
+**alone** is invisible. **Anything else in either list means the tree moved
+after this was written and you are reading something stale.**
 
 *(The previous stamp was 2026-08-07 at `main @ be6d7c0`, the
 `feat/review-ui-styling` merge tip. `main` is `e2ec316` now — two continuity
@@ -171,10 +173,18 @@ Decision: **ADR-0031**. Ledger:
 
 **Status, stated first because the other sections in this file all say
 "merged".** Four tasks, strictly serial. Tasks 1–3 are complete and reviewed;
-Task 4 is this documentation commit. **No whole-branch review has run, no fix
-wave, no merge, and the branch is UNPUSHED** — `git branch --no-merged main`
-names it. `main` has not moved: `e2ec316` is `main`, `origin/main` and the
-branch point alike.
+Task 4 is the documentation commit plus one fix round. **No whole-branch review
+has run, no fix wave, no merge, and the branch is UNPUSHED** —
+`git branch --no-merged main` names it. `main` has not moved: `e2ec316` is
+`main`, `origin/main` and the branch point alike.
+
+**Deliberately NOT done, so it is not mistaken for an oversight:**
+`RECEIPT_SYSTEM_SPEC.md` §14.9's route inventory has **no** entry for
+`GET /receipts/{receipt_id}/corrections` — verified, its table carries only
+`PATCH /receipts/{id} -> apply corrections`. That same `# api.py (FastAPI
+routes)` header also wrongly heads three routes living in `auth.py`, already
+recorded below; the design puts both in remit together whenever that line is
+next edited.
 
 **What shipped — Phase 5 follow-up #1, the one that was blocked on a ruling.**
 `GET /receipts/{receipt_id}/corrections` returns one receipt's correction
@@ -231,12 +241,26 @@ the reason and the accepted cost (the order is no longer total).
 wire-neutral two independent ways. That closes the deferred follow-up carried
 since the admin-UI-routes close.
 
-**Counts, measured 2026-08-10 by `pytest --collect-only` at each commit** (the
-method was validated against `HEAD`, where 1004 collected = 1004 passed):
-`e2ec316` **979** → `bd2d0a0` 985 → `9f44864` 988 → `2ad9bf9` 989 →
-`d3569d7` 997 → `6536d0f` 998 → `df83715`/`bc67c31`/`20d9bb9` **1004**.
-Bare `python -m pytest` at `20d9bb9`: **1004 passed**. Vitest untouched — no
-frontend file is in any task's file set.
+**Counts, measured 2026-08-10 by `pytest --collect-only` at every commit from
+the base through `2909d57`** — thirteen SHAs, enumerated from
+`git log --oneline --reverse e2ec316^..2909d57` rather than from the ones that
+happened to move the number. The method was validated at that point, where 1004
+collected equalled the 1004 `python -m pytest` reported passing:
+
+`e2ec316` **979** (base) → `527f788` 979 (design) → `9f03d78` 979 (plan) →
+`bd2d0a0` 985 → `9f44864` 988 → `2df3be1` 989 → `2ad9bf9` 989 → `d3569d7` 997 →
+`6536d0f` 998 → `df83715` 1004 → `bc67c31` 1004 → `20d9bb9` 1004 →
+`2909d57` **1004** (Task 4, docs only).
+
+Task 4's fix round follows `2909d57` and leaves the count at **1004** — it edits
+two test docstrings and no test logic. **Extend this list; do not re-derive the
+range from it**, because it is anchored at a SHA rather than at "the branch".
+
+**An earlier version of this line said "at each commit" and listed nine of the
+twelve then on the branch** — the three it dropped were two docs-only commits
+and `2df3be1`, a `feat` commit that moved the count from 988 to 989. Review
+standard 20: listing is claiming. Bare `python -m pytest`: **1004 passed**.
+Vitest untouched — no frontend file is in any task's file set.
 
 **SIX plan defects, every one the controller's**, all in the plan's dated defect
 log with the measurement beside each. The two worth carrying forward: the Task 1

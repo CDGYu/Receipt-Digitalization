@@ -1310,7 +1310,7 @@ def test_refusal_and_emptiness_are_different_answers(engine: sa.Engine):
     ``None`` is "you may not see this"; ``[]`` is "you may, and there is
     none". Flattening the return type to ``list[Correction]`` -- returning
     ``[]`` for both -- turns the route's 403 into an indistinguishable empty
-    200, which is ADR-0027 section 4's collapse one layer below the UI. This
+    200, which is ADR-0027 section 5's collapse one layer below the UI. This
     test is the one that goes red for it.
     """
     with Session(engine) as session:

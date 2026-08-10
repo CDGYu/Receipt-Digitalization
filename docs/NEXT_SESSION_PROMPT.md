@@ -20,38 +20,51 @@ it to "fix" a correct sentence in an Accepted ADR to match a wrong measurement.
 
 ---
 
-# NO BRANCH IN FLIGHT. Empty is the signal (ADR-0021).
+# ONE BRANCH IN FLIGHT: `feat/corrections-read-route`. NOT merged, NOT pushed.
 
-The **review-UI styling** milestone was closed and merged on 2026-08-07 by true
-fast-forward. **Do not quote a hash or a count from this file; run it**
-(ADR-0028 §1):
+**This header said "NO BRANCH IN FLIGHT" for three days while that branch
+existed** — true when written on 2026-08-07 and rotted on 2026-08-10, which is
+the failure mode the paragraphs above describe, happening again. **Do not quote
+a hash or a count from this file; run it** (ADR-0028 §1):
 
 ```
 git status --short                        # must be empty
 git log --oneline -6
 git rev-parse main origin/main            # must be identical
-git branch --no-merged main               # must name nothing
+git branch --no-merged main               # names feat/corrections-read-route, and nothing else
+git rev-parse --short origin/feat/corrections-read-route   # expected to FAIL: unpushed
 ```
 
-## `main` is merged AND PUSHED — nothing is outstanding
+## `main` is merged and pushed. The BRANCH is neither.
 
-The milestone merged at `be6d7c0` and `main` was pushed on 2026-08-07 with
-explicit authorization, **which that push consumed**. All 14 `feat/*` branches
-including `feat/review-ui-styling` are pushed too. **The next `main` push needs
-its own fresh ask.** `main` and `origin/main` should be identical — run
-`git rev-parse main origin/main` rather than believing this sentence.
+`main` and `origin/main` are both at the commit `docs/MEMORY.md`'s stamp names,
+and the review-UI styling milestone merged into it at `be6d7c0` on 2026-08-07,
+pushed with an explicit authorization **that push consumed**. **The next `main`
+push needs its own fresh ask** — and the corrections milestone is **not ready to
+ask**, because it has had no whole-branch review and no merge.
 
-**Freshness check**, using the commit named in `docs/MEMORY.md`'s "Last updated"
-line:
+**`feat/corrections-read-route` is UNPUSHED**, which ADR-0021 decision 4 says
+should not be true of an in-flight branch: pushing `feat/*` is standing-
+authorised, so push it. Until then the work exists on one machine only.
+
+**Freshness check.** `docs/MEMORY.md`'s stamp now names **two** positions,
+because mid-branch there are two. Run both forms it gives; both must be empty
+except for the single docs commit that writes the pair.
 
 ```
-git log --oneline <STAMP>..main -- src tests frontend docs ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
+git log --oneline <BRANCH-STAMP>..feat/corrections-read-route -- src tests frontend docs ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
+git log --oneline <MAIN-STAMP>..main -- src tests frontend docs ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
 ```
 
-**Empty means this prompt is current.**
+Gates on `main` at the styling merge, controller-run: `python scripts/verify.py`
+**all five PASS**; pytest **979**; Vitest **346 across 25 files**.
 
-Gates on `main` at the merge, controller-run: `python scripts/verify.py` **all
-five PASS**; pytest **979**; Vitest **346 across 25 files**.
+**On the branch, pytest is 1004** and Vitest is unmoved — no frontend file is in
+any task's file set. **What has been run where, stated exactly rather than as
+"the gates pass" (ADR-0029):** all five gates PASS were run at `df83715`; at
+`bc67c31`, `20d9bb9` and the Task 4 docs commits only **pytest and ruff** were
+re-run, both clean. `scripts/verify.py` has not been run at the branch tip. Run
+it as part of the close.
 
 ---
 
@@ -64,8 +77,14 @@ five PASS**; pytest **979**; Vitest **346 across 25 files**.
    every controller ruling, and "THE CLOSE". **`.superpowers/` is gitignored —
    open ledgers by path; nothing in them is findable by searching the tracked
    tree.**
-3. **`docs/adr/README.md`, then the ADRs (0001–0030).** Mandatory before
-   touching the matching area:
+3. **`docs/adr/README.md`, then the ADRs (0001–0031** — count the files rather
+   than trusting that range; it read `0001–0026` for five ADRs**).** Mandatory
+   before touching the matching area:
+   - **0031** — the corrections read route. **Read before changing who can see
+     correction attribution, and before scoping `GET /receipts/{receipt_id}`:
+     that route being *unscoped* is the premise its 403-not-404 rests on.** It
+     also carries the schema-forced limit (a released or reopened task takes a
+     reviewer's own history away) and the `offset` 500 measured on three routes.
    - **0030** — *a finding is a claim, and a fix wave verifies before it fixes.*
      **Read before acting on any review output, including this document.** Two
      of six findings in one wave were false. Corollaries: check **membership,
@@ -231,15 +250,40 @@ exits 0 are not reproducible here** — use `python -m receipts.cli` for the
 outside-repo check until the install state is settled. Not a regression from any
 branch.
 
-## 2. Phase 5 follow-ups — two left
+## 2. Phase 5 follow-ups — one BUILT-NOT-MERGED, one untouched
 
-1. **A read route for `corrections`.** Nothing does `select(Correction)`, so a
-   reviewer cannot see the correction history of the receipt they are correcting
-   and an auditor needs database access. **Blocked on an auth ruling.** An
-   answer was given 2026-08-05 — *"both, scoped differently: reviewers see
-   corrections for the receipt they hold, admins see any receipt's"* — **but it
-   arrived alongside a system notice disclaiming it as user input and has never
-   been restated. Re-confirm it verbatim before designing the route.**
+1. **The `corrections` read route is BUILT, on an unmerged and unpushed
+   branch.** ~~Nothing does `select(Correction)`~~ — false at the branch tip:
+   `git grep -nE 'select\(\s*Correction' -- src` returns exactly one hit,
+   `review/queue.py`'s `list_corrections`. It was **zero** at the branch point
+   `e2ec316`, which is still true of `main`.
+
+   **The auth ruling is CONFIRMED, 2026-08-10, and is no longer blocked on
+   you:** *"both, scoped differently: reviewers see corrections for the receipt
+   they hold, admins see any receipt's."* The same words were given 2026-08-05
+   beside a system notice disclaiming them as user input, so they were **not**
+   acted on; they were put back verbatim and confirmed. The 2026-08-10
+   confirmation is the authority. **ADR-0031** records it, what "hold" means,
+   why 403 rather than 404 or an empty 200, and the schema-forced limit
+   (`review_tasks.receipt_id` is UNIQUE, so a released or reopened task takes a
+   reviewer's own correction history away from them).
+
+   `GET /receipts/{receipt_id}/corrections` ships with `list_corrections`,
+   `correction_summary`, and a `_PageResponse` base shared by all three page
+   envelopes. Four tasks, all complete and reviewed. **What remains is the
+   close: whole-branch review on the strongest model → one fix wave → one
+   scoped re-review → ff-merge → refresh this pair.** Read
+   `docs/superpowers/plans/2026-08-10-corrections-read-route.md`'s **"Dated
+   defect log"** first — six plan defects, two of them reproduced rather than
+   quoted.
+
+   **Two things this milestone deliberately did not do**, both recorded rather
+   than forgotten: `RECEIPT_SYSTEM_SPEC.md` §14.9's route inventory has **no**
+   entry for the new route (verified — the table carries only
+   `PATCH /receipts/{id} -> apply corrections`), and the same header wrongly
+   heads three routes that live in `auth.py`; the design puts both in remit
+   together whenever that line is next edited. And the offset defect below.
+
 2. **An ASGI entry point / deployment story.** `create_app` is a factory nothing
    under `src/` calls. `scripts/serve_review_e2e.py` is deliberately e2e-scoped
    — inheriting a deployment policy from an e2e launcher is the mistake to
@@ -279,7 +323,9 @@ pre-printed template rows (sibling of R052).
 
 - **From the admin-UI-routes milestone:** 20 Minor findings triaged as safe.
   `GET /receipts`' `has_more` is **unpinned in the `True` direction** — a
-  constant `has_more: False` survives all 979 tests.
+  constant `has_more: False` survived the whole suite when it was measured at
+  that milestone's close (the suite was 979 then; it is 1004 on the corrections
+  branch, so re-measure rather than comparing to the old total).
 - **Layer-wide, measured:** nothing pins the queue's caller-commits rule.
 - **ADR-0025's accepted residuals:** the re-claim, and the third race order.
 - **Parked at the error-recovery close:** the `42/42` comment; `edit()` not
@@ -325,9 +371,11 @@ so is a sentence *about* one.
 
 ## Running it
 
-- Two suites: `python -m pytest` (**979**) and Vitest in `frontend/` (**346**
-  across 25 files). `npm test` does **not** type-check — run `npm run typecheck`
-  too. `python scripts/verify.py` is what "passing" means (ADR-0017).
+- Two suites: `python -m pytest` (**979** on `main`, **1004** on
+  `feat/corrections-read-route`) and Vitest in `frontend/` (**346** across 25
+  files, the same on both). `npm test` does **not** type-check — run
+  `npm run typecheck` too. `python scripts/verify.py` is what "passing" means
+  (ADR-0017).
 - **`pyproject.toml` sets `addopts = "-q"`.** So `python -m pytest -q` is `-qq`
   and prints **no pass count**; `-v` nets to dot output. **Use bare
   `python -m pytest`,** or `--junitxml`.
@@ -338,7 +386,10 @@ so is a sentence *about* one.
 - Lint: `python -m ruff check .`. The frontend linter is **oxlint**; there is
   **no formatter config anywhere** in the tracked tree.
 - **`pytest -k` matches substrings, not words.** `-k tasks` does not match
-  `test_an_admin_sees_a_task_assigned_to_someone_else`.
+  `test_an_admin_sees_a_task_assigned_to_someone_else`. **It has now bitten two
+  plans**: the corrections plan's `-k corrections` selected **4 of its own 8**
+  route tests, because four of the names it supplies never contain the word.
+  A `-k` filter in a plan is a claim about the names in that same plan.
 - **The working tree is MIXED, not uniformly CRLF.** `tokens.css` and
   `LineItemsTable.module.css` are CRLF; `ReceiptForm.module.css` is LF.
   `core.autocrlf=true` keeps the index content identical so diffs stay
@@ -433,10 +484,17 @@ deliverable needs pinning.** That was defect #15, and it recurred twice more.
 **Probe before dispatching.** Plan-defect count by milestone: Phase 5 eleven;
 PAN hardening five; PAN grouping six; currency bound two; failure-egress two;
 review-UI error recovery four; admin release seven; admin UI backend routes
-nine; **review-UI styling twenty-five**. Every one across nine milestones was
-the controller's, and every one was caught by an implementer or reviewer who
-checked instead of trusting. **The plan's prose is reliable; its claims about
-existing artefacts are not.**
+nine; **review-UI styling twenty-five**; corrections read route **six**. Every
+one across those ten milestones was the controller's, and every one was caught
+by an implementer or reviewer who checked instead of trusting. **The plan's
+prose is reliable; its claims about existing artefacts are not.**
+
+**Two shapes from the corrections milestone worth carrying into the next plan:**
+a mutation that kills nothing because the discriminating fixture is in none of
+the supplied tests (the scope predicate survived all five), and a RED phase that
+proves nothing because the framework produces the asserted status code on its
+own (FastAPI 404s an unregistered path, so a 404 test passes before the route
+exists). Both were reproduced in an isolated copy rather than taken on trust.
 
 ## Review standards — hold all of them
 
@@ -479,8 +537,38 @@ points from outside the repository. §1.6 is the current example.
 
 ## Blocked on me (the user) — surface these, do not guess
 
-1. **Re-confirm the `corrections` auth ruling** — answered 2026-08-05, never
-   confirmed (gates §2.1).
+1. **`?offset=9223372036854775808` is an unhandled 500 on THREE auth-scoped
+   routes.** ~~Re-confirm the `corrections` auth ruling~~ — **done, confirmed
+   2026-08-10, ADR-0031**; this replaces it, and it is a live pre-existing
+   defect rather than a design question.
+
+   `offset` is declared `Query(0, ge=0)` with **no upper bound**, so `2**63`
+   passes validation, reaches SQLite and raises `OverflowError`. The body is
+   Starlette's plain `Internal Server Error`, **not** this service's
+   `{"error": {"message": ...}}` shape, because `OverflowError` is not a
+   `ValueError` and none of `_install_error_handlers`' three handlers catches
+   it. Controls: `offset=-1` → 422 (so `ge=0` does fire), `2**63-1` → 200,
+   `2**63` → 500.
+
+   Measured per caller class on all three paginated routes, independently
+   reproduced twice:
+
+   | caller | `/receipts` | `/review/tasks` | `/receipts/{id}/corrections` |
+   |---|---|---|---|
+   | anonymous | 401 | 401 | 401 |
+   | machine key | 401 | 401 | 401 |
+   | reviewer, no task row | 500 | 500 | **403 at every offset** |
+   | reviewer holding it | 500 | 500 | 500 |
+   | admin | 500 | 500 | 500 |
+
+   **Two of the three are reachable by any signed-in caller.** Left unfixed
+   deliberately under review standard 19 (report further shapes rather than
+   fixing them) — the declaration is pre-existing on the two older routes and
+   the third inherited it from a plan that specified the parameter verbatim.
+   **The decision is yours:** a one-line `le=` on three routes, or a shared page
+   bound. Either changes shipped contracts. Full record in **ADR-0031**'s
+   closing section, deliberately in the tracked tree because the ledger is
+   gitignored.
 2. **A hosted tool-capable provider + freshly rotated key** (ISSUE-001 → all
    calibration, and Phase 6's success metric).
 3. **The theme control.** ADR-0027 ships dark as a full second theme and **the
@@ -512,8 +600,16 @@ points from outside the repository. §1.6 is the current example.
 
 ## Today's goal
 
-**Nothing is in flight and nothing is half-done.** Pick from §2 onward, or
-answer the questions above and let that pick for you.
+**Something IS in flight: `feat/corrections-read-route`, four tasks done, no
+whole-branch review, not merged, not pushed.** Finishing it is the default
+first move, and it is the only item here with work already banked. In order:
+push the branch (standing `feat/*` authorisation, ADR-0021 decision 4) →
+`python scripts/verify.py` at the tip → whole-branch review on the strongest
+model → one consolidated fix wave → one scoped re-review → ff-merge → refresh
+this pair in the same session → **ask before pushing `main`**.
+
+**Only then** pick from §2.2 onward, or answer the questions above and let that
+pick for you.
 
 **The one item that needs no ruling from anybody** is §2.2, the ASGI entry point
 and deployment story — and §1.6 sits right beside it: the declared `receipts`

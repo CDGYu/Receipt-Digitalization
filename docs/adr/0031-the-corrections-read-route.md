@@ -154,12 +154,22 @@ and neither may look like 'empty'"* — one layer below the UI.
 
 **The section number is 5, not 4.** ADR-0027's decision 4 is *"A pathname
 switch, not React Router"*, which has nothing to do with this. Verified by
-`grep -n "^### " docs/adr/0027-review-ui-design-system.md`. The wrong number
-shipped into three source files on this branch (`review/queue.py`,
-`review/serializers.py`, `review/api.py`) before the Task 3 review caught it,
-and it is still wrong in this milestone's own design spec and plan, both of
-which carry dated notes rather than edits. Cited here with the heading text
-beside the number so the citation cannot rot silently (review standard 21).
+`grep -n "^### " docs/adr/0027-review-ui-design-system.md`.
+
+**Where the wrong number went, enumerated rather than sampled.** The anchor is
+`git grep -nE "0027[^0-9]{0,12}(§ ?4|section 4)"` over the **whole tracked
+tree, with no pathspec** — the narrower `src/*.py` anchor is exactly what let
+two of these survive a round that reported the class closed:
+
+| site | state |
+|---|---|
+| `review/queue.py`, `review/serializers.py`, `review/api.py` | fixed at `bc67c31` |
+| `tests/test_api_read.py`, `tests/test_review_queue.py` | fixed at this milestone's Task 4 fix round |
+| this milestone's design spec and plan | **left wrong**, each carrying a dated note, because neither self-amends |
+| `frontend/src/route.ts` | **correct — do not change it.** It cites §4 for the pathname switch, which is what §4 is |
+
+Cited here with the heading text beside the number so this citation cannot rot
+silently (review standard 21).
 
 The distinction is enforced by the signature, not by a comment:
 `list_corrections` returns `list[Correction] | None`. `None` means "may not
@@ -306,10 +316,18 @@ sufficient for this scope.
   this file; the route's docstring says so at the site.
 - **`corrections.value_after` is now HTTP-readable.** See decision 6. Any future
   writer of that column inherits an egress it did not have before.
-- **`RECEIPT_SYSTEM_SPEC.md` §14.9's route inventory gains a row.** No prose
-  count was written to replace it — ADR-0015's and ADR-0016's dated notes
-  (2026-08-04) already generalised that the route list in the source is the
-  durable reference, not a number in prose.
+- **`RECEIPT_SYSTEM_SPEC.md` §14.9's route inventory is OUTSTANDING, not
+  updated.** Verified 2026-08-10: `grep -n "corrections" RECEIPT_SYSTEM_SPEC.md`
+  returns nine hits and none of them is a route entry — §14.9's table carries
+  `PATCH /receipts/{id} -> apply corrections` and no
+  `GET /receipts/{id}/corrections`. **This ADR does not do it and does not
+  claim to.** It is deliberately deferred rather than folded in: the same
+  header also heads three routes that live in `auth.py`, which
+  `docs/MEMORY.md` already records as wrong, and the design's follow-up puts
+  both in remit together *"if that line is edited"*. Whoever takes that edit
+  takes both. No prose count is written to replace the row — ADR-0015's and
+  ADR-0016's dated notes (2026-08-04) already generalised that the route list
+  in the source is the durable reference, not a number in prose.
 - **No frontend.** Nothing under `frontend/` was touched and Vitest did not
   move. The reviewer-facing view of this history is a separate milestone, and it
   will need ADR-0027's token vocabulary and its decision 5 for the
@@ -327,9 +345,10 @@ sufficient for this scope.
   filter vocabulary an auditor wants is unspecified, and guessing it would put
   an implementer's judgement in place of a design's.
 - **`corrections` stays append-only.** No delete, no edit.
-- **`PATCH /receipts/{id}` stays claim-unaware** (ADR-0024 §3's premise). A
-  reviewer whose claim was released can still write — and, per decision 3, can
-  no longer read that they did.
+- **`PATCH /receipts/{id}` stays claim-unaware** — ruled in ADR-0025 decision 6
+  and relied on as a premise by ADR-0024 decision 3. A reviewer whose claim was
+  released can still write — and, per decision 3 above, can no longer read that
+  they did.
 
 ## An open defect this milestone measured and did not cause
 
@@ -393,8 +412,13 @@ listing this one is shaped after: `require_user` not `require_role`,
 of stating a limit instead of claiming a class closed); ADR-0027 decision 5
 (*"`null` must never look like `0`, and neither may look like 'empty'"* — **not**
 decision 4, which is "A pathname switch, not React Router"); ADR-0018 and
-ADR-0022 (PAN masked at its writer / redacted at every egress); ADR-0024 §3
-(`PATCH /receipts/{id}` is claim-unaware); ADR-0006 (pure reads, the `ValueError`
+ADR-0022 (PAN masked at its writer / redacted at every egress); **ADR-0025
+decision 6**, *"`PATCH /receipts/{receipt_id}` stays claim-unaware — a
+deliberate non-change"*, which is the decision that **states** it, and
+ADR-0024 decision 3, *"Terminal states end in one exit, never a retry that
+cannot work"*, where claim-unawareness is the **premise** rather than the
+ruling (both heading lists re-read 2026-08-10 with `grep -n "^### "`);
+ADR-0006 (pure reads, the `ValueError`
 boundary); ADR-0012 (identity and roles); ADR-0028 (claims about the tree are
 re-derived — this record's own method notes); ADR-0029 (what a green run
 certifies); ADR-0030 (a finding is a claim, which is why decision 3 exists as a

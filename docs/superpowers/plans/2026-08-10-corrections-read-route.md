@@ -765,7 +765,7 @@ every milestone it lists.
 | 3 | Task 2 Step 1 | one fixture row cannot discriminate | **Still wrong above** |
 | 4 | Task 3 Step 4 | `-k corrections` selects 4 of 8 | **Still wrong above** |
 | 5 | Task 3 Steps 1–2 | a 404 test that passes vacuously in RED | **Still wrong above** |
-| 6 | Global Constraints + four more sites | "ADR-0027 section 4" is section 5 | **Still wrong above**; fixed in the tree at `bc67c31` |
+| 6 | Global Constraints + four more sites | "ADR-0027 section 4" is section 5 | **Still wrong above**; fixed in `src/` at `bc67c31` and in two test docstrings at Task 4's fix round |
 
 ### #1 — Task 1 Step 6's mutation is worthless, and it is the serious one
 
@@ -888,33 +888,51 @@ shipped tree in **three source
 files** — `review/queue.py`, `review/serializers.py`, `review/api.py` — before
 the Task 3 review caught it, and all three were corrected at `bc67c31`.
 
-**Two test files still carry the wrong number**, found by
-`git grep -nE "0027[^0-9]{0,12}(§ ?4|section 4)"` over the whole tracked tree:
-`tests/test_api_read.py` (the `correction_summary` two-row docstring) and
-`tests/test_review_queue.py` (the refusal-vs-emptiness docstring). Left alone
-because Task 4 is documentation-only, and reported instead of fixed. **That same
-grep also hits `frontend/src/route.ts`, which is correct and must not be
-"fixed"** — it cites §4 for the pathname switch, which is exactly what §4 is.
-The design spec carries its own dated note. A citation is a claim (review
+**Two test files carried it too, and "all three source files" was the wrong
+bound.** `bc67c31`'s claim was verified with a grep anchored to `src/*.py`,
+which is precisely why these survived a round that reported the class closed —
+**state a query's anchor beside its number** (ADR-0030). The anchor that finds
+them is `git grep -nE "0027[^0-9]{0,12}(§ ?4|section 4)"` over the **whole
+tracked tree with no pathspec**: `tests/test_api_read.py` (the
+`correction_summary` two-row docstring) and `tests/test_review_queue.py` (the
+refusal-vs-emptiness docstring). Reported at Task 4 and **fixed in Task 4's fix
+round** once those two files entered remit — docstring text only, no test logic
+touched.
+
+**That same grep also hits `frontend/src/route.ts`, which is correct and must
+not be "fixed"** — it cites §4 for the pathname switch, which is exactly what
+§4 is. A grep that finds a class will also find its non-members.
+
+The design spec and this plan keep the wrong number in their bodies, each under
+a dated note, because neither self-amends. A citation is a claim (review
 standard 21).
 
 ### The predicted counts were all low, and the plan pre-disclosed that they were predictions
 
 The Self-Review above predicts `979 → 984 → 985 → 993 → 994` and says outright
 that these are predictions, not measurements. They are all low. Measured
-2026-08-10 with `python -m pytest --collect-only` at each commit — the method was
-validated against `HEAD`, where 1004 collected equals the 1004 that
-`python -m pytest` reports passing:
+2026-08-10 with `python -m pytest --collect-only` at **every** commit on the
+branch and at its base — the commit list came from
+`git log --oneline --reverse e2ec316^..HEAD`, not from the commits that happened
+to move the count, and the method was validated against `HEAD`, where 1004
+collected equals the 1004 that `python -m pytest` reports passing. Each step is
+matched to its commit by the commit message the step itself prescribes.
 
-| step | predicted | commit | measured |
+| commit | what it is | predicted | measured |
 |---|---|---|---|
-| branch point | 979 | `e2ec316` | **979** |
-| Task 1 Step 7 | 984 | `bd2d0a0` | **985** (the added scope test) |
-| Task 1 fix round | — | `9f44864` | **988** |
-| Task 2 Step 7 | 985 | `2ad9bf9` | **989** |
-| Task 3 Step 6 | 993 | `d3569d7` | **997** |
-| Task 3 Step 10 | 994 | `6536d0f` | **998** |
-| Task 3 close | — | `df83715` … `20d9bb9` | **1004** |
+| `e2ec316` | branch point | 979 | **979** |
+| `527f788` | the design | — | 979 |
+| `9f03d78` | the plan | — | 979 |
+| `bd2d0a0` | Task 1 Step 7 | 984 | **985** (the added scope test) |
+| `9f44864` | Task 1 fix round | — | 988 |
+| `2df3be1` | Task 2 Step 7 | 985 | **989** |
+| `2ad9bf9` | Task 2 fix round | — | 989 (a test replaced, not added) |
+| `d3569d7` | Task 3 Steps 6–7 | 993 | **997** |
+| `6536d0f` | Task 3 Step 10 | 994 | **998** |
+| `df83715` | Task 3's mutation-driven pins | — | 1004 |
+| `bc67c31` | Task 3 fix round 1 | — | 1004 |
+| `20d9bb9` | Task 3 fix round 2 | — | 1004 |
+| `2909d57` | Task 4, docs only | — | 1004 |
 
 Every gap is a test some implementer or reviewer added because the plan's own
 coverage was thin — which is the same story defects #1, #3 and #4 tell from the
