@@ -501,6 +501,14 @@ def test_the_docs_can_be_turned_on(session_factory, settings, tmp_path, path):
     assert TestClient(app).get(path).status_code == 200
 
 
+# `GET /receipts/{id}/corrections` is deliberately NOT in this table. The
+# matrix asserts 200 for every actor in `allowed`, but a reviewer reaching that
+# route gets 200 or 403 depending on a `review_tasks` row, not on their role --
+# the same reason `POST /review/{id}/complete` is absent. Adding it would either
+# assert something false or silently depend on whether the `receipt_id` fixture
+# happens to be claimed. Its 401 half is pinned by
+# `test_corrections_require_a_session`, and its 200/403 split by the four tests
+# beside it.
 READ_ROUTES = [
     ("GET", "/receipts", {"reviewer", "admin"}),
     ("GET", "/receipts/{id}", {"reviewer", "admin"}),
@@ -859,3 +867,110 @@ def test_correction_summary_reads_every_key_off_the_row_it_was_given():
             f"row {label} renders one value under two keys, so a key reading the "
             f"wrong attribute would still satisfy its dict above: {rendered}"
         )
+
+
+# --------------------------------------------------------------------------- #
+# GET /receipts/{receipt_id}/corrections (P5.T4): existence before scope, and
+# 403 is not 404 and is not an empty 200.
+# --------------------------------------------------------------------------- #
+
+
+def _corrections_for(session_factory, receipt_id: uuid.UUID, *, by: str = "alice") -> None:
+    """Two audit rows, timestamps explicit so ordering is under test."""
+    with session_factory() as session:
+        session.add_all(
+            [
+                Correction(receipt_id=receipt_id, field_path="receipt.total",
+                           value_before="900", value_after="1000", corrected_by=by,
+                           created_at=datetime(2026, 7, 3, 9, 0, 0, tzinfo=UTC)),
+                Correction(receipt_id=receipt_id, field_path="payment.method",
+                           value_before=None, value_after="VISA", corrected_by=by,
+                           created_at=datetime(2026, 7, 3, 9, 0, 1, tzinfo=UTC)),
+            ]
+        )
+        session.commit()
+
+
+def test_an_admin_reads_a_receipt_they_never_held(session_factory, admin_client, receipt_id):
+    _corrections_for(session_factory, receipt_id)
+
+    response = admin_client.get(f"/receipts/{receipt_id}/corrections")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert [row["field_path"] for row in body["items"]] == ["receipt.total", "payment.method"]
+    assert body["has_more"] is False
+
+
+def test_the_holding_reviewer_reads_the_history(session_factory, reviewer_client, receipt_id):
+    """``_claim_as`` hands alice the seeded priority-1 task, which is
+    ``RECEIPT_B``'s -- the same receipt the ``receipt_id`` fixture names."""
+    _corrections_for(session_factory, receipt_id)
+    _claim_as(session_factory, "alice")
+
+    response = reviewer_client.get(f"/receipts/{receipt_id}/corrections")
+
+    assert response.status_code == 200
+    assert len(response.json()["items"]) == 2
+
+
+def test_a_reviewer_who_never_held_the_receipt_is_refused(
+    session_factory, reviewer_client, receipt_id
+):
+    """The seeded task for ``RECEIPT_B`` is ``OPEN`` and unassigned, so alice
+    does not hold it. 403, not 404 and not an empty 200: the receipt exists
+    (``GET /receipts/{id}`` already discloses that to any signed-in user), and
+    "not permitted" is not "none exist".
+    """
+    _corrections_for(session_factory, receipt_id)
+
+    response = reviewer_client.get(f"/receipts/{receipt_id}/corrections")
+
+    assert response.status_code == 403
+
+
+def test_an_unknown_receipt_is_404_even_for_an_admin(admin_client):
+    """Existence is checked **before** scope, so a probe for a random id cannot
+    be told apart from any other absent receipt."""
+    response = admin_client.get(f"/receipts/{uuid.uuid4()}/corrections")
+
+    assert response.status_code == 404
+
+
+def test_an_in_scope_receipt_with_no_corrections_is_an_empty_200(
+    session_factory, reviewer_client, receipt_id
+):
+    """The other half of the 403 above. Together these two are what make the
+    empty list mean something: with only one of them, a route that returned
+    ``{"items": []}`` for *everything* would pass.
+    """
+    _claim_as(session_factory, "alice")
+
+    response = reviewer_client.get(f"/receipts/{receipt_id}/corrections")
+
+    assert response.status_code == 200
+    assert response.json() == {"items": [], "has_more": False}
+
+
+@pytest.mark.parametrize("actor", ["anonymous", "api_key"])
+def test_corrections_require_a_session(clients, receipt_id, actor):
+    """Written out rather than added to ``READ_ROUTES`` -- see the comment on
+    that table for why this route cannot express itself there."""
+    assert clients[actor].get(f"/receipts/{receipt_id}/corrections").status_code == 401
+
+
+def test_corrections_paginate_in_both_directions(session_factory, admin_client, receipt_id):
+    """``has_more`` is pinned **true and false**. ``GET /receipts``' own
+    ``has_more`` is unpinned in the ``True`` direction -- a constant
+    ``has_more: False`` survives all 979 tests, measured at the admin-UI-routes
+    close. This route does not inherit that hole.
+    """
+    _corrections_for(session_factory, receipt_id)
+
+    first = admin_client.get(f"/receipts/{receipt_id}/corrections?limit=1").json()
+    assert [row["field_path"] for row in first["items"]] == ["receipt.total"]
+    assert first["has_more"] is True
+
+    second = admin_client.get(f"/receipts/{receipt_id}/corrections?limit=1&offset=1").json()
+    assert [row["field_path"] for row in second["items"]] == ["payment.method"]
+    assert second["has_more"] is False

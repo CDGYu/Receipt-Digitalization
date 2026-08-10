@@ -72,8 +72,9 @@ from .auth import (
     sign_url,
     verify_signature,
 )
-from .queue import close_task, list_tasks, next_task, queue_stats, release_task
+from .queue import close_task, list_corrections, list_tasks, next_task, queue_stats, release_task
 from .schemas import (
+    CorrectionListResponse,
     CorrectionPatch,
     ErrorBody,
     ErrorDetail,
@@ -82,7 +83,13 @@ from .schemas import (
     ReceiptListResponse,
     ReviewTaskListResponse,
 )
-from .serializers import build_export_rows, query_export_receipts, receipt_detail, receipt_summary
+from .serializers import (
+    build_export_rows,
+    correction_summary,
+    query_export_receipts,
+    receipt_detail,
+    receipt_summary,
+)
 
 __all__ = ["create_app"]
 
@@ -230,6 +237,60 @@ def _install_read_routes(app: FastAPI) -> None:
                 raise HTTPException(status_code=404, detail=f"no receipt with id {receipt_id}")
             findings = get_findings(session, receipt_id)
             return receipt_detail(receipt, findings)
+
+    @app.get("/receipts/{receipt_id}/corrections", response_model=CorrectionListResponse)
+    def list_receipt_corrections(
+        receipt_id: uuid.UUID,
+        request: Request,
+        user: Annotated[SessionUser, Depends(require_user)],
+        limit: int = Query(50, ge=1, le=200),
+        offset: int = Query(0, ge=0),
+    ) -> Any:
+        """One receipt's correction history, oldest first.
+
+        Guarded by ``require_user``, **not** ``require_role``: both roles reach
+        it. An admin reads any receipt's; a reviewer reads only a receipt they
+        hold or have held (ADR-0031, the ruling confirmed 2026-08-10).
+
+        **Existence is checked before scope, and the order is the contract.** A
+        receipt that does not exist is 404; one that exists but is out of scope
+        is 403. 403 rather than 404 because ``GET /receipts/{receipt_id}`` takes
+        ``require_user`` and nothing else -- any signed-in caller can already
+        confirm any receipt exists, so a 404 here would hide nothing and mislead
+        a legitimate reviewer. And 403 rather than an empty 200 because an
+        in-scope receipt with no corrections **is** an empty 200, and that is a
+        true and useful answer: "you may not see this" is not "there is
+        nothing here" (ADR-0027 section 4).
+
+        This route makes ``corrections.value_after`` readable over HTTP for the
+        first time. It adds no redaction: ``_plan_change`` masks every coerced
+        text path on the way in, precisely because this column is the copy
+        nothing later scrubs. Relied on and pinned end-to-end rather than
+        re-filtered here, which would be dead code under the invariant --
+        ``test_a_pan_never_reaches_the_corrections_route``.
+
+        Like the other two list routes, ``has_more`` comes off a ``limit + 1``
+        fetch. That makes three sites carrying ``limit=limit + 1``; anchor on
+        text unique to this one when mutating (review standard 16).
+        """
+        visible_to = None if user.role == ROLE_ADMIN else user.username
+        with request.app.state.session_factory() as session:
+            if get_receipt(session, receipt_id) is None:
+                raise HTTPException(status_code=404, detail=f"no receipt with id {receipt_id}")
+            rows = list_corrections(
+                session,
+                receipt_id,
+                visible_to=visible_to,
+                limit=limit + 1,
+                offset=offset,
+            )
+            if rows is None:
+                raise HTTPException(
+                    status_code=403,
+                    detail="you may not read this receipt's correction history",
+                )
+            items = [correction_summary(row) for row in rows[:limit]]
+        return {"items": items, "has_more": len(rows) > limit}
 
     @app.get("/metrics", response_model=MetricsResponse)
     def metrics(
