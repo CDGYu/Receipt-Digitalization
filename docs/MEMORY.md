@@ -6,21 +6,40 @@ continuity protocol itself — what lives where, and why this snapshot must be
 verified rather than trusted — is **ADR-0019**, extended by **ADR-0021** (whose
 2026-08-02 dated correction widened the freshness check after a docs-only task
 proved invisible to it).
-Last updated: **2026-08-07 (`feat/review-ui-styling` MERGED — the milestone is
-closed; NO branch in flight)**, at **`main @ be6d7c0`**, which is the merge tip
-itself. A stamp cannot name the commit that writes it, so the check is this:
+Last updated: **2026-08-10, MID-MILESTONE (ADR-0021)**. **Both positions, because
+mid-branch there are two** and ADR-0021 decision 2 requires both:
+**`main @ e2ec316`** (= `origin/main`, = the branch point) and
+**`feat/corrections-read-route @ 20d9bb9`, 11 commits ahead, UNPUSHED**, where
+`20d9bb9` is the last *code* commit — a stamp cannot name the commit that writes
+it. The freshness test is a command, not a commit count:
 
 ```
-git log --oneline be6d7c0..main -- src tests frontend docs ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
+git log --oneline 20d9bb9..feat/corrections-read-route -- src tests frontend docs ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
+git log --oneline e2ec316..main -- src tests frontend docs ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
 ```
 
-**Empty means this file is current.** Any output means the tree moved after it
-was written and you are reading something stale.
+**Empty means current.** The second was empty when this was written. The first
+lists **exactly one** commit — this milestone's Task 4, which writes this file
+alongside `docs/adr/0031`, the ADR index, and dated notes on this milestone's
+spec and plan. ADR-0021's 2026-08-02 correction records that a commit touching
+`docs/` *beside* the handoff pair is deliberately visible here; only a commit
+touching the pair **alone** is invisible. **Anything else in either list means
+the tree moved after this was written and you are reading something stale.**
+
+*(The previous stamp was 2026-08-07 at `main @ be6d7c0`, the
+`feat/review-ui-styling` merge tip. `main` is `e2ec316` now — two continuity
+commits landed on top of that merge, so the merge SHA is not the tip.)*
 
 ## Snapshot
 
-- **NO BRANCH IN FLIGHT. Empty is the signal (ADR-0021.)**
-  `git branch --no-merged main` must name nothing.
+- **ONE BRANCH IN FLIGHT: `feat/corrections-read-route` (since 2026-08-10).**
+  `git branch --no-merged main` names it and nothing else, verified 2026-08-10;
+  `main`, `origin/main` and the branch point are all `e2ec316`. **This bullet
+  read "NO BRANCH IN FLIGHT" from the moment the branch was cut until Task 4
+  edited it** — true when written on 2026-08-07 and rotted three days later,
+  which is why the answer is the command and never the sentence. The milestone
+  is **NOT merged and has had no whole-branch review** — see "Corrections read
+  route" below.
 - **The review-UI styling milestone is COMPLETE AND MERGED** (2026-08-07, true
   fast-forward `1314485` → `be6d7c0`, single parent, 38 branch commits).
   `feat/review-ui-styling` is kept at its merge point and pushed.
@@ -120,9 +139,10 @@ was written and you are reading something stale.
 - **Phases 0–5 complete, plus PAN hardening, PAN grouping, the currency
   bound, failure-egress redaction, review-UI error recovery, the admin
   release, and the admin UI's backend routes.** Phase 3 is complete except
-  **P3.T6 calibration** (blocked on ISSUE-001). Phase 5 has **two** named
-  follow-ups left, and the admin UI's **frontend half** is the committed
-  next milestone (see "Remaining work").
+  **P3.T6 calibration** (blocked on ISSUE-001). Of Phase 5's two named
+  follow-ups, the `corrections` read route is **built on an unmerged branch**
+  (2026-08-10) and a real ASGI entry point / deployment story is untouched.
+  See "Remaining work"; the admin UI's frontend half shipped 2026-08-06.
 - Dev interpreter **Python 3.14.4**. Node **v22.22.2** / npm **10.9.7**.
 - Plan of record: `IMPLEMENTATION_PLAN.md`. Ledgers:
   `.superpowers/sdd/2026-08-05-admin-ui-backend-routes/progress.md`
@@ -140,6 +160,107 @@ was written and you are reading something stale.
   searching the tracked tree — open ledgers by path.**
 - **The repo is PUBLIC.** Verified 2026-07-31 via the GitHub API. See
   "Environment / provider" for what that exposes.
+
+## Corrections read route — IN FLIGHT, NOT MERGED (2026-08-10)
+
+Design + plan: `docs/superpowers/{specs,plans}/2026-08-10-corrections-read-route*`
+(the design carries a **2026-08-10 dated note**; the plan carries a **dated
+defect log** — read the log before re-deriving anything from the plan's body).
+Decision: **ADR-0031**. Ledger:
+`.superpowers/sdd/2026-08-10-corrections-read-route/progress.md`.
+
+**Status, stated first because the other sections in this file all say
+"merged".** Four tasks, strictly serial. Tasks 1–3 are complete and reviewed;
+Task 4 is this documentation commit. **No whole-branch review has run, no fix
+wave, no merge, and the branch is UNPUSHED** — `git branch --no-merged main`
+names it. `main` has not moved: `e2ec316` is `main`, `origin/main` and the
+branch point alike.
+
+**What shipped — Phase 5 follow-up #1, the one that was blocked on a ruling.**
+`GET /receipts/{receipt_id}/corrections` returns one receipt's correction
+history, oldest first, guarded by `require_user` (**not** `require_role`) so
+both roles reach it. An admin reads any receipt's; a reviewer reads a receipt
+whose `review_tasks` row names them, in any state. Backed by `list_corrections`
+in `review/queue.py` beside `list_tasks`, which returns `list[Correction] |
+None` — `None` is "may not see", `[]` is "may, and there is none", and the
+signature is what keeps 403 reachable rather than a comment describing it.
+`correction_summary` in `review/serializers.py` renders six keys and
+deliberately omits `receipt_id` (the route is nested under it).
+
+**The ruling, and its provenance** (ADR-0031, "Decisions the user has made"):
+*"both, scoped differently."* The same words were given on 2026-08-05 alongside
+a system notice disclaiming them as user input, so they were **not** treated as
+settled; they were put back verbatim on 2026-08-10 and confirmed. **The
+2026-08-10 confirmation is the authority.**
+
+**403, not 404, not an empty 200**, and existence is checked **before** scope so
+a random UUID is 404 while a real receipt you never held is 403. The 403 rests
+on a premise that lives in *another route*: `GET /receipts/{receipt_id}` takes
+`require_user` and nothing else, so existence is already public to any signed-in
+caller and a 404 here would hide nothing. **If that route is ever scoped, the
+403 decision must be revisited.**
+
+**The limit is real, was found by review rather than by design, and is stated
+rather than narrowed away.** `review_tasks.receipt_id` is UNIQUE, so a receipt
+has exactly one task row and there is no record of prior holders. Both
+`release_task` and `enqueue_review`'s reopen branch **clear** `assigned_to`, so a
+reviewer whose task was released or reopened is refused exactly as a stranger is
+— they lose access to corrections they made themselves.
+
+**What the scope protects is attribution, not the receipt.** Any signed-in caller
+already reads the receipt in full. What is scoped is which named colleague
+changed which field and what it was before. The asymmetry is deliberate.
+
+**A new network egress for a column that was previously database-only.**
+`corrections.value_after` had never left the database — measured at the branch
+point, `git grep -nE 'select\(\s*Correction' e2ec316 -- src` returns nothing.
+The route adds **no** redaction: `_plan_change`'s `after = redact_pan(after)`
+masks every coerced text path on the way in precisely because this column is the
+copy nothing later scrubs. Relied on and pinned end-to-end by
+`test_a_pan_never_reaches_the_corrections_route`, proven red for the right
+reason (a real 200 body carrying the card number, not a 403 or 404).
+**Stated limit:** the pin covers the reviewer-typed path; a future writer
+bypassing `_plan_change` would not be covered.
+
+**Ordering changed during implementation, by user ruling:** `created_at` then
+**`field_path`**, not `created_at, id`. See "Decisions the user has made" for
+the reason and the accepted cost (the order is no longer total).
+
+**The third page envelope earned its base:** `_PageResponse` in
+`review/schemas.py`, with all three named subclasses reparented and proven
+wire-neutral two independent ways. That closes the deferred follow-up carried
+since the admin-UI-routes close.
+
+**Counts, measured 2026-08-10 by `pytest --collect-only` at each commit** (the
+method was validated against `HEAD`, where 1004 collected = 1004 passed):
+`e2ec316` **979** → `bd2d0a0` 985 → `9f44864` 988 → `2ad9bf9` 989 →
+`d3569d7` 997 → `6536d0f` 998 → `df83715`/`bc67c31`/`20d9bb9` **1004**.
+Bare `python -m pytest` at `20d9bb9`: **1004 passed**. Vitest untouched — no
+frontend file is in any task's file set.
+
+**SIX plan defects, every one the controller's**, all in the plan's dated defect
+log with the measurement beside each. The two worth carrying forward: the Task 1
+**mutation was worthless** — deleting the scope predicate left all five
+plan-supplied tests green, because the discriminating case (a task belonging to a
+*different* reviewer) was in none of them, so the plan would have shipped a 403
+whose predicate nothing tested; and a **404 test passed vacuously in its RED
+phase**, because FastAPI answers 404 for an unregistered path, which is the code
+the test asserts. Both were reproduced in an isolated copy of the tree on
+2026-08-10 rather than taken from the ledger.
+
+**AN OPEN DEFECT THIS MILESTONE MEASURED AND DID NOT CAUSE — needs a user
+decision at the branch close.** `?offset=9223372036854775808` satisfies `ge=0`,
+reaches SQLite and raises `OverflowError`: an unhandled **500** whose body is
+Starlette's plain `Internal Server Error`, not this service's
+`{"error": {"message": ...}}` shape, because `OverflowError` is not a
+`ValueError` and none of `_install_error_handlers`' three handlers catches it.
+Measured on **all three** paginated routes at `20d9bb9`, with controls
+(`offset=-1` → 422, `2**63-1` → 200, `2**63` → 500). **Who reaches it differs:**
+on this route, an admin or a *holding* reviewer and no one else (a reviewer with
+no task row gets 403 at every offset, before the value reaches SQLite); on
+`GET /receipts` and `GET /review/tasks`, any signed-in caller. Left unfixed
+deliberately under review standard 19. **Full table in ADR-0031** — that is the
+tracked-tree record, because the ledger is gitignored.
 
 ## Review-UI styling — complete and merged (2026-08-05 → 2026-08-07)
 
@@ -701,6 +822,36 @@ API path moves.
   the five still living in the plan's body are covered by a **dated defect
   log appended to that plan** — plans do not self-amend here, so the log is
   appended the way an ADR takes a dated correction.
+- **Corrections read route — auth (2026-08-10, ADR-0031): "both, scoped
+  differently: reviewers see corrections for the receipt they hold, admins see
+  any receipt's."** Confirmed verbatim on 2026-08-10. **This ruling had a
+  strange provenance and it is worth remembering why:** the same words were
+  given in the 2026-08-05 session, but arrived alongside a system notice
+  disclaiming them as user input, so they sat under "Still needing a user
+  decision" for five days with an instruction to re-confirm rather than act.
+  They were put back unchanged and confirmed. **The 2026-08-10 confirmation is
+  the authority; the 2026-08-05 exchange is provenance.** "Hold" is read as
+  *the receipt's review task currently names the caller, in any state* —
+  `IN_PROGRESS`-only was rejected (ADR-0025 leaves `assigned_to` set on a
+  `DONE` task, so narrowing would cost a reviewer the history of what they just
+  did) and mirroring `list_tasks`' `OPEN`-inclusive scope was rejected (that
+  half exists to show claimable backlog, and including it would disclose every
+  unclaimed receipt's attribution to every reviewer). Out of scope is **403**,
+  not 404 and not an empty 200. **The limit is real and stated:**
+  `review_tasks.receipt_id` is UNIQUE, so a receipt has one task row, and both
+  `release_task` and `enqueue_review`'s reopen branch **clear** `assigned_to` —
+  a reviewer whose task was released or reopened loses access to corrections
+  they made themselves.
+- **Corrections ordering tiebreaker (2026-08-10, ADR-0031 decision 7):**
+  `created_at` then **`field_path`**, chosen over the design's `created_at, id`
+  during implementation. `Correction.id` is a random `uuid4` that scrambled
+  within-patch display order on every write and could not be honestly pinned;
+  `field_path` reproduces `apply_corrections`' own
+  `sorted(flatten(patch).items())` write order. **The accepted cost, offered and
+  taken:** the order is no longer *total* — two corrections to the same
+  `field_path` in the same whole second tie completely. A three-key form
+  (`created_at, field_path, id`) was offered and not chosen; adding `id` as a
+  third key would restore totality without disturbing within-patch order.
 - **Milestone close includes the handoff refresh** (ADR-0019); **every session
   end refreshes the handoff** (ADR-0021), whose freshness check was widened by
   dated correction (2026-08-02) to include `docs` with the handoff pair itself
@@ -708,15 +859,12 @@ API path moves.
 
 ## Still needing a user decision
 
-1. **Auth for the `corrections` read route** — reviewer-visible, admin-only,
-   or both scoped differently? **An answer was given in the 2026-08-05
-   session — "both, scoped differently: reviewers see corrections for the
-   receipt they hold, admins see any receipt's" — but it arrived alongside a
-   system notice disclaiming it as user input, and it was never restated for
-   confirmation.** Treat it as the user's likely intent and **re-confirm it
-   verbatim before designing the route**; do not record it as a settled
-   ruling on the strength of that exchange alone. Gates Phase 5 follow-up #1.
-2. **A hosted tool-capable provider + a freshly rotated key** — for ISSUE-001,
+**Renumbered 2026-08-10.** This list ran `1, 2, 2, 3, 4, 5, 6` — seven items
+presenting as six — and the corrections-auth item at the top is now **settled**
+and has moved to "Decisions the user has made". Six items remain; a reference to
+"decision #N" written before 2026-08-10 is pointing at a different item.
+
+1. **A hosted tool-capable provider + a freshly rotated key** — for ISSUE-001,
    and therefore for all calibration.
 2. **R060/R061 OCR grounding (P2.T2)** — model returns the text it read / a
    cheap OCR pass / drop the rules. Also gates bbox highlighting.
@@ -814,10 +962,14 @@ the "Write routes (P4.T5)" banner was wrong once a read route consumed it.
 **`docs/NEXT_SESSION_PROMPT.md` carries the full ordered task list.** Headlines:
 
 1. Phase 5 follow-ups — the five §5 error-recovery behaviours (ADR-0024)
-   and the **admin release** (ADR-0025) are DONE. **Two remain:** a read
-   route for `corrections` (**blocked on the auth ruling — see "Still
-   needing a user decision" #1, whose answer needs re-confirming**) and a
-   real ASGI entry point / deployment story.
+   and the **admin release** (ADR-0025) are DONE. The `corrections` **read
+   route is BUILT but NOT MERGED** — the auth ruling that blocked it was
+   confirmed 2026-08-10 (ADR-0031) and is now under "Decisions the user has
+   made"; it is no longer an open decision, and the item it used to be
+   numbered against in "Still needing a user decision" is gone, so that list
+   was renumbered. See "Corrections read route" above for what remains
+   (whole-branch review, one fix wave, merge). **One follow-up is genuinely
+   untouched:** a real ASGI entry point / deployment story.
 1b. **A design system for the review UI is DRAFTED but NOT APPROVED and NOT
    PLANNED** — `docs/superpowers/specs/2026-08-05-review-ui-design-system.md`,
    with the raw generated output at `design-system/receipt-review/MASTER.md`.
@@ -983,9 +1135,19 @@ measured.**
     *removal* (the fixture's insertion order already equals queue order) but
     does discriminate a *wrong* order. The guarantee is properly pinned at
     the queue layer, whose fixture inserts out of order.
-  - `ReviewTaskListResponse`'s body is byte-identical to
+  - ~~`ReviewTaskListResponse`'s body is byte-identical to
     `ReceiptListResponse`'s. Defensible — distinct response models give
-    distinct OpenAPI schema names — but a third page envelope earns a base.
+    distinct OpenAPI schema names — but a third page envelope earns a base.~~
+    **RESOLVED 2026-08-10 on `feat/corrections-read-route`** (`2df3be1`):
+    `GET /receipts/{id}/corrections` was that third envelope, so
+    `review/schemas.py` now declares **`_PageResponse`** and all three named
+    classes inherit from it — `ReceiptListResponse`, `ReviewTaskListResponse`,
+    `CorrectionListResponse`. The three names are kept deliberately, because
+    the recorded reason for the duplication was the distinct OpenAPI schema
+    names and subclassing preserves that while removing the copied body.
+    Reparenting two **shipped** models was proven wire-neutral two independent
+    ways before it was accepted: a `model_fields`/`model_json_schema()`
+    comparison across all three, and a full served `app.openapi()` diff.
   - `RECEIPT_SYSTEM_SPEC.md`'s `# api.py  (FastAPI routes)` header now heads
     three routes that live in `auth.py`'s `build_auth_router()`.
     `# api.py + auth.py` settles it when that line is next in remit.
@@ -1319,16 +1481,25 @@ with an entry point gets run from outside the repository.
 - `docs/NEXT_SESSION_PROMPT.md` — the ordered task list and reading order.
 - `IMPLEMENTATION_PLAN.md` · `README.md` (§5 design decisions) · `VLM_AND_DATA.md`
 - **`docs/KNOWN_ISSUES.md`** — ISSUE-001 with its diagnosis and resume steps.
-- **`docs/adr/` — 0001–0026**; see `docs/adr/README.md`. Read **0001** first;
+- **`docs/adr/` — 0001–0031** (re-derived 2026-08-10: `ls docs/adr/*.md` minus
+  `README.md` counts **31**, and the four-digit prefixes are contiguous from
+  0001); see `docs/adr/README.md`. **This range read `0001–0026` until
+  2026-08-10** — it was written at ADR-0026 and never touched again while 0027,
+  0028, 0029 and 0030 landed. **Count the files; do not trust the range**, and
+  do not trust this sentence either the next time an ADR is added. Read
+  **0001** first;
   **0018 then 0020 (with corrections)** before touching `_PAN_RE`/`redact_pan`;
   **0022** before touching any failure-text egress; **0024** before touching
   the review UI's error surfaces (`failure.ts`, `stash.ts`,
   `SignOutControl.tsx`, `ReviewScreen.tsx`'s state unions, the inline error
   slots); **0026** before touching `/auth/me`, `/review/tasks` or
   `list_tasks`' scope — it is also where the privacy invariant's limit is
-  recorded; **0023 (with both dated notes)** before dispatching parallel task
-  agents; **0017** before believing a green test run; **0019 + 0021 (with its
-  correction)** for how cross-session state works.
+  recorded; **0031** before changing who can see correction attribution, or
+  before scoping `GET /receipts/{receipt_id}` (that route being *unscoped* is
+  the premise 0031's 403-not-404 rests on); **0023 (with both dated notes)**
+  before dispatching parallel task agents; **0017** before believing a green
+  test run; **0019 + 0021 (with its correction)** for how cross-session state
+  works.
 - `docs/superpowers/specs/` and `docs/superpowers/plans/` — per-milestone design
   and plan documents.
 - `.superpowers/sdd/<plan-name>/progress.md` — per-milestone ledgers.

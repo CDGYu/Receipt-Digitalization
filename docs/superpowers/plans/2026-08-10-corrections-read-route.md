@@ -742,3 +742,180 @@ git add docs/adr/0031-the-corrections-read-route.md docs/adr/README.md docs/MEMO
 **Count arithmetic.** 979 → 984 (Task 1, +5) → 985 (Task 2, +1) → 993 (Task 3 Step 6, +8: five named tests, one parametrised over two actors, plus the pagination test — 5 + 2 + 1) → 994 (Task 3 Step 10, +1). **These are predictions, not measurements.** Plan RED predictions have been wrong before in this repo — 3 of 4 in one task, 1 of 6 in another. Read every failure reason rather than matching colours, and correct the count in the ledger rather than trusting this line.
 
 **Known risk.** Task 2 reparents two shipped response models. If FastAPI's OpenAPI generation orders inherited fields differently from declared ones, a schema-snapshot test could move. No such test is known to exist, which is why Step 6 runs both API modules before proceeding — and if one moves, that is a stop-and-report, not a test to adjust.
+
+---
+
+## Dated defect log — 2026-08-10, added by Task 4
+
+**This plan's body is left as written.** Plans are dated historical records here
+and do not self-amend; this log is appended the way an ADR takes a dated
+correction. **Read it before re-deriving anything from the text above** — every
+one of the six defects below is still sitting in that text, and two of them are
+the kind that produce a green run over an untested guarantee.
+
+Six plan defects, **all the plan author's (the controller's)**, and every one
+found by an implementer or a reviewer who checked instead of trusting — the
+pattern `docs/MEMORY.md`'s "Probe before dispatching" bullet has recorded for
+every milestone it lists.
+
+| # | Where | The defect | Status |
+|---|---|---|---|
+| 1 | Task 1 Step 6 | the scope mutation kills nothing | **Still wrong above** |
+| 2 | Task 2 Step 5 | the `__all__` instruction contradicts itself | **Still wrong above** |
+| 3 | Task 2 Step 1 | one fixture row cannot discriminate | **Still wrong above** |
+| 4 | Task 3 Step 4 | `-k corrections` selects 4 of 8 | **Still wrong above** |
+| 5 | Task 3 Steps 1–2 | a 404 test that passes vacuously in RED | **Still wrong above** |
+| 6 | Global Constraints + four more sites | "ADR-0027 section 4" is section 5 | **Still wrong above**; fixed in the tree at `bc67c31` |
+
+### #1 — Task 1 Step 6's mutation is worthless, and it is the serious one
+
+The step says: delete `.where(ReviewTask.assigned_to == visible_to)` and confirm
+`test_list_corrections_refuses_a_receipt_the_reviewer_never_held` and
+`test_refusal_and_emptiness_are_different_answers` go **red**. Neither does.
+**All five of Step 1's tests stay green under that mutation.**
+
+Reproduced 2026-08-10 in an isolated byte copy of `src/`, `tests/`, `config/`
+and `pyproject.toml` (the working tree was never mutated): with the predicate
+deleted, the five plan-supplied tests all **PASS**, and the only red is
+`test_list_corrections_refuses_a_receipt_held_by_a_different_reviewer` — a test
+the *implementer* added, failing on
+`AssertionError: assert [<Correction object>] is None`, which is the right
+reason (review standard 15).
+
+Why they cannot go red: without the predicate the guard degenerates to *"does
+any task exist for this receipt?"*. Three of the five use a receipt with **no**
+review task at all, so they are still refused — for the wrong reason. The other
+two (`test_refusal_and_emptiness_are_different_answers`,
+`test_a_closed_task_still_grants_its_holder_the_history`) *do* create a task, but
+one assigned to **the caller**, so removing the caller comparison changes
+nothing. **The discriminating case — a receipt whose task belongs to a
+*different* reviewer — is in none of the five.**
+
+*(That last precision matters: the ledger's own first draft of this defect says
+"All five plan-supplied tests use a receipt with NO review task", which is false
+of two of them. The conclusion survives; the sentence did not. ADR-0030.)*
+
+Unpinned, deleting that predicate discloses every queued receipt's correction
+history **and its attribution** to every reviewer. **The plan would have shipped
+a 403 whose predicate nothing tested.** Fixed by the implementer's added test;
+the suite came out at 985, not the predicted 984.
+
+**Second, disclosed deviation in the same task:** Step 4 tells the implementer to
+export `list_corrections` from `review/__init__.py` and omits `queue.py`'s own
+`__all__`, which carries all eight other public names in that module. The
+implementer added it and said so.
+
+### #2 — Task 2 Step 5's `__all__` instruction contradicts itself
+
+It says to add `"CorrectionListResponse"` to `__all__` *"alphabetically, after
+`CorrectionPatch`"*. Those are two different instructions: `CorrectionL` sorts
+**before** `CorrectionP`. The implementer followed alphabetical and reported the
+conflict rather than silently picking one. The shipped list is correct —
+`CorrectionListResponse` is the first entry.
+
+### #3 — Task 2 Step 1's serializer test was supplied verbatim and cannot discriminate
+
+The step hands over a complete test built on **one** fixture row. A single row
+cannot tell a key that is *read from the row* apart from a key *hardcoded to that
+row's value*. The Task 2 reviewer ran three mutants the implementer's own 21 had
+missed and **all three survived with the suite green** — and `correction_summary`
+has no other consumer, so nothing else in the suite could have seen them:
+
+- `"value_before": None` as a literal — a row with `value_before="900"` renders
+  `null`;
+- `"value_after": correction.value_after or ""` — a row with `value_after=None`
+  renders `""`. So the null-is-not-empty rule was pinned on `value_before`
+  **only**, while the fix report claimed it pinned unqualified;
+- `"corrected_by": "alice"` as a literal.
+
+The fix was required as a **property, not an edit list** (review standard 19):
+every key proven read from the row, and null-vs-text pinned in both directions on
+both text fields. What shipped is two fixture rows differing in every rendered
+value with nulls on **opposite** text fields, plus two guards that iterate the
+rendered dict itself — no hardcoded key list — so they bind keys added later. The
+re-reviewer verified that empirically by shadowing in a seventh key.
+
+**A verbatim test in a plan is a claim about what that test discriminates**, and
+this one carried no such analysis.
+
+### #4 — Task 3 Step 4's `-k corrections` selects 4 of the 8 tests
+
+The step says `python -m pytest tests/test_api_read.py -k corrections` runs "8
+tests". It selects **4**. `pytest -k` matches substrings of the test id, and
+**four of the seven test names the plan itself supplies in Step 1 do not contain
+"corrections"**: `test_an_admin_reads_a_receipt_they_never_held`,
+`test_the_holding_reviewer_reads_the_history`,
+`test_a_reviewer_who_never_held_the_receipt_is_refused`,
+`test_an_unknown_receipt_is_404_even_for_an_admin`. The three that do match are
+`test_an_in_scope_receipt_with_no_corrections_is_an_empty_200`,
+`test_corrections_require_a_session` (parametrised, so two ids) and
+`test_corrections_paginate_in_both_directions` — 4 ids of 8. **The plan's own
+names defeat the plan's own filter**, and the four unselected tests would have
+looked green without running. Same shape as the admin-UI-routes plan's defect
+#3, where `-k "tasks or …"` collected 5 of 6 because a name contained `a_task`
+rather than `tasks`.
+
+### #5 — Task 3's 404 test passes vacuously during its RED phase
+
+Step 2 runs the new route tests expecting red before the route exists.
+`test_an_unknown_receipt_is_404_even_for_an_admin` **passes** there. FastAPI
+answers **404** for an unregistered path, which is exactly the status code the
+test asserts, so "the route does not exist yet" cannot prove this test red.
+
+Reproduced 2026-08-10 in the same isolated copy, by deleting the whole
+`/receipts/{receipt_id}/corrections` route from `api.py` and re-running: the test
+**PASSES**. It does pin the existence check *now* — without it an admin gets 200
+— but its RED phase established nothing. Another instance of the class
+`docs/MEMORY.md` already names ("plan RED predictions are unreliable"); review
+standard 2 wants a failure whose reason is the guarantee, not a status code that
+two different mechanisms produce.
+
+### #6 — "ADR-0027 section 4" is section 5, in five places, and it shipped
+
+The plan cites **ADR-0027 section 4** for the `null` ≠ `0` ≠ empty rule.
+`grep -n "^### " docs/adr/0027-review-ui-design-system.md` says section 4 is
+*"A pathname switch, not React Router"*; the null rule is **section 5**. The
+cause was conflating ADR-0027's numbering with the **design spec's** §4, which
+is where `docs/MEMORY.md`'s "its section 4 is the null rule" actually points —
+two different documents.
+
+**Five sites in the plan body above** — Global Constraints, Task 1 Step 1,
+Task 1 Step 3, Task 2 Step 3, Task 3 Step 3 — enumerated on 2026-08-10 by
+grepping this file for `0027` *before this log was appended*, not from memory.
+(This log names ADR-0027 many times, so re-running that grep now returns more;
+the five are the ones above the `## Dated defect log` heading.) It reached the
+shipped tree in **three source
+files** — `review/queue.py`, `review/serializers.py`, `review/api.py` — before
+the Task 3 review caught it, and all three were corrected at `bc67c31`.
+
+**Two test files still carry the wrong number**, found by
+`git grep -nE "0027[^0-9]{0,12}(§ ?4|section 4)"` over the whole tracked tree:
+`tests/test_api_read.py` (the `correction_summary` two-row docstring) and
+`tests/test_review_queue.py` (the refusal-vs-emptiness docstring). Left alone
+because Task 4 is documentation-only, and reported instead of fixed. **That same
+grep also hits `frontend/src/route.ts`, which is correct and must not be
+"fixed"** — it cites §4 for the pathname switch, which is exactly what §4 is.
+The design spec carries its own dated note. A citation is a claim (review
+standard 21).
+
+### The predicted counts were all low, and the plan pre-disclosed that they were predictions
+
+The Self-Review above predicts `979 → 984 → 985 → 993 → 994` and says outright
+that these are predictions, not measurements. They are all low. Measured
+2026-08-10 with `python -m pytest --collect-only` at each commit — the method was
+validated against `HEAD`, where 1004 collected equals the 1004 that
+`python -m pytest` reports passing:
+
+| step | predicted | commit | measured |
+|---|---|---|---|
+| branch point | 979 | `e2ec316` | **979** |
+| Task 1 Step 7 | 984 | `bd2d0a0` | **985** (the added scope test) |
+| Task 1 fix round | — | `9f44864` | **988** |
+| Task 2 Step 7 | 985 | `2ad9bf9` | **989** |
+| Task 3 Step 6 | 993 | `d3569d7` | **997** |
+| Task 3 Step 10 | 994 | `6536d0f` | **998** |
+| Task 3 close | — | `df83715` … `20d9bb9` | **1004** |
+
+Every gap is a test some implementer or reviewer added because the plan's own
+coverage was thin — which is the same story defects #1, #3 and #4 tell from the
+other side. **Correct the count from the run, never from this plan.**

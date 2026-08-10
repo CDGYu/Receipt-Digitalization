@@ -163,6 +163,32 @@ Ordering matters and is part of the contract: **existence first, then scope.**
 reviewer probing a random UUID gets 404; a real receipt they never held gets
 403.
 
+> **Dated note (2026-08-10, the milestone's Task 4) — the ADR-0027 section
+> number above is wrong, and so is the one in §8.** This document cites
+> **"ADR-0027 §4"** for the `null` ≠ `0` ≠ empty rule, in the bullet directly
+> above (§2.3) and again in §8's References list. **The rule is ADR-0027's
+> decision 5**, *"`null` must never look like `0`, and neither may look like
+> 'empty'"*; its decision **4** is *"A pathname switch, not React Router"* and
+> has nothing to do with this route. Verified by `grep -n "^### "
+> docs/adr/0027-review-ui-design-system.md`.
+>
+> Those are the **only two** sites in the body of this document — derived, not
+> recalled, by grepping it for `0027` *before this note was added* (this note
+> discusses ADR-0027 repeatedly, so re-running that grep now returns more). It
+> returned three hits: the two above, plus §6's "ADR-0027's token vocabulary",
+> which carries no section number and is fine. **§2.5 does not cite a section
+> number at all** — it says "exactly what the UI's null rule is for" — so a
+> reader told the defect is in "§2.3 and §2.5" is being sent to the wrong second
+> place.
+>
+> The same wrong number shipped into three source files on this branch
+> (`review/queue.py`, `review/serializers.py`, `review/api.py`) and was
+> corrected there at `bc67c31`. It also survives in the plan, which carries its
+> own dated log. Recorded by dated note rather than by rewriting, per the
+> convention this project uses for designs and ADRs. ADR-0031's decision 4
+> carries the correct citation **with the heading text beside the number**, so
+> that one cannot rot silently (review standard 21).
+
 ### 2.4 Ordering
 
 `created_at`, then `id` as a tiebreaker — oldest first, so a page reads as a
@@ -171,6 +197,30 @@ pagination. `id` is a UUID and carries no time information, so it is a
 tiebreaker only, present because `created_at` has a `server_default` of
 `now()` and a single `apply_corrections` call writes every row of one patch in
 one flush — ties are the normal case, not the exception.
+
+> **Dated note (2026-08-10, user ruling during implementation) — the
+> tiebreaker above is NOT what shipped.** The order is `created_at` then
+> **`field_path`**, not `created_at, id`.
+>
+> The Task 1 reviewer measured that `id` is both unpinned and *unpinnable*:
+> `Correction.id` is `mapped_column(sa.Uuid, primary_key=True,
+> default=uuid.uuid4)`, a random UUID, so — exactly because ties are the normal
+> case, as the paragraph above correctly says — within-patch display order
+> scrambled on every write and no test could honestly assert anything about it.
+> **User ruling, 2026-08-10: use `field_path`**, which reproduces
+> `apply_corrections`' own `sorted(flatten(patch).items())` write order, so what
+> a reader sees is what was planned and is identical on every read. Pinned by
+> `test_list_corrections_breaks_a_created_at_tie_by_field_path`.
+>
+> **The paragraph above also claims "the total order is stable under
+> pagination", and that half is now false.** The shipped order is **not
+> total**: two corrections to the same `field_path`, written by separate
+> `apply_corrections` calls inside the same whole second, tie completely, where
+> `(created_at, id)` was total. A three-key form (`created_at, field_path, id`)
+> was offered alongside the two-key one and guarantees totality; the user chose
+> the two-key form. Accepted and recorded, not re-raised — adding `id` as a
+> **third** key would restore totality without disturbing within-patch order if
+> it ever matters. ADR-0031 decision 7 is the record.
 
 ### 2.5 Response shape, and the third envelope
 

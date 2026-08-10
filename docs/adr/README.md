@@ -36,6 +36,7 @@ Accepted; supersede it with a new ADR rather than editing history.
 | [0028](0028-claims-about-the-tree-are-re-derived.md) | Claims about the tree are re-derived, not restated | Accepted |
 | [0029](0029-what-the-gates-certify.md) | What the gates certify, and what they cannot | Accepted |
 | [0030](0030-a-finding-is-a-claim.md) | A finding is a claim, and a fix wave verifies before it fixes | Accepted |
+| [0031](0031-the-corrections-read-route.md) | The corrections read route: who may see a receipt's attribution | Accepted |
 
 Read **0001** first: it is the invariant everything else defers to. **0007** is
 the one to read before touching anything that writes card data or money, and
@@ -60,6 +61,11 @@ Critical — once reverted with all five green, and it states exactly what a gre
 run now certifies and what it still cannot. **0030** is the one to read before
 acting on a review finding, or writing a fix wave's brief: two of six findings
 in one wave were false, and a fix wave may return *"this finding is wrong"*.
+**0031** is the one to read before changing who can see correction attribution —
+or before scoping `GET /receipts/{receipt_id}`, whose being *unscoped* is the
+premise its 403-not-404 rests on. It also records the limit the schema forces:
+`review_tasks.receipt_id` is UNIQUE, so a released or reopened task takes a
+reviewer's own correction history away from them.
 
 Primary sources these build on: `RECEIPT_SYSTEM_SPEC.md` (build spec),
 `README.md` (§5 design decisions), `VLM_AND_DATA.md`, and the always-on
