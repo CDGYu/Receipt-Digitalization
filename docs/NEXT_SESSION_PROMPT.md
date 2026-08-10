@@ -20,7 +20,7 @@ it to "fix" a correct sentence in an Accepted ADR to match a wrong measurement.
 
 ---
 
-# NO BRANCH IN FLIGHT. `main` is MERGED and UNPUSHED — that is the one loose end.
+# NO BRANCH IN FLIGHT. `main` is MERGED AND PUSHED. Nothing is outstanding.
 
 **This header said "NO BRANCH IN FLIGHT" for three days while a branch existed**
 — true when written, rotted the moment the branch was cut. It is true again now,
@@ -32,20 +32,22 @@ git status --short                                # must be empty
 git log --oneline -6
 git branch --no-merged main                       # must name NOTHING
 git rev-parse main                                # merged tip
-git rev-parse refs/remotes/origin/main            # EXPECTED TO DIFFER: main is unpushed
+git ls-remote --heads origin main                 # authoritative; expect main's SHA
 git log --oneline refs/remotes/origin/main..main  # what the pending push would send
 ```
 
-## `main` is merged. `main` is NOT pushed. Everything else is done.
+## `main` is merged AND pushed — nothing is outstanding.
 
 The corrections read route **merged by true fast-forward on 2026-08-10** —
 single parent, zero merge commits, `git branch --no-merged main` names nothing.
 It went in only after its whole-branch review, three fix rounds and a final
 scoped re-review returning **MERGE** and *"no sixteenth false claim"*.
 
-**The one outstanding action is a `main` push, and it needs YOUR authorization.**
-Every authorization is one-time and the 2026-08-07 one was consumed by that
-day's push. `feat/corrections-read-route` is pushed and kept at its merge point.
+**`main` was pushed the same day with explicit authorization, which that push
+consumed. The next `main` push needs its own fresh ask.**
+`feat/corrections-read-route` is kept at its merge point and pushed too. Run
+`git ls-remote --heads origin main` rather than believing this sentence — the
+pair commit that writes it necessarily lands after the push it records.
 
 **Freshness check.** `docs/MEMORY.md`'s stamp names **one** position again now
 that nothing is in flight:
@@ -161,12 +163,13 @@ pushing `main`. See §0.
 
 # THE WORK, IN ORDER
 
-## 0. The corrections read route is DONE and MERGED. One action outstanding.
+## 0. The corrections read route is DONE, MERGED and PUSHED. Nothing carries over.
 
-**`main` is unpushed and the push needs the user's fresh authorization.** That
-is the entire remainder of the last milestone. Ask; do not assume — every
-authorization is one-time and the 2026-08-07 one was consumed by that day's
-push.
+**There is no outstanding action from the last milestone.** It was merged and
+`main` pushed on 2026-08-10, on an authorization **that push consumed** — the
+next `main` push needs its own fresh ask. Start at §2 or answer the questions
+under "Blocked on me"; this section is history, kept because it is what a reader
+needs to not re-do the close.
 
 The close ran in full: whole-branch review on the strongest model → **MERGE
 AFTER FIXES**, no Critical, every finding prose → three fix rounds, each
@@ -385,13 +388,12 @@ exits 0 are not reproducible here** — use `python -m receipts.cli` for the
 outside-repo check until the install state is settled. Not a regression from any
 branch.
 
-## 2. Phase 5 follow-ups — one BUILT-NOT-MERGED, one untouched
+## 2. Phase 5 follow-ups — one DONE, one untouched
 
-1. **The `corrections` read route is BUILT, on an unmerged and unpushed
-   branch.** ~~Nothing does `select(Correction)`~~ — false at the branch tip:
+1. ~~**A read route for `corrections`**~~ — **DONE, merged and pushed
+   2026-08-10.** ~~Nothing does `select(Correction)`~~ — false on `main` now:
    `git grep -nE 'select\(\s*Correction' -- src` returns exactly one hit,
-   `review/queue.py`'s `list_corrections`. It was **zero** at the branch point
-   `e2ec316`, which is still true of `main`.
+   `review/queue.py`'s `list_corrections`. It was **zero** at `e2ec316`.
 
    **The auth ruling is CONFIRMED, 2026-08-10, and is no longer blocked on
    you:** *"both, scoped differently: reviewers see corrections for the receipt
@@ -761,11 +763,9 @@ points from outside the repository. §1.6 is the current example.
 
 ## Today's goal
 
-**Nothing is in flight and nothing is half-done.** The corrections read route is
-merged; `git branch --no-merged main` should name nothing.
-
-**§0 is one action and it is the user's: authorize the `main` push.** Ask for it
-first — it is the only thing carried over, and it costs one sentence.
+**Nothing is in flight, nothing is half-done, and nothing carries over.** The
+corrections read route is merged and pushed; `git branch --no-merged main`
+should name nothing and `main` should equal `origin/main`.
 
 **Run the freshness command in `docs/MEMORY.md`'s stamp before trusting any of
 this.** If it lists anything, the tree moved after this was written — re-run

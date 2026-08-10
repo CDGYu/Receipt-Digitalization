@@ -8,12 +8,12 @@ verified rather than trusted — is **ADR-0019**, extended by **ADR-0021** (whos
 proved invisible to it).
 Last updated: **2026-08-10**, at the close of the session that built **and
 merged** the corrections read route. **One position again, because nothing is in
-flight: `main @ 7b08941`, UNPUSHED.** A stamp cannot name the commit that writes
+flight: `main @ 7b08941`, PUSHED.** A stamp cannot name the commit that writes
 it, so the test is a command, not a commit and not a count:
 
 ```
 git log --oneline 7b08941..main -- src tests frontend docs ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
-git rev-parse main refs/remotes/origin/main    # EXPECTED TO DIFFER: main is unpushed
+git ls-remote --heads origin main             # authoritative; the pair commit lands after the stamp
 ```
 
 **Empty means current.** Anything listed means the tree moved after this was
@@ -41,11 +41,12 @@ committed first; `7b08941` is the last of it.
   for three days while one existed**: true when written on 2026-08-07, rotted
   the moment the corrections branch was cut, and corrected only when Task 4
   edited the file. **The answer is the command, never the sentence.**
-- **`main` is AHEAD of `origin/main` and needs a push authorization.** The
-  corrections read route merged by true fast-forward on 2026-08-10; the
-  2026-08-07 authorization was consumed by that day's push. `git rev-parse main
-  refs/remotes/origin/main` will differ until the next ask is granted. See
-  "Corrections read route" below.
+- **`main` is merged AND PUSHED — nothing is outstanding.** The corrections read
+  route merged by true fast-forward on 2026-08-10 and `main` was pushed the same
+  day on an explicit authorization, **which that push consumed**. **The next
+  `main` push needs its own fresh ask.** Verify with `git ls-remote --heads
+  origin main` rather than believing this sentence. See "Corrections read route"
+  below.
 - **The review-UI styling milestone is COMPLETE AND MERGED** (2026-08-07, true
   fast-forward `1314485` → `be6d7c0`, single parent, 38 branch commits).
   `feat/review-ui-styling` is kept at its merge point and pushed.
@@ -198,14 +199,14 @@ recursed 17-route walk**, both ADRs and their index rows in place, and the
 outside-repo import check green from `C:\Users` (`src/` changed on this branch,
 so ADR-0021's rule applied).
 
-**`main` is NOT pushed.** The merge moved `main` past `origin/main`, and the
-2026-08-07 push authorization was consumed by that push. **The next one needs
-its own fresh ask.** `main` has not moved: `e2ec316` is
-`main`, `origin/main` and the branch point alike.
+**`main` was PUSHED the same day**, on an authorization granted at this close
+and **consumed by that push**. **The next `main` push needs its own fresh ask.**
+`feat/corrections-read-route` is kept at its merge point and pushed too.
 
-**Gates at the branch tip `983f57c`, controller-run 2026-08-10:
-`python scripts/verify.py` — all five PASS.** pytest **1004**; Vitest **346
-across 25 files, unmoved**, because no frontend file is in any task's file set.
+**Gates on `main` AFTER the merge, controller-run 2026-08-10:
+`python scripts/verify.py` — all five PASS.** pytest **1004** (979 before this
+milestone); Vitest **346 across 25 files, unmoved**, because no frontend file is
+in any task's file set.
 This is the tip result, not a mid-branch one: earlier records in this file that
 say "`verify.py` has not been run at the tip" are superseded by this line.
 
