@@ -11,18 +11,10 @@ never look like `0`, and neither may look like 'empty'"* — the rule this route
 applies one layer below the UI), ADR-0018 + ADR-0022 (PAN is masked at its
 writer, which is the invariant this route reads through), ADR-0006 (pure read:
 injected session, no flush, no commit, no `ValueError`), ADR-0012 (identity and
-roles), ADR-0028 (every claim below was derived at the moment it was written,
-with the method beside it).
+roles), ADR-0028 (claims about the tree are re-derived, not restated).
 
-The enumerations and numbers in this record were derived on 2026-08-10 against
-`feat/corrections-read-route @ 20d9bb9` — the branch's last commit to touch
-`src/`, which has not moved since — and each names the query that produced it.
-**Re-run them rather than quoting them**, and note that this sentence used to
-read *"every enumeration and number in this record was re-derived"*: a universal
-about the document's own rigour, which review then falsified twice, in the two
-places that had in fact been copied rather than run. Both are corrected in place
-below, each with the copy it came from named. **A document cannot certify itself;
-the queries are here so you can.**
+Derived 2026-08-10, against `feat/corrections-read-route`; `src/` has not moved
+since `bc67c31`. **Re-derive rather than quote** (ADR-0028 rule 1).
 
 ## Context
 
@@ -41,14 +33,10 @@ and one of them is not about this table at all:
 | `persist/repository.py` | **a false positive** — the comment *"Recorded in ADR-0020's Correction (2026-08-02)"*, where "Correction" means a dated correction to an ADR |
 | `persist/repository.py` | the `Correction(...)` construction inside `apply_corrections`' `add_all` |
 
-The design spec's §1.1 breaks the same six down as *"the import, the
-`session.add_all` construction inside `apply_corrections`, and its `__all__`
-entry"*. **The count is right and that third item is wrong**: `repository.py`'s
-`__all__` does not contain `Correction` — checked directly, it holds
-`apply_corrections`, which `\bCorrection\b` does not match. The spec carries a
-dated note. At
-`HEAD` the same first query returns exactly one hit, `select(Correction)` in
-`review/queue.py`.
+The `__all__` entry in that table is `persist/__init__.py`'s.
+`persist/repository.py`'s `__all__` does **not** contain `Correction`: it holds
+`apply_corrections`, which `\bCorrection\b` does not match. At `HEAD` the same
+first query returns exactly one hit, `select(Correction)` in `review/queue.py`.
 
 So a reviewer could not see the correction history of the receipt they were
 correcting, and an auditor needed database access. This milestone closes the
@@ -122,9 +110,7 @@ disclosure decision 4 says this scope exists to prevent.
 ### 3. The stated limit, which is real and was found by review, not by design
 
 The design said "held **or previously held**". The schema cannot express that,
-and the shipped scope is narrower than the phrase. This was found by the Task 1
-reviewer, not designed in, and it is recorded here as a limit rather than argued
-away.
+and the shipped scope is narrower than the phrase.
 
 `ReviewTask.receipt_id` carries `unique=True` (`src/receipts/persist/models.py`),
 so a receipt has exactly **one** task row. There is no history of prior holders
@@ -145,8 +131,7 @@ writes, not matches — the same near-miss ADR-0026 records.)
 
 **So a reviewer whose task was released by an admin, or reopened by a later
 `enqueue_review`, loses access to corrections they made themselves, and is
-refused exactly as a stranger is.** That is the limit. It is not narrowed here
-until it is vacuous, and it is not dressed up as a policy: widening the scope to
+refused exactly as a stranger is.** That is the limit. Widening the scope to
 match the wider phrase would need history this schema does not keep, so the
 phrase gave way and the code did not. `list_corrections`' docstring states the
 same thing at the point of use.
@@ -176,7 +161,7 @@ and neither may look like 'empty'"* — one layer below the UI.
 switch, not React Router"*, which has nothing to do with this. Verified by
 `grep -n "^### " docs/adr/0027-review-ui-design-system.md`.
 
-**Where the wrong number went, enumerated rather than sampled.** The anchor is
+**Where the wrong number went.** The anchor is
 `git grep -nE "0027[^0-9]{0,12}(§ ?4|section 4)"` over the **whole tracked
 tree, with no pathspec** — the narrower `src/*.py` anchor is exactly what let
 two of these survive a round that reported the class closed:
@@ -184,12 +169,9 @@ two of these survive a round that reported the class closed:
 | site | state |
 |---|---|
 | `review/queue.py`, `review/serializers.py`, `review/api.py` | fixed at `bc67c31` |
-| `tests/test_api_read.py`, `tests/test_review_queue.py` | fixed at this milestone's Task 4 fix round |
+| `tests/test_api_read.py`, `tests/test_review_queue.py` | fixed on this branch |
 | this milestone's design spec and plan | **left wrong**, each carrying a dated note, because neither self-amends |
 | `frontend/src/route.ts` | **correct — do not change it.** It cites §4 for the pathname switch, which is what §4 is |
-
-Cited here with the heading text beside the number so this citation cannot rot
-silently (review standard 21).
 
 The distinction is enforced by the signature, not by a comment:
 `list_corrections` returns `list[Correction] | None`. `None` means "may not
@@ -254,7 +236,7 @@ standard 15).
 **Stated limit.** The pin covers the **reviewer-typed** path. A row written to
 `corrections` by any future code path that bypasses `_plan_change` would not be
 covered, and no schema constraint prevents one. Same shape of limit ADR-0026
-records for its privacy property; recorded here rather than claimed closed.
+records for its privacy property.
 
 ### 7. Ordering: `created_at`, then `field_path` — and it changed during implementation
 
@@ -341,8 +323,8 @@ sufficient for this scope.
   `# api.py  (FastAPI routes)` header: **it has no
   `GET /receipts/{id}/corrections` row.** The only line in it mentioning
   corrections is `PATCH /receipts/{id} -> apply corrections`, which is the
-  *write* route and was already there. **This ADR does not add the row and does
-  not claim to.** It is deliberately deferred rather than folded in: that same
+  *write* route and was already there. The row is deliberately deferred rather
+  than folded in here: that same
   header also heads `POST /auth/login`, `GET /auth/me` and `POST /auth/logout`,
   all three of which live in `auth.py`'s `build_auth_router()` rather than in
   `api.py` — `docs/MEMORY.md` already records that as wrong — and the design's
@@ -375,10 +357,9 @@ sufficient for this scope.
 
 ## An open defect this milestone measured and did not cause
 
-Recorded here because it was found by this milestone's review, is **not** caused
-by this milestone's code, and was deliberately left unfixed under review
-standard 19 (state the bounded property, report further shapes rather than
-fixing them). It needs a user decision.
+The defect is **not** caused by this milestone's code, and was deliberately left
+unfixed under review standard 19 (state the bounded property, report further
+shapes rather than fixing them). It needs a user decision.
 
 **`?offset=9223372036854775808` is an unhandled 500 on every paginated route.**
 `offset` is declared `Query(0, ge=0)` with no upper bound, so `2**63` satisfies
@@ -396,9 +377,8 @@ and the body is Starlette's plain `Internal Server Error`, not
 `{"error": {"message": ...}}`. The same route's 404 on the same path honours the
 contract.
 
-**Measured on all three paginated routes, and who reaches it differs.** Every
-value below was re-measured for this record, per caller class, at offsets
-`0 / 2**63-1 / 2**63`:
+**Measured on all three paginated routes, and who reaches it differs.** Measured
+per caller class, at offsets `0 / 2**63-1 / 2**63`:
 
 | caller | `GET /receipts` | `GET /review/tasks` | this route |
 |---|---|---|---|
@@ -414,11 +394,9 @@ the offset ever reaches SQLite, because `list_corrections` returns `None` first.
 On the two sibling routes there is no such gate and **any** signed-in caller
 reaches it.
 
-The narrower sentence matters for its own sake: an earlier draft of the route's
-own docstring said "reachable by any signed-in caller", which is true of the two
-older routes and false of the one it documents. That claim was caught by a
-re-review and corrected — the same true-in-one-branch/false-in-the-other shape as
-the finding it was fixing (ADR-0030).
+**"Any signed-in caller" is the wrong sentence for this route** and the right
+one for the other two, so do not generalise across them. The route's docstring
+says which callers reach it; the table above is where that comes from.
 
 **Not fixed here.** The declaration defect is pre-existing on two shipped routes
 and the third inherited it from a plan that specified the parameter verbatim.
@@ -443,9 +421,8 @@ cannot work"*, where claim-unawareness is the **premise** rather than the
 ruling (both heading lists re-read 2026-08-10 with `grep -n "^### "`);
 ADR-0006 (pure reads, the `ValueError`
 boundary); ADR-0012 (identity and roles); ADR-0028 (claims about the tree are
-re-derived — this record's own method notes); ADR-0029 (what a green run
-certifies); ADR-0030 (a finding is a claim, which is why decision 3 exists as a
-limit rather than as the design's original sentence).
+re-derived, not restated); ADR-0029 (what a green run certifies); ADR-0030 (a
+finding is a claim).
 
 `docs/superpowers/specs/2026-08-10-corrections-read-route-design.md` — the
 approved design, **with its 2026-08-10 dated note**: §2.4's tiebreaker changed
