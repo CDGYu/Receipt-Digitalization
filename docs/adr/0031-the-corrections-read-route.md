@@ -35,8 +35,11 @@ and one of them is not about this table at all:
 
 The `__all__` entry in that table is `persist/__init__.py`'s.
 `persist/repository.py`'s `__all__` does **not** contain `Correction`: it holds
-`apply_corrections`, which `\bCorrection\b` does not match. At `HEAD` the same
-first query returns exactly one hit, `select(Correction)` in `review/queue.py`.
+`apply_corrections`, which `\bCorrection\b` does not match. **The design spec's
+§1.1 breaks the same six down differently, and its breakdown is wrong there** —
+it gives `repository.py` an `__all__` entry — so read §1.1's dated note, which
+says so, before taking anything from that paragraph. At `HEAD` the same first
+query returns exactly one hit, `select(Correction)` in `review/queue.py`.
 
 So a reviewer could not see the correction history of the receipt they were
 correcting, and an auditor needed database access. This milestone closes the
@@ -107,7 +110,7 @@ would disclose every unclaimed receipt's attribution — which named colleague
 changed which field — to every reviewer in the system, which is precisely the
 disclosure decision 4 says this scope exists to prevent.
 
-### 3. The stated limit, which is real and was found by review, not by design
+### 3. The stated limit: the schema cannot answer "has ever held"
 
 The design said "held **or previously held**". The schema cannot express that,
 and the shipped scope is narrower than the phrase.
@@ -355,7 +358,7 @@ sufficient for this scope.
   released can still write — and, per decision 3 above, can no longer read that
   they did.
 
-## An open defect this milestone measured and did not cause
+## An open defect: `offset` is declared with no upper bound
 
 The defect is **not** caused by this milestone's code, and was deliberately left
 unfixed under review standard 19 (state the bounded property, report further
@@ -395,8 +398,7 @@ On the two sibling routes there is no such gate and **any** signed-in caller
 reaches it.
 
 **"Any signed-in caller" is the wrong sentence for this route** and the right
-one for the other two, so do not generalise across them. The route's docstring
-says which callers reach it; the table above is where that comes from.
+one for the other two, so do not generalise across them.
 
 **Not fixed here.** The declaration defect is pre-existing on two shipped routes
 and the third inherited it from a plan that specified the parameter verbatim.
@@ -425,8 +427,10 @@ re-derived, not restated); ADR-0029 (what a green run certifies); ADR-0030 (a
 finding is a claim).
 
 `docs/superpowers/specs/2026-08-10-corrections-read-route-design.md` — the
-approved design, **with its 2026-08-10 dated note**: §2.4's tiebreaker changed
-by user ruling during implementation, and its ADR-0027 §4 citations are §5.
+approved design. It does not self-amend: where a ruling or a later check
+overtook it, it carries a **dated 2026-08-10 note**, and the paragraph above
+each note still carries the claim that note corrects. Grep it for `Dated note`
+and read every one before re-deriving anything from its body.
 `docs/superpowers/plans/2026-08-10-corrections-read-route.md` — the plan, **with
 its dated defect log**: six defects, all the plan author's.
 

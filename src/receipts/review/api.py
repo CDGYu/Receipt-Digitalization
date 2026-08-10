@@ -249,8 +249,16 @@ def _install_read_routes(app: FastAPI) -> None:
         """One receipt's correction history, oldest first.
 
         Guarded by ``require_user``, **not** ``require_role``: both roles reach
-        it. An admin reads any receipt's; a reviewer reads only a receipt they
-        hold or have held (ADR-0031, the ruling confirmed 2026-08-10).
+        it. An admin reads any receipt's; a reviewer reads only a receipt whose
+        ``review_tasks`` row **currently names** them, in any state (ADR-0031,
+        the ruling confirmed 2026-08-10). That is narrower than the design's
+        "held or previously held", and deliberately so: the ``receipt_id``
+        column on ``review_tasks`` is UNIQUE, so a receipt has at most one task
+        row and there is no record of prior holders, and both ``release_task``
+        and ``enqueue_review``'s reopen branch clear ``assigned_to`` -- a
+        released or reopened task takes the history away from its former holder.
+        :func:`~receipts.review.queue.list_corrections` states the same limit at
+        the point of use.
 
         **Existence is checked before scope, and the order is the contract.** A
         receipt that does not exist is 404; one that exists but is out of scope
