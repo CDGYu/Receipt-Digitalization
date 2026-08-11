@@ -44,6 +44,11 @@ from .review.api import create_app
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from fastapi import FastAPI
 
+#: ``app`` is deliberately absent. It is not a real module attribute -- it is
+#: resolved by ``__getattr__`` below -- so listing it here would make
+#: ``from receipts.asgi import *`` *build the application*, which is the one
+#: thing this module is arranged not to do on import. Uvicorn does not consult
+#: ``__all__``, so nothing is lost.
 __all__ = ["create_asgi_app"]
 
 

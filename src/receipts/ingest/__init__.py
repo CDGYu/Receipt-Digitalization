@@ -41,6 +41,7 @@ from .storage import (
     S3Storage,
     StorageBackend,
     make_image_key,
+    make_storage,
 )
 
 if TYPE_CHECKING:  # pragma: no cover - import-time typing only
@@ -73,6 +74,7 @@ __all__ = [
     "find_semantic_duplicate",
     "ingest_bytes",
     "ingest_file",
+    "make_storage",
     "link_duplicate",
     "make_image_key",
     "phash_distance",

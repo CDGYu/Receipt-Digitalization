@@ -28,6 +28,7 @@ pytest.importorskip("pypdfium2")
 import pypdfium2  # noqa: E402
 from PIL import Image  # noqa: E402
 
+from config.settings import Settings  # noqa: E402
 from receipts.ingest import (  # noqa: E402
     LocalStorage,
     ReceiptJob,
@@ -41,6 +42,7 @@ from receipts.ingest import (  # noqa: E402
     ingest_file,
     link_duplicate,
     make_image_key,
+    make_storage,
     phash_distance,
     validate_upload,
 )
@@ -111,6 +113,48 @@ def test_s3storage_raises_clear_error_without_boto3():
     s3 = S3Storage("my-bucket")
     with pytest.raises(RuntimeError, match="boto3 not installed"):
         s3.put("k", b"data", "image/png")
+
+
+# --------------------------------------------------------------------------- #
+# storage: make_storage (the backend-selection policy)
+# --------------------------------------------------------------------------- #
+#
+# This policy shipped untested. It lived as ``_make_storage``, private in
+# ``cli.py``, and no test referenced it under either name -- so when ADR-0035
+# moved it here for the ASGI entry point to share, nothing proved the move
+# preserved its behaviour. These three cases are that proof.
+
+
+def test_make_storage_builds_a_local_backend_rooted_at_the_setting(tmp_path):
+    settings = Settings(
+        _env_file=None, storage_backend="local", storage_root=str(tmp_path / "blobs")
+    )
+
+    storage = make_storage(settings)
+
+    assert isinstance(storage, LocalStorage)
+    assert storage.root == tmp_path / "blobs"
+
+
+def test_make_storage_builds_an_s3_backend_for_the_configured_bucket():
+    settings = Settings(_env_file=None, storage_backend="s3", s3_bucket="some-bucket")
+
+    storage = make_storage(settings)
+
+    assert isinstance(storage, S3Storage)
+
+
+def test_make_storage_refuses_a_non_local_backend_with_no_bucket():
+    """The one branch that is a refusal rather than a construction.
+
+    Any non-``local`` backend needs a bucket, so an operator who sets
+    ``STORAGE_BACKEND`` and forgets ``S3_BUCKET`` is told which one is missing
+    rather than getting an ``S3Storage`` bound to ``None``.
+    """
+    settings = Settings(_env_file=None, storage_backend="s3", s3_bucket=None)
+
+    with pytest.raises(ValueError, match="S3_BUCKET"):
+        make_storage(settings)
 
 
 # --------------------------------------------------------------------------- #
