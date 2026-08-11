@@ -20,7 +20,7 @@ it to "fix" a correct sentence in an Accepted ADR to match a wrong measurement.
 
 ---
 
-# NO BRANCH IN FLIGHT. `main` is MERGED AND PUSHED.
+# NO BRANCH IN FLIGHT. `main` is MERGED, and AHEAD of `origin/main`.
 
 **This header said "NO BRANCH IN FLIGHT" for three days while a branch existed**
 — true when written, rotted the moment the branch was cut. It has also carried
@@ -36,7 +36,7 @@ git ls-remote --heads origin main                 # authoritative on what is pus
 git log --oneline refs/remotes/origin/main..main  # what the pending push would send
 ```
 
-## `main` is merged and pushed — nothing is waiting to go.
+## `main` is merged, and has UNPUSHED work on top.
 
 The corrections read route **merged by true fast-forward on 2026-08-10** —
 single parent, zero merge commits, `git branch --no-merged main` names nothing.
@@ -46,8 +46,9 @@ scoped re-review returning **MERGE** and *"no sixteenth false claim"*.
 **Six pushes happened, each on a one-time authorization that the push
 consumed** — the corrections read route (2026-08-10), then a docs fix wave, the
 shared page bound, the ASGI entry point, the containerisation, and CI plus the
-P8.T3 eval fix (all 2026-08-11). **The next `main` push needs its own fresh
-ask.**
+P8.T3 eval fix (all 2026-08-11). **The ISSUE-001 readiness record and the
+backlog recommendations merged after all six and are NOT pushed. The next
+`main` push needs its own fresh ask.**
 `feat/corrections-read-route`, `feat/shared-page-bound`, `feat/asgi-entry-point`,
 `feat/containerisation`, `feat/ci-workflow` and `feat/eval-precision-null` are
 all kept at their merge points and pushed. Run
@@ -865,39 +866,95 @@ new item joined the end, so **a reference to "item #N" written before
 2026-08-11 points at a different item.** No count is given: the list is right
 here (ADR-0032 §3).
 
+**A recommendation is attached to each item, offered 2026-08-11 and NOT a
+ruling.** They are one session's reasoning, recorded so the next one does not
+re-derive it from scratch — and they are exactly the kind of prose ADR-0030
+says to check before acting on. **Where a recommendation and the item's own
+measured text disagree, the measurement wins.**
+
 1. **A hosted tool-capable provider + freshly rotated key** (ISSUE-001 → all
    calibration, and Phase 6's success metric).
+   > **Recommended: do this first, and it is not close.** Ten of the other
+   > items are cosmetic or bounded; this one is why the project cannot state a
+   > real accuracy number. **Everything but the key is verified** — see
+   > ISSUE-001's "Readiness check, 2026-08-11": the hosted wiring builds, the
+   > timeout reaches the client, tool-use is on, and the golden labels still
+   > validate zero-findings. **Only a human can do the remaining step**, and
+   > the old Gemini key must be rotated regardless — it was echoed to a
+   > terminal, and the repo is public.
 2. **The theme control.** ADR-0027 ships dark as a full second theme and **the
    application has no way for a user to choose it** — the only routes in are the
    OS preference and setting `data-theme` by hand. Every token and the
    precedence rule are correct and browser-verified; the decision is
    half-delivered. It needs a home for the control, which ADR-0027 deliberately
    did not open.
+   > **Recommended: yes, and it is small.** ADR-0027 shipped dark as a complete
+   > second theme with every token browser-verified, and no user can reach it —
+   > the best ratio of delivered value to remaining work on this list. Put the
+   > control in the same shell as sign-out and take item 3 with it.
 3. **The currency prefix**, parked in design §5.1 with *the browser pass* named
    as its resolver. **The pass ran and never addressed it** — grepping the
    report for "currency", "prefix" or "symbol" returns nothing. **Its designated
    resolver has been spent; it needs a new one.**
+   > **Recommended: decide it inline with item 2, not separately.** Its
+   > designated resolver was spent, so the honest replacement is "whoever next
+   > opens `MoneyInput`" rather than another scheduled pass.
 4. **Should the Playwright visual run become a sixth gate?** ADR-0029 leaves it
    open. It would need a headless-stable config, a policy for the 43 recorded
    undersized hit targets, and a way to establish a first baseline without
    pinning current defects.
+   > **Recommended: no, not yet.** A visual gate established now would pin the
+   > 43 recorded undersized hit targets and today's rendering as the baseline
+   > before anyone has decided whether they are defects. Revisit after items 2
+   > and 3, when the UI has stopped moving.
 5. **Does the census parser get replaced?** §1.1 item 1: a `;` or `{}` inside a
    value is silently mis-parsed and ships. Replacing it is real work; adding a
    bullet to ADR-0029 §4 is honest but leaves the hole.
+   > **Recommended: add the ADR-0029 §4 bullet; do not rewrite the parser.**
+   > The hole needs someone to write pathological CSS to reach. Documenting the
+   > blind spot is cheap and true; a replacement parser is a new thing that can
+   > be wrong in new ways.
 6. **Should the citation sweep become a repo script?** §1.2. ADR-0028
    deliberately declined to propose a CI check for prose, and that stands until
    you say otherwise.
+   > **Recommended: no.** Every prose defect found on 2026-08-11 — a false
+   > filter list, two wrong counts, aged citations, a claim that CI needed no
+   > ruling — needed a human to notice the *claim* was wrong, not that a number
+   > had drifted. A script would have caught none of them and would read as
+   > coverage.
 7. **Do the public golden labels need scrubbing?** (Real third-party names,
    TINs, addresses — also the values the PAN silent-case tests pin.)
+   > **Recommended: yes, and sooner is cheaper.** This is the only item with a
+   > third-party privacy dimension, and the repo is public. The PAN silent-case
+   > tests pin some of those exact values, so every further pin added before
+   > this is one more thing that has to move with it.
 8. **R060/R061 grounding (P2.T2)** — also gates bbox highlighting.
+   > **Recommended: defer behind item 1.** It is a three-way choice (model
+   > returns the text it read / a cheap OCR pass / drop the rules) and none of
+   > the three can be evaluated without a working provider. Deciding it now is
+   > guessing.
 9. **Close the PAN grouping residual?** Which priced route?
+   > **Recommended: defer, and answer it together with item 10.** Both surfaces
+   > are measured and pinned, so nothing is leaking while they wait.
 10. **Narrow the `{1,2}` separator** now that its surface is measured?
+    > **Recommended: defer, with item 9 — they are one decision.** How much PAN
+    > shape to close by construction versus by enumeration is a single
+    > question, and review standard 19 says answer it as one bounded property
+    > rather than two narrowings.
 11. **Bound the CLI's `--limit`?** Found by ADR-0034's review and reported
     rather than fixed (standard 19): `query_receipts(limit=2**63)` raises the
     same `OverflowError` the HTTP routes just closed, and `--limit` is bounded
     below by `_positive_int` but not above. Local to the CLI, not an HTTP
     surface, so an operator sees a traceback rather than a service returning
     500 to a caller.
+    > **Recommended: yes, and it is about an hour.** ADR-0034 already decided
+    > the shape, so this applies a ruling rather than making one, and it closes
+    > the class instead of leaving one instance open. Lower severity than the
+    > HTTP routes were; nearly free.
+
+**If you want the short version:** unblock **1**, spend an hour each on **11**
+and **2** (taking **3** with it), do **7** while it is still cheap, say no to
+**4**, **5** and **6**, and leave **8**, **9** and **10** until item 1 lands.
 
 ## Today's goal
 

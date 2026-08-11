@@ -6,13 +6,13 @@ continuity protocol itself — what lives where, and why this snapshot must be
 verified rather than trusted — is **ADR-0019**, extended by **ADR-0021** (whose
 2026-08-02 dated correction widened the freshness check after a docs-only task
 proved invisible to it).
-Last updated: **2026-08-11**, at the close of the session that switched CI back on and
-fixed P8.T3. **One position, because nothing is in flight: `main @ 4a46c46`,
-PUSHED.** A stamp cannot name the commit that
+Last updated: **2026-08-11**, at the close of the session that switched CI back
+on, fixed P8.T3, and verified everything but the key on ISSUE-001. **One
+position, because nothing is in flight: `main @ 8995d1e`, NOT pushed.** A stamp cannot name the commit that
 writes it, so the test is a command, not a commit and not a count:
 
 ```
-git log --oneline 4a46c46..main -- src tests frontend docs ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
+git log --oneline 8995d1e..main -- src tests frontend docs ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
 git log --oneline refs/remotes/origin/main..main   # what a push would send
 git ls-remote --heads origin main                  # authoritative on what is pushed
 ```
@@ -20,7 +20,7 @@ git ls-remote --heads origin main                  # authoritative on what is pu
 **Empty means current.** Anything listed means the tree moved after this was
 written and you are reading something stale.
 
-**No characterisation of `4a46c46` is written here on purpose** — an earlier
+**No characterisation of `8995d1e` is written here on purpose** — an earlier
 stamp called its SHA "the last *code* commit", and the next commit falsified
 that by editing a docstring under `src/`. **ADR-0032 §2**: a claim can be
 derived correctly and rot inside the commit that carries it. The SHA plus the
@@ -30,9 +30,9 @@ command cannot rot; a sentence about what the SHA *is* can.
 check excludes exactly these two files and watches `docs` otherwise, so a commit
 bundling them with an ADR or an index row lists itself as stale. That happened
 three times in the session that wrote ADR-0033. Everything substantive was
-committed first; `4a46c46` is the last of it.
+committed first; `8995d1e` is the last of it.
 
-*(The previous stamp was 2026-08-11 at `main @ 743cacb`, the CI merge tip.)*
+*(The previous stamp was 2026-08-11 at `main @ 4a46c46`, the P8.T3 fix.)*
 
 ## Snapshot
 
@@ -41,11 +41,13 @@ committed first; `4a46c46` is the last of it.
   for three days while one existed**: true when written on 2026-08-07, rotted
   the moment the corrections branch was cut, and corrected only when Task 4
   edited the file. **The answer is the command, never the sentence.**
-- **`main` is merged AND PUSHED.** Six pushes, each on a one-time
-  authorization the push consumed: the corrections read route (2026-08-10),
-  then a docs fix wave, the shared page bound, the ASGI entry point, the
-  containerisation, and CI plus the P8.T3 eval fix (all 2026-08-11). **The next
-  `main` push needs its own fresh ask.** Run
+- **`main` is merged, and is AHEAD of `origin/main`.** Six pushes so far, each
+  on a one-time authorization the push consumed: the corrections read route
+  (2026-08-10), then a docs fix wave, the shared page bound, the ASGI entry
+  point, the containerisation, and CI plus the P8.T3 eval fix (all 2026-08-11).
+  **The ISSUE-001 readiness record and the backlog recommendations merged after
+  all six and are NOT pushed.** **The next `main` push needs its own fresh
+  ask.** Run
   `git log --oneline refs/remotes/origin/main..main` rather than believing this
   sentence — empty means nothing is waiting to go.
 - **CI RUNS AGAIN** (2026-08-11, true fast-forward `a6c4392` → `743cacb`,
@@ -1258,10 +1260,20 @@ API path moves.
 
 ## Still needing a user decision
 
+**This list is a SUBSET, and it is not the one to work from.**
+`docs/NEXT_SESSION_PROMPT.md`'s "Blocked on me" is the full, ordered list — it
+carries more items than this one and, since 2026-08-11, **a recommendation
+attached to each**. The recommendations are deliberately written down **once**,
+there, rather than mirrored here: eleven paragraphs kept in two files is how
+copies drift (ADR-0033 §2). **The numbering differs between the two lists**, so
+cite an item by its words, never by its number.
+
 **Renumbered 2026-08-10.** This list ran `1, 2, 2, 3, 4, 5, 6` — seven items
-presenting as six — and the corrections-auth item at the top is now **settled**
-and has moved to "Decisions the user has made". Six items remain; a reference to
-"decision #N" written before 2026-08-10 is pointing at a different item.
+presenting as six — and the corrections-auth item at the top is now settled and
+has moved to "Decisions the user has made". A reference to "decision #N"
+written before 2026-08-10 points at a different item. **No count is given**: two
+entries have been answered since, and a count here would have to be maintained
+against a list that lives somewhere else (ADR-0032 §3).
 
 1. **A hosted tool-capable provider + a freshly rotated key** — for ISSUE-001,
    and therefore for all calibration.
