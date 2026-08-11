@@ -103,6 +103,12 @@ because merges here are local fast-forwards, and it guards against the false
 green that `pytest.importorskip` makes possible. It reverses the 2026-07-29
 decision to untrack `.github/workflows/` and corrects ADR-0017's Context, and it
 is candid that the workflow itself was unverified when written.
+**0038** is the one to read before touching the theme, the header, or anything
+that wants browser storage: three states (`system` removes the attribute rather
+than setting a third value, so ADR-0027's precedence rule stays reachable in
+both directions), a pre-paint script in `index.html` whose duplicated storage
+key is pinned by a text-reading test, and the **narrowing of ADR-0024** that
+permits exactly one key — which nothing else inherits.
 
 Primary sources these build on: `RECEIPT_SYSTEM_SPEC.md` (build spec),
 `README.md` (§5 design decisions), `VLM_AND_DATA.md`, and the always-on

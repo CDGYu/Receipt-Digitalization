@@ -5,6 +5,34 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Receipt review</title>
+    <!--
+      Apply the stored theme BEFORE first paint (ADR-0038).
+
+      Without this, a reviewer who chose a theme that differs from their OS sees
+      the OS one flash and then swap when React mounts. Only that reviewer is
+      affected: the default is "match system", which sets no attribute and needs
+      no script at all.
+
+      Inline and synchronous on purpose -- a module script is deferred, which is
+      exactly one paint too late. It reads the same key `src/theme.ts` exports;
+      the two literals cannot import each other, so `theme.test.ts` reads this
+      file as text and fails if they ever disagree.
+
+      Anything other than the two known words is ignored, leaving the attribute
+      absent so the media query applies. `localStorage` can throw, so the whole
+      thing is wrapped: a browser that refuses to store gets the OS theme, not a
+      blank page.
+    -->
+    <script>
+      try {
+        var t = localStorage.getItem('receipts.theme')
+        if (t === 'dark' || t === 'light') {
+          document.documentElement.setAttribute('data-theme', t)
+        }
+      } catch (e) {
+        /* no stored preference is reachable; the OS preference applies */
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>

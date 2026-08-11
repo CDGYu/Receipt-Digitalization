@@ -82,6 +82,17 @@ via ADR-0016's resume, and the overlay is re-applied as
 as it did before the stash existed. The trade is deliberate: no
 receipt-adjacent text is written to disk by the browser.
 
+> **Narrowed 2026-08-11 (ADR-0038).** The ruling above reads as absolute and was
+> applied that way for a week. Its *reason* is the last sentence — **no
+> receipt-adjacent text** — and a theme preference is not that.
+>
+> The user narrowed it to permit **exactly one key**: `receipts.theme`, holding
+> one of `light` / `dark` / `system`. That is the whole exception. **The stash
+> is unchanged and always will be** — it holds edited receipt values, which is
+> precisely what the ruling exists to keep off disk — and nothing else in this
+> application may write to storage. A later feature wanting persistence does
+> **not** inherit permission from this one; it needs its own narrowing.
+
 The stash is cleared **exactly where a write landed or the session ended** —
 approve success (clean and held), skip success, close-task success, entering
 either terminal state, the terminal advance, and a logout that really ended

@@ -1,0 +1,59 @@
+/* The theme control. Tokens only; no raw hex (ADR-0027 decision 3).
+ *
+ * This sits in `main.tsx`'s `<header>` beside `SignOutControl`, so the root is
+ * an `inline-flex` row with its own gap for the same reason that one is: the
+ * header is unstyled, and both controls have to read correctly against it and
+ * against whatever it later becomes.
+ *
+ * `.select` deliberately mirrors `SignOutControl`'s `.button` -- the same 44px
+ * minimum, `1px solid var(--color-border)`, `--radius-md`, `--text-base`,
+ * `line-height: 1.5` and the `--color-ring` hover. They are adjacent controls
+ * in one header, and two different box treatments a few pixels apart is the
+ * kind of thing ADR-0027's browser pass exists to catch. Spelled out rather
+ * than shared: a common `ui/` control is a bigger change than this milestone,
+ * and `SignOutControl.module.css` sets that precedent in its own header
+ * comment.
+ *
+ * **The literals are the sibling's literals, not invented tokens.** There is no
+ * `--control-height`, `--border-width`, `--leading-tight` or `--weight-medium`
+ * in `tokens.css` -- a first draft of this file used all four, and a missing
+ * custom property renders as *nothing at all*, silently. `44px`, `1px`, `1.5`
+ * and `500` are what the adjacent button already spells.
+ *
+ * **No `appearance: none`.** The native chevron is the affordance that says
+ * "this has options", and replacing it means re-drawing focus, open state and
+ * the chevron per platform -- none of which has been through a browser pass in
+ * either theme. `color-scheme` on `:root` is what makes the native control
+ * render dark when the theme is dark, so the platform widget already follows
+ * the theme it is switching. */
+
+.control {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+}
+
+.label {
+  color: var(--color-muted-foreground);
+  font-weight: 500;
+}
+
+.select {
+  min-height: 44px;
+  padding: var(--space-xs) var(--space-md);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-foreground);
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  line-height: 1.5;
+  cursor: pointer;
+  transition: border-color 150ms ease-out;
+}
+
+.select:hover {
+  border-color: var(--color-ring);
+}

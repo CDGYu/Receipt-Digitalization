@@ -26,6 +26,7 @@ import { currentIdentity, hydrateIdentity, isSignedIn, setSignedIn, subscribe } 
 import { LoginPage } from './login/LoginPage'
 import { ReviewScreen } from './review/ReviewScreen'
 import { SignOutControl } from './SignOutControl'
+import { ThemeControl } from './ThemeControl'
 
 /** Three screens, no routing library -- three paths do not need one.
  *
@@ -99,6 +100,7 @@ function App() {
   return (
     <>
       <header>
+        <ThemeControl />
         <SignOutControl />
       </header>
       {currentRoute() === 'admin' ? (

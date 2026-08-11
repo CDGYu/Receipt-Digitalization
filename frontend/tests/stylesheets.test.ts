@@ -249,6 +249,16 @@ function censusFor(relative: string): Record<string, string> {
  *  browser during the Task 5 pass, and a change to any of them should be a
  *  deliberate edit in two places rather than an invisible one in one. */
 const CENSUS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
+  // Derived by applying `censusOf`'s own rule to the file, not transcribed by
+  // eye -- the header above calls this mechanical, and doing it by hand is how
+  // a census drifts from the stylesheet it is supposed to guard.
+  'ThemeControl.module.css': {
+    '.control': 'display: inline-flex, align-items: center, gap, font-family, font-size',
+    '.label': 'color, font-weight',
+    '.select':
+      'min-height, padding, border, border-radius, background, color, font-family, font-size, line-height, cursor: pointer, transition',
+    '.select:hover': 'border-color',
+  },
   'SignOutControl.module.css': {
     '.control': 'display: inline-flex, align-items: center, gap, font-family, font-size',
     '.confirm':
@@ -551,7 +561,7 @@ describe('the census reads what is there, not what it hopes for', () => {
 
   it('is reading the real tree, not an empty one', () => {
     const files = stylesheets()
-    expect(files.length, 'no stylesheets found -- the whole census is vacuous').toBe(16)
+    expect(files.length, 'no stylesheets found -- the whole census is vacuous').toBe(17)
     let rules = 0
     let declarations = 0
     for (const file of files) {
@@ -560,9 +570,15 @@ describe('the census reads what is there, not what it hopes for', () => {
         declarations += rule.declarations.length
       }
     }
-    // Measured at the time of writing: 16 files, 160 rules, 739 declarations. A
-    // floor rather than an equality, so adding a rule is not a failure here --
-    // it is a failure in the census below, which says which rule and where.
+    // Floors, not equalities: adding a rule is not a failure here -- it is a
+    // failure in the census below, which says which rule and where. These two
+    // exist only to catch a parser that has stopped finding anything.
+    //
+    // The exact rule and declaration totals used to be written down beside
+    // them and are not any more: they moved on every stylesheet edit while the
+    // floors never did, so they were a maintenance cost with no guard attached
+    // (ADR-0032 §3). The file count above stays an equality because a
+    // stylesheet appearing or vanishing is precisely what it is watching for.
     expect(rules, 'the parser stopped finding rules').toBeGreaterThan(120)
     expect(declarations, 'the parser stopped finding declarations').toBeGreaterThan(600)
   })
