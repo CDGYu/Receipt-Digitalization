@@ -11,7 +11,7 @@ on, fixed P8.T3, verified everything but the key on ISSUE-001, bounded the
 CLI's `--limit`, built the theme control, and
 settled the currency prefix and the census parser, and re-measured ISSUE-001's
 local path. **One position, because nothing is in flight:
-`main @ 0cdf6c9`, NOT pushed.** A stamp cannot name the commit that
+`main @ 0cdf6c9`, PUSHED.** A stamp cannot name the commit that
 writes it, so the test is a command, not a commit and not a count:
 
 ```
@@ -45,7 +45,7 @@ readiness record.)*
   for three days while one existed**: true when written on 2026-08-07, rotted
   the moment the corrections branch was cut, and corrected only when Task 4
   edited the file. **The answer is the command, never the sentence.**
-- **`main` is merged, and is AHEAD of `origin/main`.** Eight pushes so far, each on a one-time
+- **`main` is merged AND PUSHED.** Nine pushes, each on a one-time
   authorization the push consumed: the corrections read route (2026-08-10),
   then a docs fix wave, the shared page bound, the ASGI entry point, the
   containerisation, CI plus the P8.T3 eval fix, and the ISSUE-001 readiness
