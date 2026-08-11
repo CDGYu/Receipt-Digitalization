@@ -9,7 +9,7 @@ proved invisible to it).
 Last updated: **2026-08-11**, at the close of the session that switched CI back
 on, fixed P8.T3, verified everything but the key on ISSUE-001, and bounded the
 CLI's `--limit`. **One position, because nothing is in flight:
-`main @ ba9d9d1`, NOT pushed.** A stamp cannot name the commit that
+`main @ ba9d9d1`, PUSHED.** A stamp cannot name the commit that
 writes it, so the test is a command, not a commit and not a count:
 
 ```
@@ -43,12 +43,12 @@ readiness record.)*
   for three days while one existed**: true when written on 2026-08-07, rotted
   the moment the corrections branch was cut, and corrected only when Task 4
   edited the file. **The answer is the command, never the sentence.**
-- **`main` is merged, and is AHEAD of `origin/main`.** Seven pushes so far, each on a one-time
+- **`main` is merged AND PUSHED.** Eight pushes, each on a one-time
   authorization the push consumed: the corrections read route (2026-08-10),
   then a docs fix wave, the shared page bound, the ASGI entry point, the
   containerisation, CI plus the P8.T3 eval fix, and the ISSUE-001 readiness
-  record plus the backlog recommendations (all 2026-08-11). **The CLI `--limit` bound merged after all
-  seven and is NOT pushed.** **The next `main` push needs its own fresh ask.** Run
+  record plus the backlog recommendations, and the CLI `--limit` bound (all 2026-08-11). **The next
+  `main` push needs its own fresh ask.** Run
   `git log --oneline refs/remotes/origin/main..main` rather than believing this
   sentence — empty means nothing is waiting to go.
 - **CI RUNS AGAIN** (2026-08-11, true fast-forward `a6c4392` → `743cacb`,
