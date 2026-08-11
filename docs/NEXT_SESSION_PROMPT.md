@@ -20,34 +20,36 @@ it to "fix" a correct sentence in an Accepted ADR to match a wrong measurement.
 
 ---
 
-# NO BRANCH IN FLIGHT. `main` is MERGED AND PUSHED. Nothing is outstanding.
+# NO BRANCH IN FLIGHT. `main` is MERGED, and AHEAD of `origin/main`.
 
 **This header said "NO BRANCH IN FLIGHT" for three days while a branch existed**
-— true when written, rotted the moment the branch was cut. It is true again now,
-and that is exactly why you run the commands rather than reading the sentence
-(ADR-0028 §1):
+— true when written, rotted the moment the branch was cut. The in-flight half is
+true again now; the push state is not something to read here at all. Run the
+commands rather than the sentence (ADR-0028 §1):
 
 ```
 git status --short                                # must be empty
 git log --oneline -6
 git branch --no-merged main                       # must name NOTHING
 git rev-parse main                                # merged tip
-git ls-remote --heads origin main                 # authoritative; expect main's SHA
+git ls-remote --heads origin main                 # authoritative on what is pushed
 git log --oneline refs/remotes/origin/main..main  # what the pending push would send
 ```
 
-## `main` is merged AND pushed — nothing is outstanding.
+## `main` is merged, and has UNPUSHED commits on top.
 
 The corrections read route **merged by true fast-forward on 2026-08-10** —
 single parent, zero merge commits, `git branch --no-merged main` names nothing.
 It went in only after its whole-branch review, three fix rounds and a final
 scoped re-review returning **MERGE** and *"no sixteenth false claim"*.
 
-**`main` was pushed the same day with explicit authorization, which that push
-consumed. The next `main` push needs its own fresh ask.**
+**`main` was pushed on 2026-08-10 with explicit authorization, which that push
+consumed. A docs fix wave on 2026-08-11 put commits on top of it, and those are
+NOT pushed. The next `main` push needs its own fresh ask.**
 `feat/corrections-read-route` is kept at its merge point and pushed too. Run
-`git ls-remote --heads origin main` rather than believing this sentence — the
-pair commit that writes it necessarily lands after the push it records.
+`git log --oneline refs/remotes/origin/main..main` for what a push would send,
+rather than believing this sentence — the pair commit that writes it
+necessarily lands after any push it could record.
 
 **Freshness check.** `docs/MEMORY.md`'s stamp names **one** position again now
 that nothing is in flight:
@@ -71,9 +73,7 @@ standard 17), both ADRs and their index rows in place, and the outside-repo
 import check green from `C:\Users`.
 
 **All four tasks are complete**, each with a task review and a scoped
-re-review. **What remains is the close and nothing else:** whole-branch review →
-fix wave → one scoped re-review → ff-merge → refresh this pair → ask before
-pushing `main`. See §0.
+re-review. The close then ran in full, and §0 is its record.
 
 ---
 
@@ -407,9 +407,8 @@ branch.
 
    `GET /receipts/{receipt_id}/corrections` ships with `list_corrections`,
    `correction_summary`, and a `_PageResponse` base shared by all three page
-   envelopes. Four tasks, all complete and reviewed. **What remains is the
-   close: whole-branch review on the strongest model → one fix wave → one
-   scoped re-review → ff-merge → refresh this pair.** Read
+   envelopes. Four tasks, all complete and reviewed; the close ran in full and
+   §0 is its record. Read
    `docs/superpowers/plans/2026-08-10-corrections-read-route.md`'s **"Dated
    defect log"** first — six plan defects, two of them reproduced rather than
    quoted.
@@ -510,9 +509,10 @@ so is a sentence *about* one.
 
 ## Running it
 
-- Two suites: `python -m pytest` (**979** on `main`, **1004** on
-  `feat/corrections-read-route`) and Vitest in `frontend/` (**346** across 25
-  files, the same on both). `npm test` does **not** type-check — run
+- Two suites: `python -m pytest` and Vitest in `frontend/`. **No count is
+  written here** — a suite count anchored to `main` moves with every milestone,
+  and this line's did. Run them (ADR-0032 §3).
+  `npm test` does **not** type-check — run
   `npm run typecheck` too. `python scripts/verify.py` is what "passing" means
   (ADR-0017).
 - **`pyproject.toml` sets `addopts = "-q"`.** So `python -m pytest -q` is `-qq`
@@ -562,8 +562,8 @@ so is a sentence *about* one.
   `no-float-in-money-path.test.ts`'s attribution is still wrong and still
   uncorrected — it has been outside every task's permitted set.
 - **Enumerating routes:** build the app and walk `app.routes` **recursing
-  through `.original_router.routes`** — a flat walk yields 13 routes with
-  **zero** `/auth/*` paths. Detect a transitively-called guard by qualname, and
+  through `.original_router.routes`** — a flat walk yields **zero** `/auth/*`
+  paths. Detect a transitively-called guard by qualname, and
   **match `require_` rather than hard-coding names**: there are three
   (`require_user`, `require_role.<locals>.dependency`, `require_upload`) and
   assuming two is what made ADR-0028 §4's corroboration fail to reproduce.
@@ -764,8 +764,9 @@ points from outside the repository. §1.6 is the current example.
 ## Today's goal
 
 **Nothing is in flight, nothing is half-done, and nothing carries over.** The
-corrections read route is merged and pushed; `git branch --no-merged main`
-should name nothing and `main` should equal `origin/main`.
+corrections read route is merged; `git branch --no-merged main` should name
+nothing, and `main` should be **ahead** of `origin/main` by the 2026-08-11 docs
+commits, which need a fresh ask before they go.
 
 **Run the freshness command in `docs/MEMORY.md`'s stamp before trusting any of
 this.** If it lists anything, the tree moved after this was written — re-run

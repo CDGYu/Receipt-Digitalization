@@ -6,20 +6,21 @@ continuity protocol itself — what lives where, and why this snapshot must be
 verified rather than trusted — is **ADR-0019**, extended by **ADR-0021** (whose
 2026-08-02 dated correction widened the freshness check after a docs-only task
 proved invisible to it).
-Last updated: **2026-08-10**, at the close of the session that built **and
-merged** the corrections read route. **One position again, because nothing is in
-flight: `main @ 7b08941`, PUSHED.** A stamp cannot name the commit that writes
-it, so the test is a command, not a commit and not a count:
+Last updated: **2026-08-11**, at the close of a session whose only work was a
+docs fix wave. **One position, because nothing is in
+flight: `main @ b899d7d`, NOT pushed.** A stamp cannot name the commit that
+writes it, so the test is a command, not a commit and not a count:
 
 ```
-git log --oneline 7b08941..main -- src tests frontend docs ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
-git ls-remote --heads origin main             # authoritative; the pair commit lands after the stamp
+git log --oneline b899d7d..main -- src tests frontend docs ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
+git log --oneline refs/remotes/origin/main..main   # what a push would send
+git ls-remote --heads origin main                  # authoritative on what is pushed
 ```
 
 **Empty means current.** Anything listed means the tree moved after this was
 written and you are reading something stale.
 
-**No characterisation of `7b08941` is written here on purpose** — an earlier
+**No characterisation of `b899d7d` is written here on purpose** — an earlier
 stamp called its SHA "the last *code* commit", and the next commit falsified
 that by editing a docstring under `src/`. **ADR-0032 §2**: a claim can be
 derived correctly and rot inside the commit that carries it. The SHA plus the
@@ -29,10 +30,10 @@ command cannot rot; a sentence about what the SHA *is* can.
 check excludes exactly these two files and watches `docs` otherwise, so a commit
 bundling them with an ADR or an index row lists itself as stale. That happened
 three times in the session that wrote ADR-0033. Everything substantive was
-committed first; `7b08941` is the last of it.
+committed first; `b899d7d` is the last of it.
 
-*(The previous stamp was 2026-08-07 at `main @ be6d7c0`, the
-`feat/review-ui-styling` merge tip.)*
+*(The previous stamp was 2026-08-10 at `main @ 7b08941`, at the close of the
+session that merged the corrections read route.)*
 
 ## Snapshot
 
@@ -41,12 +42,13 @@ committed first; `7b08941` is the last of it.
   for three days while one existed**: true when written on 2026-08-07, rotted
   the moment the corrections branch was cut, and corrected only when Task 4
   edited the file. **The answer is the command, never the sentence.**
-- **`main` is merged AND PUSHED — nothing is outstanding.** The corrections read
+- **`main` is merged, and is AHEAD of `origin/main`.** The corrections read
   route merged by true fast-forward on 2026-08-10 and `main` was pushed the same
-  day on an explicit authorization, **which that push consumed**. **The next
-  `main` push needs its own fresh ask.** Verify with `git ls-remote --heads
-  origin main` rather than believing this sentence. See "Corrections read route"
-  below.
+  day on an explicit authorization, **which that push consumed**. A docs fix
+  wave on 2026-08-11 added commits on top, and **those are not pushed**. **The
+  next `main` push needs its own fresh ask.** Verify with `git log --oneline
+  refs/remotes/origin/main..main` rather than believing this sentence. See
+  "Corrections read route" below.
 - **The review-UI styling milestone is COMPLETE AND MERGED** (2026-08-07, true
   fast-forward `1314485` → `be6d7c0`, single parent, 38 branch commits).
   `feat/review-ui-styling` is kept at its merge point and pushed.
@@ -91,7 +93,8 @@ committed first; `7b08941` is the last of it.
   in the plan's own defect log and **25** in the handoff for a day, while all
   three told the reader to open the plan's log first (corrected 2026-08-07).
 
-- **`main` merged AND PUSHED 2026-08-07**, in sync with `origin/main`. The
+- **`main` merged AND PUSHED 2026-08-07**, in sync with `origin/main` **as of
+  that date**. The
   milestone merged at `be6d7c0`; the continuity refresh commits on top, so the
   tip is later — **a document cannot name the commit that writes it (ADR-0019).
   Verify, do not quote** (ADR-0028 §1): `git rev-parse main origin/main`.
@@ -147,8 +150,8 @@ committed first; `7b08941` is the last of it.
   bound, failure-egress redaction, review-UI error recovery, the admin
   release, and the admin UI's backend routes.** Phase 3 is complete except
   **P3.T6 calibration** (blocked on ISSUE-001). Of Phase 5's two named
-  follow-ups, the `corrections` read route is **built on an unmerged branch**
-  (2026-08-10) and a real ASGI entry point / deployment story is untouched.
+  follow-ups, the `corrections` read route **merged 2026-08-10** and a real
+  ASGI entry point / deployment story is untouched.
   See "Remaining work"; the admin UI's frontend half shipped 2026-08-06.
 - Dev interpreter **Python 3.14.4**. Node **v22.22.2** / npm **10.9.7**.
 - Plan of record: `IMPLEMENTATION_PLAN.md`. Ledgers:
@@ -761,10 +764,12 @@ added to `_PAN_RE` requires the two-instance check, every time.**
 
 ## How to run
 
-- **There are two test suites.**
-  - `python -m pytest` — **979** on `main`; offline and **Node-free**.
+- **There are two test suites. No count is written here** — a suite count
+  anchored to `main` moves with every milestone, and both of these were stale
+  by one. Run them (ADR-0032 §3).
+  - `python -m pytest` — offline and **Node-free**.
     `pyproject` sets `pythonpath=["src","."]`, `testpaths=["tests"]`.
-  - **Vitest, in `frontend/`** — **221** across 19 files. `npm test`.
+  - **Vitest, in `frontend/`** — `npm test`.
 - **`npm test` does NOT type-check.** Run `npm run typecheck` too. **That trap
   fired three times in one milestone.**
 - **`python scripts/verify.py` is the gate runner** — pytest, ruff, typecheck,
@@ -1080,13 +1085,12 @@ the "Write routes (P4.T5)" banner was wrong once a read route consumed it.
 
 1. Phase 5 follow-ups — the five §5 error-recovery behaviours (ADR-0024)
    and the **admin release** (ADR-0025) are DONE. The `corrections` **read
-   route is BUILT but NOT MERGED** — the auth ruling that blocked it was
-   confirmed 2026-08-10 (ADR-0031) and is now under "Decisions the user has
+   route MERGED 2026-08-10** — the auth ruling that blocked it was
+   confirmed the same day (ADR-0031) and is now under "Decisions the user has
    made"; it is no longer an open decision, and the item it used to be
    numbered against in "Still needing a user decision" is gone, so that list
-   was renumbered. See "Corrections read route" above for what remains
-   (whole-branch review, one fix wave, merge). **One follow-up is genuinely
-   untouched:** a real ASGI entry point / deployment story.
+   was renumbered. See "Corrections read route" above. **One follow-up is
+   genuinely untouched:** a real ASGI entry point / deployment story.
 1b. **A design system for the review UI is DRAFTED but NOT APPROVED and NOT
    PLANNED** — `docs/superpowers/specs/2026-08-05-review-ui-design-system.md`,
    with the raw generated output at `design-system/receipt-review/MASTER.md`.
@@ -1464,8 +1468,8 @@ measured.**
     script; the reasoning that replaced it took less and was wrong. **Note
     the trap in that enumeration:** on this FastAPI version `include_router`
     wraps the auth router in an `_IncludedRouter`, so a flat walk of
-    `app.routes` yields 13 routes with **zero** `/auth/*` paths — recurse
-    through `.original_router.routes` for the real 17. A transitively-called
+    `app.routes` yields **zero** `/auth/*` paths — recurse through
+    `.original_router.routes`. A transitively-called
     guard (`require_role` → `require_user`) is invisible at runtime too; it
     is plain Python, not a nested `Depends`. **There are THREE guard qualnames,
     not two** (added 2026-08-07): `require_user`,
