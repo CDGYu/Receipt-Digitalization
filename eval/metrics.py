@@ -207,8 +207,14 @@ class EvalReport:
     n_critical_correct: int
     auto_approve_threshold: Decimal
 
-    # §16 metrics, in priority order
-    auto_approval_precision: float        # 1
+    # §16 metrics, in priority order.
+    #
+    # ``auto_approval_precision`` is ``None`` -- not ``1.0``, and not ``0.0`` --
+    # when nothing was auto-approved. A ratio over zero decisions is undefined,
+    # not perfect and not bad, and this project's rule is null over
+    # confident-wrong. It was ``1.0``, which meant a run where every receipt
+    # failed persisted flawless precision to the committed artifact.
+    auto_approval_precision: float | None  # 1
     auto_approval_rate: float             # 2
     critical_field_accuracy: float        # 3
     field_accuracy: float                 # 4

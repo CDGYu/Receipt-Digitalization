@@ -101,7 +101,13 @@ def _build_report(results: list[EvalResult], acc: _Accumulator) -> EvalReport:
         n_auto_approved=n_approved,
         n_critical_correct=acc.n_critical_correct,
         auto_approve_threshold=AUTO_APPROVE_THRESHOLD,
-        auto_approval_precision=(n_approved_correct / n_approved) if n_approved else 1.0,
+        # ``None`` when nothing was approved: undefined, not perfect. The two
+        # zero-receipt guards (``calibrate``'s reader-side refusal and
+        # ``eval``'s producer-side one) both stand down when receipts *were*
+        # read and simply all failed, which is the case this covers.
+        auto_approval_precision=(
+            (n_approved_correct / n_approved) if n_approved else None
+        ),
         auto_approval_rate=(n_approved / n) if n else 0.0,
         critical_field_accuracy=(acc.n_critical_correct / n) if n else 0.0,
         field_accuracy=(acc.field_correct / acc.field_total) if acc.field_total else 0.0,

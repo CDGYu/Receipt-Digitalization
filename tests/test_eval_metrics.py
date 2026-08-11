@@ -212,6 +212,56 @@ def test_run_eval_counts_and_writes_results_file(tmp_path):
     assert len(written) == 1
 
 
+def test_an_all_failed_run_reports_no_precision_rather_than_a_perfect_one(tmp_path):
+    """A run where every receipt failed must not claim perfect precision.
+
+    ``_build_report`` defined ``auto_approval_precision`` as ``1.0`` when
+    nothing was auto-approved -- a ratio over zero decisions, asserted as
+    certainty. Two guards were built for that value and **neither covers this
+    case**: ``calibrate`` refuses a zero-receipt *result set*, and ``eval``
+    refuses a zero-receipt *run*. Here ``n_receipts`` is 3, so both stand down,
+    and ``n_auto_approved`` is 0 because every receipt failed.
+
+    Measured before the fix: the report said ``1.0`` and
+    ``_report_to_dict`` persisted ``1.0`` into the committed JSON artifact --
+    a run that read nothing successfully, recorded as flawless.
+
+    ``None``, not ``0.0``: no receipt was approved, so precision is undefined
+    rather than bad. This is the project's "null over confident-wrong"
+    invariant at the one place that writes the number down, and ADR-0027
+    decision 5's rule -- ``null`` must never look like ``0`` -- applied to the
+    artifact instead of the screen.
+
+    The console path was already honest (``run_baseline`` prints ``n/a`` when
+    nothing was approved); only the persisted value lied.
+    """
+    golden = tmp_path / "golden"
+    labels = golden / "labels"
+    labels.mkdir(parents=True)
+    for name in ("r1", "r2", "r3"):
+        (labels / f"{name}.json").write_text(
+            _extraction(total="224.00").model_dump_json(), encoding="utf-8"
+        )
+
+    def pipeline_fn(path):
+        raise RuntimeError("the provider is down")
+
+    results_dir = tmp_path / "results"
+    report = run_eval(golden, pipeline_fn, results_dir=results_dir)
+
+    # The zero-receipt guards cannot fire here: receipts were read, and failed.
+    assert report.n_receipts == 3
+    assert report.n_failed == 3
+    assert report.n_auto_approved == 0
+
+    assert report.auto_approval_precision is None
+
+    written = json.loads(
+        next(results_dir.glob("*.json")).read_text(encoding="utf-8")
+    )
+    assert written["metrics"]["auto_approval_precision"] is None
+
+
 def test_run_eval_survives_a_failing_receipt(tmp_path):
     # A single receipt that raises must not abort the batch. At minutes per call
     # that would throw away the whole run and write no results file at all --
