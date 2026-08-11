@@ -90,6 +90,12 @@ boots: `uvicorn receipts.asgi:app` is the supported entry point, importing the
 module builds nothing, and it refuses to start on four misconfigurations whose
 symptom would otherwise be silent — chief among them an unset `DATABASE_URL`,
 which would serve production off a local SQLite file.
+**0036** is the one to read before changing how the service is packaged or run:
+one image runs both halves (`api` takes the default `CMD`, the worker overrides
+it), the image builds the review UI itself so a stale `dist` cannot ship,
+migrations are a documented operator step rather than an entrypoint, and the
+whole thing was verified by building and running it. `docs/DEPLOYMENT.md` is the
+guide.
 
 Primary sources these build on: `RECEIPT_SYSTEM_SPEC.md` (build spec),
 `README.md` (§5 design decisions), `VLM_AND_DATA.md`, and the always-on

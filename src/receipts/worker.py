@@ -309,3 +309,19 @@ def run_worker(
     )
     log.info("Worker starting on queues %s", ", ".join(queues))
     worker.work(burst=burst)
+
+
+if __name__ == "__main__":  # pragma: no cover - process entry, not importable code
+    # `python -m receipts.worker` -- what the container runs (ADR-0036), and
+    # what anyone starting a worker by hand should run. Added when the
+    # deployment story needed a command to name: `run_worker` existed but
+    # nothing invoked it, so the queue had the same gap the review API had
+    # before ADR-0035 gave it `receipts.asgi`.
+    #
+    # No argument parsing. Every knob `run_worker` takes is already an
+    # environment variable read through Settings, and a second way to say the
+    # same thing is a second thing to keep in agreement. Defaults are what a
+    # long-running service wants: the default queue, and `burst=False` so it
+    # runs until stopped rather than draining once and exiting.
+    logging.basicConfig(level=logging.INFO)
+    run_worker()

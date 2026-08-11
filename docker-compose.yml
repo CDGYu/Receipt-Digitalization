@@ -1,7 +1,15 @@
-# Local development services: Postgres and Ollama.
+# Local development stack: the service itself, plus Postgres, Redis and Ollama.
 #
-# Start both with:        docker compose up -d
+# Start everything with:  docker compose up -d
 # Or one at a time with:  docker compose up -d ollama
+#
+# The `api` and `worker` services run the image this repository builds
+# (ADR-0036) and are for **local development only** -- see the SESSION_SECRET
+# and ALLOW_INSECURE_SESSION_COOKIE notes on `api`, and docs/DEPLOYMENT.md for
+# what a real deployment has to do differently.
+#
+# Migrations are not run by any service here. Before the first request:
+#   docker compose run --rm api python -m alembic upgrade head
 #
 # Postgres: production and dev use Postgres; the test suite uses SQLite only,
 # so this is not required to run the tests. Point the app at it with:
@@ -32,6 +40,76 @@ services:
       timeout: 5s
       retries: 5
 
+  # The queue broker. `receipts.asgi` refuses to boot without REDIS_URL, and
+  # POST /upload enqueues through it, so this is not optional for the api
+  # service the way ollama is.
+  redis:
+    image: redis:7-alpine
+    container_name: receipts-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # --- the service itself ------------------------------------------------- #
+  # One image, two commands (ADR-0036). `api` takes the image's default CMD;
+  # `worker` overrides it. Both are built from this repository rather than
+  # pulled, so `docker compose up --build` picks up local changes.
+  api:
+    build: .
+    image: receipts
+    container_name: receipts-api
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql+psycopg://receipts:receipts@postgres:5432/receipts
+      REDIS_URL: redis://redis:6379/0
+      # No default, deliberately: compose fails to start if it is unset rather
+      # than inventing one. `install_session_middleware` would refuse anyway --
+      # this just moves the failure to before the container starts.
+      SESSION_SECRET: ${SESSION_SECRET:?set SESSION_SECRET in your .env or shell}
+      # **Local development only.** This stack is plain HTTP on loopback, so the
+      # Secure flag would make the session cookie unusable. `receipts.asgi`
+      # refuses to boot with SESSION_COOKIE_SECURE=false unless this hatch is
+      # set, which is the point: running insecure is possible, but somebody has
+      # to write it down. A real deployment terminates TLS upstream and sets
+      # neither of these.
+      SESSION_COOKIE_SECURE: "false"
+      ALLOW_INSECURE_SESSION_COOKIE: "true"
+      STORAGE_ROOT: /var/receipts/blobs
+    volumes:
+      - receipts_blobs:/var/receipts/blobs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  worker:
+    build: .
+    image: receipts
+    container_name: receipts-worker
+    command: ["python", "-m", "receipts.worker"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://receipts:receipts@postgres:5432/receipts
+      REDIS_URL: redis://redis:6379/0
+      STORAGE_ROOT: /var/receipts/blobs
+      # The worker reads and writes the same blobs the API wrote, so it shares
+      # the volume. It needs no SESSION_SECRET: it serves no HTTP and builds no
+      # app -- `receipts.asgi` is never imported here.
+    volumes:
+      - receipts_blobs:/var/receipts/blobs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
   ollama:
     image: ollama/ollama
     container_name: ollama
@@ -43,6 +121,9 @@ services:
 
 volumes:
   receipts_pgdata:
+  # Shared by api and worker: the API writes an uploaded blob, the worker reads
+  # it. With STORAGE_BACKEND=s3 neither needs this.
+  receipts_blobs:
   # Created outside compose and already holds the pulled models (moondream);
   # declared external so compose reuses it instead of making a new empty one.
   ollama:
