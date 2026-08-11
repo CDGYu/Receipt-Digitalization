@@ -43,12 +43,12 @@ single parent, zero merge commits, `git branch --no-merged main` names nothing.
 It went in only after its whole-branch review, three fix rounds and a final
 scoped re-review returning **MERGE** and *"no sixteenth false claim"*.
 
-**Four pushes happened, each on a one-time authorization that the push
+**Five pushes happened, each on a one-time authorization that the push
 consumed** — the corrections read route (2026-08-10), then a docs fix wave, the
-shared page bound, and the ASGI entry point (all 2026-08-11). **The next `main`
-push needs its own fresh ask.**
-`feat/corrections-read-route`, `feat/shared-page-bound` and
-`feat/asgi-entry-point` are all kept at their merge points and pushed. Run
+shared page bound, the ASGI entry point and the containerisation (all
+2026-08-11). **The next `main` push needs its own fresh ask.**
+`feat/corrections-read-route`, `feat/shared-page-bound`, `feat/asgi-entry-point`
+and `feat/containerisation` are all kept at their merge points and pushed. Run
 `git log --oneline refs/remotes/origin/main..main` rather than believing this
 sentence — empty means nothing is waiting to go, and the pair commit that
 writes this necessarily lands after any push it could record.
@@ -886,7 +886,7 @@ right here (ADR-0032 §3).
 ## Today's goal
 
 **Nothing is in flight, nothing is half-done, and nothing carries over.** The
-ASGI entry point merged and was pushed on 2026-08-11.
+containerisation merged and was pushed on 2026-08-11, and §1.6 is closed.
 `git branch --no-merged main` should name nothing, and
 `git log --oneline refs/remotes/origin/main..main` should come out empty.
 

@@ -8,7 +8,7 @@ verified rather than trusted — is **ADR-0019**, extended by **ADR-0021** (whos
 proved invisible to it).
 Last updated: **2026-08-11**, at the close of the session that containerised
 the service and closed the console-script question. **One position, because
-nothing is in flight: `main @ bbb84ec`, NOT pushed.** A stamp cannot name the commit that
+nothing is in flight: `main @ bbb84ec`, PUSHED.** A stamp cannot name the commit that
 writes it, so the test is a command, not a commit and not a count:
 
 ```
@@ -42,13 +42,12 @@ merge tip.)*
   for three days while one existed**: true when written on 2026-08-07, rotted
   the moment the corrections branch was cut, and corrected only when Task 4
   edited the file. **The answer is the command, never the sentence.**
-- **`main` is merged, and is AHEAD of `origin/main`.** Four pushes so far, each
-  on a one-time authorization the push consumed: the corrections read route
-  (2026-08-10), then a docs fix wave, the shared page bound, and the ASGI entry
-  point (all 2026-08-11). **The containerisation merged after all four and is
-  NOT pushed.** **The next `main` push needs its own fresh ask.** Run
-  `git log --oneline refs/remotes/origin/main..main` rather than believing this
-  sentence — empty means nothing is waiting to go.
+- **`main` is merged AND PUSHED.** Five pushes, each on a one-time
+  authorization the push consumed: the corrections read route (2026-08-10),
+  then a docs fix wave, the shared page bound, the ASGI entry point and the
+  containerisation (all 2026-08-11). **The next `main` push needs its own fresh
+  ask.** Run `git log --oneline refs/remotes/origin/main..main` rather than
+  believing this sentence — empty means nothing is waiting to go.
 - **The containerisation is COMPLETE AND MERGED** (2026-08-11, true
   fast-forward `45660cf` → `8646980`, single parent, one branch commit).
   `feat/containerisation` is kept at its merge point and pushed. One image runs
