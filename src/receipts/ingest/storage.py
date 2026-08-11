@@ -18,6 +18,8 @@ from pathlib import Path
 from typing import Protocol
 from uuid import UUID
 
+from config.settings import Settings
+
 
 class StorageBackend(Protocol):
     """Narrow blob-storage contract: address bytes by an opaque string key.
@@ -140,3 +142,33 @@ def make_image_key(
     if when is None:
         when = datetime.now(UTC)
     return f"receipts/{when:%Y}/{when:%m}/{receipt_id}/{variant}.jpg"
+
+
+def make_storage(settings: Settings) -> StorageBackend:
+    """Build the configured blob backend.
+
+    One implementation of the policy, for every caller that needs a backend:
+    the CLI (via its ``_make_storage`` delegation) and
+    :func:`receipts.asgi.create_asgi_app`. It lived as a private helper in
+    ``cli.py`` until the ASGI entry point needed the same four lines, and a
+    second copy of "which setting selects which backend" is exactly the kind of
+    decision that drifts.
+
+    **On importing ``Settings`` here.** This is the first ``config`` dependency
+    under ``receipts.ingest``, and it is safe in the way ADR-0014 cares about:
+    ``pydantic-settings`` is a *base* dependency rather than an extra, the model
+    has no import-time side effects, and ``config.settings`` imports only
+    ``receipts.score.thresholds``, which imports nothing but the standard
+    library -- so there is no cycle. ``boto3`` stays lazy inside
+    :class:`S3Storage`, untouched by this.
+
+    Never called for a command that does not need a backend, so
+    ``receipts users list`` still works with no blob store configured at all.
+    """
+    if settings.storage_backend == "local":
+        return LocalStorage(Path(settings.storage_root))
+    if not settings.s3_bucket:
+        raise ValueError(
+            f"STORAGE_BACKEND={settings.storage_backend!r} requires S3_BUCKET to be set"
+        )
+    return S3Storage(settings.s3_bucket)

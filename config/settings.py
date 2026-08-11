@@ -113,6 +113,15 @@ class Settings(BaseSettings):
     # door.
     receipts_api_key: str | None = None
     session_cookie_secure: bool = True
+    # Maps ALLOW_INSECURE_SESSION_COOKIE. The escape hatch for the boot check in
+    # ``receipts.asgi``, which refuses to start when SESSION_COOKIE_SECURE is
+    # false (``create_app`` itself only logs a warning -- see
+    # ``install_session_middleware``). Without a hatch there would be no way to
+    # run the real entry point over plain HTTP at all; with one, doing so stops
+    # being a default nobody noticed and becomes a line somebody wrote down.
+    # It does not weaken the cookie by itself -- SESSION_COOKIE_SECURE still
+    # does that. This only decides whether the service agrees to start.
+    allow_insecure_session_cookie: bool = False
     # Maps SESSION_TTL_S. How long a signed session cookie is honoured,
     # enforced server-side via SessionMiddleware(max_age=...) and
     # itsdangerous's TimestampSigner -- not a browser-side expiry a client
@@ -143,6 +152,16 @@ class Settings(BaseSettings):
     # unguarded mount would break create_app for a base install, for CI, and
     # for every developer who has never run npm.
     frontend_dist: str = "frontend/dist"
+    # Maps SERVE_SPA. Whether this deployment serves the review UI at all.
+    # ``frontend/dist`` is gitignored, so a fresh checkout has no ``index.html``
+    # and every deployment that wants the UI must run ``npm run build`` first.
+    # Left true, ``receipts.asgi`` enforces exactly that: an unbuilt frontend is
+    # a refusal to start rather than ``/app/*`` 404ing with no explanation. Set
+    # false, the mount is skipped as a declared choice and an API-only
+    # deployment becomes possible -- and the mount is then skipped even if a
+    # stale ``dist`` happens to be present, because "do not serve the SPA" has
+    # to mean it.
+    serve_spa: bool = True
 
 
 def get_settings() -> Settings:

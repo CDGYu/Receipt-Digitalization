@@ -963,7 +963,16 @@ def _install_spa(app: FastAPI, settings: Settings) -> None:
     ``FRONTEND_DIST`` aimed at some other real directory, otherwise mounts
     and serves whatever happens to be in it while every SPA page 404s. See
     ``Settings.frontend_dist``.
+
+    ``SERVE_SPA=false`` -> no mount either, **even when a built ``dist`` is
+    present**. That flag is how an API-only deployment declares itself
+    (ADR-0035), and a declaration that a stale directory could override would
+    not be one. ``receipts.asgi`` refuses to start when the SPA is *wanted*
+    and missing, so the two silent-no-mount cases stay distinguishable there:
+    unbuilt-but-wanted is a boot failure, and this is the only remaining one.
     """
+    if not settings.serve_spa:
+        return
     dist = Path(settings.frontend_dist)
     if not dist.is_dir() or not (dist / "index.html").is_file():
         return

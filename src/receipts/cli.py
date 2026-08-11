@@ -135,7 +135,7 @@ from config.settings import Settings, get_settings
 from .extract.clients.base import VLMClient
 from .extract.clients.factory import make_client
 from .ingest.ingest import ReceiptJob, ingest_file
-from .ingest.storage import LocalStorage, S3Storage, StorageBackend
+from .ingest.storage import StorageBackend, make_storage
 from .persist.models import Merchant, Receipt
 from .persist.repository import (
     create_pending_receipt,
@@ -550,17 +550,15 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def _make_storage(settings: Settings) -> StorageBackend:
-    """Build the configured blob backend. Never called for a command that
-    does not need one, so ``receipts users list`` works with no blob store
-    configured at all.
+    """Build the configured blob backend.
+
+    The policy moved to :func:`receipts.ingest.storage.make_storage` when the
+    ASGI entry point needed the same decision; this stays as a delegation so
+    every call site in this module, and this name in any test that reaches for
+    it, keep working. Never called for a command that does not need a backend,
+    so ``receipts users list`` works with no blob store configured at all.
     """
-    if settings.storage_backend == "local":
-        return LocalStorage(Path(settings.storage_root))
-    if not settings.s3_bucket:
-        raise ValueError(
-            f"STORAGE_BACKEND={settings.storage_backend!r} requires S3_BUCKET to be set"
-        )
-    return S3Storage(settings.s3_bucket)
+    return make_storage(settings)
 
 
 def _collect_files(path: Path, *, recursive: bool) -> list[Path]:

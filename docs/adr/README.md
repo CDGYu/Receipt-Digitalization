@@ -85,6 +85,11 @@ window: all three declare `limit` and `offset` through one shared `PageLimit` /
 `PageOffset`, an out-of-range offset is a 422 from request validation rather
 than the `OverflowError` 500 ADR-0031 reported, and the pin is stated over the
 built app so a fourth route cannot re-declare its way around it.
+**0035** is the one to read before deploying the service or changing how it
+boots: `uvicorn receipts.asgi:app` is the supported entry point, importing the
+module builds nothing, and it refuses to start on four misconfigurations whose
+symptom would otherwise be silent — chief among them an unset `DATABASE_URL`,
+which would serve production off a local SQLite file.
 
 Primary sources these build on: `RECEIPT_SYSTEM_SPEC.md` (build spec),
 `README.md` (§5 design decisions), `VLM_AND_DATA.md`, and the always-on
