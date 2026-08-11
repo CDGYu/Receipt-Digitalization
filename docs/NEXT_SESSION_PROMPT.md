@@ -20,7 +20,7 @@ it to "fix" a correct sentence in an Accepted ADR to match a wrong measurement.
 
 ---
 
-# NO BRANCH IN FLIGHT. `main` is MERGED, and AHEAD of `origin/main`.
+# NO BRANCH IN FLIGHT. `main` is MERGED AND PUSHED.
 
 **This header said "NO BRANCH IN FLIGHT" for three days while a branch existed**
 — true when written, rotted the moment the branch was cut. It has also carried
@@ -36,19 +36,19 @@ git ls-remote --heads origin main                 # authoritative on what is pus
 git log --oneline refs/remotes/origin/main..main  # what the pending push would send
 ```
 
-## `main` is merged, and has UNPUSHED work on top.
+## `main` is merged and pushed — nothing is waiting to go.
 
 The corrections read route **merged by true fast-forward on 2026-08-10** —
 single parent, zero merge commits, `git branch --no-merged main` names nothing.
 It went in only after its whole-branch review, three fix rounds and a final
 scoped re-review returning **MERGE** and *"no sixteenth false claim"*.
 
-**Six pushes happened, each on a one-time authorization that the push
+**Seven pushes happened, each on a one-time authorization that the push
 consumed** — the corrections read route (2026-08-10), then a docs fix wave, the
-shared page bound, the ASGI entry point, the containerisation, and CI plus the
-P8.T3 eval fix (all 2026-08-11). **The ISSUE-001 readiness record and the
-backlog recommendations merged after all six and are NOT pushed. The next
-`main` push needs its own fresh ask.**
+shared page bound, the ASGI entry point, the containerisation, CI plus the
+P8.T3 eval fix, and the ISSUE-001 readiness record plus the backlog
+recommendations (all 2026-08-11). **The next `main` push needs its own fresh
+ask.**
 `feat/corrections-read-route`, `feat/shared-page-bound`, `feat/asgi-entry-point`,
 `feat/containerisation`, `feat/ci-workflow` and `feat/eval-precision-null` are
 all kept at their merge points and pushed. Run

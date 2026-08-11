@@ -8,7 +8,7 @@ verified rather than trusted — is **ADR-0019**, extended by **ADR-0021** (whos
 proved invisible to it).
 Last updated: **2026-08-11**, at the close of the session that switched CI back
 on, fixed P8.T3, and verified everything but the key on ISSUE-001. **One
-position, because nothing is in flight: `main @ 8995d1e`, NOT pushed.** A stamp cannot name the commit that
+position, because nothing is in flight: `main @ 8995d1e`, PUSHED.** A stamp cannot name the commit that
 writes it, so the test is a command, not a commit and not a count:
 
 ```
@@ -41,13 +41,12 @@ committed first; `8995d1e` is the last of it.
   for three days while one existed**: true when written on 2026-08-07, rotted
   the moment the corrections branch was cut, and corrected only when Task 4
   edited the file. **The answer is the command, never the sentence.**
-- **`main` is merged, and is AHEAD of `origin/main`.** Six pushes so far, each
-  on a one-time authorization the push consumed: the corrections read route
-  (2026-08-10), then a docs fix wave, the shared page bound, the ASGI entry
-  point, the containerisation, and CI plus the P8.T3 eval fix (all 2026-08-11).
-  **The ISSUE-001 readiness record and the backlog recommendations merged after
-  all six and are NOT pushed.** **The next `main` push needs its own fresh
-  ask.** Run
+- **`main` is merged AND PUSHED.** Seven pushes, each on a one-time
+  authorization the push consumed: the corrections read route (2026-08-10),
+  then a docs fix wave, the shared page bound, the ASGI entry point, the
+  containerisation, CI plus the P8.T3 eval fix, and the ISSUE-001 readiness
+  record plus the backlog recommendations (all 2026-08-11). **The next `main`
+  push needs its own fresh ask.** Run
   `git log --oneline refs/remotes/origin/main..main` rather than believing this
   sentence — empty means nothing is waiting to go.
 - **CI RUNS AGAIN** (2026-08-11, true fast-forward `a6c4392` → `743cacb`,
