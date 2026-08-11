@@ -493,13 +493,21 @@ measured. **C1, C2, C3 and I4 are CLOSED and the status note says so.** Open:
 
 ### 1.6 One environment gap found at the merge
 
-`pyproject.toml` declares `[project.scripts] receipts = "receipts.cli:_console_main"`
-and the installed distribution records that entry point, **but no generated
+**WITHDRAWN 2026-08-11 — there is no packaging gap.** This read: *"no generated
 wrapper exists in `C:\Python314\Scripts`, so `receipts --help` does not run as a
-command.** `_console_main` imports fine and `python -m receipts.cli --help`
-exits 0 from outside the repo. **Earlier records claiming `receipts --help`
-exits 0 are not reproducible here** — use `python -m receipts.cli` for the
-outside-repo check until the install state is settled. Not a regression from any
+command"*, and dismissed earlier records that said otherwise. Measured:
+
+| directory | has `receipts.exe` | on `PATH` |
+|---|---|---|
+| `…\AppData\Roaming\Python\Python314\Scripts` | **yes** | **no** |
+| `C:\Python314\Scripts` | no | yes |
+
+The install is `--user` and editable, so pip put the wrapper in the user scripts
+directory, which is exactly right and is not on `PATH`. By full path it exits 0.
+**ADR-0014's consequences already said this**, and ADR-0036's image proves the
+packaging: installed system-wide, `receipts` is `/usr/local/bin/receipts`.
+`python -m receipts.cli` is still the invocation that always works. Not a
+regression from any
 branch.
 
 ## 2. Phase 5 follow-ups — one DONE, one untouched
@@ -550,9 +558,9 @@ branch.
    `uvicorn` invocation, and the image's `CMD` is one. **CI is what remains,
    and it needs your ruling** — see "Blocked on me" item 9.
 
-   **§1.6 is still open beside it** — the declared `receipts` console script
-   installs no wrapper. Same smell, different root cause; it may resolve to
-   "reinstall" rather than to code.
+   ~~**§1.6 is still open beside it**~~ — **§1.6 is CLOSED (2026-08-11): the
+   wrapper exists, in the user scripts directory, which is not on `PATH`. Never
+   a packaging defect.** See §1.6 itself and ADR-0035's closing note.
 
 ## 3. Phase 6 — merchants & few-shot (P6.T1)
 
@@ -891,11 +899,10 @@ for you.
 
 **§2.2, the ASGI entry point, is DONE** (ADR-0035), and so is the
 containerisation ADR-0035 left out (**ADR-0036**: Dockerfile, compose services,
-`docs/DEPLOYMENT.md`). **§1.6 still sits beside them:** the declared `receipts`
-console script installs no wrapper, so the packaging story is unfinished in a
-way that is measured rather than suspected. **CI is the remaining deployment
-piece and it is NOT ruling-free** — it is "Blocked on me" item 9, and
-`.github/workflows/` is gitignored.
+`docs/DEPLOYMENT.md`). **§1.6 is closed too** — the console script was never
+broken; its wrapper sits in the user scripts directory, which is not on `PATH`.
+**CI is the only remaining deployment piece, and it is NOT ruling-free** — it is
+"Blocked on me" item 9, and `.github/workflows/` is gitignored.
 
 **If you would rather clear the decision backlog first**, items 3–7 above are all
 consequences of the last milestone and all of them are one answer each: the theme

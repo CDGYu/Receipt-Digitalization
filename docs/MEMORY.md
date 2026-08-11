@@ -7,12 +7,12 @@ verified rather than trusted — is **ADR-0019**, extended by **ADR-0021** (whos
 2026-08-02 dated correction widened the freshness check after a docs-only task
 proved invisible to it).
 Last updated: **2026-08-11**, at the close of the session that containerised
-the service. **One position, because nothing is in
-flight: `main @ 8646980`, NOT pushed.** A stamp cannot name the commit that
+the service and closed the console-script question. **One position, because
+nothing is in flight: `main @ bbb84ec`, NOT pushed.** A stamp cannot name the commit that
 writes it, so the test is a command, not a commit and not a count:
 
 ```
-git log --oneline 8646980..main -- src tests frontend docs ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
+git log --oneline bbb84ec..main -- src tests frontend docs ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
 git log --oneline refs/remotes/origin/main..main   # what a push would send
 git ls-remote --heads origin main                  # authoritative on what is pushed
 ```
@@ -20,7 +20,7 @@ git ls-remote --heads origin main                  # authoritative on what is pu
 **Empty means current.** Anything listed means the tree moved after this was
 written and you are reading something stale.
 
-**No characterisation of `8646980` is written here on purpose** — an earlier
+**No characterisation of `bbb84ec` is written here on purpose** — an earlier
 stamp called its SHA "the last *code* commit", and the next commit falsified
 that by editing a docstring under `src/`. **ADR-0032 §2**: a claim can be
 derived correctly and rot inside the commit that carries it. The SHA plus the
@@ -30,10 +30,10 @@ command cannot rot; a sentence about what the SHA *is* can.
 check excludes exactly these two files and watches `docs` otherwise, so a commit
 bundling them with an ADR or an index row lists itself as stale. That happened
 three times in the session that wrote ADR-0033. Everything substantive was
-committed first; `8646980` is the last of it.
+committed first; `bbb84ec` is the last of it.
 
-*(The previous stamp was 2026-08-11 at `main @ b2ba652`, the ASGI entry
-point's merge tip.)*
+*(The previous stamp was 2026-08-11 at `main @ 8646980`, the containerisation
+merge tip.)*
 
 ## Snapshot
 
@@ -96,13 +96,17 @@ point's merge tip.)*
   so the **outside-repo import check was run at the merge** from `C:\Users`:
   `python -m receipts.cli --help` exit 0; `create_app`, `build_auth_router` and
   `receipts.review.list_tasks` all import clean and resolve through the
-  installed package. **One gap found and NOT a regression from this branch:**
-  `pyproject.toml` declares `[project.scripts] receipts = …` and the
-  distribution records the entry point, but **no generated wrapper exists in
-  `C:\Python314\Scripts`, so `receipts --help` does not run as a command here.**
-  `_console_main` itself imports fine. Earlier records claiming `receipts --help`
-  exits 0 are **not reproducible in this environment** — use
-  `python -m receipts.cli` for the check until the install state is settled.
+  installed package. ~~**One gap found and NOT a regression from this
+  branch:** … no generated wrapper exists …~~ **WITHDRAWN 2026-08-11. There is
+  no packaging gap.** The wrapper exists — `receipts.exe` in the **user**
+  scripts directory, because the install is `--user` and editable — and that
+  directory is not on `PATH`, while the one that is (`C:\Python314\Scripts`)
+  holds only pip. Run by full path it exits 0. The original check was true of
+  the single directory it looked in; the conclusion drawn from it was not, and
+  it dismissed earlier records that had been right. **ADR-0014's consequences
+  already stated the real cause**, and the container corroborates it: installed
+  system-wide, `receipts` is `/usr/local/bin/receipts`. See ADR-0035's closing
+  note. `python -m receipts.cli` remains the invocation that always works.
 - **TWENTY-FIVE plan defects this milestone, every one the controller's.**
   #1–9 during Tasks 1–2; #10–14 in Task 3's pre-flight; #15–16 at Task 3's
   review; #17–20 in Task 4's pre-flight; #21–24 in Task 5's; #25 at Task 5's
@@ -952,6 +956,10 @@ added to `_PAN_RE` requires the two-instance check, every time.**
   PATH either.
 - CLI: `python -m receipts.cli <command>` — the console script needs the
   interpreter's `Scripts`/`bin` on `PATH`, which it is **not** on this machine.
+  **This bullet was right all along**; a 2026-08-07 finding contradicted it with
+  a packaging story and was withdrawn 2026-08-11. `receipts.exe` is in
+  `…\AppData\Roaming\Python\Python314\Scripts` — the user scripts directory,
+  since the install is `--user`.
 - E2E (deliberate, not part of the sweep): `python scripts/seed_review_e2e.py
   --reset`, then `cd frontend && npx playwright test`. Playwright's Chromium is
   installed.
