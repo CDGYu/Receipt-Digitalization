@@ -924,10 +924,31 @@ measured text disagree, the measurement wins.**
    > coverage.
 7. **Do the public golden labels need scrubbing?** (Real third-party names,
    TINs, addresses — also the values the PAN silent-case tests pin.)
-   > **Recommended: yes, and sooner is cheaper.** This is the only item with a
-   > third-party privacy dimension, and the repo is public. The PAN silent-case
-   > tests pin some of those exact values, so every further pin added before
-   > this is one more thing that has to move with it.
+   > **Recommendation CORRECTED 2026-08-11 — the first one was wrong.** It said
+   > "yes, and sooner is cheaper", which assumed a bounded scrub. Measured
+   > since:
+   >
+   > * **The images are gitignored.** Only the *labels* are public — three
+   >   files, each with `merchant.name`, `merchant.address`, `merchant.tax_id`
+   >   and `receipt.number` populated. `card_last4` is **null** in all three,
+   >   so no card data is exposed.
+   > * **The values spread far past the labels.** The TIN appears in **8**
+   >   tracked files and the merchant name in **6** — including
+   >   `docs/adr/0018-pan-masking-policy.md`, three PAN plans/specs, and two
+   >   test modules. The TIN is *load-bearing*: a TIN's digit groups are
+   >   PAN-shaped, which is exactly why it became the silent-case fixture.
+   > * **And the decisive one: scrubbing the working tree removes nothing.**
+   >   `git log -G <tin> --all` finds the value in **11 commits** of a repo
+   >   that is public. Every one survives a scrub.
+   >
+   > So this is not a cheap tidy-up. The real options are **rewrite history**
+   > (force-push; breaks every clone, and this repo's standing rule is that
+   > merged `feat/*` branches are kept), **make the repo private** (removes the
+   > exposure at a stroke, keeps history), or **accept it and stop adding
+   > copies**. That is a judgement about a real business's tax ID on a receipt
+   > someone was handed, and it is **yours** — I withdraw the "sooner is
+   > cheaper" framing, because the history exposure is already at its maximum
+   > and does not grow.
 8. **R060/R061 grounding (P2.T2)** — also gates bbox highlighting.
    > **Recommended: defer behind item 1.** It is a three-way choice (model
    > returns the text it read / a cheap OCR pass / drop the rules) and none of
@@ -942,8 +963,10 @@ measured text disagree, the measurement wins.**
     > question, and review standard 19 says answer it as one bounded property
     > rather than two narrowings.
 **If you want the short version:** unblock **1**, spend an hour on **2**
-(taking **3** with it), do **7** while it is still cheap, say no to **4**,
-**5** and **6**, and leave **8**, **9** and **10** until item 1 lands.
+(taking **3** with it), say no to **4**, **5** and **6**, and leave **8**,
+**9** and **10** until item 1 lands. **7 is not a tidy-up** — its values are in
+11 commits of a public repo's history, so it is a rewrite-history / go-private /
+accept-it decision, and it is yours.
 
 *(The CLI `--limit` bound was item 11 and is **DONE, 2026-08-11** — the last
 instance of the class ADR-0034 closed. `_positive_int` bounds above at
