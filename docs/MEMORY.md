@@ -9,12 +9,13 @@ proved invisible to it).
 Last updated: **2026-08-11**, at the close of the session that switched CI back
 on, fixed P8.T3, verified everything but the key on ISSUE-001, bounded the
 CLI's `--limit`, built the theme control, and
-settled the currency prefix and the census parser. **One position, because nothing is in flight:
-`main @ de5cc20`, NOT pushed.** A stamp cannot name the commit that
+settled the currency prefix and the census parser, and re-measured ISSUE-001's
+local path. **One position, because nothing is in flight:
+`main @ 0cdf6c9`, NOT pushed.** A stamp cannot name the commit that
 writes it, so the test is a command, not a commit and not a count:
 
 ```
-git log --oneline de5cc20..main -- src tests frontend docs ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
+git log --oneline 0cdf6c9..main -- src tests frontend docs ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
 git log --oneline refs/remotes/origin/main..main   # what a push would send
 git ls-remote --heads origin main                  # authoritative on what is pushed
 ```
@@ -22,7 +23,7 @@ git ls-remote --heads origin main                  # authoritative on what is pu
 **Empty means current.** Anything listed means the tree moved after this was
 written and you are reading something stale.
 
-**No characterisation of `de5cc20` is written here on purpose** — an earlier
+**No characterisation of `0cdf6c9` is written here on purpose** — an earlier
 stamp called its SHA "the last *code* commit", and the next commit falsified
 that by editing a docstring under `src/`. **ADR-0032 §2**: a claim can be
 derived correctly and rot inside the commit that carries it. The SHA plus the
@@ -32,7 +33,7 @@ command cannot rot; a sentence about what the SHA *is* can.
 check excludes exactly these two files and watches `docs` otherwise, so a commit
 bundling them with an ADR or an index row lists itself as stale. That happened
 three times in the session that wrote ADR-0033. Everything substantive was
-committed first; `de5cc20` is the last of it.
+committed first; `0cdf6c9` is the last of it.
 
 *(The previous stamp was 2026-08-11 at `main @ 8995d1e`, the ISSUE-001
 readiness record.)*
@@ -1227,6 +1228,13 @@ API path moves.
   trigger, because this repo does not use PRs. Python **3.11 and 3.13**; a
   second job builds the image and checks it boots. Nothing is pushed to a
   registry.
+- **ISSUE-001 stays blocked on hardware, and the local path is a liveness check
+  (2026-08-11, ADR-0039):** re-measured at **1896s for one receipt** against
+  ~1371s in July — same model, same image, slower. `Failed: 0`, confidence
+  `0.000`, nothing read. **Do not re-run it to check**, and **never commit a
+  liveness artefact to `eval/results/`**, which is still empty and should stay
+  so until a real baseline exists. The user's plan is a better-specified
+  machine; `.env` stays on Ollama meanwhile and no code change is pending.
 - **The containerisation (2026-08-11, ADR-0036):** **one image, two commands**,
   not two images; the image **builds the review UI itself** rather than trusting
   a `dist` in the build context; **migrations are an operator step**, not an
@@ -1962,8 +1970,8 @@ with an entry point gets run from outside the repository.
 - `docs/NEXT_SESSION_PROMPT.md` — the ordered task list and reading order.
 - `IMPLEMENTATION_PLAN.md` · `README.md` (§5 design decisions) · `VLM_AND_DATA.md`
 - **`docs/KNOWN_ISSUES.md`** — ISSUE-001 with its diagnosis and resume steps.
-- **`docs/adr/` — 0001–0038** (re-derived at the merge:
-  `ls docs/adr/*.md` minus `README.md` counts **38**, and the four-digit
+- **`docs/adr/` — 0001–0039** (re-derived at the merge:
+  `ls docs/adr/*.md` minus `README.md` counts **39**, and the four-digit
   prefixes are contiguous from
   0001); see `docs/adr/README.md`. **This range read `0001–0026` until
   2026-08-10** — it was written at ADR-0026 and never touched again while 0027,

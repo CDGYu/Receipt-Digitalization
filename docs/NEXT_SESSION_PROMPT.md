@@ -47,9 +47,10 @@ scoped re-review returning **MERGE** and *"no sixteenth false claim"*.
 consumed** — the corrections read route (2026-08-10), then a docs fix wave, the
 shared page bound, the ASGI entry point, the containerisation, CI plus the
 P8.T3 eval fix, the ISSUE-001 readiness record plus the backlog
-recommendations, and the CLI `--limit` bound (all 2026-08-11). **The theme control, and the
-currency-prefix and census-parser resolutions, merged after all eight and are
-NOT pushed. The next `main` push needs its own fresh ask.**
+recommendations, and the CLI `--limit` bound (all 2026-08-11). **The theme
+control (ADR-0038), the currency-prefix and census-parser resolutions, the
+ISSUE-001 re-measurement and ADR-0039 all merged after those eight.** Run
+`git log --oneline refs/remotes/origin/main..main` for what is unpushed.
 **Every merged `feat/*` branch is kept at its merge point and pushed.** No
 count and no list: the list rotted twice on 2026-08-11, and the commit that
 replaced it with "no count is written down" wrote **"all seven"** in the same
@@ -85,6 +86,78 @@ re-review. The close then ran in full, and §0c is its record.
 
 ---
 
+## START HERE — every open task, in one place
+
+Written 2026-08-11 because this file had grown to a thousand lines and the open
+work was scattered across nine sections. **This index is a pointer, not a
+second source** — each row names where the detail lives, and where a row and its
+section disagree, **the section wins** (ADR-0030: a finding is a claim, and so
+is a summary of one).
+
+### Step 0 — always, before anything
+
+Run the commands in the block above. Then read, in this order:
+`docs/MEMORY.md` (state + **review standards 1–25**) → the ADR index
+(`docs/adr/README.md`) → the ADRs its rows send you to. Your own memory index
+carries the cross-session lessons; **`docs/KNOWN_ISSUES.md` is ISSUE-001's home
+and is not to be re-derived** (ADR-0039 §3).
+
+### A. Needs no ruling — start here if you want to build something
+
+| # | Task | Where the detail is |
+|---|---|---|
+| A1 | **I6** — the inline field error renders three grid columns from the field it blames | §1.4; browser-pass report §3 |
+| A2 | **I8** — admin tiles say "9 open" directly above "No open tasks" | §1.4 |
+| A3 | **I9** — the 503 sentence is printed twice | §1.4 |
+| A4 | Test-shape debt: the row-highlight pin on `.style.background`, the vacuous `getByText(/carol/)`, the class-name guard's three parked leaks | §1.5 |
+| A5 | §1.3's shipped residuals — the hardcoded `0.85`/`0.60` band, `.screen > div`, per-row labels, `--color-null` on `surface-active`, `SignOutControl`'s 4.39:1 `.error` in dark | §1.3 |
+| A6 | The citation residual — **71** `path:NNN` citations, ~unaudited; resolve each against the line it points at | §1.2, ADR-0028 §5 |
+
+**A5's contrast item and A1–A3 are visual.** ADR-0029 §4 is the list of what a
+green `verify.py` cannot see; jsdom renders no colour, so these need a browser
+and a person.
+
+### B. Needs a ruling from the user — do not guess
+
+Seven live items, all in **"Blocked on me"** below with a recommendation each.
+**Numbers there are stable from 2026-08-11**; resolved items stay struck
+through rather than being removed, because renumbering aged citations three
+times in one day.
+
+### C. Blocked on hardware, not on code
+
+**ISSUE-001.** No code change is pending — ADR-0002 makes the provider switch
+environment variables, and `docs/KNOWN_ISSUES.md`'s readiness check has already
+verified the hosted wiring builds, the timeout reaches the client and tool-use
+is on. **The user's plan (2026-08-11) is to test on a better-specified
+machine.**
+
+**Do not re-run the local baseline to see how bad it is.** Measured twice, seven
+weeks apart, and it got slower — 1896s for one receipt on 2026-08-11 against
+~1371s in July. That is **ADR-0039**, which also settles that a local run is a
+*liveness check* whose §16 table means nothing about accuracy, and that liveness
+artefacts never enter `eval/results/`.
+
+Blocked behind it: **P3.T6 / P8.T1** (threshold sweep, confidence weights into
+`config/rules.yaml`), **Phase 6**'s top-10-merchant accuracy metric, and any
+real precision claim. Phase 6 and 7 can be *built* without it — see §3 and §4.
+
+### D. Phases not yet started
+
+**Phase 6** merchants & few-shot (§3) · **Phase 7** self-consistency (§4) ·
+**Phase 8** the rest of the eval harness (§5) · earlier-phase leftovers (§6).
+Each names its own spec section and its blockers.
+
+### What is NOT open
+
+The deployment story is complete: entry point (**ADR-0035**), container
+(**ADR-0036**), CI (**ADR-0037**), guide (`docs/DEPLOYMENT.md`). The theme
+control (**ADR-0038**), the shared page bound (**ADR-0034**), the corrections
+read route (**ADR-0031**) and the CLI `--limit` bound all shipped. §1.6's
+"packaging gap" was **withdrawn** — it was never one.
+
+---
+
 ## Reading order
 
 1. **`docs/MEMORY.md`** — state, decisions already made, environment, blockers,
@@ -97,12 +170,16 @@ re-review. The close then ran in full, and §0c is its record.
    styling one records twenty-five plan defects and "THE CLOSE".
    **`.superpowers/` is gitignored — open ledgers by path; nothing in them is
    findable by searching the tracked tree.**
-3. **`docs/adr/README.md`, then the ADRs (0001–0038** — count the files rather
+3. **`docs/adr/README.md`, then the ADRs (0001–0039** — count the files rather
    than trusting that range**).** *This* file's range has tracked each ADR as it
    landed; it was **`docs/MEMORY.md`'s** copy that sat at `0001–0026` while four
    more ADRs shipped, and it was corrected on 2026-08-10. Derived per-commit
    with `git show <sha>:docs/NEXT_SESSION_PROMPT.md | grep -oE "0001.00[23][0-9]"`.
    Mandatory before touching the matching area:
+   - **0039** — the local path is a liveness check. **Read before running the
+     eval harness or believing its output.** A local run prints the six §16
+     metrics and licenses only "the pipeline completes"; liveness artefacts stay
+     out of `eval/results/`; and the local timing is **not** to be re-derived.
    - **0038** — the theme control. **Read before touching the theme, the
      header, or anything that wants browser storage.** Three states (`system`
      removes the attribute, so ADR-0027's precedence rule stays reachable both
