@@ -127,6 +127,62 @@ variable** — a valid key turns this from unverified to running.
 **The compromised key was NOT echoed again** during this check. Configuration
 presence was reported as a boolean.
 
+### The local path, re-measured 2026-08-11 — it got WORSE
+
+The user chose to stay on Ollama, so the "alternatives if staying local" above
+were run rather than argued about. **One receipt (`r001`), 768px, detached,
+`VLM_TIMEOUT_S=1800`** so a slow extract could not time out and burn a retry.
+
+| | July (this issue, above) | **2026-08-11** |
+|---|---|---|
+| one receipt at 768px | ~1371 s (~23 min) | **1896 s (31.6 min)** |
+
+**~38% slower than July, on the same model and the same image.** Not explained
+here — Ollama moved to 0.32.4 and nothing else about the box is known to have
+changed. Recorded as a measurement, not a diagnosis.
+
+What the run produced:
+
+```
+Receipts: 1   Auto-approved: 0   Critical-correct: 0   Failed: 0
+Auto-approval precision:  n/a      Critical-field accuracy: 0.00%
+Field accuracy:        45.00%      Line-item F1:            0.00%
+confidence 0.000, critical_correct false, fields_correct 18 / 40
+```
+
+**`Failed: 0` is the good news and the whole of it:** the pipeline completes end
+to end against a real provider. Everything else says the model cannot read the
+receipt — confidence `0.000`, no critical field right, no line item found.
+
+**Do not read 45% as "nearly half right".** As this issue's own side-findings
+note, `field_accuracy` counts `meta.*` — annotator prose and model self-reports
+— and a field that is null in both label and extraction scores as correct. The
+number is dominated by agreeing-about-nothing.
+
+**The GPU finding is current, not inherited.** Ollama ran discovery on
+2026-08-11 and reported `library=cpu … total "7.6 GiB" available "7.2 GiB"` with
+no device, and `/api/ps` showed `size_vram=0` while the model was loaded. CPU-only
+is measured today, not assumed still true from July.
+
+**Not committed to `eval/results/`.** One receipt, at a non-default resolution,
+from a model that read nothing, would be the *first* artefact in that directory
+and would sit beside future real baselines as though comparable. It lives in
+`var/` (gitignored). §16 wants results committed so regressions show in a diff;
+this is not a result, it is a liveness check.
+
+### A third local option this issue did not have: Ollama Cloud
+
+`ollama signin` **exists in the installed build** (0.32.4, verified via
+`ollama --help`), and the server already reports `OLLAMA_NO_CLOUD:false` with
+`OLLAMA_REMOTES:[ollama.com]`. That makes "stay on Ollama, stop paying the CPU
+cost" a real option rather than a hypothetical, and it needs no code change —
+`VLM_PROVIDER=ollama` with the same `base_url`, a cloud model tag, and
+**`VLM_USE_TOOLS=true`** to override `_TOOLS_OFF_BY_DEFAULT`, which otherwise
+silently keeps this provider in JSON mode (the "Secondary" finding above).
+
+Untested here: no account was created, so whether a suitable vision model is
+offered and whether it accepts a `tools` payload are both unverified.
+
 ### How to resume (exact steps)
 
 1. Rotate the Gemini key; put the hosted config in `.env` (block above).
