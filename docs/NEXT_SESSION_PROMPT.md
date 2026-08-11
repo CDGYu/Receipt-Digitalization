@@ -20,7 +20,7 @@ it to "fix" a correct sentence in an Accepted ADR to match a wrong measurement.
 
 ---
 
-# NO BRANCH IN FLIGHT. `main` is MERGED AND PUSHED.
+# NO BRANCH IN FLIGHT. `main` is MERGED, and AHEAD of `origin/main`.
 
 **This header said "NO BRANCH IN FLIGHT" for three days while a branch existed**
 — true when written, rotted the moment the branch was cut. It has also carried
@@ -36,7 +36,7 @@ git ls-remote --heads origin main                 # authoritative on what is pus
 git log --oneline refs/remotes/origin/main..main  # what the pending push would send
 ```
 
-## `main` is merged and pushed — nothing is waiting to go.
+## `main` is merged, and has UNPUSHED work on top.
 
 The corrections read route **merged by true fast-forward on 2026-08-10** —
 single parent, zero merge commits, `git branch --no-merged main` names nothing.
@@ -47,8 +47,8 @@ scoped re-review returning **MERGE** and *"no sixteenth false claim"*.
 consumed** — the corrections read route (2026-08-10), then a docs fix wave, the
 shared page bound, the ASGI entry point, the containerisation, CI plus the
 P8.T3 eval fix, and the ISSUE-001 readiness record plus the backlog
-recommendations (all 2026-08-11). **The next `main` push needs its own fresh
-ask.**
+recommendations (all 2026-08-11). **The CLI `--limit` bound merged after all
+seven and is NOT pushed. The next `main` push needs its own fresh ask.**
 `feat/corrections-read-route`, `feat/shared-page-bound`, `feat/asgi-entry-point`,
 `feat/containerisation`, `feat/ci-workflow` and `feat/eval-precision-null` are
 all kept at their merge points and pushed. Run
@@ -941,20 +941,15 @@ measured text disagree, the measurement wins.**
     > shape to close by construction versus by enumeration is a single
     > question, and review standard 19 says answer it as one bounded property
     > rather than two narrowings.
-11. **Bound the CLI's `--limit`?** Found by ADR-0034's review and reported
-    rather than fixed (standard 19): `query_receipts(limit=2**63)` raises the
-    same `OverflowError` the HTTP routes just closed, and `--limit` is bounded
-    below by `_positive_int` but not above. Local to the CLI, not an HTTP
-    surface, so an operator sees a traceback rather than a service returning
-    500 to a caller.
-    > **Recommended: yes, and it is about an hour.** ADR-0034 already decided
-    > the shape, so this applies a ruling rather than making one, and it closes
-    > the class instead of leaving one instance open. Lower severity than the
-    > HTTP routes were; nearly free.
+**If you want the short version:** unblock **1**, spend an hour on **2**
+(taking **3** with it), do **7** while it is still cheap, say no to **4**,
+**5** and **6**, and leave **8**, **9** and **10** until item 1 lands.
 
-**If you want the short version:** unblock **1**, spend an hour each on **11**
-and **2** (taking **3** with it), do **7** while it is still cheap, say no to
-**4**, **5** and **6**, and leave **8**, **9** and **10** until item 1 lands.
+*(The CLI `--limit` bound was item 11 and is **DONE, 2026-08-11** — the last
+instance of the class ADR-0034 closed. `_positive_int` bounds above at
+`2**63 - 1`, a representability ceiling rather than a policy one, because
+`--limit 5000000` is a legitimate batch size. `--workers` shares the validator
+and was measured not to need it.)*
 
 ## Today's goal
 

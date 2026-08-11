@@ -7,12 +7,13 @@ verified rather than trusted — is **ADR-0019**, extended by **ADR-0021** (whos
 2026-08-02 dated correction widened the freshness check after a docs-only task
 proved invisible to it).
 Last updated: **2026-08-11**, at the close of the session that switched CI back
-on, fixed P8.T3, and verified everything but the key on ISSUE-001. **One
-position, because nothing is in flight: `main @ 8995d1e`, PUSHED.** A stamp cannot name the commit that
+on, fixed P8.T3, verified everything but the key on ISSUE-001, and bounded the
+CLI's `--limit`. **One position, because nothing is in flight:
+`main @ ba9d9d1`, NOT pushed.** A stamp cannot name the commit that
 writes it, so the test is a command, not a commit and not a count:
 
 ```
-git log --oneline 8995d1e..main -- src tests frontend docs ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
+git log --oneline ba9d9d1..main -- src tests frontend docs ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
 git log --oneline refs/remotes/origin/main..main   # what a push would send
 git ls-remote --heads origin main                  # authoritative on what is pushed
 ```
@@ -20,7 +21,7 @@ git ls-remote --heads origin main                  # authoritative on what is pu
 **Empty means current.** Anything listed means the tree moved after this was
 written and you are reading something stale.
 
-**No characterisation of `8995d1e` is written here on purpose** — an earlier
+**No characterisation of `ba9d9d1` is written here on purpose** — an earlier
 stamp called its SHA "the last *code* commit", and the next commit falsified
 that by editing a docstring under `src/`. **ADR-0032 §2**: a claim can be
 derived correctly and rot inside the commit that carries it. The SHA plus the
@@ -30,9 +31,10 @@ command cannot rot; a sentence about what the SHA *is* can.
 check excludes exactly these two files and watches `docs` otherwise, so a commit
 bundling them with an ADR or an index row lists itself as stale. That happened
 three times in the session that wrote ADR-0033. Everything substantive was
-committed first; `8995d1e` is the last of it.
+committed first; `ba9d9d1` is the last of it.
 
-*(The previous stamp was 2026-08-11 at `main @ 4a46c46`, the P8.T3 fix.)*
+*(The previous stamp was 2026-08-11 at `main @ 8995d1e`, the ISSUE-001
+readiness record.)*
 
 ## Snapshot
 
@@ -41,12 +43,12 @@ committed first; `8995d1e` is the last of it.
   for three days while one existed**: true when written on 2026-08-07, rotted
   the moment the corrections branch was cut, and corrected only when Task 4
   edited the file. **The answer is the command, never the sentence.**
-- **`main` is merged AND PUSHED.** Seven pushes, each on a one-time
+- **`main` is merged, and is AHEAD of `origin/main`.** Seven pushes so far, each on a one-time
   authorization the push consumed: the corrections read route (2026-08-10),
   then a docs fix wave, the shared page bound, the ASGI entry point, the
   containerisation, CI plus the P8.T3 eval fix, and the ISSUE-001 readiness
-  record plus the backlog recommendations (all 2026-08-11). **The next `main`
-  push needs its own fresh ask.** Run
+  record plus the backlog recommendations (all 2026-08-11). **The CLI `--limit` bound merged after all
+  seven and is NOT pushed.** **The next `main` push needs its own fresh ask.** Run
   `git log --oneline refs/remotes/origin/main..main` rather than believing this
   sentence — empty means nothing is waiting to go.
 - **CI RUNS AGAIN** (2026-08-11, true fast-forward `a6c4392` → `743cacb`,
@@ -404,10 +406,13 @@ validation; `MAX_PAGE_OFFSET` is reachable and answers 200. The signed-blob
 with the service's own error body, because signature verification refuses
 before the value reaches SQLite.
 
-**Reported, not fixed** (standard 19): `query_receipts(limit=2**63)` raises the
-same `OverflowError`, and the CLI's `--limit` is bounded below by
-`_positive_int` but not above. Pre-existing, local to the CLI rather than an
-HTTP surface, and out of this branch's scope.
+~~**Reported, not fixed** (standard 19): `query_receipts(limit=2**63)` raises
+the same `OverflowError`~~ — **FIXED 2026-08-11.** `_positive_int` now bounds
+above as well as below, at `2**63 - 1`: a **representability** ceiling, not a
+policy one like `MAX_PAGE_OFFSET`, because `--limit 5000000` is a legitimate
+batch size. `--workers` shares the validator and was **measured not to need
+it** — `ThreadPoolExecutor(max_workers=2**63)` constructs and runs, threads
+being lazy.
 
 ## Corrections read route — COMPLETE AND MERGED (2026-08-10)
 
