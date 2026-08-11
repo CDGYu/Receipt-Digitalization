@@ -47,9 +47,9 @@ scoped re-review returning **MERGE** and *"no sixteenth false claim"*.
 consumed** — the corrections read route (2026-08-10), then a docs fix wave, the
 shared page bound, the ASGI entry point, the containerisation, CI plus the
 P8.T3 eval fix, the ISSUE-001 readiness record plus the backlog
-recommendations, and the CLI `--limit` bound (all 2026-08-11). **The theme
-control merged after all eight and is NOT pushed. The next `main` push needs
-its own fresh ask.**
+recommendations, and the CLI `--limit` bound (all 2026-08-11). **The theme control, and the
+currency-prefix and census-parser resolutions, merged after all eight and are
+NOT pushed. The next `main` push needs its own fresh ask.**
 **Every merged `feat/*` branch is kept at its merge point and pushed.** No
 count and no list: the list rotted twice on 2026-08-11, and the commit that
 replaced it with "no count is written down" wrote **"all seven"** in the same
@@ -868,12 +868,17 @@ points from outside the repository. §1.6 is the current example.
 
 ## Blocked on me (the user) — surface these, do not guess
 
-**Renumbered twice on 2026-08-11.** Two items closed the same day: the `offset`
-500 (was item 1 — you chose the shared page bound, ADR-0034) and GitHub Actions
-(was item 9 — you said yes, ADR-0037). Everything below each moved up, and one
-new item joined the end, so **a reference to "item #N" written before
-2026-08-11 points at a different item.** No count is given: the list is right
-here (ADR-0032 §3).
+**Numbers are stable from 2026-08-11 onward. Resolved items stay in place,
+struck through, and keep their number.** This list was renumbered three times in
+one day — the `offset` 500, GitHub Actions, and the CLI `--limit` bound all
+closed and everything below each shifted up — and each shift aged every
+reference to "item #N" written before it. Two of those references were mine and
+had to be chased. Leaving a dead entry in place costs a line; moving a live one
+costs a correction, so the trade is settled the other way now.
+
+**A reference to "item #N" written before 2026-08-11 still points at a
+different item**, because of those three shifts. No count is given: the list is
+right here (ADR-0032 §3).
 
 **A recommendation is attached to each item, offered 2026-08-11 and NOT a
 ruling.** They are one session's reasoning, recorded so the next one does not
@@ -901,28 +906,13 @@ measured text disagree, the measurement wins.**
    **Nobody has seen it in a browser** — jsdom renders no colour, so how it
    reads against the header in either theme is asserted by nothing (ADR-0038's
    own "what the gates still cannot see").
-3. **The currency prefix**, parked in design §5.1 with *the browser pass* named
-   as its resolver. **The pass ran and never addressed it** — grepping the
-   report for "currency", "prefix" or "symbol" returns nothing. **Its designated
-   resolver has been spent; it needs a new one.**
-   > **Recommendation CORRECTED 2026-08-11.** It said "decide it inline with
-   > item 2" — item 2 is now done and this was *not* decided with it, because
-   > the two are unrelated. Re-reading §5.1's dated note: the prefix carries
-   > **two** independent objections, and the second does not need a browser at
-   > all. **`receipt.currency` is itself a correctable text field** edited live
-   > on that same screen, so a hardcoded symbol mislabels every money field on a
-   > receipt whose currency is being corrected — Task 2's implementer refused on
-   > exactly that ground and was upheld. The first objection (a prefix span
-   > joins the accessible name, turning `Total` into `Total ₱`) is **derived,
-   > not measured**, and §5.1 says checking that derivation is a reviewer's
-   > first job.
-   >
-   > So the real question is not *where* the prefix goes. It is whether a
-   > **static** prefix can be right on a screen where currency is user-editable
-   > — and the answer looks like no. The live options are: **drop it**, make it
-   > **dynamic** from the current field value (which still meets objection one),
-   > or show the currency **once per receipt** rather than per field. That is a
-   > design call, not a placement call, and it is yours.
+3. ~~**The currency prefix.**~~ **RESOLVED 2026-08-11: dropped.** Its
+   designated resolver (the browser pass) was spent, and one fact settles it
+   that neither parked objection used — **`receipt.currency` is already a
+   labelled, editable field on that same screen**, so the currency is shown
+   once per receipt already, in the field that owns it. A prefix would repeat
+   an editable value on every money field. Full reasoning in design §5.1's
+   dated resolution note.
 4. **Should the Playwright visual run become a sixth gate?** ADR-0029 leaves it
    open. It would need a headless-stable config, a policy for the 43 recorded
    undersized hit targets, and a way to establish a first baseline without
@@ -931,13 +921,13 @@ measured text disagree, the measurement wins.**
    > 43 recorded undersized hit targets and today's rendering as the baseline
    > before anyone has decided whether they are defects. Revisit after items 2
    > and 3, when the UI has stopped moving.
-5. **Does the census parser get replaced?** §1.1 item 1: a `;` or `{}` inside a
-   value is silently mis-parsed and ships. Replacing it is real work; adding a
-   bullet to ADR-0029 §4 is honest but leaves the hole.
-   > **Recommended: add the ADR-0029 §4 bullet; do not rewrite the parser.**
-   > The hole needs someone to write pathological CSS to reach. Documenting the
-   > blind spot is cheap and true; a replacement parser is a new thing that can
-   > be wrong in new ways.
+5. ~~**Does the census parser get replaced?**~~ **RESOLVED 2026-08-11: no —
+   documented instead.** Reproduced first: `content: '+'` → `content: '+;XX'`
+   leaves the census green, 0 failures, while the glyph differs and ships.
+   **ADR-0029 §4 now carries the bullet it was missing** — the blind spot was
+   neither layout, nor cascade, nor a narrower surface, so nothing named it.
+   Reaching it takes deliberately pathological CSS; a quote-aware parser is a
+   new component that can be wrong in new ways.
 6. **Should the citation sweep become a repo script?** §1.2. ADR-0028
    deliberately declined to propose a CI check for prose, and that stands until
    you say otherwise.
@@ -986,11 +976,14 @@ measured text disagree, the measurement wins.**
     > shape to close by construction versus by enumeration is a single
     > question, and review standard 19 says answer it as one bounded property
     > rather than two narrowings.
-**If you want the short version:** unblock **1**, spend an hour on **2**
-(taking **3** with it), say no to **4**, **5** and **6**, and leave **8**,
-**9** and **10** until item 1 lands. **7 is not a tidy-up** — its values are in
-11 commits of a public repo's history, so it is a rewrite-history / go-private /
-accept-it decision, and it is yours.
+**If you want the short version:** **1 is the one that matters** — it gates all
+calibration and Phase 6's only metric, and everything but the key is verified.
+Say no to **4** and **6**. Leave **8**, **9** and **10** until 1 lands. **7 is
+not a tidy-up** — its values are in 11 commits of a public repo's history, so it
+is a rewrite-history / go-private / accept-it decision, and it is yours.
+
+*(**2**, **3** and **5** closed on 2026-08-11, as did the CLI `--limit` bound
+that was item 11. Their entries are struck through above rather than removed.)*
 
 *(The CLI `--limit` bound was item 11 and is **DONE, 2026-08-11** — the last
 instance of the class ADR-0034 closed. `_positive_int` bounds above at

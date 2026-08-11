@@ -8,12 +8,13 @@ verified rather than trusted — is **ADR-0019**, extended by **ADR-0021** (whos
 proved invisible to it).
 Last updated: **2026-08-11**, at the close of the session that switched CI back
 on, fixed P8.T3, verified everything but the key on ISSUE-001, bounded the
-CLI's `--limit`, and built the theme control. **One position, because nothing is in flight:
-`main @ fba69a7`, NOT pushed.** A stamp cannot name the commit that
+CLI's `--limit`, built the theme control, and
+settled the currency prefix and the census parser. **One position, because nothing is in flight:
+`main @ de5cc20`, NOT pushed.** A stamp cannot name the commit that
 writes it, so the test is a command, not a commit and not a count:
 
 ```
-git log --oneline fba69a7..main -- src tests frontend docs ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
+git log --oneline de5cc20..main -- src tests frontend docs ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
 git log --oneline refs/remotes/origin/main..main   # what a push would send
 git ls-remote --heads origin main                  # authoritative on what is pushed
 ```
@@ -21,7 +22,7 @@ git ls-remote --heads origin main                  # authoritative on what is pu
 **Empty means current.** Anything listed means the tree moved after this was
 written and you are reading something stale.
 
-**No characterisation of `fba69a7` is written here on purpose** — an earlier
+**No characterisation of `de5cc20` is written here on purpose** — an earlier
 stamp called its SHA "the last *code* commit", and the next commit falsified
 that by editing a docstring under `src/`. **ADR-0032 §2**: a claim can be
 derived correctly and rot inside the commit that carries it. The SHA plus the
@@ -31,7 +32,7 @@ command cannot rot; a sentence about what the SHA *is* can.
 check excludes exactly these two files and watches `docs` otherwise, so a commit
 bundling them with an ADR or an index row lists itself as stale. That happened
 three times in the session that wrote ADR-0033. Everything substantive was
-committed first; `fba69a7` is the last of it.
+committed first; `de5cc20` is the last of it.
 
 *(The previous stamp was 2026-08-11 at `main @ 8995d1e`, the ISSUE-001
 readiness record.)*
@@ -719,15 +720,18 @@ route list (`2689635`), ADR-0027's two corrections, **ADR-0028** and its
 correction, and review standards **21, 22 and 23**.
 
 **What the close is owed next, and by whom:** three questions this milestone
-created and deliberately did not answer — ~~**the theme control**~~ (**done
-2026-08-11, ADR-0038**), **the currency
-prefix** (parked in design §5.1 with the browser pass named as its resolver; the
-pass ran and never addressed it, so its designated resolver is spent), and
-**whether the Playwright visual run becomes a sixth gate** (ADR-0029 leaves it
-open). Two more from the re-review: **whether the census parser is replaced**
-given its silent semicolon/brace blind spot, and **whether the citation sweep
-becomes a repo script**. All five are user decisions and are listed in
-`docs/NEXT_SESSION_PROMPT.md` under "Blocked on me".
+created and deliberately did not answer. **Three of the five are now settled**
+(all 2026-08-11): ~~the theme control~~ **built, ADR-0038**; ~~the currency
+prefix~~ **dropped** — `receipt.currency` is already a labelled editable field
+on that screen, so a prefix would repeat an editable value on every money field
+(design §5.1's dated resolution); and ~~whether the census parser is replaced~~
+**no, documented instead** — the semicolon blind spot was reproduced and
+ADR-0029 §4 now names it.
+
+**Two remain, both user decisions:** whether the Playwright visual run becomes
+a sixth gate (ADR-0029 leaves it open), and whether the citation sweep becomes
+a repo script. Both are in `docs/NEXT_SESSION_PROMPT.md` under "Blocked on me",
+which is the fuller list.
 
 ## Admin UI backend routes — complete and merged (2026-08-05)
 
