@@ -20,7 +20,7 @@ it to "fix" a correct sentence in an Accepted ADR to match a wrong measurement.
 
 ---
 
-# NO BRANCH IN FLIGHT. `main` is MERGED AND PUSHED.
+# NO BRANCH IN FLIGHT. `main` is MERGED, and AHEAD of `origin/main`.
 
 **This header said "NO BRANCH IN FLIGHT" for three days while a branch existed**
 — true when written, rotted the moment the branch was cut. It has also carried
@@ -36,21 +36,21 @@ git ls-remote --heads origin main                 # authoritative on what is pus
 git log --oneline refs/remotes/origin/main..main  # what the pending push would send
 ```
 
-## `main` is merged and pushed — nothing is waiting to go.
+## `main` is merged, and has an UNPUSHED milestone on top.
 
 The corrections read route **merged by true fast-forward on 2026-08-10** —
 single parent, zero merge commits, `git branch --no-merged main` names nothing.
 It went in only after its whole-branch review, three fix rounds and a final
 scoped re-review returning **MERGE** and *"no sixteenth false claim"*.
 
-**`main` was pushed on 2026-08-10 with explicit authorization, which that push
-consumed. A docs fix wave on 2026-08-11 put two commits on top, and those were
-pushed on a second one-time authorization, which that push also consumed. The
-next `main` push needs its own fresh ask.**
-`feat/corrections-read-route` is kept at its merge point and pushed too. Run
+**Two pushes happened on authorizations that each consumed themselves** — the
+corrections read route on 2026-08-10, and a docs fix wave on 2026-08-11. **The
+shared page bound (ADR-0034) merged after both and is NOT pushed. The next
+`main` push needs its own fresh ask.** Both `feat/corrections-read-route` and
+`feat/shared-page-bound` are kept at their merge points and pushed. Run
 `git log --oneline refs/remotes/origin/main..main` rather than believing this
 sentence — empty means nothing is waiting to go, and the pair commit that
-writes this necessarily lands after the push it records.
+writes this necessarily lands after any push it could record.
 
 **Freshness check.** `docs/MEMORY.md`'s stamp names **one** position again now
 that nothing is in flight:
@@ -74,7 +74,7 @@ standard 17), both ADRs and their index rows in place, and the outside-repo
 import check green from `C:\Users`.
 
 **All four tasks are complete**, each with a task review and a scoped
-re-review. The close then ran in full, and §0 is its record.
+re-review. The close then ran in full, and §0b is its record.
 
 ---
 
@@ -90,12 +90,18 @@ re-review. The close then ran in full, and §0 is its record.
    styling one records twenty-five plan defects and "THE CLOSE".
    **`.superpowers/` is gitignored — open ledgers by path; nothing in them is
    findable by searching the tracked tree.**
-3. **`docs/adr/README.md`, then the ADRs (0001–0033** — count the files rather
+3. **`docs/adr/README.md`, then the ADRs (0001–0034** — count the files rather
    than trusting that range**).** *This* file's range has tracked each ADR as it
    landed; it was **`docs/MEMORY.md`'s** copy that sat at `0001–0026` while four
    more ADRs shipped, and it was corrected on 2026-08-10. Derived per-commit
    with `git show <sha>:docs/NEXT_SESSION_PROMPT.md | grep -oE "0001.00[23][0-9]"`.
    Mandatory before touching the matching area:
+   - **0034** — the shared page bound. **Read before adding a paginated route
+     or changing a page window.** All three declare `limit`/`offset` through
+     one `PageLimit`/`PageOffset`; an out-of-range offset is a 422 from
+     request validation, not the `OverflowError` 500 ADR-0031 reported. It also
+     records the contract that narrowed, and that validation now runs *ahead*
+     of ADR-0031's existence-then-scope ordering.
    - **0033** — *the handoff pair goes last and alone, and a correction goes to
      every copy.* **Read before refreshing this pair, or fixing any sentence
      that appears more than once.** Bundling the pair with any other `docs/`
@@ -111,7 +117,8 @@ re-review. The close then ran in full, and §0 is its record.
      correction attribution, and before scoping `GET /receipts/{receipt_id}`:
      that route being *unscoped* is the premise its 403-not-404 rests on.** It
      also carries the schema-forced limit (a released or reopened task takes a
-     reviewer's own history away) and the `offset` 500 measured on three routes.
+     reviewer's own history away) and the `offset` 500 measured on three routes
+     — **that 500 is closed; see ADR-0034.**
    - **0030** — *a finding is a claim, and a fix wave verifies before it fixes.*
      **Read before acting on any review output, including this document.** Two
      of six findings in one wave were false. Corollaries: check **membership,
@@ -164,7 +171,29 @@ re-review. The close then ran in full, and §0 is its record.
 
 # THE WORK, IN ORDER
 
-## 0. The corrections read route is DONE, MERGED and PUSHED. Nothing carries over.
+## 0a. The shared page bound is DONE and MERGED. It is NOT pushed.
+
+Built and closed 2026-08-11 from your ruling — *"fix the offset 500 with a
+shared page bound"* — with no design doc, no plan and no ledger: one defect,
+two commits, true fast-forward `0851c55` → `744b533`, single parent. Five gates
+PASS on `main`, controller-run. pytest **1004 → 1025**; Vitest unmoved, no
+frontend file was touched. **ADR-0034** is the decision.
+
+All three paginated routes now share `PageLimit`/`PageOffset`. An out-of-range
+offset is a **422 from request validation**, exactly as `offset=-1` already
+was. **The contract narrowed:** an offset between 1,000,001 and `2**63-1` used
+to answer 200 and now answers 422.
+
+**Read ADR-0034 before adding a paginated route.** Two things in it are easy to
+trip over: the pin is stated over the **built app**, so re-declaring `offset` by
+hand fails; and validation now runs **ahead** of ADR-0031's existence-then-scope
+ordering, so a reviewer holding nothing gets 422 rather than 403 at a bad offset.
+
+**The review found two false claims in the fix wave's own prose** and both are
+fixed (ADR-0032 §6 again). **One thing was reported and not fixed:** the CLI's
+`--limit` has the same unbounded shape — see "Blocked on me".
+
+## 0b. The corrections read route is DONE, MERGED and PUSHED. Nothing carries over.
 
 **There is no outstanding action from the last milestone.** It was merged and
 `main` pushed on 2026-08-10, on an authorization **that push consumed** — the
@@ -197,9 +226,8 @@ searched for (ADR-0033 §3). Read the ledger's list.
 
 The ones still open and worth knowing:
 
-- **The `offset` 500 — the only one that is a live defect.** See §7 and
-  "Blocked on me": it is pre-existing on three routes and needs **your** call,
-  not the reviewer's.
+- ~~**The `offset` 500**~~ — **CLOSED 2026-08-11 by the shared page bound,
+  ADR-0034.** It was the only one of these that was a live defect.
 - The **inverse** null/empty direction is unpinned in
   `correction_summary` — a different shape from the closed class; belongs with
   the column's write-time contract.
@@ -409,7 +437,7 @@ branch.
    `GET /receipts/{receipt_id}/corrections` ships with `list_corrections`,
    `correction_summary`, and a `_PageResponse` base shared by all three page
    envelopes. Four tasks, all complete and reviewed; the close ran in full and
-   §0 is its record. Read
+   §0b is its record. Read
    `docs/superpowers/plans/2026-08-10-corrections-read-route.md`'s **"Dated
    defect log"** first — six plan defects, two of them reproduced rather than
    quoted.
@@ -421,7 +449,8 @@ branch.
    corrections`, the write route, already there), and the same
    `# api.py  (FastAPI routes)` header also heads `/auth/login`, `/auth/me` and
    `/auth/logout`, which live in `auth.py`; the design puts both in remit
-   together whenever that line is next edited. And the offset defect below.
+   together whenever that line is next edited. **The offset defect it also
+   deferred is closed — ADR-0034.**
 
 2. **An ASGI entry point / deployment story.** `create_app` is a factory nothing
    under `src/` calls. `scripts/serve_review_e2e.py` is deliberately e2e-scoped
@@ -463,8 +492,8 @@ pre-printed template rows (sibling of R052).
 - **From the admin-UI-routes milestone:** 20 Minor findings triaged as safe.
   `GET /receipts`' `has_more` is **unpinned in the `True` direction** — a
   constant `has_more: False` survived the whole suite when it was measured at
-  that milestone's close (the suite was 979 then; it is 1004 on the corrections
-  branch, so re-measure rather than comparing to the old total).
+  that milestone's close. **The suite has grown twice since, so re-measure
+  rather than comparing to any total written down here** (ADR-0032 §3).
 - **Layer-wide, measured:** nothing pins the queue's caller-commits rule.
 - **ADR-0025's accepted residuals:** the re-claim, and the third race order.
 - **Parked at the error-recovery close:** the `42/42` comment; `edit()` not
@@ -701,77 +730,58 @@ points from outside the repository. §1.6 is the current example.
 
 ## Blocked on me (the user) — surface these, do not guess
 
-1. **`?offset=9223372036854775808` is an unhandled 500 on THREE auth-scoped
-   routes.** ~~Re-confirm the `corrections` auth ruling~~ — **done, confirmed
-   2026-08-10, ADR-0031**; this replaces it, and it is a live pre-existing
-   defect rather than a design question.
+**Renumbered 2026-08-11.** The `offset` 500 was item 1 and is **closed** — you
+chose the shared page bound, and ADR-0034 records it. Everything below it moved
+up one, and one new item joined the end, so **a reference to "item #N" written
+before 2026-08-11 points at a different item.** No count is given: the list is
+right here (ADR-0032 §3).
 
-   `offset` is declared `Query(0, ge=0)` with **no upper bound**, so `2**63`
-   passes validation, reaches SQLite and raises `OverflowError`. The body is
-   Starlette's plain `Internal Server Error`, **not** this service's
-   `{"error": {"message": ...}}` shape, because `OverflowError` is not a
-   `ValueError` and none of `_install_error_handlers`' three handlers catches
-   it. Controls: `offset=-1` → 422 (so `ge=0` does fire), `2**63-1` → 200,
-   `2**63` → 500.
-
-   Measured per caller class on all three paginated routes, independently
-   reproduced twice:
-
-   | caller | `/receipts` | `/review/tasks` | `/receipts/{id}/corrections` |
-   |---|---|---|---|
-   | anonymous | 401 | 401 | 401 |
-   | machine key | 401 | 401 | 401 |
-   | reviewer, no task row | 500 | 500 | **403 at every offset** |
-   | reviewer holding it | 500 | 500 | 500 |
-   | admin | 500 | 500 | 500 |
-
-   **Two of the three are reachable by any signed-in caller.** Left unfixed
-   deliberately under review standard 19 (report further shapes rather than
-   fixing them) — the declaration is pre-existing on the two older routes and
-   the third inherited it from a plan that specified the parameter verbatim.
-   **The decision is yours:** a one-line `le=` on three routes, or a shared page
-   bound. Either changes shipped contracts. Full record in **ADR-0031**'s
-   closing section, deliberately in the tracked tree because the ledger is
-   gitignored.
-2. **A hosted tool-capable provider + freshly rotated key** (ISSUE-001 → all
+1. **A hosted tool-capable provider + freshly rotated key** (ISSUE-001 → all
    calibration, and Phase 6's success metric).
-3. **The theme control.** ADR-0027 ships dark as a full second theme and **the
+2. **The theme control.** ADR-0027 ships dark as a full second theme and **the
    application has no way for a user to choose it** — the only routes in are the
    OS preference and setting `data-theme` by hand. Every token and the
    precedence rule are correct and browser-verified; the decision is
    half-delivered. It needs a home for the control, which ADR-0027 deliberately
    did not open.
-4. **The currency prefix**, parked in design §5.1 with *the browser pass* named
+3. **The currency prefix**, parked in design §5.1 with *the browser pass* named
    as its resolver. **The pass ran and never addressed it** — grepping the
    report for "currency", "prefix" or "symbol" returns nothing. **Its designated
    resolver has been spent; it needs a new one.**
-5. **Should the Playwright visual run become a sixth gate?** ADR-0029 leaves it
+4. **Should the Playwright visual run become a sixth gate?** ADR-0029 leaves it
    open. It would need a headless-stable config, a policy for the 43 recorded
    undersized hit targets, and a way to establish a first baseline without
    pinning current defects.
-6. **Does the census parser get replaced?** §1.1 item 1: a `;` or `{}` inside a
+5. **Does the census parser get replaced?** §1.1 item 1: a `;` or `{}` inside a
    value is silently mis-parsed and ships. Replacing it is real work; adding a
    bullet to ADR-0029 §4 is honest but leaves the hole.
-7. **Should the citation sweep become a repo script?** §1.2. ADR-0028
+6. **Should the citation sweep become a repo script?** §1.2. ADR-0028
    deliberately declined to propose a CI check for prose, and that stands until
    you say otherwise.
-8. **Do the public golden labels need scrubbing?** (Real third-party names,
+7. **Do the public golden labels need scrubbing?** (Real third-party names,
    TINs, addresses — also the values the PAN silent-case tests pin.)
-9. **R060/R061 grounding (P2.T2)** — also gates bbox highlighting.
-10. **GitHub Actions again?** If yes, the workflow calls `scripts/verify.py`.
-11. **Close the PAN grouping residual?** Which priced route?
-12. **Narrow the `{1,2}` separator** now that its surface is measured?
+8. **R060/R061 grounding (P2.T2)** — also gates bbox highlighting.
+9. **GitHub Actions again?** If yes, the workflow calls `scripts/verify.py`.
+10. **Close the PAN grouping residual?** Which priced route?
+11. **Narrow the `{1,2}` separator** now that its surface is measured?
+12. **Bound the CLI's `--limit`?** Found by ADR-0034's review and reported
+    rather than fixed (standard 19): `query_receipts(limit=2**63)` raises the
+    same `OverflowError` the HTTP routes just closed, and `--limit` is bounded
+    below by `_positive_int` but not above. Local to the CLI, not an HTTP
+    surface, so an operator sees a traceback rather than a service returning
+    500 to a caller.
 
 ## Today's goal
 
-**Nothing is in flight, nothing is half-done, and nothing carries over.** The
-corrections read route is merged and the 2026-08-11 docs fix wave is pushed.
+**Nothing is in flight and nothing is half-done. One thing carries over:** the
+shared page bound merged on 2026-08-11 and **is not pushed**.
 `git branch --no-merged main` should name nothing, and
-`git log --oneline refs/remotes/origin/main..main` should come out empty.
+`git log --oneline refs/remotes/origin/main..main` should list the shared
+page bound's commits plus this pair. Pushing them needs a fresh ask.
 
 **Run the freshness command in `docs/MEMORY.md`'s stamp before trusting any of
 this.** If it lists anything, the tree moved after this was written — re-run
-`python scripts/verify.py` and re-read §0 before acting.
+`python scripts/verify.py` and re-read §0a and §0b before acting.
 
 **Then** pick from §2.2 onward, or answer the questions above and let that pick
 for you.

@@ -6,13 +6,13 @@ continuity protocol itself — what lives where, and why this snapshot must be
 verified rather than trusted — is **ADR-0019**, extended by **ADR-0021** (whose
 2026-08-02 dated correction widened the freshness check after a docs-only task
 proved invisible to it).
-Last updated: **2026-08-11**, at the close of a session whose only work was a
-docs fix wave. **One position, because nothing is in
-flight: `main @ b899d7d`, PUSHED.** A stamp cannot name the commit that
+Last updated: **2026-08-11**, at the close of the session that fixed the
+`offset` 500 with the shared page bound. **One position, because nothing is in
+flight: `main @ 744b533`, NOT pushed.** A stamp cannot name the commit that
 writes it, so the test is a command, not a commit and not a count:
 
 ```
-git log --oneline b899d7d..main -- src tests frontend docs ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
+git log --oneline 744b533..main -- src tests frontend docs ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
 git log --oneline refs/remotes/origin/main..main   # what a push would send
 git ls-remote --heads origin main                  # authoritative on what is pushed
 ```
@@ -20,7 +20,7 @@ git ls-remote --heads origin main                  # authoritative on what is pu
 **Empty means current.** Anything listed means the tree moved after this was
 written and you are reading something stale.
 
-**No characterisation of `b899d7d` is written here on purpose** — an earlier
+**No characterisation of `744b533` is written here on purpose** — an earlier
 stamp called its SHA "the last *code* commit", and the next commit falsified
 that by editing a docstring under `src/`. **ADR-0032 §2**: a claim can be
 derived correctly and rot inside the commit that carries it. The SHA plus the
@@ -30,10 +30,10 @@ command cannot rot; a sentence about what the SHA *is* can.
 check excludes exactly these two files and watches `docs` otherwise, so a commit
 bundling them with an ADR or an index row lists itself as stale. That happened
 three times in the session that wrote ADR-0033. Everything substantive was
-committed first; `b899d7d` is the last of it.
+committed first; `744b533` is the last of it.
 
-*(The previous stamp was 2026-08-10 at `main @ 7b08941`, at the close of the
-session that merged the corrections read route.)*
+*(The previous stamp was 2026-08-11 at `main @ b899d7d`, earlier in this same
+session, before the shared page bound was built.)*
 
 ## Snapshot
 
@@ -42,14 +42,20 @@ session that merged the corrections read route.)*
   for three days while one existed**: true when written on 2026-08-07, rotted
   the moment the corrections branch was cut, and corrected only when Task 4
   edited the file. **The answer is the command, never the sentence.**
-- **`main` is merged AND PUSHED.** The corrections read
-  route merged by true fast-forward on 2026-08-10 and `main` was pushed the same
-  day on an explicit authorization, **which that push consumed**. A docs fix
-  wave on 2026-08-11 added commits on top, and **those were pushed too, on a
-  second one-time authorization that push consumed**. **The next `main` push
-  needs its own fresh ask.** Run `git log --oneline
-  refs/remotes/origin/main..main` rather than believing this sentence — empty
-  means nothing is waiting to go. See "Corrections read route" below.
+- **`main` is merged, and is AHEAD of `origin/main`.** Two pushes happened on
+  authorizations that each consumed themselves: the corrections read route on
+  2026-08-10, and a docs fix wave on 2026-08-11. **The shared page bound merged
+  after both and is NOT pushed.** **The next `main` push needs its own fresh
+  ask.** Run `git log --oneline refs/remotes/origin/main..main` rather than
+  believing this sentence — empty means nothing is waiting to go.
+- **The shared page bound is COMPLETE AND MERGED** (2026-08-11, true
+  fast-forward `0851c55` → `744b533`, single parent, two branch commits).
+  `feat/shared-page-bound` is kept at its merge point and pushed. It closed the
+  `offset` 500 ADR-0031 reported: all three paginated routes now declare their
+  window through one `PageLimit`/`PageOffset`, and an out-of-range offset is a
+  422 from request validation. **ADR-0034** records the decision, the contract
+  change, and the three mutations that proved the pin red. See "The shared page
+  bound" below.
 - **The review-UI styling milestone is COMPLETE AND MERGED** (2026-08-07, true
   fast-forward `1314485` → `be6d7c0`, single parent, 38 branch commits).
   `feat/review-ui-styling` is kept at its merge point and pushed.
@@ -171,6 +177,53 @@ session that merged the corrections read route.)*
   searching the tracked tree — open ledgers by path.**
 - **The repo is PUBLIC.** Verified 2026-07-31 via the GitHub API. See
   "Environment / provider" for what that exposes.
+
+## The shared page bound — COMPLETE AND MERGED (2026-08-11)
+
+Decision: **ADR-0034**. No design doc, no plan, no ledger — a single-defect fix
+taken directly from the user's ruling, built and closed in one session.
+
+**What it does.** `GET /receipts`, `GET /review/tasks` and
+`GET /receipts/{id}/corrections` each declared `limit`/`offset` verbatim.
+`limit` was bounded at both ends; `offset` had no ceiling, so `2**63` reached
+SQLite and raised `OverflowError` — an unhandled 500 that escaped both the
+status and the error-body contracts. All three now share `PageLimit` /
+`PageOffset` in `api.py` (**not** `schemas.py`: `fastapi` is an optional extra
+and `schemas.py` is pure Pydantic with one importer).
+
+**Proven red three ways**, each mutation alone and reverted before the next:
+dropping `le=MAX_PAGE_OFFSET` → 13 failed; giving `GET /receipts` its own
+`le=100` → the shared-bound case failed; `MAX_PAGE_OFFSET = 2**64` → 12 failed.
+**The second exists because the `limit` half was green from the start** — it
+was already bounded everywhere, so the fix never proved that half red
+(standard 14). The third is what stops the constant being raised back over the
+overflow threshold, and it works because the tests carry literal `2**63` cases
+beside the constant-derived ones.
+
+**The pin is stated over the built app**, walking `app.routes` and recursing
+through `.original_router.routes`, so a fourth paginated route that
+re-declares `offset` by hand fails without anyone having thought of it. That is
+how the third route acquired the defect: it copied the declaration from a plan.
+
+**Two things the review found, both in prose the fix wave itself wrote**
+(ADR-0032 §6): ADR-0034's justification claimed "every one of these routes has
+filters" when the corrections route takes **none**, and both the ADR and
+`api.py` asserted a `Query()` default in an `Annotated` alias "is an error"
+without anyone having run it. It is — `AssertionError` at decoration time — and
+the error text is now recorded beside the claim.
+
+**Probes that found nothing**, recorded so they are not re-run: OpenAPI still
+carries `maximum: 1000000` on all three; `limit` still refuses 0, 201 and
+`2**63`; defaults still apply; a duplicated `offset` param does not bypass
+validation; `MAX_PAGE_OFFSET` is reachable and answers 200. The signed-blob
+`exp` param was **suspected of the same overflow and is not** — it answers 403
+with the service's own error body, because signature verification refuses
+before the value reaches SQLite.
+
+**Reported, not fixed** (standard 19): `query_receipts(limit=2**63)` raises the
+same `OverflowError`, and the CLI's `--limit` is bounded below by
+`_positive_int` but not above. Pre-existing, local to the CLI rather than an
+HTTP surface, and out of this branch's scope.
 
 ## Corrections read route — COMPLETE AND MERGED (2026-08-10)
 
@@ -365,16 +418,18 @@ phase**, because FastAPI answers 404 for an unregistered path, which is the code
 the test asserts. Both were reproduced in an isolated copy of the tree on
 2026-08-10 rather than taken from the ledger.
 
-**AN OPEN DEFECT THIS MILESTONE MEASURED AND DID NOT CAUSE — needs a user
-decision at the branch close.** `?offset=9223372036854775808` satisfies `ge=0`,
-reaches SQLite and raises `OverflowError`: an unhandled **500** whose body is
+**A DEFECT THIS MILESTONE MEASURED AND DID NOT CAUSE. Closed 2026-08-11 by the
+shared page bound — ADR-0034.** The measurement below is closed to `20d9bb9`
+and is still true of that commit; read it as the record of what was found, not
+as current behaviour. `?offset=9223372036854775808` satisfied `ge=0`,
+reached SQLite and raised `OverflowError`: an unhandled **500** whose body was
 Starlette's plain `Internal Server Error`, not this service's
 `{"error": {"message": ...}}` shape, because `OverflowError` is not a
-`ValueError` and none of `_install_error_handlers`' three handlers catches it.
+`ValueError` and none of `_install_error_handlers`' three handlers caught it.
 Measured on **all three** paginated routes at `20d9bb9`, with controls
-(`offset=-1` → 422, `2**63-1` → 200, `2**63` → 500). **Who reaches it differs:**
+(`offset=-1` → 422, `2**63-1` → 200, `2**63` → 500). **Who reached it differed:**
 on this route, an admin or a *holding* reviewer and no one else (a reviewer with
-no task row gets 403 at every offset, before the value reaches SQLite); on
+no task row got 403 at every offset, before the value reached SQLite); on
 `GET /receipts` and `GET /review/tasks`, any signed-in caller. Left unfixed
 deliberately under review standard 19. **Full table in ADR-0031** — that is the
 tracked-tree record, because the ledger is gitignored.
@@ -965,6 +1020,16 @@ API path moves.
   `release_task` and `enqueue_review`'s reopen branch **clear** `assigned_to` —
   a reviewer whose task was released or reopened loses access to corrections
   they made themselves.
+- **The shared page bound (2026-08-11, ADR-0034):** the `offset` 500 is fixed
+  with **a shared page bound**, not a one-line `le=` per route. All three
+  paginated routes declare their window through one `PageLimit`/`PageOffset`
+  in `api.py`; `MAX_PAGE_OFFSET` is **1,000,000** and `MAX_PAGE_LIMIT` is
+  **200**. An out-of-range offset is a 422 from request validation, as
+  `offset=-1` already was. **The accepted cost, stated at the time:** an offset
+  between 1,000,001 and `2**63-1` used to answer 200 and now answers 422 — the
+  one change a working caller could notice. The value is a policy, not a
+  correctness bound (anything under `2**63` stops the overflow); it is one
+  constant, and the tests bound where it may move rather than what it must be.
 - **Corrections ordering tiebreaker (2026-08-10, ADR-0031 decision 7):**
   `created_at` then **`field_path`**, chosen over the design's `created_at, id`
   during implementation. `Correction.id` is a random `uuid4` that scrambled
@@ -1661,8 +1726,8 @@ with an entry point gets run from outside the repository.
 - `docs/NEXT_SESSION_PROMPT.md` — the ordered task list and reading order.
 - `IMPLEMENTATION_PLAN.md` · `README.md` (§5 design decisions) · `VLM_AND_DATA.md`
 - **`docs/KNOWN_ISSUES.md`** — ISSUE-001 with its diagnosis and resume steps.
-- **`docs/adr/` — 0001–0033** (re-derived at the merge:
-  `ls docs/adr/*.md` minus `README.md` counts **33**, and the four-digit
+- **`docs/adr/` — 0001–0034** (re-derived at the merge:
+  `ls docs/adr/*.md` minus `README.md` counts **34**, and the four-digit
   prefixes are contiguous from
   0001); see `docs/adr/README.md`. **This range read `0001–0026` until
   2026-08-10** — it was written at ADR-0026 and never touched again while 0027,
