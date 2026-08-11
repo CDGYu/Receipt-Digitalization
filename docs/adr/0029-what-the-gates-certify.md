@@ -88,6 +88,24 @@ floor on the surfaces they are used on.
   above is caught only because `display` happens to be a **keyword** — *a width
   regression expressed as a length would still pass.*
 * **Cascade and specificity.** A per-rule census cannot see two rules fighting.
+* **A declaration whose *value* contains `;` or `{}`** — added 2026-08-11, and
+  the one blind spot here that is the census parser's own rather than a
+  consequence of censusing per rule. The parser splits declarations on `;`
+  without regard for quoting, so a `;` inside a quoted value splits one
+  declaration into a fragment that keeps the original property name and a
+  colon-less fragment that is dropped. **The census entry comes out
+  byte-identical.**
+
+  Measured, twice, a milestone apart: `FindingsPanel.module.css`'s
+  `content: '+'` changed to `content: '+;XX'` leaves the census green — 0
+  failures — while the glyph a reviewer sees is different and the changed value
+  ships to `dist`. It is valid CSS; a quoted string may contain a semicolon.
+
+  **Recorded rather than fixed.** Reaching it takes deliberately pathological
+  CSS, and the alternative is replacing the parser with something quote-aware —
+  a new component that can be wrong in new ways, guarding a case no stylesheet
+  in this tree has ever had. If that trade is ever revisited, this bullet is the
+  measurement to re-run first.
 * **Contrast on the three narrower surfaces** (`raised`, `active`, `sunken`).
   The census bounds itself to the surfaces it can attribute with certainty.
 * **Anything a person would call "does it look right".** That still needs a

@@ -255,6 +255,31 @@ never replaces it).
 > the inline-error placement are unchanged and all belong to the review-screen
 > task.
 
+> **RESOLVED (2026-08-11): the prefix is dropped, not parked again.**
+>
+> Its designated resolver was spent — the browser pass ran and never addressed
+> it — so this is settled on the two objections above plus one fact neither of
+> them used: **`receipt.currency` is already rendered as a labelled, editable
+> field on this same screen** (`TEXT_FIELDS` in `ReceiptForm.tsx`, labelled
+> `Currency`). The currency is therefore already shown **once per receipt, in
+> the field that owns it**.
+>
+> A prefix would repeat that value on every money field, which adds no
+> information and costs three things: it duplicates a value the reviewer can
+> edit, so the two can visibly disagree mid-correction; it repeats one symbol
+> down a column whose whole design is scanning amounts; and inside the
+> `<label>` it joins the accessible name (`Total` → `Total ₱`), the objection
+> §5.1 raised and never measured.
+>
+> **What the browser pass would have decided is narrower than it looked.** The
+> question was whether a right-aligned tabular-mono column reads wrong without
+> a symbol. Even if it did, the fix is not a per-field prefix — it is making
+> the existing `Currency` field easier to find, which is a layout question for
+> whoever next opens `ReceiptForm`, not a `MoneyInput` API change.
+>
+> Right-alignment, `--font-mono`, tabular figures and the inline-error
+> placement remain exactly as parked in 2026-08-06.
+
 ### 5.2 LineItemsTable
 
 Description left, numbers right, one row per line item. Column widths fixed so
