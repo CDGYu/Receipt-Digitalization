@@ -80,6 +80,11 @@ sentence that appears more than once: the pair is committed **last and alone**
 (three repair commits in one session are why), a correction goes to **every**
 copy — `docs/MEMORY.md` states the current milestone twice by design — and a
 count anchored to the ledger is falsified by recording a finding about it there.
+**0034** is the one to read before adding a paginated route or changing a page
+window: all three declare `limit` and `offset` through one shared `PageLimit` /
+`PageOffset`, an out-of-range offset is a 422 from request validation rather
+than the `OverflowError` 500 ADR-0031 reported, and the pin is stated over the
+built app so a fourth route cannot re-declare its way around it.
 
 Primary sources these build on: `RECEIPT_SYSTEM_SPEC.md` (build spec),
 `README.md` (§5 design decisions), `VLM_AND_DATA.md`, and the always-on

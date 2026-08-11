@@ -43,7 +43,7 @@ from receipts.persist.models import Base, Correction, Receipt, ValidationFinding
 from receipts.persist.repository import _RECEIPT_FIELDS  # noqa: E402
 from receipts.persist.session import make_engine, make_session_factory  # noqa: E402
 from receipts.persist.users import ROLE_ADMIN, ROLE_REVIEWER, create_user  # noqa: E402
-from receipts.review.api import create_app  # noqa: E402
+from receipts.review.api import MAX_PAGE_LIMIT, MAX_PAGE_OFFSET, create_app  # noqa: E402
 from receipts.review.queue import close_task, enqueue_review, next_task  # noqa: E402
 from receipts.review.serializers import correction_summary  # noqa: E402
 from receipts.score.confidence import ReceiptStatus  # noqa: E402
@@ -1016,7 +1016,7 @@ def test_an_unknown_receipt_is_404_for_every_signed_in_role(clients, actor):
 def test_the_corrections_paging_window_is_refused_outside_its_bounds(
     admin_client, receipt_id, query
 ):
-    """``Query(50, ge=1, le=200)`` and ``Query(0, ge=0)`` were decorative.
+    """The paging window's declared bounds were decorative.
 
     Measured separately: dropping ``ge=1, le=200`` from ``limit``, and dropping
     ``ge=0`` from ``offset``, each left the whole suite green as it stood at
@@ -1029,41 +1029,168 @@ def test_the_corrections_paging_window_is_refused_outside_its_bounds(
     **What this closes:** ``limit`` in both directions, and ``offset`` below
     zero. Those three are refused by request validation, before any query runs.
 
-    **What it does not close, and the measurement rather than the reasoning:**
-    ``offset`` has no declared ceiling, so ``?offset=9223372036854775808``
-    (``2**63``) satisfies ``ge=0``, reaches SQLite, and raises ``OverflowError:
-    Python int too large to convert to SQLite INTEGER`` -- an unhandled **500**.
-    Measured by calling the route: ``2**63 - 1`` (9223372036854775807) is the
-    largest offset that still answers 200, and the 500 body is Starlette's plain
-    ``Internal Server Error``, not this service's ``{"error": {"message": ...}}``
-    shape. ``OverflowError`` is an ``ArithmeticError``, not a ``ValueError``, so
-    none of the three handlers in ``_install_error_handlers`` catches it and the
-    failure escapes the error-body contract as well as the status one.
-
-    **Who reaches it here is narrower than "any signed-in caller", and this
-    route's scope check is the difference.** Measured, every caller class at
-    offsets 0, ``2**63 - 1`` and ``2**63``:
-
-      * anonymous -- 401, 401, 401;
-      * a configured machine key -- 401, 401, 401;
-      * a reviewer with **no** ``review_tasks`` row -- **403, 403, 403**: the
-        scope call returns ``None`` and the 403 is raised before the offset is
-        ever handed to SQLite, so the ceiling is unreachable for them;
-      * a reviewer **holding** the receipt -- 200, 200, 500;
-      * an admin -- 200, 200, 500.
-
-    So the 500 is reachable by exactly the callers already entitled to read this
-    history, and by no one else -- a strictly smaller set than the sibling
-    routes expose, and smaller *because* scope is checked before the query.
-
-    **Left open on purpose.** The identical input answers 500 on ``GET
-    /receipts`` and ``GET /review/tasks``, and **there** it really is reachable
-    by any signed-in caller -- reviewer and admin alike, measured the same way --
-    because neither route refuses anybody before its query runs. Three instances
-    of one pre-existing defect, in a declaration this route copied verbatim from
-    its brief: report, do not fix (standard 19). A fix belongs with all three at
-    once, and the two siblings are the more exposed pair.
+    **The ceiling on ``offset`` is not here.** It was missing entirely when
+    these cases were written -- ``?offset=2**63`` satisfied ``ge=0``, reached
+    SQLite and raised ``OverflowError`` -- and it was closed for all three
+    paginated routes at once by the shared page bound (ADR-0034), which is
+    pinned by ``test_every_paginated_route_shares_one_page_bound`` and
+    ``test_an_out_of_range_offset_is_refused_by_validation_on_every_paged_route``
+    rather than by another case bolted onto this route-specific test.
     """
     response = admin_client.get(f"/receipts/{receipt_id}/corrections?{query}")
 
     assert response.status_code == 422
+
+
+# --------------------------------------------------------------------------- #
+# The shared page bound (ADR-0034)
+# --------------------------------------------------------------------------- #
+
+#: The three routes that page, as URL templates. This is a list, so it is a
+#: claim (review standard 20) -- and
+#: ``test_the_behavioural_cases_cover_every_paginated_route`` is what checks it,
+#: by deriving the same set from the built app.
+PAGINATED_PATHS = [
+    "/receipts",
+    "/review/tasks",
+    "/receipts/{receipt_id}/corrections",
+]
+
+
+def _walk_routes(carrier):
+    """Every route, recursing through ``_IncludedRouter``.
+
+    ``include_router`` wraps the auth router, so a flat walk of ``app.routes``
+    cannot see anything it carries -- the trap ADR-0028 section 3 names.
+    Nothing under ``/auth/*`` pages today, and a walk that cannot see those
+    routes could not promise that.
+    """
+    for route in carrier.routes:
+        inner = getattr(route, "original_router", None)
+        if inner is not None:
+            yield from _walk_routes(inner)
+        else:
+            yield route
+
+
+def _declared_upper_bound(field):
+    """A query param's declared ``le``, or ``None`` when it declares none.
+
+    Under Pydantic v2 the constraints live in ``field_info.metadata`` as
+    ``annotated_types`` objects (``[Ge(ge=0), Le(le=1000000)]``); there is no
+    ``field_info.le`` to read. Probed against the built app rather than
+    assumed -- reading ``.le`` directly returns the attribute's absence for
+    every param, bounded or not, which would make this helper answer ``None``
+    always and the pin below vacuous.
+    """
+    for constraint in field.field_info.metadata:
+        if hasattr(constraint, "le"):
+            return constraint.le
+    return None
+
+
+def _paginated_params(app, name):
+    """``{route path: declared upper bound}`` for every param called *name*."""
+    found = {}
+    for route in _walk_routes(app):
+        dependant = getattr(route, "dependant", None)
+        if dependant is None:
+            continue
+        for field in dependant.query_params:
+            if field.name == name:
+                found[route.path] = _declared_upper_bound(field)
+    return found
+
+
+@pytest.mark.parametrize(
+    ("param", "expected"),
+    [("offset", MAX_PAGE_OFFSET), ("limit", MAX_PAGE_LIMIT)],
+)
+def test_every_paginated_route_shares_one_page_bound(app, param, expected):
+    """One bound, every paginated route, both parameters.
+
+    The property is stated over the **built app**, not over three declarations,
+    which is what makes it converge: a fourth paginated route that re-declares
+    ``offset`` by hand fails here without anybody having thought of that route.
+    That is how the third route acquired the defect in the first place -- it
+    copied ``Query(0, ge=0)`` verbatim from a brief.
+
+    Equality rather than "some bound exists" is deliberate: *shared* is the
+    property, so a route that invents its own ceiling is as much a failure as
+    one that declares none.
+    """
+    declared = _paginated_params(app, param)
+
+    assert declared, f"no route declares a {param!r} query parameter"
+    assert declared == dict.fromkeys(declared, expected)
+
+
+def test_the_behavioural_cases_cover_every_paginated_route(app):
+    """``PAGINATED_PATHS`` is written down, so the app is asked to confirm it."""
+    from_app = set(_paginated_params(app, "offset"))
+
+    assert from_app == set(PAGINATED_PATHS)
+
+
+@pytest.mark.parametrize("path", PAGINATED_PATHS)
+@pytest.mark.parametrize(
+    ("offset", "expected"),
+    [
+        (0, 200),
+        (MAX_PAGE_OFFSET, 200),
+        (MAX_PAGE_OFFSET + 1, 422),
+        (2**63 - 1, 422),
+        (2**63, 422),
+    ],
+)
+def test_an_out_of_range_offset_is_refused_by_validation_on_every_paged_route(
+    admin_client, receipt_id, path, offset, expected
+):
+    """``?offset=2**63`` was an unhandled 500 on all three of these routes.
+
+    ``offset`` was declared ``Query(0, ge=0)`` with no ceiling, so ``2**63``
+    satisfied validation, reached SQLite and raised ``OverflowError`` -- which
+    is an ``ArithmeticError``, not a ``ValueError``, so none of
+    ``_install_error_handlers``' three handlers caught it and the body came
+    back as Starlette's plain ``Internal Server Error`` rather than this
+    service's ``{"error": {"message": ...}}``.
+
+    The bound makes an over-large offset behave exactly like ``offset=-1``
+    already did: refused by request validation, before any query runs. Out of
+    range is out of range in both directions, and neither direction reaches
+    the database.
+
+    ``MAX_PAGE_OFFSET`` and ``MAX_PAGE_OFFSET + 1`` are both here so the
+    assertion is a boundary rather than an anecdote; ``2**63 - 1`` is the
+    largest offset that used to answer 200 and now does not, which is the one
+    behaviour change a caller could notice.
+    """
+    url = path.format(receipt_id=receipt_id)
+
+    assert admin_client.get(url, params={"offset": offset}).status_code == expected
+
+
+@pytest.mark.parametrize("path", PAGINATED_PATHS)
+def test_no_offset_reaches_the_database_as_a_500(admin_client, receipt_id, path):
+    """The regression this closes, swept rather than sampled at one value.
+
+    **How the defect surfaces here is not a 500.** ``TestClient`` is built with
+    ``raise_server_exceptions=True``, so an unhandled ``OverflowError`` in the
+    route propagates into this test rather than being turned into a response --
+    measured: before the bound, this test failed with ``OverflowError: Python
+    int too large to convert to SQLite INTEGER``, not with a failed assertion.
+    Over a real ASGI server the same input answers 500 with Starlette's plain
+    ``Internal Server Error`` body. Either way the request must not reach
+    SQLite, which is what the sweep checks; the ``assert`` is the backstop for
+    a future handler that catches the overflow and returns 500 instead of
+    letting it escape.
+    """
+    url = path.format(receipt_id=receipt_id)
+    offsets = [0, 1, MAX_PAGE_OFFSET - 1, MAX_PAGE_OFFSET, MAX_PAGE_OFFSET + 1, 2**63 - 1, 2**63]
+
+    statuses = {
+        offset: admin_client.get(url, params={"offset": offset}).status_code
+        for offset in offsets
+    }
+
+    assert 500 not in statuses.values(), statuses

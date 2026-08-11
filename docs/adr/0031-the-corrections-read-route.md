@@ -383,11 +383,18 @@ sufficient for this scope.
   released can still write — and, per decision 3 above, can no longer read that
   they did.
 
-## An open defect: `offset` is declared with no upper bound
+## The `offset` ceiling: reported here, decided in ADR-0034
 
 The defect is **not** caused by this milestone's code, and was deliberately left
 unfixed under review standard 19 (state the bounded property, report further
-shapes rather than fixing them). It needs a user decision.
+shapes rather than fixing them). It needed a user decision.
+
+> **Closed 2026-08-11 by ADR-0034**, the shared page bound: all three routes
+> now declare their window through one `PageOffset`, and an over-large offset
+> is a 422 from request validation instead of an `OverflowError` in SQLite.
+> **The measurement below is left exactly as written** — it is closed to
+> `20d9bb9` and is still true of that commit (ADR-0032 §3). Read it as the
+> record of what was found, not as the current behaviour.
 
 **`?offset=9223372036854775808` is an unhandled 500 on every paginated route.**
 `offset` is declared `Query(0, ge=0)` with no upper bound, so `2**63` satisfies
@@ -429,7 +436,7 @@ one for the other two, so do not generalise across them.
 and the third inherited it from a plan that specified the parameter verbatim.
 Fixing it is a one-line `le=` on three routes, or a decision about a shared page
 bound; either is a change to shipped contracts and belongs to whoever takes that
-decision.
+decision. **Taken 2026-08-11: the shared page bound — ADR-0034.**
 
 ## References
 

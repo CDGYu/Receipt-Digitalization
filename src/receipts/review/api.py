@@ -110,6 +110,30 @@ ImageVariant = Literal["original", "processed"]
 #: database of five thousand receipts.
 _EXPORT_MAX_ROWS = 5000
 
+#: The shared page bound (ADR-0034). Every paginated route declares its window
+#: through ``PageLimit``/``PageOffset`` below rather than spelling out its own
+#: ``Query(...)``, so there is one ceiling to read and one to change.
+#:
+#: ``offset`` had **no** ceiling until 2026-08-11, which made
+#: ``?offset=9223372036854775808`` (``2**63``) an unhandled 500: it satisfied
+#: ``ge=0``, reached SQLite and raised ``OverflowError``, which is an
+#: ``ArithmeticError`` rather than a ``ValueError``, so it escaped both the
+#: status contract and the ``{"error": {"message": ...}}`` body contract.
+#:
+#: A million is a policy, not a representability limit -- anything under
+#: ``2**63`` would stop the overflow. Deep offsets are a sequential scan the
+#: database cannot index away, and every list route here has filters (status,
+#: merchant, date range, confidence) that answer the question a page-5000 seek
+#: is really asking. Raise this constant if a deployment ever needs more.
+MAX_PAGE_LIMIT = 200
+MAX_PAGE_OFFSET = 1_000_000
+
+#: Reusable annotated parameters. The defaults stay at each call site, which is
+#: what ``Annotated`` requires: a default inside ``Query()`` is an error when
+#: the ``Query`` is shared through a type alias.
+PageLimit = Annotated[int, Query(ge=1, le=MAX_PAGE_LIMIT)]
+PageOffset = Annotated[int, Query(ge=0, le=MAX_PAGE_OFFSET)]
+
 
 def _default_submit(job: ReceiptJob) -> Any:
     """Enqueue ``job`` on the real RQ queue backed by ``REDIS_URL``.
@@ -204,8 +228,8 @@ def _install_read_routes(app: FastAPI) -> None:
         date_from: date | None = None,
         date_to: date | None = None,
         min_confidence: Decimal | None = None,
-        limit: int = Query(50, ge=1, le=200),
-        offset: int = Query(0, ge=0),
+        limit: PageLimit = 50,
+        offset: PageOffset = 0,
     ) -> Any:
         """Fetches ``limit + 1`` rows and reports ``has_more`` from the extra
         one, rather than a ``COUNT(*)`` per page -- see the brief's ambiguity
@@ -243,8 +267,8 @@ def _install_read_routes(app: FastAPI) -> None:
         receipt_id: uuid.UUID,
         request: Request,
         user: Annotated[SessionUser, Depends(require_user)],
-        limit: int = Query(50, ge=1, le=200),
-        offset: int = Query(0, ge=0),
+        limit: PageLimit = 50,
+        offset: PageOffset = 0,
     ) -> Any:
         """One receipt's correction history, oldest first.
 
@@ -359,8 +383,8 @@ def _install_read_routes(app: FastAPI) -> None:
         request: Request,
         user: Annotated[SessionUser, Depends(require_user)],
         state: ReviewState | None = None,
-        limit: int = Query(50, ge=1, le=200),
-        offset: int = Query(0, ge=0),
+        limit: PageLimit = 50,
+        offset: PageOffset = 0,
     ) -> Any:
         """The review queue as rows, so an admin can find a task id (§14.9).
 
