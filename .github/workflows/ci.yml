@@ -53,20 +53,43 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
 
       # `dev` for pytest and ruff; `pipeline` and `api` because the suite
-      # `importorskip`s on them. Derived from the tests, not copied: the
-      # importorskip targets are fastapi, cv2, openpyxl, pypdfium2 and
-      # pillow_heif. Nothing under `tests/` hard-imports rq, redis or boto3, so
-      # `worker` and the provider extras are not needed here.
+      # `importorskip`s on them; `openai` because seven tests in
+      # `tests/test_client_factory.py` build a real `OpenAICompatClient` and
+      # **fail rather than skip** without the SDK -- which is how the first CI
+      # run found this, having been given only the importorskip targets.
+      #
+      # `anthropic` is deliberately NOT installed: the same module's docstring
+      # says that path "must fail loudly with a clear RuntimeError", and it can
+      # only do that while the SDK is absent. Nothing under `tests/`
+      # hard-imports rq, redis or boto3, so `worker` and `postgres` stay out.
       - name: Install the project and the extras the suite needs
-        run: pip install -e ".[dev,pipeline,api]"
+        run: pip install -e ".[dev,pipeline,api,openai]"
 
-      # **The false-green guard.** `pytest.importorskip` turns a missing extra
-      # into a silent skip, so an install that quietly dropped one would leave
-      # the suite green while covering less. This turns that into a failure, and
-      # it is a membership check rather than a count, so it does not rot as the
+      # **The dependency-assumption guard, in both directions.**
+      #
+      # Present: `pytest.importorskip` turns a missing extra into a silent skip,
+      # so an install that quietly dropped one would leave the suite green while
+      # covering less.
+      #
+      # Absent: if `anthropic` ever arrives -- directly, or pulled in by
+      # something else -- `test_client_factory`'s missing-SDK assertions stop
+      # testing what they claim to and nothing else would notice.
+      #
+      # Both are membership checks rather than counts, so they do not rot as the
       # suite grows (ADR-0032 section 3).
-      - name: Confirm the optional extras actually installed
-        run: python -c "import fastapi, cv2, openpyxl, pypdfium2, pillow_heif"
+      - name: Confirm the suite's dependency assumptions hold
+        run: |
+          python -c "import fastapi, cv2, openpyxl, pypdfium2, pillow_heif, openai"
+          python - <<'PY'
+          import importlib.util
+          import sys
+
+          if importlib.util.find_spec("anthropic") is not None:
+              sys.exit(
+                  "anthropic is installed, and tests/test_client_factory.py "
+                  "requires it ABSENT -- see that module's docstring."
+              )
+          PY
 
       - name: Install frontend dependencies
         run: npm ci

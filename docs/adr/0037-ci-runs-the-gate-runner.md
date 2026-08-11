@@ -138,6 +138,45 @@ filesystem.
 **The first red run is expected to be informative rather than alarming**, and
 should be read before anything is "fixed".
 
+### It was. Here is what it found
+
+The workflow was pushed on a branch before merging, precisely so the first run
+would happen somewhere it could not hurt. It went red, and the finding is worth
+more than the workflow.
+
+**The `image` job passed outright** — build, boot refusal, console script — so
+ADR-0036's artefact is now verified on Linux by something other than the machine
+that wrote it.
+
+**Both `gates` jobs failed at `verify.py`**, after setup, install, the extras
+guard and `npm ci` all passed. Reproduced locally in a `python:3.13-slim`
+container rather than read from a log: **7 failures in
+`tests/test_client_factory.py`**, every one
+`RuntimeError: pip install openai to use OpenAICompatClient`.
+
+**It was never a Linux problem.** Those tests build a real `OpenAICompatClient`
+and therefore need the `openai` SDK — and they do it **without**
+`importorskip`, so they *fail* rather than skip. The extras list here had been
+derived from the importorskip targets, which is exactly the set that cannot
+contain them. The guard could not have caught it: it was built for the silent
+skip, and this was a loud failure of a dependency nobody had written down.
+
+**The suite passes locally only because `openai` happens to be installed** on
+the development machine. That is the environment coupling ADR-0014 warns about,
+found the way ADR-0014 says these are found — by running somewhere else.
+
+And the coupling has **two** directions. The module's own docstring states both:
+
+> The `openai` family constructs a real `OpenAICompatClient` — the `openai` SDK
+> **is installed** … The `anthropic` SDK **is not installed**, so that path must
+> fail loudly with a clear `RuntimeError`.
+
+So CI installs `openai` and deliberately does not install `anthropic`, and the
+guard now asserts **both** — present *and* absent. If `anthropic` ever arrives,
+directly or pulled in by something else, those missing-SDK assertions quietly
+stop testing what they claim to, and nothing else in the repository would
+notice.
+
 ## Consequences
 
 - **ADR-0017's Context is now wrong** where it says the repository cannot use a
