@@ -311,8 +311,23 @@ def _add_users(sub: argparse._SubParsersAction) -> None:
     set_role_parser.add_argument("role", choices=sorted(ROLES))
 
 
+#: The largest value SQLite can store in an INTEGER column, and therefore the
+#: largest ``--limit`` that can reach a query. Past it the driver raises
+#: ``OverflowError: Python int too large to convert to SQLite INTEGER`` from
+#: inside SQLAlchemy, as an unhandled traceback rather than a usage error.
+#:
+#: **A representability bound, deliberately not a policy one.** ADR-0034 capped
+#: the HTTP routes' ``offset`` at a million because a deep offset is a
+#: sequential scan no index removes and those routes have filters that answer
+#: the same question better. Neither argument holds for a batch size:
+#: ``--limit 5000000`` is a legitimate instruction from an operator with that
+#: many pending receipts, so the only defensible ceiling is what the database
+#: can actually hold.
+_MAX_INT64 = 2**63 - 1
+
+
 def _positive_int(value: str) -> int:
-    """An ``argparse`` ``type=`` that only accepts an integer ``>= 1``.
+    """An ``argparse`` ``type=`` that only accepts an integer in ``1 .. 2**63-1``.
 
     ``--limit 0``, ``--limit -1`` and ``--workers 0`` all parse fine as plain
     integers but mean something silently wrong here: ``--limit 0`` reads as
@@ -326,10 +341,27 @@ def _positive_int(value: str) -> int:
     :class:`argparse.ArgumentTypeError` are both caught by argparse itself
     and turned into that same clean error, the same way ``type=uuid.UUID``
     already works for ``reprocess <id>``.
+
+    **The upper bound is why this is not just ``>= 1``.** ``--limit 2**63``
+    passed this check, reached ``query_receipts``, and raised ``OverflowError``
+    out of the SQLite driver -- the same shape ADR-0034 closed on the HTTP
+    routes, surviving here because the CLI has its own validator. See
+    :data:`_MAX_INT64` for why the ceiling is representability rather than
+    policy.
+
+    ``--workers`` shares this validator and does **not** need the ceiling:
+    measured, ``ThreadPoolExecutor(max_workers=2**63)`` constructs and runs a
+    task, because threads are spawned lazily. It is bounded because the two
+    flags share one rule, not because a second defect was found.
     """
     parsed = int(value)
     if parsed < 1:
         raise argparse.ArgumentTypeError(f"must be a positive integer, got {value!r}")
+    if parsed > _MAX_INT64:
+        raise argparse.ArgumentTypeError(
+            f"must be at most {_MAX_INT64} (the largest integer the database "
+            f"can store), got {value!r}"
+        )
     return parsed
 
 

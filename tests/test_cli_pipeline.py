@@ -997,3 +997,73 @@ def test_an_enqueue_failure_prints_a_redacted_reason(
     assert "************4444" in out
     assert "4111111111111111" not in out
     assert "5555555555554444" not in out
+
+
+# --------------------------------------------------------------------------- #
+# `_positive_int` -- the bound on `--limit` and `--workers`
+# --------------------------------------------------------------------------- #
+#
+# This validator shipped untested. Nothing under `tests/` referenced it under
+# any name, so neither the bound it already had nor the one it was missing was
+# pinned.
+
+
+@pytest.mark.parametrize("flag", ["--limit", "--workers"])
+@pytest.mark.parametrize("value", ["0", "-1"])
+def test_the_batch_flags_refuse_a_value_below_one(flag, value):
+    """The pre-existing lower bound, pinned for the first time.
+
+    ``--limit 0`` reads as "take none" and prints ``nothing pending`` against a
+    full backlog; a negative ``--limit`` means "no limit" on SQLite and errors
+    on Postgres; ``--workers 0`` is accepted by ``ThreadPoolExecutor`` as
+    "run sequentially" with nothing saying so. argparse turns the
+    ``ArgumentTypeError`` into exit 2.
+    """
+    with pytest.raises(SystemExit):
+        build_parser().parse_args(["process", flag, value])
+
+
+@pytest.mark.parametrize("flag", ["--limit", "--workers"])
+def test_the_batch_flags_accept_an_ordinary_value(flag):
+    """The control. Without it, a validator that refused everything would pass
+    every rejection case above and below."""
+    args = build_parser().parse_args(["process", flag, "50"])
+
+    assert getattr(args, flag.lstrip("-")) == 50
+
+
+@pytest.mark.parametrize("flag", ["--limit", "--workers"])
+def test_the_batch_flags_refuse_an_integer_too_large_for_the_database(flag):
+    """``--limit 9223372036854775808`` reached SQLite and raised OverflowError.
+
+    Measured before the bound existed: ``query_receipts(limit=2**63)`` raises
+    ``OverflowError: Python int too large to convert to SQLite INTEGER``,
+    straight out of the driver, as an unhandled traceback rather than a usage
+    error. ``2**63 - 1`` is fine, so the boundary is exactly the signed 64-bit
+    ceiling.
+
+    **This is a representability bound, not a policy one** -- deliberately
+    unlike ADR-0034's ``MAX_PAGE_OFFSET``. A page offset past a million is a
+    scan no index removes, but ``--limit 5000000`` is a legitimate batch size
+    for an operator with that many pending receipts, so the only defensible
+    ceiling here is what the database can actually store.
+
+    ``--workers`` is bounded by the same validator and **does not need it**:
+    measured, ``ThreadPoolExecutor(max_workers=2**63)`` constructs fine and
+    runs a task, because threads are spawned lazily. It is covered here because
+    the two flags share one validator, not because a second defect was found.
+    """
+    with pytest.raises(SystemExit):
+        build_parser().parse_args(["process", flag, str(2**63)])
+
+
+@pytest.mark.parametrize("flag", ["--limit", "--workers"])
+def test_the_batch_flags_accept_the_largest_value_the_database_can_store(flag):
+    """The boundary's other side: ``2**63 - 1`` must still parse.
+
+    This is what makes the case above a bound rather than an anecdote -- a
+    validator that rejected everything large would satisfy it otherwise.
+    """
+    args = build_parser().parse_args(["process", flag, str(2**63 - 1)])
+
+    assert getattr(args, flag.lstrip("-")) == 2**63 - 1
