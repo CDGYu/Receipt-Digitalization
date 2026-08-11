@@ -128,9 +128,10 @@ _EXPORT_MAX_ROWS = 5000
 MAX_PAGE_LIMIT = 200
 MAX_PAGE_OFFSET = 1_000_000
 
-#: Reusable annotated parameters. The defaults stay at each call site, which is
-#: what ``Annotated`` requires: a default inside ``Query()`` is an error when
-#: the ``Query`` is shared through a type alias.
+#: Reusable annotated parameters. The defaults stay at each call site because
+#: FastAPI refuses them here, at decoration time: ``Annotated[int, Query(50,
+#: ...)]`` raises ``AssertionError: `Query` default value cannot be set in
+#: `Annotated` ... Set the default value with `=` instead.``
 PageLimit = Annotated[int, Query(ge=1, le=MAX_PAGE_LIMIT)]
 PageOffset = Annotated[int, Query(ge=0, le=MAX_PAGE_OFFSET)]
 

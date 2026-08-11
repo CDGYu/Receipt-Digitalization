@@ -54,9 +54,11 @@ PageLimit = Annotated[int, Query(ge=1, le=MAX_PAGE_LIMIT)]
 PageOffset = Annotated[int, Query(ge=0, le=MAX_PAGE_OFFSET)]
 ```
 
-The defaults stay at each call site (`limit: PageLimit = 50`), which is what
-`Annotated` requires — a default inside a `Query()` shared through a type alias
-is an error.
+The defaults stay at each call site (`limit: PageLimit = 50`) because FastAPI
+refuses them in the alias, at decoration time. Measured 2026-08-11:
+`Annotated[int, Query(50, ge=1, le=200)]` raises ``AssertionError: `Query`
+default value cannot be set in `Annotated` for 'limit'. Set the default value
+with `=` instead.``
 
 They live in `api.py`, not `schemas.py`. `fastapi` is an optional extra
 (ADR-0014) and `schemas.py` is pure Pydantic with exactly one importer; moving
@@ -76,9 +78,16 @@ other rather than inventing a third behaviour.
 
 Any ceiling below `2**63` stops the overflow, so the value is not forced by
 correctness. It is chosen because deep offsets are a sequential scan no index
-removes, and every one of these routes has filters — status, merchant, date
-range, confidence, task state — that answer what a page-5000 seek is really
-asking.
+removes, and because on the two routes that list across the whole table there
+is a better tool for the job: `GET /receipts` takes `status`, `merchant_id`,
+`date_from`, `date_to` and `min_confidence`, and `GET /review/tasks` takes
+`state`.
+
+**`GET /receipts/{receipt_id}/corrections` takes no filter at all** — only the
+path's `receipt_id` — so that argument does not apply to it. It is bounded
+anyway, because *shared* is the property and one route opting out is how the
+triplication started. A million corrections against a single receipt is not a
+shape this schema produces.
 
 **It is a single constant.** Raising it is one edit; raising it *past the
 overflow* is not, because the tests carry literal `2**63 - 1` and `2**63` cases
