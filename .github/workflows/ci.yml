@@ -1,0 +1,111 @@
+# The gates, run on GitHub (ADR-0037).
+#
+# This workflow does not re-list the gates. `scripts/verify.py` IS the gate list
+# (ADR-0017), and a second copy here would be one more thing to keep in
+# agreement -- the previous version of this file listed pytest, ruff and mypy
+# and ran **none** of the three frontend gates, so a green run said less than it
+# looked like it said.
+#
+# `.github/workflows/` was gitignored from 2026-07-29 to 2026-08-11 at the
+# user's request. ADR-0017 argued that a tracked workflow which cannot execute
+# is worse than none, "because it reads as coverage". That is still true, and is
+# why this file only exists now that Actions is switched back on.
+
+name: gates
+
+# Every branch, not just `main`. Feature branches here are pushed and then
+# merged into `main` by local fast-forward, so a workflow scoped to `main`
+# would only ever report *after* the merge it was supposed to gate. There is
+# no `pull_request:` trigger because this repository does not use PRs -- adding
+# one would produce no runs and read as coverage that does not exist.
+on: [push]
+
+jobs:
+  gates:
+    name: gates (py${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      # Report both versions rather than stopping at the first failure: "3.11
+      # broke and 3.13 is unknown" is a worse answer than knowing both.
+      fail-fast: false
+      matrix:
+        # 3.11 is the floor `requires-python` declares; 3.13 is what ADR-0036's
+        # image ships. The development interpreter is 3.14.4 and is deliberately
+        # not here -- it is the one exercised locally every day.
+        python-version: ["3.11", "3.13"]
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      # Node 22 matches the Dockerfile's `node:22-slim` builder stage.
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      # `dev` for pytest and ruff; `pipeline` and `api` because the suite
+      # `importorskip`s on them. Derived from the tests, not copied: the
+      # importorskip targets are fastapi, cv2, openpyxl, pypdfium2 and
+      # pillow_heif. Nothing under `tests/` hard-imports rq, redis or boto3, so
+      # `worker` and the provider extras are not needed here.
+      - name: Install the project and the extras the suite needs
+        run: pip install -e ".[dev,pipeline,api]"
+
+      # **The false-green guard.** `pytest.importorskip` turns a missing extra
+      # into a silent skip, so an install that quietly dropped one would leave
+      # the suite green while covering less. This turns that into a failure, and
+      # it is a membership check rather than a count, so it does not rot as the
+      # suite grows (ADR-0032 section 3).
+      - name: Confirm the optional extras actually installed
+        run: python -c "import fastapi, cv2, openpyxl, pypdfium2, pillow_heif"
+
+      - name: Install frontend dependencies
+        run: npm ci
+        working-directory: frontend
+
+      # The whole gate list, in one command, in the order ADR-0017 fixes.
+      # Nothing is skipped silently: a Node gate with no npm prints
+      # `SKIPPED: npm not found` naming itself, and npm is installed above.
+      - name: Run the gates
+        run: python scripts/verify.py
+
+  image:
+    name: image
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      # The Dockerfile is an artefact nothing else exercises. Without this it is
+      # known-good only on the day somebody last built it by hand, and the first
+      # sign of a break would be a deployment.
+      - name: Build the image
+        run: docker build -t receipts:ci .
+
+      # Boot behaviour, not just build success. An unconfigured container must
+      # REFUSE and name what is missing (ADR-0035); an image that started here
+      # would mean the boot contract had been lost.
+      #
+      # The container exits non-zero by design, and that is fine: in `cmd |
+      # grep`, the pipeline's status is grep's, so the assertion is "the output
+      # contained this", not "the container succeeded". Both greps were run
+      # against the real image locally before this was written.
+      - name: The image refuses to start unconfigured
+        run: |
+          docker run --rm receipts:ci 2>&1 | grep -q "refuses to start"
+          docker run --rm receipts:ci 2>&1 | grep -q "DATABASE_URL is not set"
+
+      # The console script is installed system-wide in the image, which is the
+      # measurement that closed the section 1.6 question (ADR-0035's closing
+      # note). If it stops resolving, the packaging really did break this time.
+      - name: The console script resolves in the image
+        run: docker run --rm receipts:ci receipts --help

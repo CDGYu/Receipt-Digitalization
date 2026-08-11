@@ -96,6 +96,13 @@ it), the image builds the review UI itself so a stale `dist` cannot ship,
 migrations are a documented operator step rather than an entrypoint, and the
 whole thing was verified by building and running it. `docs/DEPLOYMENT.md` is the
 guide.
+**0037** is the one to read before touching CI: the workflow runs
+`scripts/verify.py` rather than re-listing gates (the previous one drifted three
+gates out of date and ran none of the frontend ones), it fires on every branch
+because merges here are local fast-forwards, and it guards against the false
+green that `pytest.importorskip` makes possible. It reverses the 2026-07-29
+decision to untrack `.github/workflows/` and corrects ADR-0017's Context, and it
+is candid that the workflow itself was unverified when written.
 
 Primary sources these build on: `RECEIPT_SYSTEM_SPEC.md` (build spec),
 `README.md` (§5 design decisions), `VLM_AND_DATA.md`, and the always-on

@@ -29,6 +29,21 @@ cannot use one: `.github/workflows/ci.yml` is gitignored and untracked at the
 user's request, and GitHub Actions does not run. A tracked workflow that cannot
 execute is a false signal — worse than none, because it reads as coverage.
 
+> **Correction (2026-08-11).** The paragraph above is no longer true of the
+> repository. The user reversed the request, `.github/workflows/` is tracked
+> again, and CI runs — **ADR-0037**.
+>
+> **The decision below is untouched, and CI strengthens rather than replaces
+> it.** The workflow does not list gates; it runs `scripts/verify.py`, so the
+> gate list still lives in exactly one place and CI is a consumer of it. The
+> previous workflow did the opposite — it re-listed pytest, ruff and mypy, ran
+> **none** of the three frontend gates, and drifted three gates out of date
+> while looking like coverage. That is this ADR's own argument, demonstrated.
+>
+> The last sentence above stands unchanged and is worth keeping: a tracked
+> workflow that cannot execute is worse than none. It is why ADR-0037 exists
+> only now that Actions is switched back on.
+
 ## Decision
 
 **There are two suites, and neither alone is a gate.**

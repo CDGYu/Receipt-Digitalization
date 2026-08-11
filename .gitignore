@@ -66,6 +66,10 @@ smoke_*.log
 smoke_*.err
 smoke_pid.txt
 
-# Local-only tooling config (Kiro steering/hooks/MCP, GitHub Actions)
+# Local-only tooling config (Kiro steering/hooks/MCP)
 .kiro/
-.github/workflows/
+# `.github/workflows/` was here from 2026-07-29 to 2026-08-11, untracked at the
+# user's request -- see ADR-0017's Context, which built its whole argument on
+# CI being unavailable. That decision was reversed on 2026-08-11 (ADR-0037), so
+# the directory is tracked again and the workflow is a real gate rather than a
+# false signal.
