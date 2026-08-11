@@ -20,7 +20,7 @@ it to "fix" a correct sentence in an Accepted ADR to match a wrong measurement.
 
 ---
 
-# NO BRANCH IN FLIGHT. `main` is MERGED, and AHEAD of `origin/main`.
+# NO BRANCH IN FLIGHT. `main` is MERGED AND PUSHED.
 
 **This header said "NO BRANCH IN FLIGHT" for three days while a branch existed**
 — true when written, rotted the moment the branch was cut. It has also carried
@@ -36,18 +36,18 @@ git ls-remote --heads origin main                 # authoritative on what is pus
 git log --oneline refs/remotes/origin/main..main  # what the pending push would send
 ```
 
-## `main` is merged, and has an UNPUSHED milestone on top.
+## `main` is merged and pushed — nothing is waiting to go.
 
 The corrections read route **merged by true fast-forward on 2026-08-10** —
 single parent, zero merge commits, `git branch --no-merged main` names nothing.
 It went in only after its whole-branch review, three fix rounds and a final
 scoped re-review returning **MERGE** and *"no sixteenth false claim"*.
 
-**Three pushes happened, each on a one-time authorization that the push
-consumed** — the corrections read route (2026-08-10), a docs fix wave
-(2026-08-11), and the shared page bound (2026-08-11). **The ASGI entry point
-(ADR-0035) merged after all three and is NOT pushed. The next `main` push needs
-its own fresh ask.** `feat/corrections-read-route`, `feat/shared-page-bound` and
+**Four pushes happened, each on a one-time authorization that the push
+consumed** — the corrections read route (2026-08-10), then a docs fix wave, the
+shared page bound, and the ASGI entry point (all 2026-08-11). **The next `main`
+push needs its own fresh ask.**
+`feat/corrections-read-route`, `feat/shared-page-bound` and
 `feat/asgi-entry-point` are all kept at their merge points and pushed. Run
 `git log --oneline refs/remotes/origin/main..main` rather than believing this
 sentence — empty means nothing is waiting to go, and the pair commit that
@@ -179,7 +179,7 @@ re-review. The close then ran in full, and §0c is its record.
 
 # THE WORK, IN ORDER
 
-## 0a. The ASGI entry point is DONE and MERGED. It is NOT pushed.
+## 0a. The ASGI entry point is DONE, MERGED and PUSHED.
 
     uvicorn receipts.asgi:app
 
@@ -823,11 +823,10 @@ right here (ADR-0032 §3).
 
 ## Today's goal
 
-**Nothing is in flight and nothing is half-done. One thing carries over:** the
-ASGI entry point merged on 2026-08-11 and **is not pushed**.
+**Nothing is in flight, nothing is half-done, and nothing carries over.** The
+ASGI entry point merged and was pushed on 2026-08-11.
 `git branch --no-merged main` should name nothing, and
-`git log --oneline refs/remotes/origin/main..main` should list its commits plus
-this pair. Pushing them needs a fresh ask.
+`git log --oneline refs/remotes/origin/main..main` should come out empty.
 
 **Run the freshness command in `docs/MEMORY.md`'s stamp before trusting any of
 this.** If it lists anything, the tree moved after this was written — re-run

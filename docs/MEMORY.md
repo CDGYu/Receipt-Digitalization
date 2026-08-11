@@ -8,7 +8,7 @@ verified rather than trusted — is **ADR-0019**, extended by **ADR-0021** (whos
 proved invisible to it).
 Last updated: **2026-08-11**, at the close of the session that built the ASGI
 entry point. **One position, because nothing is in
-flight: `main @ b2ba652`, NOT pushed.** A stamp cannot name the commit that
+flight: `main @ b2ba652`, PUSHED.** A stamp cannot name the commit that
 writes it, so the test is a command, not a commit and not a count:
 
 ```
@@ -42,11 +42,10 @@ bound's merge tip.)*
   for three days while one existed**: true when written on 2026-08-07, rotted
   the moment the corrections branch was cut, and corrected only when Task 4
   edited the file. **The answer is the command, never the sentence.**
-- **`main` is merged, and is AHEAD of `origin/main`.** Three pushes so far, each
-  on a one-time authorization the push consumed: the corrections read route
-  (2026-08-10), a docs fix wave (2026-08-11), and the shared page bound
-  (2026-08-11). **The ASGI entry point merged after all three and is NOT
-  pushed.** **The next `main` push needs its own fresh ask.** Run
+- **`main` is merged AND PUSHED.** Four pushes, each on a one-time
+  authorization the push consumed: the corrections read route (2026-08-10),
+  then a docs fix wave, the shared page bound, and the ASGI entry point (all
+  2026-08-11). **The next `main` push needs its own fresh ask.** Run
   `git log --oneline refs/remotes/origin/main..main` rather than believing this
   sentence — empty means nothing is waiting to go.
 - **The ASGI entry point is COMPLETE AND MERGED** (2026-08-11, true
