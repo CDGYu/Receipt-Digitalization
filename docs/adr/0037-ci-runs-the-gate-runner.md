@@ -110,12 +110,26 @@ succeeded".
 **Nothing is pushed to a registry.** No image-promotion decision is being taken
 here.
 
-## What is NOT verified
+## What was not verified when this was written — and then was
 
-**This workflow has never run.** GitHub Actions executes on GitHub, and it could
-not be executed from the machine that wrote it. That is a weaker position than
-ADR-0036, whose image was built and run before it was written, and it is stated
-here rather than left for a reader to discover.
+> **This section was written before the workflow had ever run, and was
+> falsified inside its own branch.** It said "this workflow has never run", the
+> branch was pushed, the workflow ran twice, and the second run was green on
+> every step of all three jobs. That is ADR-0032 §2 — a correctly-derived claim
+> rotted by the commit sequence that carried it — and the section is kept rather
+> than deleted because the *method* below is what a reader needs, and because
+> the gap between "checked locally" and "actually ran" is the whole point.
+>
+> **Verified on `3ad51c6`:** `setup-python` offers both 3.11 and 3.13 on
+> `ubuntu-latest`; `pip install -e ".[dev,pipeline,api,openai]"` resolves on
+> Linux for both; `npm ci` succeeds from the committed lockfile; and
+> `scripts/verify.py` passes on a Linux runner — the suite had only ever run on
+> Windows before this.
+
+**When written, this workflow had never run.** GitHub Actions executes on
+GitHub, and it could not be executed from the machine that wrote it. That was a
+weaker position than ADR-0036, whose image was built and run before it was
+written, and it was stated rather than left for a reader to discover.
 
 What *was* checked locally, and what it does and does not tell you:
 
@@ -128,12 +142,16 @@ What *was* checked locally, and what it does and does not tell you:
 | the extras guard | run, and run again with a bogus name | that step, both directions |
 | `python scripts/verify.py` | run many times on this machine | the command, not the runner |
 
-**Unverified until the first run:** that `actions/setup-python` offers 3.11 and
-3.13 on `ubuntu-latest`; that `pip install -e ".[dev,pipeline,api]"` resolves on
-Linux for both; that `npm ci` succeeds from the committed lockfile; and that the
-suite passes on a Linux runner at all — it has only ever been run on Windows
-here, and `tests/` contains path handling that has never met a case-sensitive
-filesystem.
+**What was unverified until the first run** — all of it now green on
+`3ad51c6`, and listed because the list is what the first run was *for*: that
+`actions/setup-python` offers 3.11 and 3.13 on `ubuntu-latest`; that the
+editable install resolves on Linux for both; that `npm ci` succeeds from the
+committed lockfile; and that the suite passes on a Linux runner at all — it had
+only ever been run on Windows here, against a filesystem that is not
+case-sensitive.
+
+One item on that list was wrong in a way worth keeping: the extras were
+*also* unverified, and nobody had thought to list them. That is what went red.
 
 **The first red run is expected to be informative rather than alarming**, and
 should be read before anything is "fixed".
