@@ -91,12 +91,18 @@ re-review. The close then ran in full, and §0c is its record.
    styling one records twenty-five plan defects and "THE CLOSE".
    **`.superpowers/` is gitignored — open ledgers by path; nothing in them is
    findable by searching the tracked tree.**
-3. **`docs/adr/README.md`, then the ADRs (0001–0035** — count the files rather
+3. **`docs/adr/README.md`, then the ADRs (0001–0036** — count the files rather
    than trusting that range**).** *This* file's range has tracked each ADR as it
    landed; it was **`docs/MEMORY.md`'s** copy that sat at `0001–0026` while four
    more ADRs shipped, and it was corrected on 2026-08-10. Derived per-commit
    with `git show <sha>:docs/NEXT_SESSION_PROMPT.md | grep -oE "0001.00[23][0-9]"`.
    Mandatory before touching the matching area:
+   - **0036** — one image, two commands. **Read before changing how the service
+     is packaged or run.** The image builds the review UI itself so a stale
+     `dist` cannot ship; migrations are a documented operator step, not an
+     entrypoint; `/app` holds only what the runtime reads, because a leftover
+     `config/` there shadows the installed package. `docs/DEPLOYMENT.md` is the
+     guide.
    - **0035** — the ASGI entry point. **Read before deploying the service or
      changing how it boots.** `uvicorn receipts.asgi:app`; importing the module
      builds nothing (a PEP-562 `__getattr__` resolves `app`); it refuses to
@@ -179,9 +185,13 @@ re-review. The close then ran in full, and §0c is its record.
 
 # THE WORK, IN ORDER
 
-## 0a. The ASGI entry point is DONE, MERGED and PUSHED.
+## 0a. The deployment story is DONE and MERGED — entry point AND container.
 
-    uvicorn receipts.asgi:app
+*(Two milestones, ADR-0035 and ADR-0036, landed the same day and kept in one
+section deliberately: splitting them would renumber §0b and §0c and age every
+citation of them, which has already happened twice today.)*
+
+    uvicorn receipts.asgi:app        # or: docker run ... receipts
 
 Brainstormed, designed, built and closed 2026-08-11 in one session, by one
 worker, with no subagents and **no plan document** — the repo's plans exist to
@@ -208,8 +218,40 @@ file at collection.
 name, before or after being moved out of `cli.py`. Moving untested code proves
 nothing; it is pinned now.
 
-**Deliberately not done, and none of it needs a ruling:** Dockerfile, compose
-service, deployment run-book, CI. `scripts/serve_review_e2e.py` is untouched.
+### The container — ADR-0036, merged the same day
+
+**One image, two commands.** `.[api,worker,postgres,pipeline]`; the API takes
+the default `CMD`, the worker overrides it with `python -m receipts.worker`.
+683 MB, Python 3.13.15. **`docs/DEPLOYMENT.md` is the guide.**
+
+**Two extras were measured, not guessed.** `worker` is *not* the worker's alone
+— the API reaches RQ to enqueue and ADR-0035 made `REDIS_URL` a boot
+requirement, so an API image without it starts cleanly and fails on every
+upload. `pipeline` genuinely is the worker's: the API path calls `ingest_bytes`,
+which imports only stdlib and `.storage`.
+
+**A Node stage builds the UI** and `.dockerignore` excludes `frontend/dist`, so
+a developer's stale build cannot ship — which `SERVE_SPA` could not have caught,
+because a stale `index.html` is still an `index.html`.
+
+**Migrations are an operator step**, not an entrypoint: an entrypoint would have
+replicas race and turn a bad migration into a crashloop.
+
+**`python -m receipts.worker` did not exist** until this milestone. `run_worker`
+was defined and nothing invoked it — the same gap the API had before ADR-0035,
+found by writing a compose `command:` that had to name something real.
+
+**What the review found, and it was mine:** the first image left `src/` and
+`config/` in `/app`, and because `config` is a top-level package and the
+container runs from `/app`, `import config` resolved to **`/app/config`, not
+site-packages**. The container was running a shadowed copy. `pip` now installs
+from `/build`, deleted in the same layer.
+
+**Everything above was verified by building and running the image**, not by
+reading it — including `alembic upgrade head`, re-tested after the restructure.
+
+**Still not done, and still needing no ruling: CI.**
+`scripts/serve_review_e2e.py` remains untouched by both milestones.
 
 ## 0b. The shared page bound is DONE, MERGED and PUSHED.
 
@@ -499,10 +541,10 @@ branch.
    docstring listed the choices a deployment must revisit, and ADR-0035 is
    where they were made.
 
-   **Scoped deliberately narrow, and these were left out:** no Dockerfile, no
-   compose service, no deployment run-book, no CI change, and no host / port /
-   worker policy — those belong to the `uvicorn` invocation. Any of them is a
-   clean next piece of work if you want it.
+   **Scoped deliberately narrow.** The Dockerfile, compose services and
+   run-book it left out landed the same day as **ADR-0036** (§0a); host, port
+   and worker count stay out of the app object by design — they belong to the
+   `uvicorn` invocation, and the image's `CMD` is one. **CI is what remains.**
 
    **§1.6 is still open beside it** — the declared `receipts` console script
    installs no wrapper. Same smell, different root cause; it may resolve to
@@ -835,12 +877,12 @@ this.** If it lists anything, the tree moved after this was written — re-run
 **Then** pick from §2.2 onward, or answer the questions above and let that pick
 for you.
 
-**§2.2, the ASGI entry point, is DONE** (ADR-0035) — it was the item that needed
-no ruling, and it is merged. **§1.6 still sits beside it:** the declared
-`receipts` console script installs no wrapper, so the packaging story is
-unfinished in a way that is measured rather than suspected. The deployment
-pieces ADR-0035 deliberately left out — Dockerfile, run-book, CI — also need no
-ruling.
+**§2.2, the ASGI entry point, is DONE** (ADR-0035), and so is the
+containerisation ADR-0035 left out (**ADR-0036**: Dockerfile, compose services,
+`docs/DEPLOYMENT.md`). **§1.6 still sits beside them:** the declared `receipts`
+console script installs no wrapper, so the packaging story is unfinished in a
+way that is measured rather than suspected. **CI is the remaining deployment
+piece** and needs no ruling either.
 
 **If you would rather clear the decision backlog first**, items 3–7 above are all
 consequences of the last milestone and all of them are one answer each: the theme

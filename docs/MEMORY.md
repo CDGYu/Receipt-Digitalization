@@ -6,13 +6,13 @@ continuity protocol itself — what lives where, and why this snapshot must be
 verified rather than trusted — is **ADR-0019**, extended by **ADR-0021** (whose
 2026-08-02 dated correction widened the freshness check after a docs-only task
 proved invisible to it).
-Last updated: **2026-08-11**, at the close of the session that built the ASGI
-entry point. **One position, because nothing is in
-flight: `main @ b2ba652`, PUSHED.** A stamp cannot name the commit that
+Last updated: **2026-08-11**, at the close of the session that containerised
+the service. **One position, because nothing is in
+flight: `main @ 8646980`, NOT pushed.** A stamp cannot name the commit that
 writes it, so the test is a command, not a commit and not a count:
 
 ```
-git log --oneline b2ba652..main -- src tests frontend docs ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
+git log --oneline 8646980..main -- src tests frontend docs ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
 git log --oneline refs/remotes/origin/main..main   # what a push would send
 git ls-remote --heads origin main                  # authoritative on what is pushed
 ```
@@ -20,7 +20,7 @@ git ls-remote --heads origin main                  # authoritative on what is pu
 **Empty means current.** Anything listed means the tree moved after this was
 written and you are reading something stale.
 
-**No characterisation of `b2ba652` is written here on purpose** — an earlier
+**No characterisation of `8646980` is written here on purpose** — an earlier
 stamp called its SHA "the last *code* commit", and the next commit falsified
 that by editing a docstring under `src/`. **ADR-0032 §2**: a claim can be
 derived correctly and rot inside the commit that carries it. The SHA plus the
@@ -30,10 +30,10 @@ command cannot rot; a sentence about what the SHA *is* can.
 check excludes exactly these two files and watches `docs` otherwise, so a commit
 bundling them with an ADR or an index row lists itself as stale. That happened
 three times in the session that wrote ADR-0033. Everything substantive was
-committed first; `b2ba652` is the last of it.
+committed first; `8646980` is the last of it.
 
-*(The previous stamp was 2026-08-11 at `main @ 744b533`, the shared page
-bound's merge tip.)*
+*(The previous stamp was 2026-08-11 at `main @ b2ba652`, the ASGI entry
+point's merge tip.)*
 
 ## Snapshot
 
@@ -42,12 +42,18 @@ bound's merge tip.)*
   for three days while one existed**: true when written on 2026-08-07, rotted
   the moment the corrections branch was cut, and corrected only when Task 4
   edited the file. **The answer is the command, never the sentence.**
-- **`main` is merged AND PUSHED.** Four pushes, each on a one-time
-  authorization the push consumed: the corrections read route (2026-08-10),
-  then a docs fix wave, the shared page bound, and the ASGI entry point (all
-  2026-08-11). **The next `main` push needs its own fresh ask.** Run
+- **`main` is merged, and is AHEAD of `origin/main`.** Four pushes so far, each
+  on a one-time authorization the push consumed: the corrections read route
+  (2026-08-10), then a docs fix wave, the shared page bound, and the ASGI entry
+  point (all 2026-08-11). **The containerisation merged after all four and is
+  NOT pushed.** **The next `main` push needs its own fresh ask.** Run
   `git log --oneline refs/remotes/origin/main..main` rather than believing this
   sentence — empty means nothing is waiting to go.
+- **The containerisation is COMPLETE AND MERGED** (2026-08-11, true
+  fast-forward `45660cf` → `8646980`, single parent, one branch commit).
+  `feat/containerisation` is kept at its merge point and pushed. One image runs
+  either half; **`docs/DEPLOYMENT.md`** is the guide and **ADR-0036** the
+  decision. See "The containerisation" below.
 - **The ASGI entry point is COMPLETE AND MERGED** (2026-08-11, true
   fast-forward `d5bf4c3` → `b2ba652`, single parent, three branch commits).
   `feat/asgi-entry-point` is kept at its merge point and pushed.
@@ -183,6 +189,57 @@ bound's merge tip.)*
 - **The repo is PUBLIC.** Verified 2026-07-31 via the GitHub API. See
   "Environment / provider" for what that exposes.
 
+## The containerisation — COMPLETE AND MERGED (2026-08-11)
+
+Guide: **`docs/DEPLOYMENT.md`**. Decision: **ADR-0036**. No design doc, no plan,
+no ledger — the questions were settled in three multiple-choice answers and the
+work followed.
+
+**One image, two commands.** `.[api,worker,postgres,pipeline]`; the API takes
+the default `CMD`, the worker overrides it with `python -m receipts.worker`.
+**683 MB, Python 3.13.15** — note that the dev interpreter is 3.14.4, so the
+image runs a different minor than the suite does.
+
+**Two extras were measured, not assumed.** `worker` is **not** the worker's
+alone: the API reaches RQ to *enqueue*, and ADR-0035 made `REDIS_URL` a boot
+requirement, so an API image without it starts cleanly and fails on every
+upload. `pipeline` genuinely is the worker's — the API path calls
+`ingest_bytes`, which imports only stdlib and `.storage`, and `pypdfium2` is
+lazy inside `expand_pdf`, which no API route calls.
+
+**A Node stage builds the UI**, and `.dockerignore` excludes `frontend/dist` so
+a developer's stale build cannot ship. `SERVE_SPA` could not have caught that: a
+stale `index.html` is still an `index.html`.
+
+**Migrations are a documented operator step**, not an entrypoint — an entrypoint
+would have every replica race on startup and turn a bad migration into a
+crashloop rather than one failed command.
+
+**`python -m receipts.worker` did not exist.** `run_worker` was defined and
+nothing invoked it, the same gap the API had before ADR-0035. Found by writing a
+compose `command:` that had to name something real — the second time in two
+milestones that documenting a thing revealed the thing was missing.
+
+**What the review found, and it was this session's own:** the first image left
+`src/`, `config/`, `build/` and `receipts.egg-info/` in `/app`. Because `config`
+is a top-level package and the container runs from `/app`, **`import config`
+resolved to `/app/config`, not site-packages** — the container ran a shadowed
+copy. Identical to the installed one, and one edit from not being. `pip` now
+installs from `/build`, deleted in the same layer; `/app` holds only `alembic/`,
+`alembic.ini` and `frontend/dist`, and the migration path was **re-tested** after
+that change rather than assumed.
+
+**Verified by building and running the image**, not by reading it: build
+succeeds with every dependency as a wheel; an unconfigured container refuses
+naming `DATABASE_URL` and `REDIS_URL`; `/health` 200; `/app/` serves the
+Node-built UI; `/receipts` 401; the worker fails *connecting* to Redis rather
+than importing; `alembic upgrade head` applies both revisions; compose validates
+with five services and refuses without `SESSION_SECRET`; no `.env` and no Node
+reach the image.
+
+**Still out of scope: CI**, a registry or promotion policy, orchestration
+manifests, secrets management, backup/restore, and observability beyond stdout.
+
 ## The ASGI entry point — COMPLETE AND MERGED (2026-08-11)
 
 Design: `docs/superpowers/specs/2026-08-11-asgi-entry-point-design.md`.
@@ -231,9 +288,11 @@ point could share it — **had never been tested under either name**. Moving
 untested code proves nothing about the move. Three cases now pin it, and the
 s3-without-a-bucket refusal is proven red.
 
-**Scoped out deliberately:** no Dockerfile, no compose service, no run-book, no
-CI change, no host/port/worker policy. `scripts/serve_review_e2e.py` is
-untouched.
+**Scoped out deliberately, and correct at the time:** no Dockerfile, no compose
+service, no run-book, no CI change, no host/port/worker policy.
+**ADR-0036 has since done the first three** (see "The containerisation" above);
+host/port/worker stay out of the app object by design, and **CI is still open**.
+`scripts/serve_review_e2e.py` is untouched by both.
 
 ## The shared page bound — COMPLETE AND MERGED (2026-08-11)
 
@@ -1077,8 +1136,15 @@ API path moves.
   `release_task` and `enqueue_review`'s reopen branch **clear** `assigned_to` —
   a reviewer whose task was released or reopened loses access to corrections
   they made themselves.
-- **The ASGI entry point (2026-08-11, ADR-0035):** scope is **the entry point
-  and its ADR only** — no Dockerfile, no run-book, no CI. It **refuses to boot**
+- **The containerisation (2026-08-11, ADR-0036):** **one image, two commands**,
+  not two images; the image **builds the review UI itself** rather than trusting
+  a `dist` in the build context; **migrations are an operator step**, not an
+  entrypoint. Scope was the Dockerfile, compose services and
+  `docs/DEPLOYMENT.md` — **CI was left out and still is.**
+- **The ASGI entry point (2026-08-11, ADR-0035):** scope was **the entry point
+  and its ADR only** — no Dockerfile, no run-book, no CI, all of which were
+  correct at the time and the first two of which ADR-0036 has since done. It
+  **refuses to boot**
   on all four of: `DATABASE_URL` unset, `SESSION_COOKIE_SECURE=false`,
   `REDIS_URL` unset, and `SERVE_SPA=true` with no built `index.html`. The app is
   exposed as a **lazy module attribute**, not an eager one, so importing builds
@@ -1792,8 +1858,8 @@ with an entry point gets run from outside the repository.
 - `docs/NEXT_SESSION_PROMPT.md` — the ordered task list and reading order.
 - `IMPLEMENTATION_PLAN.md` · `README.md` (§5 design decisions) · `VLM_AND_DATA.md`
 - **`docs/KNOWN_ISSUES.md`** — ISSUE-001 with its diagnosis and resume steps.
-- **`docs/adr/` — 0001–0035** (re-derived at the merge:
-  `ls docs/adr/*.md` minus `README.md` counts **35**, and the four-digit
+- **`docs/adr/` — 0001–0036** (re-derived at the merge:
+  `ls docs/adr/*.md` minus `README.md` counts **36**, and the four-digit
   prefixes are contiguous from
   0001); see `docs/adr/README.md`. **This range read `0001–0026` until
   2026-08-10** — it was written at ADR-0026 and never touched again while 0027,
