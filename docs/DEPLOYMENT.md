@@ -176,7 +176,9 @@ manifests, no secret manager, no backup or restore procedure, and no
 observability beyond the logs uvicorn writes to stdout. Each is a real decision
 and none is blocked by anything here.
 
-The `receipts` console script is also still unresolved: `pyproject.toml`
-declares it and the distribution records the entry point, but no wrapper is
-generated in some environments. Use `python -m receipts.cli` until that is
-settled.
+None of this affects the `receipts` console script, which **works**: the wrapper
+is generated into the scripts directory of whichever install the package went
+into, and on a `--user` install that is not the directory a system-wide `PATH`
+points at (ADR-0014's consequences, and ADR-0035's closing note). Inside the
+image this does not arise — the package is installed system-wide, so `receipts`
+is on `PATH` as a command.

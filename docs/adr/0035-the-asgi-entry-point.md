@@ -202,11 +202,32 @@ installed package:
 Containerisation, a deployment run-book, or CI. Each was offered and deliberately
 left out of scope; none is blocked by anything here.
 
-Nor the `receipts` console-script gap — `pyproject.toml` declares
-`[project.scripts] receipts = "receipts.cli:_console_main"` and the distribution
-records the entry point, but no wrapper exists in `C:\Python314\Scripts`. Same
-smell, different root cause, and it may resolve to "reinstall" rather than to
-code. Use `python -m receipts.cli` until it is settled.
+Nor the `receipts` console-script gap, which this ADR called unresolved.
+
+> **Resolved 2026-08-11, and it was never a packaging defect.** The wrapper
+> exists — `receipts.exe`, in the **user** scripts directory, because the
+> package is installed `--user` and editable. Measured:
+>
+> | directory | has `receipts.exe` | on `PATH` |
+> |---|---|---|
+> | `…\AppData\Roaming\Python\Python314\Scripts` | **yes** | **no** |
+> | `C:\Python314\Scripts` | no | yes |
+>
+> Invoked by full path it prints its usage and exits 0. The original finding —
+> "no wrapper exists in `C:\Python314\Scripts`" — was **true of the directory it
+> checked** and the inference drawn from it was wrong.
+>
+> **The container corroborates it independently.** ADR-0036's image installs
+> the package system-wide, and there `receipts` is on `PATH` as a command:
+> `/usr/local/bin/receipts`, `--help` exits 0. Same `pyproject.toml`, same
+> entry point, different install location — which is the whole story.
+>
+> **ADR-0014 already said so**, in its consequences: *"The console script also
+> needs the interpreter's `Scripts`/`bin` directory on `PATH`, which is not true
+> on the current development machine."* A later session re-derived a worse
+> explanation for a condition an Accepted ADR had already named. `python -m
+> receipts.cli` remains the invocation that always works, and now for a reason
+> rather than as a workaround.
 
 ## References
 
