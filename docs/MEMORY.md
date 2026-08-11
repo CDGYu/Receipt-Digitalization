@@ -1188,7 +1188,11 @@ and has moved to "Decisions the user has made". Six items remain; a reference to
 2. **R060/R061 OCR grounding (P2.T2)** — model returns the text it read / a
    cheap OCR pass / drop the rules. Also gates bbox highlighting.
 3. **Whether GitHub Actions should run again.** If yes, the workflow should
-   call `scripts/verify.py` rather than re-listing the gates.
+   call `scripts/verify.py` rather than re-listing the gates. **`.github/
+   workflows/` is gitignored** (`.gitignore:71`), so this starts with a
+   deliberate un-ignore. ADR-0036 left CI out of the containerisation on
+   purpose, and it is the one remaining deployment piece that is **not**
+   ruling-free.
 4. **Whether to close the PAN grouping residual**, and by which priced route
    (shape table with per-entry two-instance gate, or candidate-then-validate
    scan loop).

@@ -250,7 +250,10 @@ from `/build`, deleted in the same layer.
 **Everything above was verified by building and running the image**, not by
 reading it — including `alembic upgrade head`, re-tested after the restructure.
 
-**Still not done, and still needing no ruling: CI.**
+**Still not done: CI — and it DOES need a ruling**, unlike the rest of the
+deployment work. See "Blocked on me": the question is *"GitHub Actions
+**again**?"*, and `.github/workflows/` is **gitignored**, so a workflow cannot
+even be committed without un-ignoring it first.
 `scripts/serve_review_e2e.py` remains untouched by both milestones.
 
 ## 0b. The shared page bound is DONE, MERGED and PUSHED.
@@ -544,7 +547,8 @@ branch.
    **Scoped deliberately narrow.** The Dockerfile, compose services and
    run-book it left out landed the same day as **ADR-0036** (§0a); host, port
    and worker count stay out of the app object by design — they belong to the
-   `uvicorn` invocation, and the image's `CMD` is one. **CI is what remains.**
+   `uvicorn` invocation, and the image's `CMD` is one. **CI is what remains,
+   and it needs your ruling** — see "Blocked on me" item 9.
 
    **§1.6 is still open beside it** — the declared `receipts` console script
    installs no wrapper. Same smell, different root cause; it may resolve to
@@ -853,7 +857,15 @@ right here (ADR-0032 §3).
 7. **Do the public golden labels need scrubbing?** (Real third-party names,
    TINs, addresses — also the values the PAN silent-case tests pin.)
 8. **R060/R061 grounding (P2.T2)** — also gates bbox highlighting.
-9. **GitHub Actions again?** If yes, the workflow calls `scripts/verify.py`.
+9. **GitHub Actions again?** If yes, the workflow calls `scripts/verify.py`
+   rather than re-listing the gates. **Two things a session picking this up
+   should know before starting:** `.github/workflows/` is **gitignored**
+   (`.gitignore:71`), so the first commit has to un-ignore it — a deliberate
+   change, not a side effect; and the word *again* is load-bearing, so whatever
+   made it stop the first time is worth recovering before it is switched back
+   on. ADR-0036 left CI out of the containerisation on purpose. **This is the
+   one remaining deployment piece, and unlike the others it is not
+   ruling-free** — a session claimed otherwise on 2026-08-11 and was wrong.
 10. **Close the PAN grouping residual?** Which priced route?
 11. **Narrow the `{1,2}` separator** now that its surface is measured?
 12. **Bound the CLI's `--limit`?** Found by ADR-0034's review and reported
@@ -882,7 +894,8 @@ containerisation ADR-0035 left out (**ADR-0036**: Dockerfile, compose services,
 `docs/DEPLOYMENT.md`). **§1.6 still sits beside them:** the declared `receipts`
 console script installs no wrapper, so the packaging story is unfinished in a
 way that is measured rather than suspected. **CI is the remaining deployment
-piece** and needs no ruling either.
+piece and it is NOT ruling-free** — it is "Blocked on me" item 9, and
+`.github/workflows/` is gitignored.
 
 **If you would rather clear the decision backlog first**, items 3–7 above are all
 consequences of the last milestone and all of them are one answer each: the theme
