@@ -49,9 +49,11 @@ shared page bound, the ASGI entry point, the containerisation, CI plus the
 P8.T3 eval fix, the ISSUE-001 readiness record plus the backlog
 recommendations, and the CLI `--limit` bound (all 2026-08-11). **The next
 `main` push needs its own fresh ask.**
-**All seven `feat/*` branches** are kept at their merge points and pushed; no
-count is written down beyond that, because the list rotted twice today —
-`git branch -r --merged main` is the answer. Run
+**Every merged `feat/*` branch is kept at its merge point and pushed.** No
+count and no list: the list rotted twice on 2026-08-11, and the commit that
+replaced it with "no count is written down" wrote **"all seven"** in the same
+sentence — the real figure is **21**. `git branch -r --merged main` is the
+answer, and it cannot go stale. Run
 `git log --oneline refs/remotes/origin/main..main` rather than believing this
 sentence — empty means nothing is waiting to go, and the pair commit that
 writes this necessarily lands after any push it could record.
