@@ -20,7 +20,7 @@ it to "fix" a correct sentence in an Accepted ADR to match a wrong measurement.
 
 ---
 
-# NO BRANCH IN FLIGHT. `main` is MERGED AND PUSHED.
+# NO BRANCH IN FLIGHT. `main` is MERGED, and AHEAD of `origin/main`.
 
 **This header said "NO BRANCH IN FLIGHT" for three days while a branch existed**
 — true when written, rotted the moment the branch was cut. It has also carried
@@ -36,7 +36,7 @@ git ls-remote --heads origin main                 # authoritative on what is pus
 git log --oneline refs/remotes/origin/main..main  # what the pending push would send
 ```
 
-## `main` is merged and pushed — nothing is waiting to go.
+## `main` is merged, and has an UNPUSHED milestone on top.
 
 The corrections read route **merged by true fast-forward on 2026-08-10** —
 single parent, zero merge commits, `git branch --no-merged main` names nothing.
@@ -45,9 +45,10 @@ scoped re-review returning **MERGE** and *"no sixteenth false claim"*.
 
 **Three pushes happened, each on a one-time authorization that the push
 consumed** — the corrections read route (2026-08-10), a docs fix wave
-(2026-08-11), and the shared page bound (2026-08-11). **The next `main` push
-needs its own fresh ask.** Both `feat/corrections-read-route` and
-`feat/shared-page-bound` are kept at their merge points and pushed. Run
+(2026-08-11), and the shared page bound (2026-08-11). **The ASGI entry point
+(ADR-0035) merged after all three and is NOT pushed. The next `main` push needs
+its own fresh ask.** `feat/corrections-read-route`, `feat/shared-page-bound` and
+`feat/asgi-entry-point` are all kept at their merge points and pushed. Run
 `git log --oneline refs/remotes/origin/main..main` rather than believing this
 sentence — empty means nothing is waiting to go, and the pair commit that
 writes this necessarily lands after any push it could record.
@@ -74,7 +75,7 @@ standard 17), both ADRs and their index rows in place, and the outside-repo
 import check green from `C:\Users`.
 
 **All four tasks are complete**, each with a task review and a scoped
-re-review. The close then ran in full, and §0b is its record.
+re-review. The close then ran in full, and §0c is its record.
 
 ---
 
@@ -90,12 +91,19 @@ re-review. The close then ran in full, and §0b is its record.
    styling one records twenty-five plan defects and "THE CLOSE".
    **`.superpowers/` is gitignored — open ledgers by path; nothing in them is
    findable by searching the tracked tree.**
-3. **`docs/adr/README.md`, then the ADRs (0001–0034** — count the files rather
+3. **`docs/adr/README.md`, then the ADRs (0001–0035** — count the files rather
    than trusting that range**).** *This* file's range has tracked each ADR as it
    landed; it was **`docs/MEMORY.md`'s** copy that sat at `0001–0026` while four
    more ADRs shipped, and it was corrected on 2026-08-10. Derived per-commit
    with `git show <sha>:docs/NEXT_SESSION_PROMPT.md | grep -oE "0001.00[23][0-9]"`.
    Mandatory before touching the matching area:
+   - **0035** — the ASGI entry point. **Read before deploying the service or
+     changing how it boots.** `uvicorn receipts.asgi:app`; importing the module
+     builds nothing (a PEP-562 `__getattr__` resolves `app`); it refuses to
+     start on four silent misconfigurations, chief among them an unset
+     `DATABASE_URL`, which would otherwise serve production off
+     `sqlite:///receipts.db`. Also records the two typed escape hatches and why
+     `make_storage` moved out of `cli.py`.
    - **0034** — the shared page bound. **Read before adding a paginated route
      or changing a page window.** All three declare `limit`/`offset` through
      one `PageLimit`/`PageOffset`; an out-of-range offset is a 422 from
@@ -171,7 +179,39 @@ re-review. The close then ran in full, and §0b is its record.
 
 # THE WORK, IN ORDER
 
-## 0a. The shared page bound is DONE, MERGED and PUSHED.
+## 0a. The ASGI entry point is DONE and MERGED. It is NOT pushed.
+
+    uvicorn receipts.asgi:app
+
+Brainstormed, designed, built and closed 2026-08-11 in one session, by one
+worker, with no subagents and **no plan document** — the repo's plans exist to
+brief fresh implementers, and there were none. True fast-forward
+`d5bf4c3` → `b2ba652`, single parent, three branch commits. Five gates PASS on
+`main`, controller-run. pytest **1025 → 1040**. Design:
+`docs/superpowers/specs/2026-08-11-asgi-entry-point-design.md`. Decision:
+**ADR-0035**.
+
+**Why it refuses rather than constructs.** `make_engine` resolves
+`url or Settings().database_url or DEFAULT_URL`, and `DEFAULT_URL` is
+`sqlite:///receipts.db` — so the obvious entry point serves production off a
+local file when `DATABASE_URL` is unset, silently. Four refusals, collected and
+raised once: `DATABASE_URL` unset, `SESSION_COOKIE_SECURE=false`, `REDIS_URL`
+unset, and `SERVE_SPA=true` with no `index.html`.
+
+**Two traps worth knowing before you touch it.** Importing the module builds
+nothing — `app` comes from a PEP-562 `__getattr__` — and `app` is deliberately
+**absent from `__all__`**, because listing it would make a star-import build the
+application. An eager module-level `app` was measured: it fails the whole test
+file at collection.
+
+**The review found that `make_storage` had never been tested** under either
+name, before or after being moved out of `cli.py`. Moving untested code proves
+nothing; it is pinned now.
+
+**Deliberately not done, and none of it needs a ruling:** Dockerfile, compose
+service, deployment run-book, CI. `scripts/serve_review_e2e.py` is untouched.
+
+## 0b. The shared page bound is DONE, MERGED and PUSHED.
 
 Built and closed 2026-08-11 from your ruling — *"fix the offset 500 with a
 shared page bound"* — with no design doc, no plan and no ledger: one defect,
@@ -193,7 +233,7 @@ ordering, so a reviewer holding nothing gets 422 rather than 403 at a bad offset
 fixed (ADR-0032 §6 again). **One thing was reported and not fixed:** the CLI's
 `--limit` has the same unbounded shape — see "Blocked on me".
 
-## 0b. The corrections read route is DONE, MERGED and PUSHED. Nothing carries over.
+## 0c. The corrections read route is DONE, MERGED and PUSHED. Nothing carries over.
 
 **There is no outstanding action from the last milestone.** It was merged and
 `main` pushed on 2026-08-10, on an authorization **that push consumed** — the
@@ -437,7 +477,7 @@ branch.
    `GET /receipts/{receipt_id}/corrections` ships with `list_corrections`,
    `correction_summary`, and a `_PageResponse` base shared by all three page
    envelopes. Four tasks, all complete and reviewed; the close ran in full and
-   §0b is its record. Read
+   §0c is its record. Read
    `docs/superpowers/plans/2026-08-10-corrections-read-route.md`'s **"Dated
    defect log"** first — six plan defects, two of them reproduced rather than
    quoted.
@@ -452,11 +492,21 @@ branch.
    together whenever that line is next edited. **The offset defect it also
    deferred is closed — ADR-0034.**
 
-2. **An ASGI entry point / deployment story.** `create_app` is a factory nothing
-   under `src/` calls. `scripts/serve_review_e2e.py` is deliberately e2e-scoped
-   — inheriting a deployment policy from an e2e launcher is the mistake to
-   avoid. **The only item here that can start with no ruling** — and §1.6 is
-   adjacent to it.
+2. ~~**An ASGI entry point / deployment story.**~~ **DONE, merged 2026-08-11 —
+   ADR-0035.** `uvicorn receipts.asgi:app`. ~~`create_app` is a factory nothing
+   under `src/` calls~~ — false on `main` now: `receipts/asgi.py` calls it.
+   `scripts/serve_review_e2e.py` is **unchanged** and stays e2e-scoped; its
+   docstring listed the choices a deployment must revisit, and ADR-0035 is
+   where they were made.
+
+   **Scoped deliberately narrow, and these were left out:** no Dockerfile, no
+   compose service, no deployment run-book, no CI change, and no host / port /
+   worker policy — those belong to the `uvicorn` invocation. Any of them is a
+   clean next piece of work if you want it.
+
+   **§1.6 is still open beside it** — the declared `receipts` console script
+   installs no wrapper. Same smell, different root cause; it may resolve to
+   "reinstall" rather than to code.
 
 ## 3. Phase 6 — merchants & few-shot (P6.T1)
 
@@ -773,22 +823,25 @@ right here (ADR-0032 §3).
 
 ## Today's goal
 
-**Nothing is in flight, nothing is half-done, and nothing carries over.** The
-shared page bound merged and was pushed on 2026-08-11.
+**Nothing is in flight and nothing is half-done. One thing carries over:** the
+ASGI entry point merged on 2026-08-11 and **is not pushed**.
 `git branch --no-merged main` should name nothing, and
-`git log --oneline refs/remotes/origin/main..main` should come out empty.
+`git log --oneline refs/remotes/origin/main..main` should list its commits plus
+this pair. Pushing them needs a fresh ask.
 
 **Run the freshness command in `docs/MEMORY.md`'s stamp before trusting any of
 this.** If it lists anything, the tree moved after this was written — re-run
-`python scripts/verify.py` and re-read §0a and §0b before acting.
+`python scripts/verify.py` and re-read §0a, §0b and §0c before acting.
 
 **Then** pick from §2.2 onward, or answer the questions above and let that pick
 for you.
 
-**The one item that needs no ruling from anybody** is §2.2, the ASGI entry point
-and deployment story — and §1.6 sits right beside it: the declared `receipts`
-console script is not installed, so the packaging story is unfinished in a way
-that is now measured rather than suspected.
+**§2.2, the ASGI entry point, is DONE** (ADR-0035) — it was the item that needed
+no ruling, and it is merged. **§1.6 still sits beside it:** the declared
+`receipts` console script installs no wrapper, so the packaging story is
+unfinished in a way that is measured rather than suspected. The deployment
+pieces ADR-0035 deliberately left out — Dockerfile, run-book, CI — also need no
+ruling.
 
 **If you would rather clear the decision backlog first**, items 3–7 above are all
 consequences of the last milestone and all of them are one answer each: the theme

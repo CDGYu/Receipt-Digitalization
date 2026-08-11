@@ -6,13 +6,13 @@ continuity protocol itself — what lives where, and why this snapshot must be
 verified rather than trusted — is **ADR-0019**, extended by **ADR-0021** (whose
 2026-08-02 dated correction widened the freshness check after a docs-only task
 proved invisible to it).
-Last updated: **2026-08-11**, at the close of the session that fixed the
-`offset` 500 with the shared page bound. **One position, because nothing is in
-flight: `main @ 744b533`, PUSHED.** A stamp cannot name the commit that
+Last updated: **2026-08-11**, at the close of the session that built the ASGI
+entry point. **One position, because nothing is in
+flight: `main @ b2ba652`, NOT pushed.** A stamp cannot name the commit that
 writes it, so the test is a command, not a commit and not a count:
 
 ```
-git log --oneline 744b533..main -- src tests frontend docs ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
+git log --oneline b2ba652..main -- src tests frontend docs ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
 git log --oneline refs/remotes/origin/main..main   # what a push would send
 git ls-remote --heads origin main                  # authoritative on what is pushed
 ```
@@ -20,7 +20,7 @@ git ls-remote --heads origin main                  # authoritative on what is pu
 **Empty means current.** Anything listed means the tree moved after this was
 written and you are reading something stale.
 
-**No characterisation of `744b533` is written here on purpose** — an earlier
+**No characterisation of `b2ba652` is written here on purpose** — an earlier
 stamp called its SHA "the last *code* commit", and the next commit falsified
 that by editing a docstring under `src/`. **ADR-0032 §2**: a claim can be
 derived correctly and rot inside the commit that carries it. The SHA plus the
@@ -30,10 +30,10 @@ command cannot rot; a sentence about what the SHA *is* can.
 check excludes exactly these two files and watches `docs` otherwise, so a commit
 bundling them with an ADR or an index row lists itself as stale. That happened
 three times in the session that wrote ADR-0033. Everything substantive was
-committed first; `744b533` is the last of it.
+committed first; `b2ba652` is the last of it.
 
-*(The previous stamp was 2026-08-11 at `main @ b899d7d`, earlier in this same
-session, before the shared page bound was built.)*
+*(The previous stamp was 2026-08-11 at `main @ 744b533`, the shared page
+bound's merge tip.)*
 
 ## Snapshot
 
@@ -42,12 +42,18 @@ session, before the shared page bound was built.)*
   for three days while one existed**: true when written on 2026-08-07, rotted
   the moment the corrections branch was cut, and corrected only when Task 4
   edited the file. **The answer is the command, never the sentence.**
-- **`main` is merged AND PUSHED.** Three pushes, each on a one-time
-  authorization that the push consumed: the corrections read route
+- **`main` is merged, and is AHEAD of `origin/main`.** Three pushes so far, each
+  on a one-time authorization the push consumed: the corrections read route
   (2026-08-10), a docs fix wave (2026-08-11), and the shared page bound
-  (2026-08-11). **The next `main` push needs its own fresh ask.** Run
+  (2026-08-11). **The ASGI entry point merged after all three and is NOT
+  pushed.** **The next `main` push needs its own fresh ask.** Run
   `git log --oneline refs/remotes/origin/main..main` rather than believing this
   sentence — empty means nothing is waiting to go.
+- **The ASGI entry point is COMPLETE AND MERGED** (2026-08-11, true
+  fast-forward `d5bf4c3` → `b2ba652`, single parent, three branch commits).
+  `feat/asgi-entry-point` is kept at its merge point and pushed.
+  **`uvicorn receipts.asgi:app`** is now the supported way to serve the
+  service. **ADR-0035** records the decision. See "The ASGI entry point" below.
 - **The shared page bound is COMPLETE AND MERGED** (2026-08-11, true
   fast-forward `0851c55` → `744b533`, single parent, two branch commits).
   `feat/shared-page-bound` is kept at its merge point and pushed. It closed the
@@ -156,9 +162,9 @@ session, before the shared page bound was built.)*
 - **Phases 0–5 complete, plus PAN hardening, PAN grouping, the currency
   bound, failure-egress redaction, review-UI error recovery, the admin
   release, and the admin UI's backend routes.** Phase 3 is complete except
-  **P3.T6 calibration** (blocked on ISSUE-001). Of Phase 5's two named
-  follow-ups, the `corrections` read route **merged 2026-08-10** and a real
-  ASGI entry point / deployment story is untouched.
+  **P3.T6 calibration** (blocked on ISSUE-001). **Both of Phase 5's named
+  follow-ups are now done:** the `corrections` read route merged 2026-08-10,
+  and the ASGI entry point merged 2026-08-11 (ADR-0035).
   See "Remaining work"; the admin UI's frontend half shipped 2026-08-06.
 - Dev interpreter **Python 3.14.4**. Node **v22.22.2** / npm **10.9.7**.
 - Plan of record: `IMPLEMENTATION_PLAN.md`. Ledgers:
@@ -177,6 +183,58 @@ session, before the shared page bound was built.)*
   searching the tracked tree — open ledgers by path.**
 - **The repo is PUBLIC.** Verified 2026-07-31 via the GitHub API. See
   "Environment / provider" for what that exposes.
+
+## The ASGI entry point — COMPLETE AND MERGED (2026-08-11)
+
+Design: `docs/superpowers/specs/2026-08-11-asgi-entry-point-design.md`.
+Decision: **ADR-0035**. No plan document and no ledger — brainstormed, designed,
+built and closed in one session, by one worker, with no subagents.
+
+**`uvicorn receipts.asgi:app`.** `create_app` was a factory nothing under `src/`
+called; there was no supported way to serve the service at all.
+
+**The hazard that set the shape.** `make_engine` resolves
+`url or Settings().database_url or DEFAULT_URL`, and `DEFAULT_URL` is
+`sqlite:///receipts.db` — so the obvious entry point serves production off a
+local file when `DATABASE_URL` is unset, silently. The module's job is to
+**refuse**, not to construct.
+
+**Four refusals, collected and raised once** so a bad deployment learns
+everything wrong in one attempt: `DATABASE_URL` unset; `SESSION_COOKIE_SECURE`
+false; `REDIS_URL` unset; `SERVE_SPA` true with no `index.html`. It raises
+`ValueError`, matching `install_session_middleware` — one type for every boot
+failure. `SESSION_SECRET` is **not** re-checked; that check already exists a few
+frames later.
+
+**Importing builds nothing.** `app` resolves through a PEP-562 `__getattr__`, so
+`python -c "import receipts.asgi"` works on a base install with no
+configuration. `app` is deliberately **absent from `__all__`** — listing it
+would make a star-import build the application.
+
+**Two typed escape hatches, both defaulted safe:**
+`allow_insecure_session_cookie` and `serve_spa`. `frontend/dist` is gitignored,
+so a fresh checkout has no `index.html`; `serve_spa=False` is what makes an
+API-only deployment possible, and it also stops `_install_spa` mounting a stale
+`dist`.
+
+**Proven red six ways**, each mutation alone and reverted: each of the four
+checks stubbed to `if False:` kills its own test *and* the collect-all case;
+dropping the `serve_spa` guard from `_install_spa` kills the mount test **only**;
+an eager module-level `app` fails the whole test file **at collection**.
+
+**Verified in the runtime environment**, from `C:\Users`, outside the repo:
+uvicorn starts and serves; the same command with `DATABASE_URL` unset refuses
+and names the variable; an unconfigured import is clean. A green suite is not
+evidence that installed software works.
+
+**What the review found:** `make_storage` — moved out of `cli.py` so the entry
+point could share it — **had never been tested under either name**. Moving
+untested code proves nothing about the move. Three cases now pin it, and the
+s3-without-a-bucket refusal is proven red.
+
+**Scoped out deliberately:** no Dockerfile, no compose service, no run-book, no
+CI change, no host/port/worker policy. `scripts/serve_review_e2e.py` is
+untouched.
 
 ## The shared page bound — COMPLETE AND MERGED (2026-08-11)
 
@@ -1020,6 +1078,14 @@ API path moves.
   `release_task` and `enqueue_review`'s reopen branch **clear** `assigned_to` —
   a reviewer whose task was released or reopened loses access to corrections
   they made themselves.
+- **The ASGI entry point (2026-08-11, ADR-0035):** scope is **the entry point
+  and its ADR only** — no Dockerfile, no run-book, no CI. It **refuses to boot**
+  on all four of: `DATABASE_URL` unset, `SESSION_COOKIE_SECURE=false`,
+  `REDIS_URL` unset, and `SERVE_SPA=true` with no built `index.html`. The app is
+  exposed as a **lazy module attribute**, not an eager one, so importing builds
+  nothing. Both escape hatches (`allow_insecure_session_cookie`, `serve_spa`)
+  live in `Settings` and default safe, and `make_storage` was promoted out of
+  `cli.py` rather than duplicated.
 - **The shared page bound (2026-08-11, ADR-0034):** the `offset` 500 is fixed
   with **a shared page bound**, not a one-line `le=` per route. All three
   paginated routes declare their window through one `PageLimit`/`PageOffset`
@@ -1155,8 +1221,9 @@ the "Write routes (P4.T5)" banner was wrong once a read route consumed it.
    confirmed the same day (ADR-0031) and is now under "Decisions the user has
    made"; it is no longer an open decision, and the item it used to be
    numbered against in "Still needing a user decision" is gone, so that list
-   was renumbered. See "Corrections read route" above. **One follow-up is
-   genuinely untouched:** a real ASGI entry point / deployment story.
+   was renumbered. See "Corrections read route" above. **The other follow-up,
+   the ASGI entry point, MERGED 2026-08-11** — `uvicorn receipts.asgi:app`,
+   ADR-0035. Phase 5 has no open follow-ups left.
 1b. **A design system for the review UI is DRAFTED but NOT APPROVED and NOT
    PLANNED** — `docs/superpowers/specs/2026-08-05-review-ui-design-system.md`,
    with the raw generated output at `design-system/receipt-review/MASTER.md`.
@@ -1726,8 +1793,8 @@ with an entry point gets run from outside the repository.
 - `docs/NEXT_SESSION_PROMPT.md` — the ordered task list and reading order.
 - `IMPLEMENTATION_PLAN.md` · `README.md` (§5 design decisions) · `VLM_AND_DATA.md`
 - **`docs/KNOWN_ISSUES.md`** — ISSUE-001 with its diagnosis and resume steps.
-- **`docs/adr/` — 0001–0034** (re-derived at the merge:
-  `ls docs/adr/*.md` minus `README.md` counts **34**, and the four-digit
+- **`docs/adr/` — 0001–0035** (re-derived at the merge:
+  `ls docs/adr/*.md` minus `README.md` counts **35**, and the four-digit
   prefixes are contiguous from
   0001); see `docs/adr/README.md`. **This range read `0001–0026` until
   2026-08-10** — it was written at ADR-0026 and never touched again while 0027,
