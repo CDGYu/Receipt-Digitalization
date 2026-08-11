@@ -15,15 +15,16 @@ import react from '@vitejs/plugin-react'
 // and not recalled: build `create_app`, then walk `app.routes` recursing
 // through `.original_router.routes`. That recursion is not optional --
 // `include_router` wraps the auth router in an `_IncludedRouter`, so a FLAT
-// walk yields 13 routes with ZERO /auth/* paths. This comment previously
-// claimed to be "cross-checked against every route `create_app` registers" and
-// was missing three of them, which is what a list in prose costs when it is
-// trusted instead of re-derived (review standards 17 and 20).
+// walk yields ZERO /auth/* paths. This comment previously claimed to be
+// "cross-checked against every route `create_app` registers" and was missing
+// three of them, which is what a list in prose costs when it is trusted
+// instead of re-derived (review standards 17 and 20).
 //
-// Measured 2026-08-06 with DOCS_ENABLED unset: 16 routes plus the /app mount.
+// Measured 2026-08-11 with DOCS_ENABLED unset: 17 routes plus the /app mount.
 //   GET  /health          GET  /metrics
 //   GET  /receipts        GET  /receipts/{id}       PATCH /receipts/{id}
 //   GET  /receipts/{id}/image                       GET   /receipts/{id}/image/blob
+//   GET  /receipts/{id}/corrections
 //   POST /upload          GET  /export/xlsx
 //   GET  /review/next     GET  /review/tasks
 //   POST /review/{id}/complete                      POST  /review/{id}/release
@@ -40,8 +41,8 @@ const API_PREFIXES = [
   '/metrics',
   // FastAPI's own, registered by `create_app` only when DOCS_ENABLED is true
   // (config/settings.py defaults it to false). **Three prefixes, four route
-  // paths** -- the same enumeration run with DOCS_ENABLED=true returns 21
-  // rather than 17, because /docs also registers /docs/oauth2-redirect. Three
+  // paths** -- the same enumeration run with DOCS_ENABLED=true returns 22
+  // rather than 18, because /docs also registers /docs/oauth2-redirect. Three
   // entries still cover all four, since this array matches by prefix. The SPA
   // never fetches them, but "every prefix the API owns" includes the ones a
   // developer opens by hand, and a dev server that answers /docs with the SPA

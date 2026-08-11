@@ -69,8 +69,8 @@ the method will not.
 ### 3. Enumerate from the artefact, never from the source text
 
 For routes that means building the app and walking `app.routes`, **recursing
-through `.original_router.routes`** — a flat walk yields 13 routes with **zero**
-`/auth/*` paths. Grepping decorators is the weaker method and is what left the
+through `.original_router.routes`** — a flat walk yields **zero** `/auth/*`
+paths. Grepping decorators is the weaker method and is what left the
 trap in place. A transitively-called guard (`require_role` → `require_user`) is
 invisible at runtime too: it is plain Python, not a nested `Depends`, so a
 dependant-tree walk must detect it by qualname.
