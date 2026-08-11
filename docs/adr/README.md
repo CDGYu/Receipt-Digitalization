@@ -109,6 +109,11 @@ than setting a third value, so ADR-0027's precedence rule stays reachable in
 both directions), a pre-paint script in `index.html` whose duplicated storage
 key is pinned by a text-reading test, and the **narrowing of ADR-0024** that
 permits exactly one key — which nothing else inherits.
+**0039** is the one to read before running the eval harness or believing its
+output: a local run is a **liveness check**, not a measurement — it prints the
+six §16 metrics but licenses only "the pipeline completes". Liveness artefacts
+stay out of `eval/results/`, and the local timing is **not** to be re-derived
+(measured twice, seven weeks apart, and it got slower).
 
 Primary sources these build on: `RECEIPT_SYSTEM_SPEC.md` (build spec),
 `README.md` (§5 design decisions), `VLM_AND_DATA.md`, and the always-on
