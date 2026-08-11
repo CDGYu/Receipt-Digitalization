@@ -106,6 +106,27 @@ the provider abstraction (ADR-0002) means switching is one env var.
 - Try a larger/faster local vision model that declares tool-use support
   (Qwen-VL class), or run Ollama with GPU acceleration.
 
+### Readiness check, 2026-08-11 — everything but the key
+
+Re-run of the resume steps that do not need a provider. **Only step 1 is
+outstanding, and only a human can do it.**
+
+| checked | result |
+|---|---|
+| current config | **still local**: `VLM_PROVIDER=ollama`, `granite3.2-vision:2b`, `VLM_TIMEOUT_S=900`. The hosted block is still commented out. |
+| `DEFAULT_CURRENCY` | `PHP` — already correct, per step 1's warning |
+| hosted wiring (step 3) | **works.** With the Gemini env block and a dummy key, `make_client` builds an `OpenAICompatClient` at the right `base_url` |
+| `VLM_TIMEOUT_S` reaches the client | **yes** — 120.0 s. Attempt 1's root cause is genuinely fixed, not just believed to be |
+| `use_tools` on the hosted path | **True** — so the run exercises real tool-use, closing the "Secondary" gap above |
+| golden set | 3 labels, 3 images; **all three still validate with zero findings**, so the precondition under "What to expect" still holds |
+
+No network call was made: the `openai` constructor does not touch the network,
+so this proves wiring, not reachability. **The key is the only remaining
+variable** — a valid key turns this from unverified to running.
+
+**The compromised key was NOT echoed again** during this check. Configuration
+presence was reported as a boolean.
+
 ### How to resume (exact steps)
 
 1. Rotate the Gemini key; put the hosted config in `.env` (block above).
