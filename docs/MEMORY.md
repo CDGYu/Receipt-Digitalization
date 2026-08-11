@@ -8,7 +8,7 @@ verified rather than trusted — is **ADR-0019**, extended by **ADR-0021** (whos
 proved invisible to it).
 Last updated: **2026-08-11**, at the close of the session that fixed the
 `offset` 500 with the shared page bound. **One position, because nothing is in
-flight: `main @ 744b533`, NOT pushed.** A stamp cannot name the commit that
+flight: `main @ 744b533`, PUSHED.** A stamp cannot name the commit that
 writes it, so the test is a command, not a commit and not a count:
 
 ```
@@ -42,12 +42,12 @@ session, before the shared page bound was built.)*
   for three days while one existed**: true when written on 2026-08-07, rotted
   the moment the corrections branch was cut, and corrected only when Task 4
   edited the file. **The answer is the command, never the sentence.**
-- **`main` is merged, and is AHEAD of `origin/main`.** Two pushes happened on
-  authorizations that each consumed themselves: the corrections read route on
-  2026-08-10, and a docs fix wave on 2026-08-11. **The shared page bound merged
-  after both and is NOT pushed.** **The next `main` push needs its own fresh
-  ask.** Run `git log --oneline refs/remotes/origin/main..main` rather than
-  believing this sentence — empty means nothing is waiting to go.
+- **`main` is merged AND PUSHED.** Three pushes, each on a one-time
+  authorization that the push consumed: the corrections read route
+  (2026-08-10), a docs fix wave (2026-08-11), and the shared page bound
+  (2026-08-11). **The next `main` push needs its own fresh ask.** Run
+  `git log --oneline refs/remotes/origin/main..main` rather than believing this
+  sentence — empty means nothing is waiting to go.
 - **The shared page bound is COMPLETE AND MERGED** (2026-08-11, true
   fast-forward `0851c55` → `744b533`, single parent, two branch commits).
   `feat/shared-page-bound` is kept at its merge point and pushed. It closed the
