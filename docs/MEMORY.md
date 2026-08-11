@@ -6,12 +6,13 @@ continuity protocol itself — what lives where, and why this snapshot must be
 verified rather than trusted — is **ADR-0019**, extended by **ADR-0021** (whose
 2026-08-02 dated correction widened the freshness check after a docs-only task
 proved invisible to it).
-Last updated: **2026-08-11**, at the close of the session that switched CI back on.
-**One position, because nothing is in flight: `main @ 743cacb`, NOT pushed.** A stamp cannot name the commit that
+Last updated: **2026-08-11**, at the close of the session that switched CI back on and
+fixed P8.T3. **One position, because nothing is in flight: `main @ 4a46c46`,
+NOT pushed.** A stamp cannot name the commit that
 writes it, so the test is a command, not a commit and not a count:
 
 ```
-git log --oneline 743cacb..main -- src tests frontend docs ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
+git log --oneline 4a46c46..main -- src tests frontend docs ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
 git log --oneline refs/remotes/origin/main..main   # what a push would send
 git ls-remote --heads origin main                  # authoritative on what is pushed
 ```
@@ -19,7 +20,7 @@ git ls-remote --heads origin main                  # authoritative on what is pu
 **Empty means current.** Anything listed means the tree moved after this was
 written and you are reading something stale.
 
-**No characterisation of `743cacb` is written here on purpose** — an earlier
+**No characterisation of `4a46c46` is written here on purpose** — an earlier
 stamp called its SHA "the last *code* commit", and the next commit falsified
 that by editing a docstring under `src/`. **ADR-0032 §2**: a claim can be
 derived correctly and rot inside the commit that carries it. The SHA plus the
@@ -29,10 +30,9 @@ command cannot rot; a sentence about what the SHA *is* can.
 check excludes exactly these two files and watches `docs` otherwise, so a commit
 bundling them with an ADR or an index row lists itself as stale. That happened
 three times in the session that wrote ADR-0033. Everything substantive was
-committed first; `743cacb` is the last of it.
+committed first; `4a46c46` is the last of it.
 
-*(The previous stamp was 2026-08-11 at `main @ bbb84ec`, earlier the same
-day.)*
+*(The previous stamp was 2026-08-11 at `main @ 743cacb`, the CI merge tip.)*
 
 ## Snapshot
 
@@ -44,10 +44,11 @@ day.)*
 - **`main` is merged, and is AHEAD of `origin/main`.** Five pushes so far, each
   on a one-time authorization the push consumed: the corrections read route
   (2026-08-10), then a docs fix wave, the shared page bound, the ASGI entry
-  point and the containerisation (all 2026-08-11). **The CI workflow merged
-  after all five and is NOT pushed.** **The next `main` push needs its own fresh
-  ask.** Run `git log --oneline refs/remotes/origin/main..main` rather than
-  believing this sentence — empty means nothing is waiting to go.
+  point and the containerisation (all 2026-08-11). **The CI workflow and the
+  P8.T3 eval fix merged after all five and are NOT pushed.** **The next `main`
+  push needs its own fresh ask.** Run
+  `git log --oneline refs/remotes/origin/main..main` rather than believing this
+  sentence — empty means nothing is waiting to go.
 - **CI RUNS AGAIN** (2026-08-11, true fast-forward `a6c4392` → `743cacb`,
   single parent, three branch commits). `feat/ci-workflow` is kept at its merge
   point and pushed. **ADR-0037.** `.github/workflows/` is **no longer
@@ -1622,8 +1623,11 @@ measured.**
 - **No login rate limiting**, and each attempt costs a full scrypt derivation
   (~16 MB, ~57 ms). Address before this faces more than a LAN.
 - `receipts eval`/`calibrate` traceback without the `pipeline` extra.
-- An **all-failed** eval run still persists `"auto_approval_precision": 1.0` to
-  the results JSON. Fix with P8.
+- ~~An **all-failed** eval run persists `"auto_approval_precision": 1.0`~~ —
+  **FIXED 2026-08-11 (P8.T3).** It is `null` now: with nothing auto-approved
+  the metric is undefined, not perfect. Two guards existed and neither covered
+  it — `calibrate` refuses a zero-receipt *result set*, `eval` a zero-receipt
+  *run*, and both stand down when receipts were read and simply all failed.
 - Reprocessing a `reviewed` receipt records **no** `extraction_runs` — the
   transaction rolls back (ADR-0013's dated correction).
 - Move confidence penalty weights into `config/rules.yaml` (P3.T6).

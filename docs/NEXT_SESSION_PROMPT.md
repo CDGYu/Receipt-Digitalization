@@ -20,7 +20,7 @@ it to "fix" a correct sentence in an Accepted ADR to match a wrong measurement.
 
 ---
 
-# NO BRANCH IN FLIGHT. `main` is MERGED AND PUSHED.
+# NO BRANCH IN FLIGHT. `main` is MERGED, and AHEAD of `origin/main`.
 
 **This header said "NO BRANCH IN FLIGHT" for three days while a branch existed**
 — true when written, rotted the moment the branch was cut. It has also carried
@@ -36,7 +36,7 @@ git ls-remote --heads origin main                 # authoritative on what is pus
 git log --oneline refs/remotes/origin/main..main  # what the pending push would send
 ```
 
-## `main` is merged and pushed — nothing is waiting to go.
+## `main` is merged, and has UNPUSHED work on top.
 
 The corrections read route **merged by true fast-forward on 2026-08-10** —
 single parent, zero merge commits, `git branch --no-merged main` names nothing.
@@ -46,7 +46,8 @@ scoped re-review returning **MERGE** and *"no sixteenth false claim"*.
 **Five pushes happened, each on a one-time authorization that the push
 consumed** — the corrections read route (2026-08-10), then a docs fix wave, the
 shared page bound, the ASGI entry point and the containerisation (all
-2026-08-11). **The next `main` push needs its own fresh ask.**
+2026-08-11). **The CI workflow (ADR-0037) and the P8.T3 eval fix merged after
+all five and are NOT pushed. The next `main` push needs its own fresh ask.**
 `feat/corrections-read-route`, `feat/shared-page-bound`, `feat/asgi-entry-point`
 and `feat/containerisation` are all kept at their merge points and pushed. Run
 `git log --oneline refs/remotes/origin/main..main` rather than believing this
@@ -600,8 +601,12 @@ Wire `run_consistency` (`extract/extractor.py`, zero references in
 ## 5. Phase 8 — calibration & eval-harness honesty
 
 P3.T6/P8.T1 threshold sweep + weights into `config/rules.yaml` (**blocked on
-ISSUE-001**); P8.T2 grow the held-out set; P8.T3 the all-failed eval run still
-persists `"auto_approval_precision": 1.0` to JSON.
+ISSUE-001**); P8.T2 grow the held-out set. ~~P8.T3~~ **DONE 2026-08-11:** an
+all-failed run persisted `"auto_approval_precision": 1.0` and now persists
+`null`. Two guards existed and neither covered it — `calibrate` refuses a
+zero-receipt *result set* and `eval` a zero-receipt *run*, and both stand down
+when receipts were read and all failed. The console already printed `n/a`;
+only the number that gets written down and kept was wrong.
 
 ## 6. Still open from earlier phases
 
