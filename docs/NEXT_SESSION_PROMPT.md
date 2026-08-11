@@ -20,7 +20,7 @@ it to "fix" a correct sentence in an Accepted ADR to match a wrong measurement.
 
 ---
 
-# NO BRANCH IN FLIGHT. `main` is MERGED AND PUSHED.
+# NO BRANCH IN FLIGHT. `main` is MERGED, and AHEAD of `origin/main`.
 
 **This header said "NO BRANCH IN FLIGHT" for three days while a branch existed**
 — true when written, rotted the moment the branch was cut. It has also carried
@@ -36,7 +36,7 @@ git ls-remote --heads origin main                 # authoritative on what is pus
 git log --oneline refs/remotes/origin/main..main  # what the pending push would send
 ```
 
-## `main` is merged and pushed — nothing is waiting to go.
+## `main` is merged, and has UNPUSHED work on top.
 
 The corrections read route **merged by true fast-forward on 2026-08-10** —
 single parent, zero merge commits, `git branch --no-merged main` names nothing.
@@ -47,8 +47,9 @@ scoped re-review returning **MERGE** and *"no sixteenth false claim"*.
 consumed** — the corrections read route (2026-08-10), then a docs fix wave, the
 shared page bound, the ASGI entry point, the containerisation, CI plus the
 P8.T3 eval fix, the ISSUE-001 readiness record plus the backlog
-recommendations, and the CLI `--limit` bound (all 2026-08-11). **The next
-`main` push needs its own fresh ask.**
+recommendations, and the CLI `--limit` bound (all 2026-08-11). **The theme
+control merged after all eight and is NOT pushed. The next `main` push needs
+its own fresh ask.**
 **Every merged `feat/*` branch is kept at its merge point and pushed.** No
 count and no list: the list rotted twice on 2026-08-11, and the commit that
 replaced it with "no count is written down" wrote **"all seven"** in the same
@@ -96,12 +97,18 @@ re-review. The close then ran in full, and §0c is its record.
    styling one records twenty-five plan defects and "THE CLOSE".
    **`.superpowers/` is gitignored — open ledgers by path; nothing in them is
    findable by searching the tracked tree.**
-3. **`docs/adr/README.md`, then the ADRs (0001–0037** — count the files rather
+3. **`docs/adr/README.md`, then the ADRs (0001–0038** — count the files rather
    than trusting that range**).** *This* file's range has tracked each ADR as it
    landed; it was **`docs/MEMORY.md`'s** copy that sat at `0001–0026` while four
    more ADRs shipped, and it was corrected on 2026-08-10. Derived per-commit
    with `git show <sha>:docs/NEXT_SESSION_PROMPT.md | grep -oE "0001.00[23][0-9]"`.
    Mandatory before touching the matching area:
+   - **0038** — the theme control. **Read before touching the theme, the
+     header, or anything that wants browser storage.** Three states (`system`
+     removes the attribute, so ADR-0027's precedence rule stays reachable both
+     ways); a pre-paint script in `index.html` whose duplicated storage key is
+     pinned by a text-reading test; and the **narrowing of ADR-0024** that
+     permits exactly one key, which nothing else inherits.
    - **0037** — CI runs the gate runner. **Read before touching CI or adding a
      test that needs an optional package.** The workflow runs
      `scripts/verify.py` rather than re-listing gates; it fires on every branch
@@ -884,23 +891,38 @@ measured text disagree, the measurement wins.**
    > validate zero-findings. **Only a human can do the remaining step**, and
    > the old Gemini key must be rotated regardless — it was echoed to a
    > terminal, and the repo is public.
-2. **The theme control.** ADR-0027 ships dark as a full second theme and **the
-   application has no way for a user to choose it** — the only routes in are the
-   OS preference and setting `data-theme` by hand. Every token and the
-   precedence rule are correct and browser-verified; the decision is
-   half-delivered. It needs a home for the control, which ADR-0027 deliberately
-   did not open.
-   > **Recommended: yes, and it is small.** ADR-0027 shipped dark as a complete
-   > second theme with every token browser-verified, and no user can reach it —
-   > the best ratio of delivered value to remaining work on this list. Put the
-   > control in the same shell as sign-out and take item 3 with it.
+2. ~~**The theme control.**~~ **DONE, merged 2026-08-11 — ADR-0038.** Three
+   states (`system` removes the attribute, so ADR-0027's precedence rule stays
+   reachable both ways), a `<select>` in the header beside sign-out, one
+   `localStorage` key, and the theme applied before first paint.
+   **It required narrowing ADR-0024's "nothing enters browser storage"** — that
+   ruling's reason is *"no receipt-adjacent text"*, and a theme preference is
+   not that. Exactly one key is permitted; nothing else inherits it.
+   **Nobody has seen it in a browser** — jsdom renders no colour, so how it
+   reads against the header in either theme is asserted by nothing (ADR-0038's
+   own "what the gates still cannot see").
 3. **The currency prefix**, parked in design §5.1 with *the browser pass* named
    as its resolver. **The pass ran and never addressed it** — grepping the
    report for "currency", "prefix" or "symbol" returns nothing. **Its designated
    resolver has been spent; it needs a new one.**
-   > **Recommended: decide it inline with item 2, not separately.** Its
-   > designated resolver was spent, so the honest replacement is "whoever next
-   > opens `MoneyInput`" rather than another scheduled pass.
+   > **Recommendation CORRECTED 2026-08-11.** It said "decide it inline with
+   > item 2" — item 2 is now done and this was *not* decided with it, because
+   > the two are unrelated. Re-reading §5.1's dated note: the prefix carries
+   > **two** independent objections, and the second does not need a browser at
+   > all. **`receipt.currency` is itself a correctable text field** edited live
+   > on that same screen, so a hardcoded symbol mislabels every money field on a
+   > receipt whose currency is being corrected — Task 2's implementer refused on
+   > exactly that ground and was upheld. The first objection (a prefix span
+   > joins the accessible name, turning `Total` into `Total ₱`) is **derived,
+   > not measured**, and §5.1 says checking that derivation is a reviewer's
+   > first job.
+   >
+   > So the real question is not *where* the prefix goes. It is whether a
+   > **static** prefix can be right on a screen where currency is user-editable
+   > — and the answer looks like no. The live options are: **drop it**, make it
+   > **dynamic** from the current field value (which still meets objection one),
+   > or show the currency **once per receipt** rather than per field. That is a
+   > design call, not a placement call, and it is yours.
 4. **Should the Playwright visual run become a sixth gate?** ADR-0029 leaves it
    open. It would need a headless-stable config, a policy for the 43 recorded
    undersized hit targets, and a way to establish a first baseline without

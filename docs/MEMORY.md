@@ -7,13 +7,13 @@ verified rather than trusted — is **ADR-0019**, extended by **ADR-0021** (whos
 2026-08-02 dated correction widened the freshness check after a docs-only task
 proved invisible to it).
 Last updated: **2026-08-11**, at the close of the session that switched CI back
-on, fixed P8.T3, verified everything but the key on ISSUE-001, and bounded the
-CLI's `--limit`. **One position, because nothing is in flight:
-`main @ ba9d9d1`, PUSHED.** A stamp cannot name the commit that
+on, fixed P8.T3, verified everything but the key on ISSUE-001, bounded the
+CLI's `--limit`, and built the theme control. **One position, because nothing is in flight:
+`main @ fba69a7`, NOT pushed.** A stamp cannot name the commit that
 writes it, so the test is a command, not a commit and not a count:
 
 ```
-git log --oneline ba9d9d1..main -- src tests frontend docs ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
+git log --oneline fba69a7..main -- src tests frontend docs ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
 git log --oneline refs/remotes/origin/main..main   # what a push would send
 git ls-remote --heads origin main                  # authoritative on what is pushed
 ```
@@ -21,7 +21,7 @@ git ls-remote --heads origin main                  # authoritative on what is pu
 **Empty means current.** Anything listed means the tree moved after this was
 written and you are reading something stale.
 
-**No characterisation of `ba9d9d1` is written here on purpose** — an earlier
+**No characterisation of `fba69a7` is written here on purpose** — an earlier
 stamp called its SHA "the last *code* commit", and the next commit falsified
 that by editing a docstring under `src/`. **ADR-0032 §2**: a claim can be
 derived correctly and rot inside the commit that carries it. The SHA plus the
@@ -31,7 +31,7 @@ command cannot rot; a sentence about what the SHA *is* can.
 check excludes exactly these two files and watches `docs` otherwise, so a commit
 bundling them with an ADR or an index row lists itself as stale. That happened
 three times in the session that wrote ADR-0033. Everything substantive was
-committed first; `ba9d9d1` is the last of it.
+committed first; `fba69a7` is the last of it.
 
 *(The previous stamp was 2026-08-11 at `main @ 8995d1e`, the ISSUE-001
 readiness record.)*
@@ -43,7 +43,7 @@ readiness record.)*
   for three days while one existed**: true when written on 2026-08-07, rotted
   the moment the corrections branch was cut, and corrected only when Task 4
   edited the file. **The answer is the command, never the sentence.**
-- **`main` is merged AND PUSHED.** Eight pushes, each on a one-time
+- **`main` is merged, and is AHEAD of `origin/main`.** Eight pushes so far, each on a one-time
   authorization the push consumed: the corrections read route (2026-08-10),
   then a docs fix wave, the shared page bound, the ASGI entry point, the
   containerisation, CI plus the P8.T3 eval fix, and the ISSUE-001 readiness
@@ -700,7 +700,8 @@ point and pushed.
   to fail, and still not measure the property you care about, because the
   assertion layer cannot see what a person sees** — and **one decision the pass
   showed is incomplete: dark ships as a full second theme and the application
-  has no theme control.** Surface that at the close.
+  has no theme control.** ~~Surface that at the close.~~ **CLOSED 2026-08-11 —
+  ADR-0038.**
 
 **ALL SIX TASKS ARE COMPLETE AND THE MILESTONE IS MERGED.**
 
@@ -718,8 +719,8 @@ route list (`2689635`), ADR-0027's two corrections, **ADR-0028** and its
 correction, and review standards **21, 22 and 23**.
 
 **What the close is owed next, and by whom:** three questions this milestone
-created and deliberately did not answer — **the theme control** (ADR-0027 ships
-dark as a full second theme and the app has no way to choose it), **the currency
+created and deliberately did not answer — ~~**the theme control**~~ (**done
+2026-08-11, ADR-0038**), **the currency
 prefix** (parked in design §5.1 with the browser pass named as its resolver; the
 pass ran and never addressed it, so its designated resolver is spent), and
 **whether the Playwright visual run becomes a sixth gate** (ADR-0029 leaves it
@@ -1957,8 +1958,8 @@ with an entry point gets run from outside the repository.
 - `docs/NEXT_SESSION_PROMPT.md` — the ordered task list and reading order.
 - `IMPLEMENTATION_PLAN.md` · `README.md` (§5 design decisions) · `VLM_AND_DATA.md`
 - **`docs/KNOWN_ISSUES.md`** — ISSUE-001 with its diagnosis and resume steps.
-- **`docs/adr/` — 0001–0037** (re-derived at the merge:
-  `ls docs/adr/*.md` minus `README.md` counts **37**, and the four-digit
+- **`docs/adr/` — 0001–0038** (re-derived at the merge:
+  `ls docs/adr/*.md` minus `README.md` counts **38**, and the four-digit
   prefixes are contiguous from
   0001); see `docs/adr/README.md`. **This range read `0001–0026` until
   2026-08-10** — it was written at ADR-0026 and never touched again while 0027,
