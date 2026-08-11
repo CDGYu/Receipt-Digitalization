@@ -8,7 +8,7 @@ verified rather than trusted — is **ADR-0019**, extended by **ADR-0021** (whos
 proved invisible to it).
 Last updated: **2026-08-11**, at the close of a session whose only work was a
 docs fix wave. **One position, because nothing is in
-flight: `main @ b899d7d`, NOT pushed.** A stamp cannot name the commit that
+flight: `main @ b899d7d`, PUSHED.** A stamp cannot name the commit that
 writes it, so the test is a command, not a commit and not a count:
 
 ```
@@ -42,13 +42,14 @@ session that merged the corrections read route.)*
   for three days while one existed**: true when written on 2026-08-07, rotted
   the moment the corrections branch was cut, and corrected only when Task 4
   edited the file. **The answer is the command, never the sentence.**
-- **`main` is merged, and is AHEAD of `origin/main`.** The corrections read
+- **`main` is merged AND PUSHED.** The corrections read
   route merged by true fast-forward on 2026-08-10 and `main` was pushed the same
   day on an explicit authorization, **which that push consumed**. A docs fix
-  wave on 2026-08-11 added commits on top, and **those are not pushed**. **The
-  next `main` push needs its own fresh ask.** Verify with `git log --oneline
-  refs/remotes/origin/main..main` rather than believing this sentence. See
-  "Corrections read route" below.
+  wave on 2026-08-11 added commits on top, and **those were pushed too, on a
+  second one-time authorization that push consumed**. **The next `main` push
+  needs its own fresh ask.** Run `git log --oneline
+  refs/remotes/origin/main..main` rather than believing this sentence — empty
+  means nothing is waiting to go. See "Corrections read route" below.
 - **The review-UI styling milestone is COMPLETE AND MERGED** (2026-08-07, true
   fast-forward `1314485` → `be6d7c0`, single parent, 38 branch commits).
   `feat/review-ui-styling` is kept at its merge point and pushed.

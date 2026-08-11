@@ -20,12 +20,12 @@ it to "fix" a correct sentence in an Accepted ADR to match a wrong measurement.
 
 ---
 
-# NO BRANCH IN FLIGHT. `main` is MERGED, and AHEAD of `origin/main`.
+# NO BRANCH IN FLIGHT. `main` is MERGED AND PUSHED.
 
 **This header said "NO BRANCH IN FLIGHT" for three days while a branch existed**
-— true when written, rotted the moment the branch was cut. The in-flight half is
-true again now; the push state is not something to read here at all. Run the
-commands rather than the sentence (ADR-0028 §1):
+— true when written, rotted the moment the branch was cut. It has also carried
+the wrong push state twice, in both directions. Run the commands rather than the
+sentence (ADR-0028 §1):
 
 ```
 git status --short                                # must be empty
@@ -36,7 +36,7 @@ git ls-remote --heads origin main                 # authoritative on what is pus
 git log --oneline refs/remotes/origin/main..main  # what the pending push would send
 ```
 
-## `main` is merged, and has UNPUSHED commits on top.
+## `main` is merged and pushed — nothing is waiting to go.
 
 The corrections read route **merged by true fast-forward on 2026-08-10** —
 single parent, zero merge commits, `git branch --no-merged main` names nothing.
@@ -44,12 +44,13 @@ It went in only after its whole-branch review, three fix rounds and a final
 scoped re-review returning **MERGE** and *"no sixteenth false claim"*.
 
 **`main` was pushed on 2026-08-10 with explicit authorization, which that push
-consumed. A docs fix wave on 2026-08-11 put commits on top of it, and those are
-NOT pushed. The next `main` push needs its own fresh ask.**
+consumed. A docs fix wave on 2026-08-11 put two commits on top, and those were
+pushed on a second one-time authorization, which that push also consumed. The
+next `main` push needs its own fresh ask.**
 `feat/corrections-read-route` is kept at its merge point and pushed too. Run
-`git log --oneline refs/remotes/origin/main..main` for what a push would send,
-rather than believing this sentence — the pair commit that writes it
-necessarily lands after any push it could record.
+`git log --oneline refs/remotes/origin/main..main` rather than believing this
+sentence — empty means nothing is waiting to go, and the pair commit that
+writes this necessarily lands after the push it records.
 
 **Freshness check.** `docs/MEMORY.md`'s stamp names **one** position again now
 that nothing is in flight:
@@ -764,9 +765,9 @@ points from outside the repository. §1.6 is the current example.
 ## Today's goal
 
 **Nothing is in flight, nothing is half-done, and nothing carries over.** The
-corrections read route is merged; `git branch --no-merged main` should name
-nothing, and `main` should be **ahead** of `origin/main` by the 2026-08-11 docs
-commits, which need a fresh ask before they go.
+corrections read route is merged and the 2026-08-11 docs fix wave is pushed.
+`git branch --no-merged main` should name nothing, and
+`git log --oneline refs/remotes/origin/main..main` should come out empty.
 
 **Run the freshness command in `docs/MEMORY.md`'s stamp before trusting any of
 this.** If it lists anything, the tree moved after this was written — re-run
