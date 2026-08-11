@@ -91,12 +91,19 @@ re-review. The close then ran in full, and §0c is its record.
    styling one records twenty-five plan defects and "THE CLOSE".
    **`.superpowers/` is gitignored — open ledgers by path; nothing in them is
    findable by searching the tracked tree.**
-3. **`docs/adr/README.md`, then the ADRs (0001–0036** — count the files rather
+3. **`docs/adr/README.md`, then the ADRs (0001–0037** — count the files rather
    than trusting that range**).** *This* file's range has tracked each ADR as it
    landed; it was **`docs/MEMORY.md`'s** copy that sat at `0001–0026` while four
    more ADRs shipped, and it was corrected on 2026-08-10. Derived per-commit
    with `git show <sha>:docs/NEXT_SESSION_PROMPT.md | grep -oE "0001.00[23][0-9]"`.
    Mandatory before touching the matching area:
+   - **0037** — CI runs the gate runner. **Read before touching CI or adding a
+     test that needs an optional package.** The workflow runs
+     `scripts/verify.py` rather than re-listing gates; it fires on every branch
+     because merges here are local fast-forwards; and it guards the suite's
+     dependency assumptions in **both** directions — `openai` present,
+     `anthropic` absent. Its first run found that the suite passes locally only
+     because `openai` happens to be installed here.
    - **0036** — one image, two commands. **Read before changing how the service
      is packaged or run.** The image builds the review UI itself so a stale
      `dist` cannot ship; migrations are a documented operator step, not an
@@ -250,11 +257,22 @@ from `/build`, deleted in the same layer.
 **Everything above was verified by building and running the image**, not by
 reading it — including `alembic upgrade head`, re-tested after the restructure.
 
-**Still not done: CI — and it DOES need a ruling**, unlike the rest of the
-deployment work. See "Blocked on me": the question is *"GitHub Actions
-**again**?"*, and `.github/workflows/` is **gitignored**, so a workflow cannot
-even be committed without un-ignoring it first.
-`scripts/serve_review_e2e.py` remains untouched by both milestones.
+### CI — ADR-0037, merged the same day
+
+**`.github/workflows/ci.yml` is tracked again**, reversing the 2026-07-29
+untracking. The workflow **runs `scripts/verify.py`** rather than re-listing
+gates; `on: [push]`, every branch, no `pull_request:`; Python **3.11 and 3.13**;
+a second job builds the image and asserts it **boots**.
+
+**Its first run went red and was worth more than the workflow.** 7 failures in
+`tests/test_client_factory.py` — those tests build a real `OpenAICompatClient`
+and need the `openai` SDK **without `importorskip`**, so they fail rather than
+skip. **The suite passes locally only because `openai` is installed on this
+machine.** The coupling runs both ways: that module's docstring requires
+`anthropic` **absent**, so CI installs `openai`, does not install `anthropic`,
+and asserts both. Green on `3ad51c6`.
+
+`scripts/serve_review_e2e.py` remains untouched by all three milestones.
 
 ## 0b. The shared page bound is DONE, MERGED and PUSHED.
 
@@ -555,8 +573,8 @@ branch.
    **Scoped deliberately narrow.** The Dockerfile, compose services and
    run-book it left out landed the same day as **ADR-0036** (§0a); host, port
    and worker count stay out of the app object by design — they belong to the
-   `uvicorn` invocation, and the image's `CMD` is one. **CI is what remains,
-   and it needs your ruling** — see "Blocked on me" item 9.
+   `uvicorn` invocation, and the image's `CMD` is one. **CI landed too**
+   (ADR-0037), so the deployment story is complete.
 
    ~~**§1.6 is still open beside it**~~ — **§1.6 is CLOSED (2026-08-11): the
    wrapper exists, in the user scripts directory, which is not on `PATH`. Never
@@ -720,7 +738,7 @@ authorization is one-time, and the 2026-08-07 one **was consumed by that
 push**). Merged
 `feat/*` branches and SDD workspaces are **kept, never cleaned up** — this
 overrides the superpowers skills, which would delete both. `.kiro/`,
-`.github/workflows/`, `.superpowers/`, `var/`, `eval/golden/images/` are
+`.superpowers/`, `var/`, `eval/golden/images/` are
 gitignored — never stage anything under `var/`.
 
 **Stage by explicit path, never `git add -A`.** Verify with
@@ -834,11 +852,12 @@ points from outside the repository. §1.6 is the current example.
 
 ## Blocked on me (the user) — surface these, do not guess
 
-**Renumbered 2026-08-11.** The `offset` 500 was item 1 and is **closed** — you
-chose the shared page bound, and ADR-0034 records it. Everything below it moved
-up one, and one new item joined the end, so **a reference to "item #N" written
-before 2026-08-11 points at a different item.** No count is given: the list is
-right here (ADR-0032 §3).
+**Renumbered twice on 2026-08-11.** Two items closed the same day: the `offset`
+500 (was item 1 — you chose the shared page bound, ADR-0034) and GitHub Actions
+(was item 9 — you said yes, ADR-0037). Everything below each moved up, and one
+new item joined the end, so **a reference to "item #N" written before
+2026-08-11 points at a different item.** No count is given: the list is right
+here (ADR-0032 §3).
 
 1. **A hosted tool-capable provider + freshly rotated key** (ISSUE-001 → all
    calibration, and Phase 6's success metric).
@@ -865,18 +884,9 @@ right here (ADR-0032 §3).
 7. **Do the public golden labels need scrubbing?** (Real third-party names,
    TINs, addresses — also the values the PAN silent-case tests pin.)
 8. **R060/R061 grounding (P2.T2)** — also gates bbox highlighting.
-9. **GitHub Actions again?** If yes, the workflow calls `scripts/verify.py`
-   rather than re-listing the gates. **Two things a session picking this up
-   should know before starting:** `.github/workflows/` is **gitignored**
-   (`.gitignore:71`), so the first commit has to un-ignore it — a deliberate
-   change, not a side effect; and the word *again* is load-bearing, so whatever
-   made it stop the first time is worth recovering before it is switched back
-   on. ADR-0036 left CI out of the containerisation on purpose. **This is the
-   one remaining deployment piece, and unlike the others it is not
-   ruling-free** — a session claimed otherwise on 2026-08-11 and was wrong.
-10. **Close the PAN grouping residual?** Which priced route?
-11. **Narrow the `{1,2}` separator** now that its surface is measured?
-12. **Bound the CLI's `--limit`?** Found by ADR-0034's review and reported
+9. **Close the PAN grouping residual?** Which priced route?
+10. **Narrow the `{1,2}` separator** now that its surface is measured?
+11. **Bound the CLI's `--limit`?** Found by ADR-0034's review and reported
     rather than fixed (standard 19): `query_receipts(limit=2**63)` raises the
     same `OverflowError` the HTTP routes just closed, and `--limit` is bounded
     below by `_positive_int` but not above. Local to the CLI, not an HTTP
@@ -901,8 +911,8 @@ for you.
 containerisation ADR-0035 left out (**ADR-0036**: Dockerfile, compose services,
 `docs/DEPLOYMENT.md`). **§1.6 is closed too** — the console script was never
 broken; its wrapper sits in the user scripts directory, which is not on `PATH`.
-**CI is the only remaining deployment piece, and it is NOT ruling-free** — it is
-"Blocked on me" item 9, and `.github/workflows/` is gitignored.
+**CI is done as well** (ADR-0037), so nothing in the deployment story is
+outstanding.
 
 **If you would rather clear the decision backlog first**, items 3–7 above are all
 consequences of the last milestone and all of them are one answer each: the theme

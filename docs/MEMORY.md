@@ -6,13 +6,12 @@ continuity protocol itself — what lives where, and why this snapshot must be
 verified rather than trusted — is **ADR-0019**, extended by **ADR-0021** (whose
 2026-08-02 dated correction widened the freshness check after a docs-only task
 proved invisible to it).
-Last updated: **2026-08-11**, at the close of the session that containerised
-the service and closed the console-script question. **One position, because
-nothing is in flight: `main @ bbb84ec`, PUSHED.** A stamp cannot name the commit that
+Last updated: **2026-08-11**, at the close of the session that switched CI back on.
+**One position, because nothing is in flight: `main @ 743cacb`, NOT pushed.** A stamp cannot name the commit that
 writes it, so the test is a command, not a commit and not a count:
 
 ```
-git log --oneline bbb84ec..main -- src tests frontend docs ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
+git log --oneline 743cacb..main -- src tests frontend docs ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
 git log --oneline refs/remotes/origin/main..main   # what a push would send
 git ls-remote --heads origin main                  # authoritative on what is pushed
 ```
@@ -20,7 +19,7 @@ git ls-remote --heads origin main                  # authoritative on what is pu
 **Empty means current.** Anything listed means the tree moved after this was
 written and you are reading something stale.
 
-**No characterisation of `bbb84ec` is written here on purpose** — an earlier
+**No characterisation of `743cacb` is written here on purpose** — an earlier
 stamp called its SHA "the last *code* commit", and the next commit falsified
 that by editing a docstring under `src/`. **ADR-0032 §2**: a claim can be
 derived correctly and rot inside the commit that carries it. The SHA plus the
@@ -30,10 +29,10 @@ command cannot rot; a sentence about what the SHA *is* can.
 check excludes exactly these two files and watches `docs` otherwise, so a commit
 bundling them with an ADR or an index row lists itself as stale. That happened
 three times in the session that wrote ADR-0033. Everything substantive was
-committed first; `bbb84ec` is the last of it.
+committed first; `743cacb` is the last of it.
 
-*(The previous stamp was 2026-08-11 at `main @ 8646980`, the containerisation
-merge tip.)*
+*(The previous stamp was 2026-08-11 at `main @ bbb84ec`, earlier the same
+day.)*
 
 ## Snapshot
 
@@ -42,12 +41,19 @@ merge tip.)*
   for three days while one existed**: true when written on 2026-08-07, rotted
   the moment the corrections branch was cut, and corrected only when Task 4
   edited the file. **The answer is the command, never the sentence.**
-- **`main` is merged AND PUSHED.** Five pushes, each on a one-time
-  authorization the push consumed: the corrections read route (2026-08-10),
-  then a docs fix wave, the shared page bound, the ASGI entry point and the
-  containerisation (all 2026-08-11). **The next `main` push needs its own fresh
+- **`main` is merged, and is AHEAD of `origin/main`.** Five pushes so far, each
+  on a one-time authorization the push consumed: the corrections read route
+  (2026-08-10), then a docs fix wave, the shared page bound, the ASGI entry
+  point and the containerisation (all 2026-08-11). **The CI workflow merged
+  after all five and is NOT pushed.** **The next `main` push needs its own fresh
   ask.** Run `git log --oneline refs/remotes/origin/main..main` rather than
   believing this sentence — empty means nothing is waiting to go.
+- **CI RUNS AGAIN** (2026-08-11, true fast-forward `a6c4392` → `743cacb`,
+  single parent, three branch commits). `feat/ci-workflow` is kept at its merge
+  point and pushed. **ADR-0037.** `.github/workflows/` is **no longer
+  gitignored**. The workflow runs `scripts/verify.py` on Python 3.11 and 3.13
+  and builds the image; **it is green on `3ad51c6`**, and its first run found a
+  real environment coupling. See "CI runs again" below.
 - **The containerisation is COMPLETE AND MERGED** (2026-08-11, true
   fast-forward `45660cf` → `8646980`, single parent, one branch commit).
   `feat/containerisation` is kept at its merge point and pushed. One image runs
@@ -192,6 +198,63 @@ merge tip.)*
 - **The repo is PUBLIC.** Verified 2026-07-31 via the GitHub API. See
   "Environment / provider" for what that exposes.
 
+## CI runs again — COMPLETE AND MERGED (2026-08-11)
+
+Decision: **ADR-0037**. Workflow: `.github/workflows/ci.yml`. No design doc, no
+plan — two multiple-choice answers and the work followed.
+
+**It reverses a standing user decision.** `.github/workflows/` was untracked on
+2026-07-29 at the user's request, and **ADR-0017 built an argument on its
+absence** ("this repository cannot use one"). That Context now carries a
+correction; ADR-0017's *decision* is untouched and is strengthened, because the
+workflow runs `scripts/verify.py` rather than listing gates, so the gate list
+still lives in exactly one place.
+
+**The old `ci.yml` was still on disk** and is what a naive "turn it back on"
+would have committed: Python 3.11/3.12, **none of the three frontend gates**,
+and a re-listing of pytest/ruff/mypy. A green run of it would have said far less
+than it looked like it said — ADR-0017's own argument, against ADR-0017's own
+file.
+
+**Shape:** `on: [push]`, every branch, no `pull_request:` trigger. Merges here
+are local fast-forwards, so a `main`-only workflow reports *after* the merge it
+was meant to gate; and PRs are not used, so that trigger would produce no runs
+and read as coverage that does not exist. Python **3.11** (the declared floor)
+and **3.13** (what the image ships); 3.14.4 is the dev interpreter and is
+deliberately absent. A second job builds the image and asserts it **boots** —
+refuses unconfigured, names `DATABASE_URL`, and resolves `receipts --help`.
+
+**THE FIRST RUN WENT RED, AND IT WAS WORTH MORE THAN THE WORKFLOW.** The branch
+was pushed before merging so the first run would land somewhere harmless. Both
+`gates` jobs failed at `verify.py`; the `image` job passed outright.
+Reproduced in a `python:3.13-slim` container rather than read from a log:
+**7 failures in `tests/test_client_factory.py`**, all
+`RuntimeError: pip install openai to use OpenAICompatClient`.
+
+**Never a Linux problem.** Those tests build a real `OpenAICompatClient` and
+need the SDK — **without `importorskip`**, so they *fail* rather than skip. The
+extras list had been derived from the importorskip targets, which is exactly the
+set that cannot contain them, and the false-green guard could not have caught
+it: that guard exists for the silent skip.
+
+**The suite passes locally only because `openai` is installed on this machine.**
+ADR-0014's warning, found ADR-0014's way — by running somewhere else.
+
+**The coupling has two directions**, and `test_client_factory`'s docstring
+states both: `openai` present, **`anthropic` absent** so its path "must fail
+loudly". CI installs `.[dev,pipeline,api,openai]`, does not install `anthropic`,
+and the guard now asserts **both**. If `anthropic` ever arrives, those
+missing-SDK assertions stop testing what they claim to and nothing else would
+notice.
+
+**Green on `3ad51c6`**, every step of all three jobs — which also verified, for
+the first time, that the suite passes on a Linux runner and a case-sensitive
+filesystem.
+
+**Still out of scope:** no registry, no image tags beyond a local `receipts:ci`,
+no releases, no deployment trigger, no branch protection, and nothing that makes
+a red run block a local fast-forward merge. Playwright is still not a gate.
+
 ## The containerisation — COMPLETE AND MERGED (2026-08-11)
 
 Guide: **`docs/DEPLOYMENT.md`**. Decision: **ADR-0036**. No design doc, no plan,
@@ -294,7 +357,8 @@ s3-without-a-bucket refusal is proven red.
 **Scoped out deliberately, and correct at the time:** no Dockerfile, no compose
 service, no run-book, no CI change, no host/port/worker policy.
 **ADR-0036 has since done the first three** (see "The containerisation" above);
-host/port/worker stay out of the app object by design, and **CI is still open**.
+host/port/worker stay out of the app object by design, and **CI is done too** —
+ADR-0037, 2026-08-11.
 `scripts/serve_review_e2e.py` is untouched by both.
 
 ## The shared page bound — COMPLETE AND MERGED (2026-08-11)
@@ -1143,6 +1207,15 @@ API path moves.
   `release_task` and `enqueue_review`'s reopen branch **clear** `assigned_to` —
   a reviewer whose task was released or reopened loses access to corrections
   they made themselves.
+- **GitHub Actions runs again (2026-08-11, ADR-0037):** reverses the
+  2026-07-29 decision to untrack `.github/workflows/`. **The workflow runs
+  `scripts/verify.py` rather than re-listing gates** — the old one had drifted
+  three gates out of date and ran none of the frontend three. Fires on **every
+  branch** (merges here are local fast-forwards, so a `main`-only workflow would
+  report after the merge it was meant to gate) and has **no `pull_request:`**
+  trigger, because this repo does not use PRs. Python **3.11 and 3.13**; a
+  second job builds the image and checks it boots. Nothing is pushed to a
+  registry.
 - **The containerisation (2026-08-11, ADR-0036):** **one image, two commands**,
   not two images; the image **builds the review UI itself** rather than trusting
   a `dist` in the build context; **migrations are an operator step**, not an
@@ -1194,12 +1267,8 @@ and has moved to "Decisions the user has made". Six items remain; a reference to
    and therefore for all calibration.
 2. **R060/R061 OCR grounding (P2.T2)** — model returns the text it read / a
    cheap OCR pass / drop the rules. Also gates bbox highlighting.
-3. **Whether GitHub Actions should run again.** If yes, the workflow should
-   call `scripts/verify.py` rather than re-listing the gates. **`.github/
-   workflows/` is gitignored** (`.gitignore:71`), so this starts with a
-   deliberate un-ignore. ADR-0036 left CI out of the containerisation on
-   purpose, and it is the one remaining deployment piece that is **not**
-   ruling-free.
+3. ~~**Whether GitHub Actions should run again.**~~ **ANSWERED 2026-08-11: yes.
+   ADR-0037**, and it is now under "Decisions the user has made".
 4. **Whether to close the PAN grouping residual**, and by which priced route
    (shape table with per-entry two-instance gate, or candidate-then-validate
    scan loop).
@@ -1365,7 +1434,7 @@ the "Write routes (P4.T5)" banner was wrong once a read route consumed it.
   silent-case tests pin, so scrubbing is not free). **Awaiting the user's
   decision.**
 - **Gitignored and untracked:** `.kiro/` (steering still auto-loads from disk),
-  `.github/workflows/` (**Actions does not run**), `.superpowers/` (the SDD
+  `.superpowers/` (the SDD
   ledgers), and **`var/`**, where `STORAGE_ROOT` defaults to `var/blobs` and
   writes **real receipt images**. Never stage one.
 - **Harness notes:** the `developer-kit` plugin's
@@ -1869,8 +1938,8 @@ with an entry point gets run from outside the repository.
 - `docs/NEXT_SESSION_PROMPT.md` — the ordered task list and reading order.
 - `IMPLEMENTATION_PLAN.md` · `README.md` (§5 design decisions) · `VLM_AND_DATA.md`
 - **`docs/KNOWN_ISSUES.md`** — ISSUE-001 with its diagnosis and resume steps.
-- **`docs/adr/` — 0001–0036** (re-derived at the merge:
-  `ls docs/adr/*.md` minus `README.md` counts **36**, and the four-digit
+- **`docs/adr/` — 0001–0037** (re-derived at the merge:
+  `ls docs/adr/*.md` minus `README.md` counts **37**, and the four-digit
   prefixes are contiguous from
   0001); see `docs/adr/README.md`. **This range read `0001–0026` until
   2026-08-10** — it was written at ADR-0026 and never touched again while 0027,
