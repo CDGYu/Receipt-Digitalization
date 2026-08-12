@@ -1319,3 +1319,26 @@ entry describes. Both were updated as shape changes: `0.85` became
 `FieldBreakdown(transcription_correct=17, transcription_total=20, ...)`, which
 derives the same ratio, and `0.0` became `FieldBreakdown()`, whose derived
 ratios are `None` rather than a `0.0` that would read as "measured, and bad".
+
+### 2026-08-12 — Task 3's docstring correction names one copy of three
+
+Task 3 Step 4 corrects `format_report`'s docstring, which falsely says
+`_build_report` "defines it as `1.0`" when nothing is auto-approved. Searching
+for the *claim* rather than the phrasing (ADR-0033 §2) found two more live
+problems the plan never named:
+
+- `tests/test_cli_reports.py`'s `_empty_report` docstring makes the same
+  present-tense claim, and the fixture passes `auto_approval_precision=1.0` on
+  the strength of it.
+- `src/receipts/cli.py` cites `eval/metrics.py:255-257` for
+  `calibration_curve`'s `precision = 1.0`. That statement is at line **443**
+  today and was at **260** at the branch point; lines 255-257 now sit inside
+  `_line_fields_agree`. This milestone grew `eval/metrics.py` by ~190 lines and
+  aged the citation from mildly wrong to pointing at unrelated code — review
+  standard 21: closing a prose defect ages every sentence that cited it.
+
+The design doc's §5 claim that `format_report`'s docstring was "this third copy"
+was therefore itself incomplete.
+
+**Resolution:** all three are folded into Task 3, which already owned the first.
+Fixing one copy and leaving two is the failure ADR-0033 exists to prevent.
