@@ -26,9 +26,11 @@ from .metrics import (
     AUTO_APPROVE_THRESHOLD,
     EvalReport,
     EvalResult,
+    FieldBreakdown,
     calibration_curve,
     critical_field_accuracy,
     field_accuracy,
+    field_breakdown,
     line_item_f1,
 )
 
@@ -55,18 +57,22 @@ class _Accumulator:
 
     n_receipts: int = 0
     n_critical_correct: int = 0
-    field_correct: int = 0
-    field_total: int = 0
+    breakdown: FieldBreakdown = FieldBreakdown()
     li_precision: float = 0.0
     li_recall: float = 0.0
     li_f1: float = 0.0
     failures: list[tuple[str, str]] = dc_field(default_factory=list)
 
-    def add(self, crit: bool, facc: dict[str, bool], prf: tuple[float, float, float]) -> None:
+    def add(
+        self,
+        crit: bool,
+        facc: dict[str, bool],
+        bd: FieldBreakdown,
+        prf: tuple[float, float, float],
+    ) -> None:
         self.n_receipts += 1
         self.n_critical_correct += int(crit)
-        self.field_correct += sum(1 for ok in facc.values() if ok)
-        self.field_total += len(facc)
+        self.breakdown = self.breakdown + bd
         p, r, f = prf
         self.li_precision += p
         self.li_recall += r
@@ -77,12 +83,13 @@ class _Accumulator:
 
         Counted as processed but not correct: it lands in ``n_receipts`` so the
         batch size stays honest, contributes nothing to ``n_critical_correct``,
-        and scores zero on line items. The field map is empty on purpose — a
-        receipt that produced nothing must not inflate *or* deflate the
-        field-accuracy denominator, only the metrics it genuinely bears on.
+        and scores zero on line items.
         """
         self.failures.append((receipt_id, detail))
-        self.add(False, {}, (0.0, 0.0, 0.0))
+        # The empty map and zero breakdown are on purpose: a receipt that
+        # produced nothing must not inflate *or* deflate any denominator, only
+        # the metrics it genuinely bears on.
+        self.add(False, {}, FieldBreakdown(), (0.0, 0.0, 0.0))
 
 
 def _coerce_confidence(value: Any) -> Decimal:
@@ -110,7 +117,7 @@ def _build_report(results: list[EvalResult], acc: _Accumulator) -> EvalReport:
         ),
         auto_approval_rate=(n_approved / n) if n else 0.0,
         critical_field_accuracy=(acc.n_critical_correct / n) if n else 0.0,
-        field_accuracy=(acc.field_correct / acc.field_total) if acc.field_total else 0.0,
+        breakdown=acc.breakdown,
         line_item_precision=(acc.li_precision / n) if n else 0.0,
         line_item_recall=(acc.li_recall / n) if n else 0.0,
         line_item_f1=(acc.li_f1 / n) if n else 0.0,
@@ -122,8 +129,9 @@ def _build_report(results: list[EvalResult], acc: _Accumulator) -> EvalReport:
 
 
 def _report_to_dict(report: EvalReport) -> dict[str, Any]:
-    """Diff-friendly JSON view. Per-receipt field maps collapse to counts so the
-    committed artifact stays readable while still surfacing per-receipt movement.
+    """Diff-friendly JSON view. Per-receipt class counts plus the full per-path
+    map, sorted: §16 commits results so regressions show in a diff, and only the
+    map can show *which* field moved.
     """
     return {
         "prompt_version": _prompt_version(),
@@ -138,7 +146,14 @@ def _report_to_dict(report: EvalReport) -> dict[str, Any]:
             "auto_approval_precision": report.auto_approval_precision,
             "auto_approval_rate": report.auto_approval_rate,
             "critical_field_accuracy": report.critical_field_accuracy,
-            "field_accuracy": report.field_accuracy,
+            "transcription_accuracy": report.transcription_accuracy,
+            "transcription_accuracy_core": report.transcription_accuracy_core,
+            "transcription_accuracy_line_items": (
+                report.transcription_accuracy_line_items
+            ),
+            "self_report_agreement": report.self_report_agreement,
+            "hallucinated_fields": report.hallucinated_fields,
+            "correctly_empty_fields": report.correctly_empty_fields,
             "line_item_precision": report.line_item_precision,
             "line_item_recall": report.line_item_recall,
             "line_item_f1": report.line_item_f1,
@@ -162,8 +177,16 @@ def _report_to_dict(report: EvalReport) -> dict[str, Any]:
                 "receipt_id": r.receipt_id,
                 "confidence": str(r.confidence),
                 "critical_correct": r.critical_correct,
-                "fields_correct": sum(1 for ok in r.field_acc.values() if ok),
-                "fields_total": len(r.field_acc),
+                "transcription_correct": r.breakdown.transcription_correct,
+                "transcription_total": r.breakdown.transcription_total,
+                "self_report_correct": r.breakdown.self_report_correct,
+                "self_report_total": r.breakdown.self_report_total,
+                "hallucinated": r.breakdown.hallucinated,
+                "correctly_empty": r.breakdown.correctly_empty,
+                # The per-path map, sorted. §16 wants results committed so
+                # regressions show in a diff; two integers cannot show which
+                # field moved, and unsorted keys would make every diff noise.
+                "field_results": dict(sorted(r.field_acc.items())),
             }
             for r in report.results
         ],
@@ -218,6 +241,7 @@ def run_eval(
             predicted, confidence = pipeline_fn(label_path)
 
             facc = field_accuracy(predicted, truth)
+            bd = field_breakdown(predicted, truth)
             crit = critical_field_accuracy(predicted, truth)
             prf = line_item_f1(predicted.line_items, truth.line_items)
             conf = _coerce_confidence(confidence)
@@ -235,13 +259,14 @@ def run_eval(
             )
             continue
 
-        acc.add(crit, facc, prf)
+        acc.add(crit, facc, bd, prf)
         results.append(
             EvalResult(
                 receipt_id=label_path.stem,
                 confidence=conf,
                 critical_correct=crit,
                 field_acc=facc,
+                breakdown=bd,
             )
         )
 

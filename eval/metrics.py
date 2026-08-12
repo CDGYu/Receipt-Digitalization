@@ -326,6 +326,9 @@ class EvalResult:
     confidence: Decimal
     critical_correct: bool
     field_acc: dict[str, bool]
+    #: Per-class counts. Defaults to all-zero so ``cmd_calibrate``, which
+    #: rebuilds results from JSON for the curve alone, needs no change.
+    breakdown: FieldBreakdown = field(default_factory=FieldBreakdown)
 
 
 @dataclass
@@ -358,7 +361,11 @@ class EvalReport:
     auto_approval_precision: float | None  # 1
     auto_approval_rate: float             # 2
     critical_field_accuracy: float        # 3
-    field_accuracy: float                 # 4
+    # Metric 4 is not one number, because it was never measuring one thing.
+    # The report stores the aggregate counts and derives the ratios, so the
+    # printed block and the JSON cannot disagree, and so `format_breakdown`
+    # can render a whole run and a single receipt with the same code.
+    breakdown: FieldBreakdown           # 4
     line_item_precision: float            # 5
     line_item_recall: float               # 5
     line_item_f1: float                   # 5
@@ -372,6 +379,41 @@ class EvalReport:
 
     calibration: list[tuple[Decimal, float, float]] = field(default_factory=list)
     results: list[EvalResult] = field(default_factory=list)
+
+    @property
+    def transcription_accuracy(self) -> float | None:
+        """Metric 4: of the fields this receipt *has*, how many were read.
+
+        ``None`` when the denominator is zero, never ``0.0`` — the same rule
+        ``auto_approval_precision`` learned in P8.T3, applied before it can
+        bite a second time.
+        """
+        return ratio(
+            self.breakdown.transcription_correct, self.breakdown.transcription_total
+        )
+
+    @property
+    def transcription_accuracy_core(self) -> float | None:
+        return ratio(self.breakdown.core_correct, self.breakdown.core_total)
+
+    @property
+    def transcription_accuracy_line_items(self) -> float | None:
+        return ratio(self.breakdown.line_items_correct, self.breakdown.line_items_total)
+
+    @property
+    def self_report_agreement(self) -> float | None:
+        """``meta.*`` — model self-description, reported, never averaged in."""
+        return ratio(
+            self.breakdown.self_report_correct, self.breakdown.self_report_total
+        )
+
+    @property
+    def hallucinated_fields(self) -> int:
+        return self.breakdown.hallucinated
+
+    @property
+    def correctly_empty_fields(self) -> int:
+        return self.breakdown.correctly_empty
 
 
 def calibration_curve(

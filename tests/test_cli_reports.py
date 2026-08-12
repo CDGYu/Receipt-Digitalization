@@ -87,7 +87,7 @@ import pytest
 from openpyxl import load_workbook
 
 from config.settings import Settings
-from eval.metrics import EvalReport
+from eval.metrics import EvalReport, FieldBreakdown
 from eval.run_baseline import format_report
 from receipts import cli as cli_module
 from receipts.cli import (
@@ -355,7 +355,11 @@ def _write_results(results_dir: Path, *, receipts: int, results: list[dict]) -> 
         "counts": {"receipts": receipts, "auto_approved": 0,
                    "critical_correct": 0, "failed": 0},
         "metrics": {"auto_approval_precision": 0.0, "auto_approval_rate": 0.0,
-                    "critical_field_accuracy": 0.0, "field_accuracy": 0.0,
+                    "critical_field_accuracy": 0.0, "transcription_accuracy": 0.0,
+                    "transcription_accuracy_core": 0.0,
+                    "transcription_accuracy_line_items": 0.0,
+                    "self_report_agreement": 0.0, "hallucinated_fields": 0,
+                    "correctly_empty_fields": 0,
                     "line_item_precision": 0.0, "line_item_recall": 0.0,
                     "line_item_f1": 0.0, "cost_per_receipt": None,
                     "p50_latency_s": None, "p95_latency_s": None},
@@ -372,7 +376,11 @@ def _stub_report() -> EvalReport:
         n_receipts=3, n_auto_approved=2, n_critical_correct=2,
         auto_approve_threshold=D("0.85"),
         auto_approval_precision=1.0, auto_approval_rate=0.667,
-        critical_field_accuracy=0.667, field_accuracy=0.85,
+        critical_field_accuracy=0.667,
+        # 17/20 == the 0.85 this fixture carried as a single scalar. The counts
+        # are the stored form now; the ratios are derived from them.
+        breakdown=FieldBreakdown(transcription_correct=17, transcription_total=20,
+                                 core_correct=17, core_total=20),
         line_item_precision=0.9, line_item_recall=0.9, line_item_f1=0.9,
     )
 
@@ -388,7 +396,10 @@ def _empty_report() -> EvalReport:
         n_receipts=0, n_auto_approved=0, n_critical_correct=0,
         auto_approve_threshold=D("0.85"),
         auto_approval_precision=1.0, auto_approval_rate=0.0,
-        critical_field_accuracy=0.0, field_accuracy=0.0,
+        critical_field_accuracy=0.0,
+        # Nothing scored, so every count is zero -- and every derived ratio is
+        # `None`, not a `0.0` that would read as "measured, and bad".
+        breakdown=FieldBreakdown(),
         line_item_precision=0.0, line_item_recall=0.0, line_item_f1=0.0,
     )
 
@@ -663,7 +674,7 @@ def _results(*specs: tuple[str, bool], count: int = 1) -> list[dict]:
             rows.append({
                 "receipt_id": f"r{len(rows):03d}", "confidence": confidence,
                 "critical_correct": correct,
-                "fields_correct": int(correct), "fields_total": 1,
+                "transcription_correct": int(correct), "transcription_total": 1,
             })
     return rows
 
@@ -763,9 +774,9 @@ def test_calibrate_prints_the_sample_behind_every_precision_figure(tmp_path, cap
 def test_calibrate_when_no_threshold_clears_the_target_recommends_nothing(tmp_path, capsys):
     _write_results(tmp_path, receipts=2, results=[
         {"receipt_id": "r001", "confidence": "0.90", "critical_correct": False,
-         "fields_correct": 0, "fields_total": 1},
+         "transcription_correct": 0, "transcription_total": 1},
         {"receipt_id": "r002", "confidence": "0.95", "critical_correct": False,
-         "fields_correct": 0, "fields_total": 1},
+         "transcription_correct": 0, "transcription_total": 1},
     ])
     code = cmd_calibrate(
         build_parser().parse_args(["calibrate", "--target", "0.99"]), results_dir=tmp_path)

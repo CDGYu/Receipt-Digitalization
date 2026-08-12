@@ -394,10 +394,10 @@ def test_run_eval_survives_a_failing_receipt(tmp_path):
     assert report.n_critical_correct == 1
     assert report.n_auto_approved == 1  # only r1; confidence 0 can never approve
 
-    # The empty field map keeps the field-accuracy denominator honest: r1 read
+    # The empty field map keeps the transcription denominator honest: r1 read
     # perfectly, so the aggregate stays 1.0 rather than being halved by a
     # receipt that produced nothing.
-    assert report.field_accuracy == 1.0
+    assert report.transcription_accuracy == 1.0
 
     # The error detail reaches the committed artifact.
     written = list(results_dir.glob("*.json"))
@@ -431,3 +431,70 @@ def test_run_eval_records_an_unreadable_label_as_a_failure(tmp_path):
     assert report.n_failed == 1
     assert [rid for rid, _detail in report.failures] == ["r2"]
     assert report.n_auto_approved == 1
+
+
+def test_the_report_carries_each_class_separately(tmp_path):
+    golden = tmp_path / "golden"
+    labels = golden / "labels"
+    labels.mkdir(parents=True)
+    (labels / "r1.json").write_text(
+        _extraction(total="224.00").model_dump_json(), encoding="utf-8"
+    )
+
+    def pipeline_fn(path):
+        return _extraction(total="224.00"), D("0.95")
+
+    report = run_eval(golden, pipeline_fn, results_dir=tmp_path / "results")
+
+    assert report.transcription_accuracy == 1.0
+    assert report.transcription_accuracy_core == 1.0
+    assert report.transcription_accuracy_line_items == 1.0
+    assert report.self_report_agreement == 1.0
+    assert report.hallucinated_fields == 0
+    assert report.correctly_empty_fields > 0
+
+
+def test_a_hallucinated_field_is_counted_and_does_not_touch_transcription(tmp_path):
+    golden = tmp_path / "golden"
+    labels = golden / "labels"
+    labels.mkdir(parents=True)
+    truth = _extraction(total="224.00")
+    (labels / "r1.json").write_text(truth.model_dump_json(), encoding="utf-8")
+
+    def pipeline_fn(path):
+        invented = _extraction(total="224.00")
+        invented.receipt.cashier = "MARIA"      # truth leaves this None
+        return invented, D("0.95")
+
+    report = run_eval(golden, pipeline_fn, results_dir=tmp_path / "results")
+
+    assert report.hallucinated_fields == 1
+    # Inventing a field must not enlarge the denominator the model is scored on.
+    assert report.transcription_accuracy == 1.0
+
+
+def test_the_artifact_keeps_the_per_path_map_sorted(tmp_path):
+    """Spec §16 says metric 4 exists to show 'where to focus prompt work'. Two
+    integers cannot answer that; the map can. Sorted so a diff is legible."""
+    golden = tmp_path / "golden"
+    labels = golden / "labels"
+    labels.mkdir(parents=True)
+    (labels / "r1.json").write_text(
+        _extraction(total="224.00").model_dump_json(), encoding="utf-8"
+    )
+
+    def pipeline_fn(path):
+        return _extraction(total="999.00"), D("0.95")     # wrong total
+
+    results_dir = tmp_path / "results"
+    run_eval(golden, pipeline_fn, results_dir=results_dir)
+    payload = json.loads(
+        next(results_dir.glob("*.json")).read_text(encoding="utf-8")
+    )
+
+    row = payload["results"][0]
+    assert row["field_results"]["totals.total"] is False
+    assert list(row["field_results"]) == sorted(row["field_results"])
+    assert row["transcription_correct"] < row["transcription_total"]
+    assert payload["metrics"]["transcription_accuracy"] < 1.0
+    assert "field_accuracy" not in payload["metrics"]
