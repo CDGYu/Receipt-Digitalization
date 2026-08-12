@@ -8,6 +8,13 @@ only — tracked JSON, no images (gitignored), no network.
 Measured before the fix, with the old every-path denominator:
 r001 42.50%, r002 37.50%, r003 36.59%. A model that read nothing scored above
 40%; the one real local run on file beat that floor by a single path.
+
+That run is not guesswork and is not read from ``eval/results/``. It is recorded
+in ``docs/KNOWN_ISSUES.md`` under ISSUE-001 ("The local path, re-measured
+2026-08-11") and again in
+``docs/adr/0039-the-local-path-is-a-liveness-check.md``. ``eval/results/`` is
+empty by that ADR's decision 2, which keeps liveness artefacts out of it, so its
+absence here is the ruling being followed rather than evidence missing.
 """
 
 from __future__ import annotations

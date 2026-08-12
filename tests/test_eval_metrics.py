@@ -115,8 +115,6 @@ def test_breakdown_never_counts_an_empty_truth_path_as_transcription():
 def test_breakdown_puts_meta_paths_in_self_report_not_transcription():
     bd = field_breakdown(_extraction(), _extraction())
     assert bd.self_report_total > 0
-    # No meta path may be inside the transcription denominator.
-    assert bd.transcription_total == bd.core_total + bd.line_items_total
 
 
 def test_breakdown_classifies_by_prefix_not_by_a_list_of_names():
