@@ -16,17 +16,10 @@ from pathlib import Path
 
 import pytest
 
-# run_baseline pulls in the pipeline, which needs the optional "pipeline" extras
-# (Pillow + HEIF). Skip the whole module rather than erroring at collection.
-pytest.importorskip("PIL")
-pytest.importorskip("pillow_heif")
-
-from PIL import Image  # noqa: E402
-
-from eval.metrics import EvalReport, FieldBreakdown  # noqa: E402
-from eval.run_baseline import format_report, run_baseline  # noqa: E402
-from receipts.extract.clients.fake import FakeVLMClient  # noqa: E402
-from receipts.extract.schema import (  # noqa: E402
+from eval.metrics import EvalReport, FieldBreakdown
+from eval.run_baseline import format_breakdown, format_report, run_baseline
+from receipts.extract.clients.fake import FakeVLMClient
+from receipts.extract.schema import (
     DocumentType,
     Legibility,
     LineItem,
@@ -36,7 +29,7 @@ from receipts.extract.schema import (  # noqa: E402
     Totals,
     TriageResult,
 )
-from receipts.validate.context import ValidationContext  # noqa: E402
+from receipts.validate.context import ValidationContext
 
 CTX = ValidationContext(today=date(2026, 7, 26))
 
@@ -74,12 +67,47 @@ def _triage() -> TriageResult:
 
 def _write_png(path: Path) -> None:
     """A synthetic RGB PNG, sized so resize_for_model logs no legibility warning."""
+    from PIL import Image
+
     path.parent.mkdir(parents=True, exist_ok=True)
     Image.new("RGB", (900, 1400), (240, 240, 240)).save(path)
 
 
 def _write_golden(golden: Path) -> None:
-    """One labelled receipt (label + matching image) under a tmp golden dir."""
+    """One labelled receipt (label + matching image) under a tmp golden dir.
+
+    The optional ``pipeline`` extra (Pillow + HEIF) is needed here and nowhere
+    else in this file, so the guard sits on the fixture that needs it. It used
+    to open the module::
+
+        pytest.importorskip("PIL")
+        pytest.importorskip("pillow_heif")
+
+    which took every test in the file with it — including the
+    ``format_breakdown`` tests at the bottom, covering the renderer this module
+    shares with ``scripts/try_one_receipt.py``, which needs neither an image
+    nor the pipeline. Measured with ``pillow_heif`` blocked: the module-level
+    form reported ``1 skipped`` and ran nothing.
+
+    Attached to the fixture rather than listed against test names, because a
+    list of names is an enumeration a test added next year escapes: a test that
+    builds a golden set is guarded because it built one.
+
+    **What this does not buy, measured.** ``eval.run_baseline`` imports
+    ``receipts.pipeline``, which imports both Pillow and ``pillow_heif`` at
+    module top, so this file cannot be *collected* without either — guard or no
+    guard, the narrowed form turns a skip into a collection error there. That
+    costs nothing today: blocking ``pillow_heif`` and collecting
+    ``tests/test_cli_reports.py`` and ``tests/test_preprocess_cv.py`` one at a
+    time errors on each, so a run without the extra is already interrupted
+    before this file is reached. The guard was buying a tidy skip inside a
+    suite that could not start. What the narrowing does buy is that the file no
+    longer says the formatting tests need an image library, and that they stop
+    being hidden the day that import chain is untangled.
+    """
+    pytest.importorskip("PIL")
+    pytest.importorskip("pillow_heif")
+
     labels = golden / "labels"
     images = golden / "images"
     labels.mkdir(parents=True)
@@ -239,7 +267,7 @@ def test_format_breakdown_renders_every_class():
     """Each labelled row carries *its own* value, not merely a value.
 
     Asserted per row rather than as substrings of the block, because a
-    substring test passes under any permutation of the six rows. Measured, on
+    substring test passes under any permutation of its rows. Measured, on
     the substring version this replaces: swapping ``hallucinated`` with
     ``correctly_empty``, and swapping the transcription and core rows, both
     left it green. ``"2" in text`` was satisfied by the self-report row's
@@ -247,15 +275,12 @@ def test_format_breakdown_renders_every_class():
     text`` did not care which row carried the 90. The two counts are the novel
     part of this design and nothing was checking which one printed where.
     """
-    from eval.metrics import FieldBreakdown
-    from eval.run_baseline import format_breakdown
-
     text = format_breakdown(FieldBreakdown(
         transcription_correct=9, transcription_total=10,
         core_correct=5, core_total=5,
         line_items_correct=4, line_items_total=5,
         self_report_correct=1, self_report_total=4,
-        hallucinated=2, correctly_empty=11,
+        hallucinated=2, correctly_empty=11, structural_mismatch=3,
     ))
 
     assert _row(text, "Transcription accuracy").split()[-2:] == ["90.00%", "(9/10)"]
@@ -264,6 +289,7 @@ def test_format_breakdown_renders_every_class():
     assert _row(text, "Self-report agreement").split()[-2:] == ["25.00%", "(1/4)"]
     assert _row(text, "Hallucinated fields").split()[-1] == "2"
     assert _row(text, "Correctly empty fields").split()[-1] == "11"
+    assert _row(text, "Structural mismatches").split()[-1] == "3"
 
 
 def test_format_breakdown_renders_an_empty_denominator_as_na_not_zero():
@@ -273,9 +299,6 @@ def test_format_breakdown_renders_an_empty_denominator_as_na_not_zero():
     block where a single row got the ``None`` treatment and the other three
     printed ``0.00%``.
     """
-    from eval.metrics import FieldBreakdown
-    from eval.run_baseline import format_breakdown
-
     text = format_breakdown(FieldBreakdown())
 
     for label in ("Transcription accuracy", "core:", "line items:",
