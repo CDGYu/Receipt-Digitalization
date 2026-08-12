@@ -64,19 +64,24 @@ empty container):
 
 | contributor | count |
 |---|---|
-| truth not filled and prediction not filled — the receipt has no such field | 12 |
+| **non-`meta`** paths where neither side is filled — the receipt has no such field | 12 |
 | `meta.*` self-reports resting at their schema defaults | 4 |
 | a filled truth value a schema default happens to match (`receipt.decimal_convention`) | 1 |
 
-`meta.*` is the **smaller** contributor. That is what refutes the remedy that
-was on file — see *Consequences*.
+**The `meta` qualifier on row 1 is load-bearing, and a re-deriver who drops it
+will get a different number.** Neither-side-filled *without* it is 14, because
+`meta.ambiguous_fields` and `meta.unreadable_regions` are `[]` on both sides and
+so satisfy both predicates. Row 2 is where they are counted. With the qualifier
+the three rows partition the 17; without it, rows 1 and 2 overlap by exactly
+those two paths.
 
 ADR-0039 records a local run scoring 45.00% field accuracy on r001 from a model
 whose confidence was `0.000`, whose critical fields were all wrong, and which
 found no line item. Against a 42.50% floor, that run beat silence by one path.
 **That measurement is not re-derived here and is not restated as a defect of the
-run** — it is an accurate record of what the old metric printed, and ADR-0039 §3
-is the ruling that keeps it.
+run** — it is an accurate record of what the old metric printed. ADR-0039 **§1**
+is the section that reads it, and calls that figure "the trap"; §3 is scoped to
+the *timing* and is why the run is not repeated to obtain a fresher one.
 
 Second defect, same metric: `_report_to_dict` collapsed each receipt's per-path
 map to two integers. §16 assigns metric 4 the purpose "where to focus prompt
@@ -143,9 +148,30 @@ readable and silently becomes false. A rename makes them fail loudly instead.
 
 `receipts.extract.paths.flatten` emits empty containers as leaves deliberately,
 so that "had three line items" versus "had none" is a visible difference rather
-than a silently absent key — and it is shared beyond eval, by self-consistency
-diffing and the corrections log. The rule that treats an empty container as
-*absent* is an **eval** rule and lives only in `eval/`.
+than a silently absent key. It also **has callers outside `eval/`**, which is
+the reason this decision exists at all. No set of them is named here: `git grep
+-n "flatten(" -- src eval scripts` is the list, and it is to be read rather than
+trusted to any count — including one written here, which would begin rotting the
+day it was correct. Read it literally: it also matches an unrelated `numpy`
+`.flatten()` in `ingest/dedupe.py`, the function's own recursive calls, and
+prose mentions in docstrings. Deciding which are consumers is the reading this
+sentence refuses to do for you.
+
+The rule that treats an empty container as *absent* is an **eval** rule and
+lives only in `eval/`.
+
+**`paths.py`'s own module docstring undercounts what depends on `flatten`, and
+that is recorded rather than fixed.** It says the function is "used in three
+places" and names self-consistency diffing, the corrections log and eval field
+accuracy; it omits `count_nulls`, defined in the same file, which depends on
+`flatten`'s leaf enumeration and feeds attempt tie-breaking in
+`extractor.py`. So the docstring a maintainer would consult before changing
+`flatten` understates the blast radius — in the file this decision is about not
+touching. It is left alone because this decision is not to touch that file, and
+because the milestone that found it was documentation-only. **The fix, when
+someone has licence, is to state the property and hand over the grep — not to
+replace "three" with a larger number**, which reproduces the same defect one
+size up (review standard 19).
 
 ### 5. A behaviour change outruns a token grep, because the sentences about it sit in files the fix does not touch
 
@@ -190,11 +216,21 @@ So the rule:
 > fixing commit's own file list as evidence about **where** the holdouts are:
 > the files that discuss the behaviour, minus the files the fix touched.
 
-Two honest limits on that rule, because it would otherwise overreach. Copies
-live **inside** the touched files too — several were found there — so this
-narrows where the *residue* hides, it does not relocate the whole problem. And
-the file-list query is a starting filter, not an answer: it tells you which
-files to read, and only reading them tells you what they claim.
+Two honest limits on that rule, because it would otherwise overreach.
+
+**First, copies live inside the touched files too** — several of this claim's
+were found there. The file-boundary observation narrows where the *residue*
+hides; it does not relocate the whole problem, and a reader who took it for the
+whole rule would stop searching the files the fix opened.
+
+**Second, "sweep the vocabulary" cannot converge, and must not be mistaken for a
+procedure that can.** You cannot enumerate every paraphrase of a behaviour; an
+enumerated defence never does converge (review standard 19), and a rule that
+promised otherwise would be this repo's recurring failure wearing a new hat. The
+honest statement of what happened is narrower and more useful: **the surviving
+copy would not have been found by any query — it was found by reading.** The
+grep is what shortens the list of files to read. Reading is what finds the
+claim.
 
 ## Consequences
 
@@ -265,13 +301,31 @@ the ≥99% auto-approval precision claim — §16 says so, ADR-0039 says so, and
 growing the held-out set is P8.T2. A better-defined metric over three receipts
 is still three receipts.
 
-**The "roughly 70–85%" expectation** — `git grep -n "70–85"` finds it in
-`README.md` and `RECEIPT_SYSTEM_SPEC.md` §15 — predates this split and is not
-re-baselined here. It was written against the
-old scalar; `transcription_accuracy` is a strictly harder number. Re-stating it
-needs a real baseline, which is ISSUE-001's business, not this ADR's. It is
-named here as an instance of decision 5's own rule: a sentence about the changed
-behaviour, sitting in a file no commit in this milestone touched.
+**The "roughly 70–85%" field-accuracy expectation, in `README.md` and
+`RECEIPT_SYSTEM_SPEC.md` §15.** Both carry it and both have since `d0ea79f`
+(2026-07-27) — `git grep -n "70–85"` finds them, and that is the whole of what
+is claimed about its provenance here. It predates this ADR's redefinition, so it
+was set when the only field-accuracy number in the project was the old scalar.
+`transcription_accuracy` is a strictly harder number, and the floors above show
+how much harder: the old scalar started a model that read *nothing* at 42.50%.
+
+**It is left standing deliberately, and this is the record of that.** The
+question was put to the project owner during this milestone and the ruling was
+to leave both sentences until a real baseline exists. The reasoning is worth
+keeping with the ruling: the figure is meaningless under the new definition, but
+*replacing* it means choosing a different number, and that is a judgement about
+what to expect from a model nobody has run — which is exactly what ISSUE-001
+blocks. So it waits on the same thing every other accuracy figure in this project
+waits on. **Revisit it when ISSUE-001 closes, not before.**
+
+If you have arrived here from `README.md` or the spec wondering whether that
+70–85% still means anything: it does not, it is known not to, and nothing is to
+be done about it yet.
+
+It is also an instance of decision 5's own rule — a sentence about the changed
+behaviour, sitting in a file no commit in this milestone touched. It was found by
+sweeping the claim's vocabulary past the milestone's own file set, which is the
+only reason it is in this ADR rather than still unnoticed.
 
 ## What was corrected on the way in
 
@@ -294,10 +348,12 @@ here and the numbers above are the measured ones.
   computed from is not recovered here. The claim's *direction* — that removing
   line items raises the floor — holds under both.
 - Its §1.2 splits r001's seventeen free points as 11 / 4 / 2. Under the shipped
-  `_is_filled` rule the split is 12 / 4 / 1, because `totals.tax_breakdown` is
-  an empty list and an empty container is *not filled* — so it belongs with the
-  both-sides-empty group rather than with the schema defaults. Both sum to 17;
-  only the bucketing differed.
+  `_is_filled` rule the split is 12 / 4 / 1 — with row 1 read as **non-`meta`**
+  paths where neither side is filled, the qualifier the Context table carries and
+  the one that keeps these rows a partition. `totals.tax_breakdown` is an empty
+  list and an empty container is *not filled*, so it moves out of the schema
+  defaults and in beside the other paths the receipt does not have. Both splits
+  sum to 17; only the bucketing differed.
 
 ## References
 

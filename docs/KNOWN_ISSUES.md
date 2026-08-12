@@ -241,8 +241,10 @@ slightly pessimistic.
 > 36.59% to 36.36% — **0.22 points**. Excluding only `meta.notes` **raises**
 > every floor, because `notes` is a path an empty extraction *fails*, so
 > dropping it removes a penalty rather than a gift. The real driver was
-> agreement about absence: of r001's 17 free points, 12 were paths where neither
-> side was filled — fields the receipt does not have. **ADR-0040** is what
+> agreement about absence: of r001's 17 free points, 12 were **non-`meta`** paths
+> where neither side was filled — fields the receipt does not have. (The
+> qualifier matters: without it the count is 14, because two `meta.*` paths are
+> `[]` on both sides and are already counted among the 4.) **ADR-0040** is what
 > shipped instead: metric 4 became four numbers over one classifier that reads
 > *filled* from the truth side only. Its probe re-derives every figure in this
 > note.
