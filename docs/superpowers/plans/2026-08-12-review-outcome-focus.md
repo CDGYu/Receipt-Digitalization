@@ -85,20 +85,30 @@ describe('the outcome reaches the reviewer (I5)', () => {
   const regionOf = (): HTMLElement | null =>
     document.querySelector<HTMLElement>('section[tabindex="-1"]')
 
-  it('takes focus when a submit resolves to a terminal state', async () => {
-    const fetchMock = stubApi({
-      '/review/next': [
-        [200, { task: TASK, receipt: SUMMARY }],
-        [200, { task: null }],
-      ],
-      'GET /receipts/a1': [200, RECEIPT],
-      'PATCH /receipts/a1': [200, RECEIPT],
-      '/review/t1/complete': [
-        403,
-        { error: { message: 'only the assignee or an admin may complete this task' } },
-      ],
-    })
-    vi.stubGlobal('fetch', fetchMock)
+  /** A 403 on complete: the write landed and the task is gone. */
+  const terminalRoutes = {
+    '/review/next': [
+      [200, { task: TASK, receipt: SUMMARY }],
+      [200, { task: null }],
+    ],
+    'GET /receipts/a1': [200, RECEIPT],
+    'PATCH /receipts/a1': [200, RECEIPT],
+    '/review/t1/complete': [
+      403,
+      { error: { message: 'only the assignee or an admin may complete this task' } },
+    ],
+  } as const
+
+  /** A 400 on the PATCH: the write was refused and the reviewer can retry. */
+  const failedRoutes = {
+    '/review/next': [[200, { task: TASK, receipt: SUMMARY }]],
+    'GET /receipts/a1': [200, RECEIPT],
+    'PATCH /receipts/a1': [400, { error: { message: "not a decimal amount: 'abc'" } }],
+  } as const
+
+  /** Render, then fire the chord from the form -- the path I5 describes. */
+  async function arriveAt(routes: Parameters<typeof stubApi>[0]): Promise<void> {
+    vi.stubGlobal('fetch', stubApi(routes))
     render(
       <StrictMode>
         <ReviewScreen />
@@ -106,6 +116,10 @@ describe('the outcome reaches the reviewer (I5)', () => {
     )
     await screen.findByLabelText('Total')
     await userEvent.keyboard('{Control>}{Enter}{/Control}')
+  }
+
+  it('takes focus when a submit resolves to a terminal state', async () => {
+    await arriveAt(terminalRoutes)
 
     const notice = await screen.findByText('Saved, but this task was taken over by someone else')
     const region = regionOf()
@@ -115,19 +129,7 @@ describe('the outcome reaches the reviewer (I5)', () => {
   })
 
   it('takes focus when a submit fails', async () => {
-    const fetchMock = stubApi({
-      '/review/next': [[200, { task: TASK, receipt: SUMMARY }]],
-      'GET /receipts/a1': [200, RECEIPT],
-      'PATCH /receipts/a1': [400, { error: { message: "not a decimal amount: 'abc'" } }],
-    })
-    vi.stubGlobal('fetch', fetchMock)
-    render(
-      <StrictMode>
-        <ReviewScreen />
-      </StrictMode>,
-    )
-    await screen.findByLabelText('Total')
-    await userEvent.keyboard('{Control>}{Enter}{/Control}')
+    await arriveAt(failedRoutes)
 
     await screen.findByText(/not a decimal amount/)
     const region = regionOf()
@@ -139,46 +141,17 @@ describe('the outcome reaches the reviewer (I5)', () => {
     // `Next receipt` sharing a slot with Approve is the failure
     // ReviewScreen.tsx already engineered away: a bare Enter advanced the queue
     // and dismissed the warning unread. Focusing it re-creates that on purpose.
-    const fetchMock = stubApi({
-      '/review/next': [
-        [200, { task: TASK, receipt: SUMMARY }],
-        [200, { task: null }],
-      ],
-      'GET /receipts/a1': [200, RECEIPT],
-      'PATCH /receipts/a1': [200, RECEIPT],
-      '/review/t1/complete': [
-        403,
-        { error: { message: 'only the assignee or an admin may complete this task' } },
-      ],
-    })
-    vi.stubGlobal('fetch', fetchMock)
-    render(
-      <StrictMode>
-        <ReviewScreen />
-      </StrictMode>,
-    )
-    await screen.findByLabelText('Total')
-    await userEvent.keyboard('{Control>}{Enter}{/Control}')
+    await arriveAt(terminalRoutes)
 
     const exit = await screen.findByRole('button', { name: 'Next receipt' })
     expect(document.activeElement).not.toBe(exit)
+    // Asserted positively as well: `not.toBe(exit)` alone would also pass with
+    // focus left on `body`, which is the defect.
     expect(document.activeElement).toBe(regionOf())
   })
 
   it('contains every outcome element, so a future one cannot render unfocused', async () => {
-    const fetchMock = stubApi({
-      '/review/next': [[200, { task: TASK, receipt: SUMMARY }]],
-      'GET /receipts/a1': [200, RECEIPT],
-      'PATCH /receipts/a1': [400, { error: { message: "not a decimal amount: 'abc'" } }],
-    })
-    vi.stubGlobal('fetch', fetchMock)
-    render(
-      <StrictMode>
-        <ReviewScreen />
-      </StrictMode>,
-    )
-    await screen.findByLabelText('Total')
-    await userEvent.keyboard('{Control>}{Enter}{/Control}')
+    await arriveAt(failedRoutes)
 
     const alert = await screen.findByRole('alert')
     const region = regionOf()
@@ -189,19 +162,7 @@ describe('the outcome reaches the reviewer (I5)', () => {
   it('carries no role, so single-alert queries stay unambiguous', async () => {
     // ADR-0024 decision 4 is a user ruling: a second alert in this region makes
     // findByRole('alert') match two elements and throw.
-    const fetchMock = stubApi({
-      '/review/next': [[200, { task: TASK, receipt: SUMMARY }]],
-      'GET /receipts/a1': [200, RECEIPT],
-      'PATCH /receipts/a1': [400, { error: { message: "not a decimal amount: 'abc'" } }],
-    })
-    vi.stubGlobal('fetch', fetchMock)
-    render(
-      <StrictMode>
-        <ReviewScreen />
-      </StrictMode>,
-    )
-    await screen.findByLabelText('Total')
-    await userEvent.keyboard('{Control>}{Enter}{/Control}')
+    await arriveAt(failedRoutes)
 
     await screen.findByRole('alert')
     const region = regionOf()
