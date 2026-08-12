@@ -46,6 +46,7 @@ Accepted; supersede it with a new ADR rather than editing history.
 | [0038](0038-the-theme-control.md) | The theme control, and one key in browser storage | Accepted |
 | [0039](0039-the-local-path-is-a-liveness-check.md) | The local path is a liveness check, not a measurement | Accepted |
 | [0040](0040-what-field-accuracy-counts.md) | What eval field accuracy counts, and the three things it used to average | Accepted |
+| [0041](0041-the-review-outcome-takes-focus.md) | The review outcome takes focus, so a 403 is not invisible | Accepted |
 
 Read **0001** first: it is the invariant everything else defers to. **0007** is
 the one to read before touching anything that writes card data or money, and
@@ -133,6 +134,21 @@ and no class named for agreement holds a path the per-path map scores wrong. Its
 reach the sentences about the changed behaviour that live in files the fixing
 commit never opens, which is verified there against two commits and their
 ancestry.
+**0041** is the one to read before adding a state to the review screen's submit
+chain, or before putting any new element in `ReviewScreen`'s tail. The outcome
+of a submit — the backend-down explanation, the summary alert, the terminal
+card — rendered at the end of a long document while the ⌘↵ chord is bound to
+`window`, so a 403 pressed from the top of the form changed nothing a sighted
+reviewer could see, in the one case where *the write landed and the task is
+gone*. It is now one `<section tabIndex={-1}>` that takes focus whenever it
+appears, and the browser does the scrolling. The condition is the **complement**
+of the pending states, so a state added later defaults *into* the region
+instead of having to be added to a list; the region carries **no role**, which
+extends ADR-0024's decision 4 rather than reopening it; and it is a `<section>`
+because `.screen > div` is the image pane's positional selector. Focus rather
+than `scrollIntoView` because `scrollIntoView` is `undefined` in jsdom — so the
+gates can certify that focus moved and that the outcome sits inside the region,
+and they still cannot certify that anything was *seen*.
 
 Primary sources these build on: `RECEIPT_SYSTEM_SPEC.md` (build spec),
 `README.md` (§5 design decisions), `VLM_AND_DATA.md`, and the always-on

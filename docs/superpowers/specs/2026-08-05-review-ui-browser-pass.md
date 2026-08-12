@@ -75,7 +75,7 @@ and the "review screen" capture is a picture of the login page.
 | Do severity colours survive dark mode at 4.5:1? | **Yes.** error 4.94:1, warn 8.66:1, info 7.31:1 on `--color-surface`. Light: 4.83 / 5.02 / 6.70. Each carries the word as well as the colour. |
 | Does anything scroll horizontally at 375px? | **No.** `documentElement.scrollWidth` never exceeded `clientWidth` on any of the 64 records. The line-items table scrolls inside its own `overflow-x` wrapper, as §5.2 asks. |
 | Are focus rings visible on every interactive element, in both themes? | **On every input, select and button: yes** — `2px solid var(--color-ring)` at 2px offset, `:focus-visible` matching under keyboard traversal (26 stops walked on the review screen). **`<summary>` is the exception** and keeps the browser's own ring (finding m10). |
-| Do the five error states read as sentences a reviewer can act on? | **The words do; the placement does not.** Every message is the server's own and every state offers exactly one workable exit. But the terminal states, the summary alert and Approve are all below the fold at a real window height (finding I5), and the 503's two sentences say the same thing twice (finding I9). |
+| Do the five error states read as sentences a reviewer can act on? | **The words do; the placement does not.** Every message is the server's own and every state offers exactly one workable exit. But the terminal states, the summary alert and Approve are all below the fold at a real window height (finding I5), and the 503's two sentences say the same thing twice (finding I9). **[Corrected 2026-08-12 — the placement half no longer answers the question. I5 was fixed (`5a7fc58`, ADR-0041): the outcome takes focus when it appears and the browser scrolls it into view, so a 403, a 404 or a 400 no longer leaves the screen identical. The sentence stands as written — these elements do still render below the fold at rest; what changed is that the reviewer is taken to them. I9 is unaffected and still open.]** |
 | Is the receipt image legible against its surround? | **Yes** — judged against an intercepted receipt-shaped image, because the seeded blob is one transparent pixel. White paper on `--color-surface-sunken`, paper edge clearly visible, nothing tinted or overlaid. §5.5 delivered. |
 | Are touch targets 44×44 in practice? | **On the review and admin screens, yes.** Every input/select/button measured ≥44 tall. The two checkboxes are 20×20 **but their wrapping label measures 317×44 / 250×44 / 179×44**, so the row is the target, as `.check` claims. ~~**Not on login (21px controls) and not on the findings disclosure rows (21px).**~~ **[Corrected 2026-08-07 — the login half is no longer true: C3's fix took all three login controls past 44px in both themes at all three widths. The findings disclosure rows are still 21px (m10's neighbourhood) and are unfixed.]** |
 | Does the light/dark switch work, and does explicit light beat an OS dark preference? | **Yes, both directions.** OS dark + `data-theme="light"` → light page *and* light UA widgets. OS light + `data-theme="dark"` → dark both. `:root:not([data-theme='light'])` behaves exactly as ADR-0027 says. **There is no theme control in the app**, so the only ways in are the OS preference and setting the attribute by hand. |
@@ -124,7 +124,7 @@ is information nobody had.
 > | C1, C2 | **FIXED** — `205d77a`. `MoneyInput.module.css`'s `.field` went `inline-flex` → `flex`; `cellOverflow` 204 records → 0. |
 > | C3 | **FIXED** — `205d77a`. `frontend/src/login/` got its first stylesheet; all three controls clear 44px. |
 > | I4 | **FIXED** — `205d77a`. `--color-null` → `#7C8CA2` in both dark blocks; sub-4.5:1 records 35 → 0. |
-> | **I5** | **RE-TRIAGED TO CRITICAL, NOT FIXED** (user ruling, 2026-08-06). See its own entry. |
+> | **I5** | **RE-TRIAGED TO CRITICAL** (user ruling, 2026-08-06), then **FIXED 2026-08-12** — `5a7fc58`, recorded in **ADR-0041**. The outcome region takes focus when it appears, so the browser scrolls it into view. See its own entry. |
 > | I6, I7, I8, I9 | **OPEN**, unchanged. |
 > | m10–m16 | **OPEN**, unchanged. |
 >
@@ -221,6 +221,16 @@ luminance and propagated; `5.43` is the measured value.)
 > the task is gone*, and the reviewer sees nothing at all. Fixing it means
 > reopening **ADR-0024**'s error-recovery contract — which is why it was not
 > taken as a drive-by.
+>
+> **[Superseded 2026-08-12 — "is NOT fixed" was true when written and is not
+> now.** I5 was fixed at `5a7fc58` and the decision is **ADR-0041**. The
+> prediction in the last sentence above did not hold: fixing this **extended**
+> ADR-0024 rather than reopening it — the outcome region carries no `role`, so
+> decision 4's single-alert ruling is untouched, and in a terminal state
+> Approve does not render while the single exit stays inside the terminal card,
+> so decision 3 is untouched. The rest of that sentence held: it was still not
+> a drive-by, and took a design, an ADR and a milestone of its own. The verdict
+> line at the end of this entry is the record.**]**
 
 **I5 — At a real window height the outcome of pressing ⌘↵ is off-screen.**
 At 1440×900 the review screen's last visible element is the middle of the form:
@@ -236,6 +246,22 @@ region is a grid item in source order; nothing pins it near the action or
 brings it into view).
 *Evidence:* `review-real-fold--1440x900-light.png`, `error-403-taken--1440-light.png`,
 `error-404-gone--375-light.png`, `error-400-field--1440-light.png`.
+***FIXED 2026-08-12 (`5a7fc58`), recorded in ADR-0041.*** The backend-down
+explanation, the summary alert and the terminal card are now one
+`<section tabIndex={-1}>` that takes focus whenever it appears, and the browser
+scrolls a focused element into view by itself.
+**This finding understated the defect**, and the correction belongs here rather
+than in the text above. Re-measured in Chromium against the seeded fixture with
+the page at the top: Approve sits at **y=1195** at 1440×900, ×800 **and**
+×1080 — measured at each height, so it is below the fold at every desktop
+height tested, not only the one this entry names — in a 1263px document, and
+the line-item row pitch is **73px**, so it degrades with the receipt.
+**The placement is unchanged**: these elements still render at the end of the
+document. What changed is that the reviewer is taken to them — measured,
+`scrollY` 0 → 460 with the region in view and `document.activeElement` on it.
+The *owning file* named above is not where the fix landed: it is
+`ReviewScreen.tsx` (the region and the focus effect), with one class added to
+the stylesheet.
 
 **I6 — The inline field error does not sit under the field it blames.**
 `ReceiptForm.module.css`'s `.form > p { grid-column: 1 / -1 }` starts the error
