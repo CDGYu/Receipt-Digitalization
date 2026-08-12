@@ -1342,3 +1342,17 @@ was therefore itself incomplete.
 
 **Resolution:** all three are folded into Task 3, which already owned the first.
 Fixing one copy and leaving two is the failure ADR-0033 exists to prevent.
+
+### 2026-08-12 — this plan cites ADR-0039 §3 for a ruling that lives in §1
+
+Task 4's brief, and several dispatch messages, said "ADR-0039 §3 says that
+measurement is not to be re-derived" about the `Field accuracy: 45.00%` /
+`fields_correct 18 / 40` record. **§3 is "Do not re-derive the local timing"**
+and its body is entirely the 1896 s measurement. The section that reads the
+field-accuracy figure — and calls it "the trap" — is **§1**.
+
+The instruction was right; the anchor was one section off, and a citation is a
+claim (review standard 21). Corrected in ADR-0040. A third copy survives in
+`docs/NEXT_SESSION_PROMPT.md` and is deliberately deferred to the session-end
+handoff refresh, because that file is half the pair ADR-0033 requires to be
+committed last and alone.
