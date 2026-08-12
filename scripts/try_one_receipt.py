@@ -12,8 +12,8 @@ minutes, and finding out which stage broke should not cost a full batch.
 
 Every stage is timed and flushed as it completes, so progress is visible while a
 slow call is still in flight. When a golden label exists for the receipt the
-extraction is scored against it (field accuracy, the critical-field gate, line-item
-F1) — that is the closest thing to "did it get the receipt right".
+extraction is scored against it (the §16 metric-4 block, the critical-field gate,
+line-item F1) — that is the closest thing to "did it get the receipt right".
 """
 
 from __future__ import annotations
@@ -57,7 +57,8 @@ def main() -> int:
     args = parser.parse_args()
 
     from config.settings import Settings
-    from eval.metrics import critical_field_accuracy, field_accuracy, line_item_f1
+    from eval.metrics import critical_field_accuracy, field_accuracy, field_breakdown, line_item_f1
+    from eval.run_baseline import format_breakdown
     from receipts.extract.clients.factory import make_client
     from receipts.extract.extractor import extract_with_repair, triage
     from receipts.extract.schema import ReceiptExtraction
@@ -185,7 +186,7 @@ def main() -> int:
 
     truth = ReceiptExtraction.model_validate_json(label_path.read_text(encoding="utf-8"))
     acc = field_accuracy(extraction, truth)
-    correct = sum(1 for ok in acc.values() if ok)
+    bd = field_breakdown(extraction, truth)
     precision, recall, f1 = line_item_f1(extraction.line_items, truth.line_items)
     critical = critical_field_accuracy(extraction, truth)
 
@@ -193,10 +194,7 @@ def main() -> int:
     print("VS GOLDEN LABEL")
     print("-" * 68)
     print(f"  critical fields (merchant+date+total) all correct: {critical}")
-    if acc:
-        print(f"  field accuracy : {correct}/{len(acc)} = {correct / len(acc):.1%}")
-    else:
-        print("  field accuracy : n/a")
+    print(format_breakdown(bd))
     print(f"  line-item F1   : {f1:.2f}  (precision {precision:.2f} recall {recall:.2f})")
     wrong = sorted(p for p, ok in acc.items() if not ok)
     if wrong:

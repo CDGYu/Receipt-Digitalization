@@ -23,7 +23,7 @@ pytest.importorskip("pillow_heif")
 
 from PIL import Image  # noqa: E402
 
-from eval.metrics import EvalReport  # noqa: E402
+from eval.metrics import EvalReport, FieldBreakdown  # noqa: E402
 from eval.run_baseline import format_report, run_baseline  # noqa: E402
 from receipts.extract.clients.fake import FakeVLMClient  # noqa: E402
 from receipts.extract.schema import (  # noqa: E402
@@ -164,7 +164,13 @@ def test_format_report_contains_metric_labels():
         auto_approval_precision=1.0,
         auto_approval_rate=0.5,
         critical_field_accuracy=1.0,
-        field_accuracy=0.95,
+        breakdown=FieldBreakdown(
+            transcription_correct=19, transcription_total=20,
+            core_correct=9, core_total=10,
+            line_items_correct=10, line_items_total=10,
+            self_report_correct=2, self_report_total=4,
+            hallucinated=2, correctly_empty=11,
+        ),
         line_item_precision=1.0,
         line_item_recall=1.0,
         line_item_f1=1.0,
@@ -177,8 +183,9 @@ def test_format_report_contains_metric_labels():
         "Auto-approval precision",
         "Auto-approval rate",
         "Critical-field accuracy",
-        "Field accuracy",
+        "Transcription accuracy",
         "Line-item F1",
+        "Hallucinated fields",
     ):
         assert label in text
 
@@ -193,7 +200,13 @@ def test_format_report_shows_failed_count():
         auto_approval_precision=1.0,
         auto_approval_rate=1 / 3,
         critical_field_accuracy=1 / 3,
-        field_accuracy=0.95,
+        breakdown=FieldBreakdown(
+            transcription_correct=19, transcription_total=20,
+            core_correct=9, core_total=10,
+            line_items_correct=10, line_items_total=10,
+            self_report_correct=2, self_report_total=4,
+            hallucinated=2, correctly_empty=11,
+        ),
         line_item_precision=1.0,
         line_item_recall=1.0,
         line_item_f1=1.0,
@@ -206,3 +219,36 @@ def test_format_report_shows_failed_count():
     assert "Failed" in text
     failed_line = next(line for line in text.splitlines() if "Failed" in line)
     assert "2" in failed_line
+
+
+# --------------------------------------------------------------------------- #
+# format_breakdown
+# --------------------------------------------------------------------------- #
+
+
+def test_format_breakdown_renders_every_class():
+    from eval.metrics import FieldBreakdown
+    from eval.run_baseline import format_breakdown
+
+    text = format_breakdown(FieldBreakdown(
+        transcription_correct=9, transcription_total=10,
+        core_correct=5, core_total=5,
+        line_items_correct=4, line_items_total=5,
+        self_report_correct=1, self_report_total=4,
+        hallucinated=2, correctly_empty=11,
+    ))
+
+    assert "90.00%" in text          # transcription
+    assert "Hallucinated fields" in text
+    assert "2" in text
+    assert "Correctly empty" in text
+
+
+def test_format_breakdown_renders_an_empty_denominator_as_na_not_zero():
+    """A ratio over no paths is undefined, not 0% — the P8.T3 rule, on screen."""
+    from eval.metrics import FieldBreakdown
+    from eval.run_baseline import format_breakdown
+
+    text = format_breakdown(FieldBreakdown())
+    assert "n/a" in text
+    assert "0.00%" not in text

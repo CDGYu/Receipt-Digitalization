@@ -36,7 +36,7 @@ from receipts.validate.context import ValidationContext
 
 from .golden_set import GOLDEN_DIR
 from .harness import DEFAULT_RESULTS_DIR, run_eval
-from .metrics import EvalReport
+from .metrics import EvalReport, FieldBreakdown, ratio
 
 #: Shown when the resolved provider is ``fake`` on the ``client=None`` path.
 _FAKE_PROVIDER_HINT = (
@@ -101,6 +101,41 @@ def run_baseline(
     return run_eval(golden_dir, pipeline_fn, results_dir=results_dir)
 
 
+def _pct(value: float | None) -> str:
+    """A percentage, or ``n/a`` when the ratio is undefined.
+
+    ``None`` renders as ``n/a``, never ``0.00%``: a ratio over no paths is
+    undefined, not bad. Same rule the auto-approval line already follows.
+    """
+    return f"{value * 100:6.2f}%" if value is not None else f"{'n/a':>7}"
+
+
+def format_breakdown(bd: FieldBreakdown) -> str:
+    """Spec §16 metric 4, as the block it needs to be.
+
+    One renderer, two callers — this module's batch table and
+    ``scripts/try_one_receipt.py``. The script used to compute its own
+    ``correct/len(acc)`` scalar, which meant "what counts as correct" had two
+    definitions in a codebase whose ``cmd_eval`` docstring says it has one.
+    """
+    return "\n".join([
+        f"  Transcription accuracy:   "
+        f"{_pct(ratio(bd.transcription_correct, bd.transcription_total))}"
+        f"   ({bd.transcription_correct}/{bd.transcription_total})",
+        f"    core:                   "
+        f"{_pct(ratio(bd.core_correct, bd.core_total))}"
+        f"   ({bd.core_correct}/{bd.core_total})",
+        f"    line items:             "
+        f"{_pct(ratio(bd.line_items_correct, bd.line_items_total))}"
+        f"   ({bd.line_items_correct}/{bd.line_items_total})",
+        f"  Self-report agreement:    "
+        f"{_pct(ratio(bd.self_report_correct, bd.self_report_total))}"
+        f"   ({bd.self_report_correct}/{bd.self_report_total})",
+        f"  Hallucinated fields:      {bd.hallucinated:>12d}",
+        f"  Correctly empty fields:   {bd.correctly_empty:>12d}",
+    ])
+
+
 def format_report(report: EvalReport) -> str:
     """Render the six §16 metrics as a compact, printable text table.
 
@@ -110,9 +145,8 @@ def format_report(report: EvalReport) -> str:
     as ``n/a`` rather than a misleading zero.
 
     **Auto-approval precision renders as ``n/a`` when nothing was
-    auto-approved.** ``_build_report`` defines it as ``1.0`` in that case —
-    "of the receipts we approved, all were correct" is vacuously true of an
-    empty set — and this is the line an operator reads off the terminal as the
+    auto-approved.** ``_build_report`` resolves it to ``None`` in that case
+    (P8.T3), and this is the line an operator reads off the terminal as the
     system's headline metric. A run that approved nothing (including a run
     that scored no receipts at all) printed ``Auto-approval precision:
     100.00%``, which is the exact artifact this project has committed once and
@@ -126,11 +160,10 @@ def format_report(report: EvalReport) -> str:
     not something you find later by reading the JSON.
     """
 
-    def pct(value: float) -> str:
-        return f"{value * 100:6.2f}%"
-
     precision = (
-        pct(report.auto_approval_precision) if report.n_auto_approved else f"{'n/a':>7}"
+        _pct(report.auto_approval_precision)
+        if report.n_auto_approved
+        else f"{'n/a':>7}"
     )
     cost = (
         f"${report.cost_per_receipt}"
@@ -151,12 +184,12 @@ def format_report(report: EvalReport) -> str:
         f"  Auto-approve threshold:   {str(report.auto_approve_threshold):>12}",
         rule,
         f"  Auto-approval precision:  {precision}",
-        f"  Auto-approval rate:       {pct(report.auto_approval_rate)}",
-        f"  Critical-field accuracy:  {pct(report.critical_field_accuracy)}",
-        f"  Field accuracy:           {pct(report.field_accuracy)}",
-        f"  Line-item precision:      {pct(report.line_item_precision)}",
-        f"  Line-item recall:         {pct(report.line_item_recall)}",
-        f"  Line-item F1:             {pct(report.line_item_f1)}",
+        f"  Auto-approval rate:       {_pct(report.auto_approval_rate)}",
+        f"  Critical-field accuracy:  {_pct(report.critical_field_accuracy)}",
+        format_breakdown(report.breakdown),
+        f"  Line-item precision:      {_pct(report.line_item_precision)}",
+        f"  Line-item recall:         {_pct(report.line_item_recall)}",
+        f"  Line-item F1:             {_pct(report.line_item_f1)}",
         rule,
         f"  Cost per receipt:         {cost:>12}",
         f"  p50 latency:              {p50:>12}",
