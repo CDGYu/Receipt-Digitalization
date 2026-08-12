@@ -1205,3 +1205,56 @@ Expected: the floor below `0.10`, `hallucinated: 0`, the old key gone, the map p
 **Existing tests pass unmodified unless the step you are executing tells you, in that step, to change one.** That is the whole bound — no count is given here, because an earlier draft of this sentence said "two exceptions" while the plan mandates three (Task 2 Steps 1 and 7, Task 3 Step 1), which is the enumerated-defence failure this repo has hit repeatedly (review standard 19).
 
 Every authorised change is a **rename or a shape update to match the producer** — never a weakened assertion. If a step's edit would make a test check *less* than it did, stop and report: that is not what any step here intends. Anything else that seems to need a test changed is also a stop-and-report.
+
+---
+
+## Dated defect log
+
+This plan is a historical record and **does not self-amend**: the task text
+above stays as written and is corrected only here. Read this section before
+applying any task block literally.
+
+### 2026-08-12 — Task 1 Step 1's meta-classification test asserted an identity
+
+The test block for `test_breakdown_puts_meta_paths_in_self_report_not_transcription`
+mandated:
+
+```python
+    # No meta path may be inside the transcription denominator.
+    assert bd.transcription_total == bd.core_total + bd.line_items_total
+```
+
+That assertion is an identity over `field_breakdown`'s own constructor
+(`transcription_total=core_t + li_t`, `core_total=core_t`,
+`line_items_total=li_t`), so it is true for every input and can only fail if
+that one constructor line is edited. The comment claims it guards against a
+`meta` path entering the transcription denominator, which it cannot: a
+misclassified `meta` path increments `core_total` *and* `transcription_total`,
+and the identity still holds.
+
+**Measured, not argued.** Mutating `_group` to return `"core"` for `meta.`
+paths failed the test at the line *above* — `assert bd.self_report_total > 0`,
+with `self_report_total=0` — while the identity held at `27 == 12 + 15`.
+Reproduced independently by both the implementer and the controller.
+
+**Resolution:** both lines deleted in `1078bc3` (ADR-0032: a sentence claiming
+a guarantee it does not deliver is deleted, not reworded). The property remains
+pinned by the surviving assertion, which is the one that caught the mutation.
+**Do not re-add them.**
+
+### 2026-08-12 — Task 1 Step 8's expected floors were wrong
+
+Step 8 predicts the mutation will show "a floor around 42%/37%/36% — the
+numbers in this file's docstring". Those are the *historical scalar's* floors.
+The mutation actually yields **42.86% / 37.14% / 37.14%**, because it folds
+absent paths back into transcription while leaving filled `meta.*` paths in
+`self_report`, which the old scalar counted.
+
+Old-scalar-minus-self-report reproduces the mutated figures exactly on all
+three labels: r001 17/40 − 2/5 = 15/35; r002 15/40 − 2/5 = 13/35;
+r003 15/41 − 2/6 = 13/35.
+
+**Resolution:** none needed in the code — the mutation still proves the pin,
+and the failure still names the floor rather than raising. Expect
+42.86/37.14/37.14 if you reproduce it. Found by the implementer, who checked
+the number instead of matching it.
