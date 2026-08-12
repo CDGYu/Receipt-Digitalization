@@ -226,7 +226,27 @@ def test_format_report_shows_failed_count():
 # --------------------------------------------------------------------------- #
 
 
+def _row(text: str, label: str) -> str:
+    """The one rendered line carrying ``label``.
+
+    Raises ``StopIteration`` when the label is absent, so asserting on a row
+    also asserts the row exists.
+    """
+    return next(line for line in text.splitlines() if label in line)
+
+
 def test_format_breakdown_renders_every_class():
+    """Each labelled row carries *its own* value, not merely a value.
+
+    Asserted per row rather than as substrings of the block, because a
+    substring test passes under any permutation of the six rows. Measured, on
+    the substring version this replaces: swapping ``hallucinated`` with
+    ``correctly_empty``, and swapping the transcription and core rows, both
+    left it green. ``"2" in text`` was satisfied by the self-report row's
+    ``25.00%`` whatever the hallucinated count rendered as, and ``"90.00%" in
+    text`` did not care which row carried the 90. The two counts are the novel
+    part of this design and nothing was checking which one printed where.
+    """
     from eval.metrics import FieldBreakdown
     from eval.run_baseline import format_breakdown
 
@@ -238,17 +258,27 @@ def test_format_breakdown_renders_every_class():
         hallucinated=2, correctly_empty=11,
     ))
 
-    assert "90.00%" in text          # transcription
-    assert "Hallucinated fields" in text
-    assert "2" in text
-    assert "Correctly empty" in text
+    assert _row(text, "Transcription accuracy").split()[-2:] == ["90.00%", "(9/10)"]
+    assert _row(text, "core:").split()[-2:] == ["100.00%", "(5/5)"]
+    assert _row(text, "line items:").split()[-2:] == ["80.00%", "(4/5)"]
+    assert _row(text, "Self-report agreement").split()[-2:] == ["25.00%", "(1/4)"]
+    assert _row(text, "Hallucinated fields").split()[-1] == "2"
+    assert _row(text, "Correctly empty fields").split()[-1] == "11"
 
 
 def test_format_breakdown_renders_an_empty_denominator_as_na_not_zero():
-    """A ratio over no paths is undefined, not 0% — the P8.T3 rule, on screen."""
+    """A ratio over no paths is undefined, not 0% — the P8.T3 rule, on screen.
+
+    Every ratio row is checked, not just one: ``"n/a" in text`` would pass on a
+    block where a single row got the ``None`` treatment and the other three
+    printed ``0.00%``.
+    """
     from eval.metrics import FieldBreakdown
     from eval.run_baseline import format_breakdown
 
     text = format_breakdown(FieldBreakdown())
-    assert "n/a" in text
+
+    for label in ("Transcription accuracy", "core:", "line items:",
+                  "Self-report agreement"):
+        assert _row(text, label).split()[-2:] == ["n/a", "(0/0)"]
     assert "0.00%" not in text

@@ -150,10 +150,7 @@ def format_report(report: EvalReport) -> str:
     system's headline metric. A run that approved nothing (including a run
     that scored no receipts at all) printed ``Auto-approval precision:
     100.00%``, which is the exact artifact this project has committed once and
-    banned; no caller of this function can print it now. The stored float in
-    ``EvalReport``/the results JSON is deliberately left alone — this is a
-    rendering guard, and the numerator/denominator are right above it in
-    ``Auto-approved:`` either way.
+    banned; no caller of this function can print it now.
 
     The failed count always shows, and each failure is listed with its error
     text when there is one — a partially failed run must be obvious on screen,
