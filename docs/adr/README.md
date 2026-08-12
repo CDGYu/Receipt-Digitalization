@@ -39,6 +39,13 @@ Accepted; supersede it with a new ADR rather than editing history.
 | [0031](0031-the-corrections-read-route.md) | The corrections read route: who may see a receipt's attribution | Accepted |
 | [0032](0032-a-document-cannot-certify-itself.md) | A document cannot certify itself, and a derived claim can rot inside its own commit | Accepted |
 | [0033](0033-the-handoff-pair-goes-last-and-alone.md) | The handoff pair goes last and alone, and a correction goes to every copy | Accepted |
+| [0034](0034-the-shared-page-bound.md) | The shared page bound | Accepted |
+| [0035](0035-the-asgi-entry-point.md) | The ASGI entry point, and what it refuses to start on | Accepted |
+| [0036](0036-one-image-two-commands.md) | One image, two commands | Accepted |
+| [0037](0037-ci-runs-the-gate-runner.md) | CI runs, and it runs the gate runner | Accepted |
+| [0038](0038-the-theme-control.md) | The theme control, and one key in browser storage | Accepted |
+| [0039](0039-the-local-path-is-a-liveness-check.md) | The local path is a liveness check, not a measurement | Accepted |
+| [0040](0040-what-field-accuracy-counts.md) | What eval field accuracy counts, and the three things it used to average | Accepted |
 
 Read **0001** first: it is the invariant everything else defers to. **0007** is
 the one to read before touching anything that writes card data or money, and
@@ -114,6 +121,17 @@ output: a local run is a **liveness check**, not a measurement — it prints the
 six §16 metrics but licenses only "the pipeline completes". Liveness artefacts
 stay out of `eval/results/`, and the local timing is **not** to be re-derived
 (measured twice, seven weeks apart, and it got slower).
+**0040** is the one to read before quoting any eval field-accuracy number, or
+before fixing a claim that appears in more than one place. Metric 4 was one
+scalar averaging three unlike things — what the model read, what it correctly
+left empty, and what it said about itself — and an extraction containing
+*nothing* scored 42.50% / 37.50% / 36.59% against the three golden labels; it is
+now four numbers over one classifier that reads *filled* from the truth side
+only, so a model cannot enlarge its own denominator by hallucinating. Its
+**decision 5** generalises beyond eval: a token grep scoped to the change cannot
+reach the sentences about the changed behaviour that live in files the fixing
+commit never opens, which is verified there against two commits and their
+ancestry.
 
 Primary sources these build on: `RECEIPT_SYSTEM_SPEC.md` (build spec),
 `README.md` (§5 design decisions), `VLM_AND_DATA.md`, and the always-on

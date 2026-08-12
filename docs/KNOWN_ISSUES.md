@@ -235,6 +235,23 @@ On the smoke run these were among the 27 mismatches. Consider excluding `meta.*`
 reflects transcription, not annotation. Until then, read per-field accuracy as
 slightly pessimistic.
 
+> **Correction, 2026-08-12 — the diagnosis stands, the remedy was refuted.**
+> Measured before acting on it (ADR-0030). Excluding `meta.*` moves the floor an
+> empty extraction reaches from 42.50% to 39.39% on r001, and on r003 from
+> 36.59% to 36.36% — **0.22 points**. Excluding only `meta.notes` **raises**
+> every floor, because `notes` is a path an empty extraction *fails*, so
+> dropping it removes a penalty rather than a gift. The real driver was
+> agreement about absence: of r001's 17 free points, 12 were paths where neither
+> side was filled — fields the receipt does not have. **ADR-0040** is what
+> shipped instead: metric 4 became four numbers over one classifier that reads
+> *filled* from the truth side only. Its probe re-derives every figure in this
+> note.
+>
+> The last sentence above — "read per-field accuracy as slightly pessimistic" —
+> was the reading under the old scalar and is left as the record of what was
+> thought. Under `transcription_accuracy` it no longer holds: the floor is
+> ~5.9%, not ~40%.
+
 ### Related
 
 - `docs/MEMORY.md` — "The real receipt corpus" (why this corpus is unusual) and
