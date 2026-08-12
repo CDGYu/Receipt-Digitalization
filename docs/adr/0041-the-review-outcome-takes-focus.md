@@ -77,10 +77,27 @@ reviewer's screen is identical to before they pressed the key. The states carry
 place.** Its evidence was a single screenshot, and the browser-pass report says
 so about itself: *"`review-real-fold--1440x900-light.png` is the only capture
 at a realistic height and is the only evidence behind I5's above/below-the-fold
-wording."* That capture predates the styling milestone, which changed this
-screen, and it records no numbers. The finding's wording says 1440×900; it is
-below the fold at every desktop height measured. The finding keeps its original
-text and carries a dated verdict line, which is that report's own convention.
+wording."* It records no numbers, and **it predates `205d77a` — not the styling
+milestone**, which is a distinction worth getting right because it is what
+licenses re-measuring. The pass ran on `feat/review-ui-styling` at tip
+`c781f40`, and `bdbfd03` (*"feat(ui): style the review screen without touching
+its error contract"*) is an ancestor of that tip, so the screen was already
+styled when the capture was taken. What the capture predates is the pass's
+**own fix round**, `205d77a`, which reshaped the money controls sitting above
+Approve on this screen: `MoneyInput.module.css`'s `.field` went `inline-flex` →
+`flex`, and `.input` gained `box-sizing: border-box`, which that stylesheet's
+own comment records as the difference between a `min-height: 44px` control
+painting 44px and painting **54px**. So the geometry did move after the
+capture. Re-derive the ancestry rather than trusting this paragraph:
+
+```bash
+git merge-base --is-ancestor bdbfd03 c781f40 && echo "styled before the capture"
+git merge-base --is-ancestor 205d77a c781f40 || echo "capture predates the fix round"
+```
+
+The finding's wording says 1440×900; it is below the fold at every desktop
+height measured. The finding keeps its original text and carries a dated
+verdict line, which is that report's own convention.
 
 ## Decision
 
@@ -215,15 +232,17 @@ which children always render.
   existed, every one of them failed instead because `section[tabindex="-1"]`
   matched nothing — failure for the wrong reason, which proves nothing (review
   standard 15). The mutations are what make them pins.
-- **A fixture that omits a route is not neutral, and one here nearly produced a
-  green meaningless test.** The plan's test fixtures did not stub the receipt
-  image; an unstubbed path 404s, and `ImagePane` answers a failed image link
-  with a `role="alert"` paragraph of its own, so `findByRole('alert')` matched
-  two elements and threw. Had it returned the *first* match instead of
-  throwing, the containment test could have passed while asserting the **image
-  pane's** alert — an element outside the region that must stay outside it.
-  `review-screen.test.tsx` carries that measurement inline, beside the stub
-  that fixes it.
+- **A fixture that omits a route is not neutral, and the failure it produces
+  does not name the thing under test.** The plan's test fixtures did not stub
+  the receipt image; an unstubbed path 404s, and `ImagePane` answers a failed
+  image link with a `role="alert"` paragraph of its own. So `findByRole('alert')`
+  matched two elements and **threw**: two of the five new tests errored on the
+  *fixture* rather than failing on their own assertion, and would have gone on
+  erroring after the region existed. The two alerts are not even in the same
+  subtree — `ImagePane` is the second child of `.screen` and the region is the
+  seventh — so a query written to find *the* outcome alert was silently
+  ambiguous about which screen element it meant. `review-screen.test.tsx`
+  carries that measurement inline, beside the stub that fixes it.
 - **The load-failure screen is untouched.** `phase.kind === 'failed'` renders a
   different `<main>`: a short, single-column page whose alert is near the top
   with nothing above it, so it has no below-the-fold problem to solve. Named

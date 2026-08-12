@@ -33,6 +33,28 @@ is the only capture at a realistic height and is the only evidence behind I5's
 above/below-the-fold wording."* That capture predates the styling milestone,
 which changed this screen, and it records no numbers.
 
+> **[Dated note, 2026-08-12 — the milestone named in the sentence above is
+> wrong; the reason for re-measuring is not.]** The capture does **not** predate
+> the styling milestone. The browser-pass report's own header says the pass ran
+> on `feat/review-ui-styling` at tip `c781f40`, and `bdbfd03` — *"feat(ui):
+> style the review screen without touching its error contract"* — is an ancestor
+> of that tip, so this screen was already styled when the capture was taken.
+> What the capture predates is **`205d77a`**, the browser pass's *own* fix
+> round, which reshaped the money controls that sit above Approve:
+> `MoneyInput.module.css`'s `.field` went `inline-flex` → `flex`, and `.input`
+> gained `box-sizing: border-box` — which that stylesheet's own comment records
+> as the difference between a `min-height: 44px` control painting 44px and
+> painting **54px**. Re-derive rather than trust this note:
+> `git merge-base --is-ancestor bdbfd03 c781f40` is true and
+> `git merge-base --is-ancestor 205d77a c781f40` is false.
+>
+> **The conclusion §1.1 draws is unaffected**: the geometry did change after the
+> capture, so the capture could not be trusted for numbers and re-measuring was
+> necessary. Only the anchor was misnamed. Recorded by dated note rather than by
+> rewriting §1.1's body, per the convention this project uses for designs and
+> ADRs. **ADR-0041's Context carries the corrected sentence** and is the copy to
+> read.
+
 Measured directly on 2026-08-12 against `main` at `6f29aa5`, by driving the real
 seeded app through Playwright and reading `boundingBox()` on the Approve button:
 
