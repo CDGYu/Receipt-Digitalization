@@ -6,16 +6,13 @@ continuity protocol itself — what lives where, and why this snapshot must be
 verified rather than trusted — is **ADR-0019**, extended by **ADR-0021** (whose
 2026-08-02 dated correction widened the freshness check after a docs-only task
 proved invisible to it).
-Last updated: **2026-08-11**, at the close of the session that switched CI back
-on, fixed P8.T3, verified everything but the key on ISSUE-001, bounded the
-CLI's `--limit`, built the theme control, and
-settled the currency prefix and the census parser, and re-measured ISSUE-001's
-local path. **One position, because nothing is in flight:
-`main @ 0cdf6c9`, PUSHED.** A stamp cannot name the commit that
+Last updated: **2026-08-12**, at the close of the session that redefined what
+eval field accuracy counts (**ADR-0040**). **One position, because nothing is in
+flight: `main @ 01d6a5a`.** A stamp cannot name the commit that
 writes it, so the test is a command, not a commit and not a count:
 
 ```
-git log --oneline 0cdf6c9..main -- src tests frontend docs ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
+git log --oneline 01d6a5a..main -- src tests frontend docs ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
 git log --oneline refs/remotes/origin/main..main   # what a push would send
 git ls-remote --heads origin main                  # authoritative on what is pushed
 ```
@@ -35,8 +32,7 @@ bundling them with an ADR or an index row lists itself as stale. That happened
 three times in the session that wrote ADR-0033. Everything substantive was
 committed first; `0cdf6c9` is the last of it.
 
-*(The previous stamp was 2026-08-11 at `main @ 8995d1e`, the ISSUE-001
-readiness record.)*
+*(The previous stamp was 2026-08-11 at `main @ 0cdf6c9`.)*
 
 ## Snapshot
 
@@ -45,12 +41,17 @@ readiness record.)*
   for three days while one existed**: true when written on 2026-08-07, rotted
   the moment the corrections branch was cut, and corrected only when Task 4
   edited the file. **The answer is the command, never the sentence.**
-- **`main` is merged AND PUSHED.** Nine pushes, each on a one-time
-  authorization the push consumed: the corrections read route (2026-08-10),
-  then a docs fix wave, the shared page bound, the ASGI entry point, the
-  containerisation, CI plus the P8.T3 eval fix, and the ISSUE-001 readiness
-  record plus the backlog recommendations, and the CLI `--limit` bound (all 2026-08-11). **The next
-  `main` push needs its own fresh ask.** Run
+- **What eval field accuracy counts is REDEFINED, COMPLETE AND MERGED**
+  (2026-08-12, true fast-forward `871f1aa` → `01d6a5a`, single parent, zero
+  merge commits). `feat/eval-field-accuracy` is kept at its merge point.
+  **ADR-0040** is the decision. The old scalar averaged what the model read,
+  what it correctly left empty and what it said about itself, so an extraction
+  containing **nothing at all** scored 42.50% / 37.50% / 36.59% against the
+  three golden labels. See "Eval field accuracy" below.
+- **`main` is merged AND PUSHED.** **No count is written here** — every push is
+  on a one-time authorization the push consumes, an earlier version of this
+  bullet enumerated them, and the enumeration rotted. **The next `main` push
+  needs its own fresh ask.** Run
   `git log --oneline refs/remotes/origin/main..main` rather than believing this
   sentence — empty means nothing is waiting to go.
 - **CI RUNS AGAIN** (2026-08-11, true fast-forward `a6c4392` → `743cacb`,
@@ -202,6 +203,50 @@ readiness record.)*
   searching the tracked tree — open ledgers by path.**
 - **The repo is PUBLIC.** Verified 2026-07-31 via the GitHub API. See
   "Environment / provider" for what that exposes.
+
+## Eval field accuracy — COMPLETE AND MERGED (2026-08-12)
+
+Decision: **ADR-0040**. Design:
+`docs/superpowers/specs/2026-08-12-eval-field-accuracy-honesty-design.md`. Plan:
+`docs/superpowers/plans/2026-08-12-eval-field-accuracy.md` — **read its "Dated
+defect log" at the bottom before applying any task block; the plan text above it
+does not self-amend.** Four tasks, each reviewed and scope-re-reviewed, then a
+whole-branch review returning MERGE WITH FIXES, one fix wave, one scoped
+re-review.
+
+**The defect.** `field_accuracy` averaged three unlike quantities — what the
+model **read**, what it **correctly left empty**, and what it **said about
+itself** (`meta.*`, including a ~160-word human annotator note). The last two
+dominate, so the metric had a floor reachable by producing nothing:
+**42.50% / 37.50% / 36.59%** on r001/r002/r003. The one real local run on file
+scored 45.00% — one path above silence.
+
+**What shipped.** A pure classifier on two axes: **group** from the path string
+(`meta.` / `line_items` / core, a prefix test so a schema field added later is
+classified without anybody deciding), and **filled** read from the **truth side
+only** — reading it from the prediction would let a model enlarge its own
+denominator by inventing fields. The classes tile the path set. The floor is now
+~5.9%. `field_accuracy` the function keeps its name, signature and meaning;
+`flatten` was not touched.
+
+**Two things to know before you touch it.**
+
+- **`correctly_empty` still rises when a model hallucinates**, and that is
+  documented rather than hidden. The bound it satisfies is narrow: every path
+  it counts is one `field_accuracy` scores as agreement. A stronger notion
+  would require changing `field_accuracy`.
+- **`structural_mismatch` is the residue class** — the two sides disagree about
+  whether a path exists, *or* about null versus empty on one they share.
+
+**ISSUE-001's own proposed remedy was measured and REFUTED**, not applied.
+Excluding `meta.*` moves r003's floor by 0.22 points; excluding only
+`meta.notes` **raises** every floor, because `notes` is a path an empty
+extraction fails. Recorded with its measurement under ADR-0030.
+
+**`README.md` and `RECEIPT_SYSTEM_SPEC.md` §15's "roughly 70–85%" expectation
+predates this redefinition and STAYS, by ruling, until a real baseline exists**
+(ISSUE-001 unblocks it). ADR-0040's "What this ADR does not decide" is where
+that is recorded.
 
 ## CI runs again — COMPLETE AND MERGED (2026-08-11)
 
@@ -1959,6 +2004,33 @@ measured.**
     * **A decision that states a boundary names what enforces it** — or says
       plainly that it is friction. ADR-0031 decision 2 is the worked example.
 
+26. **A corrected claim survives where the fixing commit never looked, and the
+    holdout is invisible to a grep for the thing you changed.** ADR-0040
+    decision 5, earned on 2026-08-12 with a mechanism rather than an anecdote.
+
+    P8.T3 changed `auto_approval_precision` from `1.0` to `None` when nothing is
+    approved. Sentences saying it "defines it as `1.0`" survived. The
+    enumeration of those survivors went **three → five → six** across one
+    milestone: the controller found three, an implementer found five, a reviewer
+    found the sixth — *inside the paragraph that had just been corrected*,
+    contradicting the corrected sentence four lines above it, in a commit titled
+    "every copy of the precision claim".
+
+    * **Why it survived is structural, and it generalises.** The sentence
+      entered at a commit that is an ancestor of P8.T3's, and P8.T3 touched
+      three files, none of them the one carrying the sentence. **A behaviour's
+      description lives in files the fixing commit does not touch**, so
+      "grep for the token you changed" is structurally insufficient — and the
+      fixing commit's own file list is evidence about where the holdouts are.
+    * **The sixth copy contained neither `1.0` nor `auto_approval_precision`.**
+      It said "the stored float". **A sweep over the claim's vocabulary is a
+      filter, not an answer; the answer is reading.**
+    * Corollary, measured the same day: **a test whose fixture makes the value
+      it pins zero cannot fail.** Three can't-fail tests shipped on that branch
+      — an identity over its own constructor, a substring satisfied by an
+      unrelated percentage, and `0 == 0` — each caught by a reviewer, none by
+      any gate.
+
 And: **a green suite is not evidence that installed software works.** Anything
 with an entry point gets run from outside the repository.
 
@@ -1970,10 +2042,11 @@ with an entry point gets run from outside the repository.
 - `docs/NEXT_SESSION_PROMPT.md` — the ordered task list and reading order.
 - `IMPLEMENTATION_PLAN.md` · `README.md` (§5 design decisions) · `VLM_AND_DATA.md`
 - **`docs/KNOWN_ISSUES.md`** — ISSUE-001 with its diagnosis and resume steps.
-- **`docs/adr/` — 0001–0039** (re-derived at the merge:
-  `ls docs/adr/*.md` minus `README.md` counts **39**, and the four-digit
-  prefixes are contiguous from
-  0001); see `docs/adr/README.md`. **This range read `0001–0026` until
+- **`docs/adr/` — 0001–0040** (re-derived at the 2026-08-12 merge:
+  `ls docs/adr/*.md` minus `README.md` counts **40**, the four-digit
+  prefixes are contiguous from 0001, and the index table carries **40 rows**
+  — it had **33 rows for 39 ADRs** until 2026-08-12, six milestones each having
+  added a prose paragraph and no row); see `docs/adr/README.md`. **This range read `0001–0026` until
   2026-08-10** — it was written at ADR-0026 and never touched again while 0027,
   0028, 0029 and 0030 landed. **Count the files; do not trust the range**, and
   do not trust this sentence either the next time an ADR is added. Read

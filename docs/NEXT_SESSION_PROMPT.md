@@ -38,24 +38,19 @@ git log --oneline refs/remotes/origin/main..main  # what the pending push would 
 
 ## `main` is merged and pushed — nothing is waiting to go.
 
-The corrections read route **merged by true fast-forward on 2026-08-10** —
-single parent, zero merge commits, `git branch --no-merged main` names nothing.
-It went in only after its whole-branch review, three fix rounds and a final
-scoped re-review returning **MERGE** and *"no sixteenth false claim"*.
+**The eval field-accuracy redefinition merged by true fast-forward on
+2026-08-12** — `871f1aa` → `01d6a5a`, single parent, zero merge commits,
+`git branch --no-merged main` names nothing. It went in after four task reviews
+with their scoped re-reviews, a whole-branch review returning **MERGE WITH
+FIXES**, one fix wave and one scoped re-review. **ADR-0040** is the decision.
 
-**Nine pushes happened, each on a one-time authorization that the push
-consumed** — the corrections read route (2026-08-10), then a docs fix wave, the
-shared page bound, the ASGI entry point, the containerisation, CI plus the
-P8.T3 eval fix, the ISSUE-001 readiness record plus the backlog
-recommendations, and the CLI `--limit` bound (all 2026-08-11). **The theme
-control (ADR-0038), the currency-prefix and census-parser resolutions, the
-ISSUE-001 re-measurement and ADR-0039 all merged after those eight.** Run
-`git log --oneline refs/remotes/origin/main..main` for what is unpushed.
-**Every merged `feat/*` branch is kept at its merge point and pushed.** No
-count and no list: the list rotted twice on 2026-08-11, and the commit that
-replaced it with "no count is written down" wrote **"all seven"** in the same
-sentence — the real figure is **21**. `git branch -r --merged main` is the
-answer, and it cannot go stale. Run
+**Every push is on a one-time authorization that the push consumes, and the
+next `main` push needs its own fresh ask.** **No count and no list of past
+pushes is written here** — an earlier version of this paragraph enumerated them,
+the list rotted twice on 2026-08-11, and the commit that replaced it with "no
+count is written down" wrote a count in the same sentence.
+**Every merged `feat/*` branch is kept at its merge point and pushed**;
+`git branch -r --merged main` is the answer and it cannot go stale. Run
 `git log --oneline refs/remotes/origin/main..main` rather than believing this
 sentence — empty means nothing is waiting to go, and the pair commit that
 writes this necessarily lands after any push it could record.
@@ -71,18 +66,26 @@ git log --oneline <STAMP>..main -- src tests frontend docs ":(exclude)docs/MEMOR
 it was written.
 
 **Gates on `main` after the merge, controller-run: `python scripts/verify.py` —
-all five PASS.** pytest **1004** (was 979 before this milestone); Vitest **346
-across 25 files, unmoved**, because no frontend file was in any task's file set.
+all five PASS.** pytest **1081**; Vitest **unmoved**, because no frontend file
+was in any task's file set. **No before/after pytest delta is given** — the
+number moves with every milestone and this line's did. Run it.
 
-**And the pre-merge check re-derived each task's deliverable from the built app
-rather than from the ledger:** `list_corrections` exported with the right
-signature, the three envelopes all on `_PageResponse`, the new route present in
-a **recursed 17-route walk** (a flat walk still yields no `/auth/*` — review
-standard 17), both ADRs and their index rows in place, and the outside-repo
-import check green from `C:\Users`.
+**The gates went red once during this milestone and the controller's independent
+run is what caught it.** The fix wave's own report said "Gates not run — yours",
+and `ruff` failed `I001` on a function-local import in the wave's new test.
+Four of five gates passed. **Re-running the gates yourself is not ceremony.**
+
+**And the pre-merge check re-derived each task's deliverable from the built code
+rather than from the ledger:** `field_accuracy`'s signature unchanged at
+`(predicted, truth) -> dict[str, bool]`, `_group` answering on a path it has
+never seen, `ratio(0, 0) is None`, the harness run end-to-end producing a floor
+of **5.77%** micro-averaged with the old attribute and JSON key both gone and
+the per-path map present and sorted, `format_report` embedding the same block
+`format_breakdown` renders, and — the real cross-boundary risk —
+**`receipts calibrate` reading the new artefact without error**.
 
 **All four tasks are complete**, each with a task review and a scoped
-re-review. The close then ran in full, and §0c is its record.
+re-review. The close then ran in full, and §0d is its record.
 
 ---
 
@@ -97,10 +100,12 @@ is a summary of one).
 ### Step 0 — always, before anything
 
 Run the commands in the block above. Then read, in this order:
-`docs/MEMORY.md` (state + **review standards 1–25**) → the ADR index
+`docs/MEMORY.md` (state + **review standards 1–26**) → the ADR index
 (`docs/adr/README.md`) → the ADRs its rows send you to. Your own memory index
 carries the cross-session lessons; **`docs/KNOWN_ISSUES.md` is ISSUE-001's home
-and is not to be re-derived** (ADR-0039 §3).
+and is not to be re-derived** (ADR-0039 **§1** for the accuracy figures, §3 for
+the timing — this pointer said §3 for both until 2026-08-12, and §3 is scoped to
+the timing alone).
 
 ### A. Needs no ruling — start here if you want to build something
 
@@ -111,7 +116,7 @@ and is not to be re-derived** (ADR-0039 §3).
 | A3 | **I9** — the 503 sentence is printed twice | §1.4 |
 | A4 | Test-shape debt: the row-highlight pin on `.style.background`, the vacuous `getByText(/carol/)`, the class-name guard's three parked leaks | §1.5 |
 | A5 | §1.3's shipped residuals — the hardcoded `0.85`/`0.60` band, `.screen > div`, per-row labels, `--color-null` on `surface-active`, `SignOutControl`'s 4.39:1 `.error` in dark | §1.3 |
-| A6 | The citation residual — **71** `path:NNN` citations, ~unaudited; resolve each against the line it points at | §1.2, ADR-0028 §5 |
+| A6 | The citation residual — `path:NNN` citations, ~unaudited; resolve each against the line it points at. **No count: it is anchor-dependent** — measured 2026-08-12, requiring a directory separator gives 44 and not requiring one gives 72, against the 71 this row used to assert. Derive it with the anchor you intend | §1.2, ADR-0028 §5 |
 
 **A5's contrast item and A1–A3 are visual.** ADR-0029 §4 is the list of what a
 green `verify.py` cannot see; jsdom renders no colour, so these need a browser
@@ -150,6 +155,10 @@ Each names its own spec section and its blockers.
 
 ### What is NOT open
 
+**Eval field accuracy is redefined (ADR-0040, §0d)** — the metric no longer has
+a ~40% floor a model reaches by producing nothing, and P8.T3's `null`-precision
+rule now covers every ratio the harness reports.
+
 The deployment story is complete: entry point (**ADR-0035**), container
 (**ADR-0036**), CI (**ADR-0037**), guide (`docs/DEPLOYMENT.md`). The theme
 control (**ADR-0038**), the shared page bound (**ADR-0034**), the corrections
@@ -161,7 +170,7 @@ read route (**ADR-0031**) and the CLI `--limit` bound all shipped. §1.6's
 ## Reading order
 
 1. **`docs/MEMORY.md`** — state, decisions already made, environment, blockers,
-   deferred items, and **review standards 1–25**.
+   deferred items, and **review standards 1–26**.
 2. **The ledgers** — `.superpowers/sdd/*/progress.md`, one per milestone.
    **`.superpowers/sdd/2026-08-10-corrections-read-route/progress.md` is the one
    that matters now**: it holds the nine fix rounds, the nine controller
@@ -170,7 +179,7 @@ read route (**ADR-0031**) and the CLI `--limit` bound all shipped. §1.6's
    styling one records twenty-five plan defects and "THE CLOSE".
    **`.superpowers/` is gitignored — open ledgers by path; nothing in them is
    findable by searching the tracked tree.**
-3. **`docs/adr/README.md`, then the ADRs (0001–0039** — count the files rather
+3. **`docs/adr/README.md`, then the ADRs (0001–0040** — count the files rather
    than trusting that range**).** *This* file's range has tracked each ADR as it
    landed; it was **`docs/MEMORY.md`'s** copy that sat at `0001–0026` while four
    more ADRs shipped, and it was corrected on 2026-08-10. Derived per-commit
@@ -280,6 +289,55 @@ read route (**ADR-0031**) and the CLI `--limit` bound all shipped. §1.6's
 ---
 
 # THE WORK, IN ORDER
+
+*(§0d is newest and sits first deliberately. It is lettered `d` rather than
+renumbered to the front because renumbering ages every citation of §0a–§0c, and
+that has already happened twice in this file's history.)*
+
+## 0d. Eval field accuracy is REDEFINED, DONE, MERGED and PUSHED (2026-08-12).
+
+**Nothing carries over.** True fast-forward `871f1aa` → `01d6a5a`, single
+parent, zero merge commits. Decision: **ADR-0040**. Design:
+`docs/superpowers/specs/2026-08-12-eval-field-accuracy-honesty-design.md`.
+Plan: `docs/superpowers/plans/2026-08-12-eval-field-accuracy.md` — **read its
+"Dated defect log" at the bottom FIRST; the task text above it does not
+self-amend and nine of its steps were wrong.**
+
+**The defect.** `field_accuracy` averaged what the model **read**, what it
+**correctly left empty**, and what it **said about itself**. The last two
+dominate, so an extraction containing **nothing at all** scored
+**42.50% / 37.50% / 36.59%**. The one real local run on file scored 45.00% —
+**one path above silence.**
+
+**What shipped.** Two axes: **group** from the path string (a prefix test, so a
+schema field added later is classified without anybody deciding), and **filled**
+read from the **truth side only** — reading it from the prediction would let a
+model enlarge its own denominator by inventing fields. The classes tile the path
+set. Floor is now ~5.9%. `field_accuracy` the function keeps its name, signature
+and meaning; **`flatten` was not touched** — it has callers outside `eval/`.
+
+**Three things to know before you touch it:**
+
+- **`correctly_empty` still rises when a model hallucinates.** Documented, not
+  hidden. The bound is narrow: every path it counts is one `field_accuracy`
+  scores as agreement. Strengthening it means changing `field_accuracy`.
+- **`structural_mismatch` is the residue class** — the two sides disagree about
+  whether a path exists, *or* about null versus empty on one they share.
+- **ISSUE-001's own proposed remedy was REFUTED, not applied.** Excluding
+  `meta.*` moves r003's floor by 0.22 points; excluding only `meta.notes`
+  **raises** every floor. Recorded with its measurement (ADR-0030).
+
+**`README.md` and `RECEIPT_SYSTEM_SPEC.md` §15's "roughly 70–85%" expectation
+predates this redefinition and STAYS, by ruling, until a real baseline exists.**
+ADR-0040's "What this ADR does not decide" is where that is recorded.
+
+**What this milestone cost, and it is the reason to read the defect log:** nine
+plan defects, every one the controller's, every one found by an implementer or
+reviewer who executed instead of trusting. **Three tests that could not fail
+shipped and were caught by review, not by any gate** — an identity over its own
+constructor, a substring satisfied by an unrelated percentage, and `0 == 0`.
+And one enumeration went **three → five → six**; **review standard 26** is what
+came out of it.
 
 ## 0a. The deployment story is DONE and MERGED — entry point AND container.
 
@@ -1071,28 +1129,30 @@ and was measured not to need it.)*
 ## Today's goal
 
 **Nothing is in flight, nothing is half-done, and nothing carries over.** The
-containerisation merged and was pushed on 2026-08-11, and §1.6 is closed.
+eval field-accuracy redefinition merged and was pushed on 2026-08-12 (§0d).
 `git branch --no-merged main` should name nothing, and
 `git log --oneline refs/remotes/origin/main..main` should come out empty.
 
 **Run the freshness command in `docs/MEMORY.md`'s stamp before trusting any of
 this.** If it lists anything, the tree moved after this was written — re-run
-`python scripts/verify.py` and re-read §0a, §0b and §0c before acting.
+`python scripts/verify.py` and re-read §0d before acting.
 
-**Then** pick from §2.2 onward, or answer the questions above and let that pick
-for you.
+**Then** pick from the START HERE index, or answer the questions above and let
+that pick for you.
 
-**§2.2, the ASGI entry point, is DONE** (ADR-0035), and so is the
-containerisation ADR-0035 left out (**ADR-0036**: Dockerfile, compose services,
-`docs/DEPLOYMENT.md`). **§1.6 is closed too** — the console script was never
-broken; its wrapper sits in the user scripts directory, which is not on `PATH`.
-**CI is done as well** (ADR-0037), so nothing in the deployment story is
-outstanding.
+**Item 1 in "Blocked on me" is still the one that matters**, and §0d did not
+change that: a hosted tool-capable provider and a freshly rotated key is what
+gates every real accuracy number. What §0d *did* change is that the number
+waiting on the other side of it is now worth reading. Everything but the key is
+verified — only a human can do the remaining step.
 
-**If you would rather clear the decision backlog first**, items 3–7 above are all
-consequences of the last milestone and all of them are one answer each: the theme
-control, the currency prefix, Playwright as a sixth gate, the census parser, and
-the citation sweep.
+**One thing §0d left open on purpose:** the two `format_breakdown` tests are the
+only tests of the shared renderer, and they sit in a module that skips whole
+without the `pipeline` extra. **No arrangement that leaves `format_breakdown` in
+`eval/run_baseline.py` makes them runnable without it** — closing it needs a
+production import change that was rightly refused at the last gate before merge.
+Coverage is unchanged from where the branch started; the mechanism is written
+down here so it is a decision rather than a surprise.
 
 **If anything in this document disagrees with the repo, the repo wins.** This
 file has been wrong at the start of several sessions, including one where the
