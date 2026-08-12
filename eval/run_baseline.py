@@ -133,6 +133,7 @@ def format_breakdown(bd: FieldBreakdown) -> str:
         f"   ({bd.self_report_correct}/{bd.self_report_total})",
         f"  Hallucinated fields:      {bd.hallucinated:>12d}",
         f"  Correctly empty fields:   {bd.correctly_empty:>12d}",
+        f"  Structural mismatches:    {bd.structural_mismatch:>12d}",
     ])
 
 

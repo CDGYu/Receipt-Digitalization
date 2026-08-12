@@ -173,11 +173,26 @@ class FieldBreakdown:
         The points a model has to earn by reading.
       * ``self_report`` — truth filled, group ``meta``. Self-description, and
         in ``meta.notes`` human annotator prose. Reported, never averaged in.
-      * absent — truth not filled. Split into ``hallucinated`` (the model
-        produced a value anyway) and ``correctly_empty``.
+      * absent — truth not filled. Split three ways: ``hallucinated`` (the
+        model produced a value anyway), ``correctly_empty``, and
+        ``structural_mismatch``.
 
     The classes tile the path set: nothing is dropped, it is only stopped from
     inflating a percentage.
+
+    One bounded property separates the last two, and it is the whole worth of a
+    class named for agreement: **no path that :func:`field_accuracy` scores
+    ``False`` may be counted in** ``correctly_empty``. Whatever is left over
+    lands in ``structural_mismatch``, so the tiling survives the bound.
+
+    ``structural_mismatch`` is that residue. A path reaches it when neither
+    side is filled and the per-path map *still* scores it wrong — which is what
+    happens when the path exists on one side only. A line-item row the model
+    invented brings its own empty sub-paths; a row it never produced leaves
+    truth's empty sub-paths with nothing on the other side to compare against.
+    It does **not** say the model misread a value: values read wrong are
+    counted in ``transcription``, values invented in ``hallucinated``. It says
+    the two sides disagree about *which paths exist*.
     """
 
     transcription_correct: int = 0
@@ -190,6 +205,7 @@ class FieldBreakdown:
     self_report_total: int = 0
     hallucinated: int = 0
     correctly_empty: int = 0
+    structural_mismatch: int = 0
 
     def __add__(self, other: "FieldBreakdown") -> "FieldBreakdown":
         """Fold two receipts' breakdowns together (micro-averaging)."""
@@ -211,17 +227,24 @@ def field_breakdown(
     Derived from the same :func:`field_accuracy` map the harness records, over
     the same ``model_dump()`` (python mode) both sides use, so the counts and
     the per-path map can never disagree.
+
+    That shared map is also what bounds ``correctly_empty``: the class is built
+    out of paths the map scores ``True``, so it cannot credit a model for a path
+    the map calls wrong. The paths that fall out land in
+    ``structural_mismatch`` rather than being dropped.
     """
     pred = flatten(predicted.model_dump())
     tru = flatten(truth.model_dump())
 
-    core_c = core_t = li_c = li_t = sr_c = sr_t = hall = empty = 0
+    core_c = core_t = li_c = li_t = sr_c = sr_t = hall = empty = struct = 0
     for path, ok in field_accuracy(predicted, truth).items():
         if not _is_filled(tru.get(path)):
             if _is_filled(pred.get(path)):
                 hall += 1
-            else:
+            elif ok:
                 empty += 1
+            else:
+                struct += 1
             continue
         group = _group(path)
         if group == "meta":
@@ -245,6 +268,7 @@ def field_breakdown(
         self_report_total=sr_t,
         hallucinated=hall,
         correctly_empty=empty,
+        structural_mismatch=struct,
     )
 
 
@@ -414,6 +438,16 @@ class EvalReport:
     @property
     def correctly_empty_fields(self) -> int:
         return self.breakdown.correctly_empty
+
+    @property
+    def structural_mismatch_fields(self) -> int:
+        """Paths empty on both sides that the per-path map still scores wrong.
+
+        See :class:`FieldBreakdown` for what does and does not land here. It is
+        a count for the same reason ``correctly_empty_fields`` is: its
+        would-be denominator is a property of the schema, not of the receipt.
+        """
+        return self.breakdown.structural_mismatch
 
 
 def calibration_curve(

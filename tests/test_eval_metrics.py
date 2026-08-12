@@ -170,12 +170,82 @@ def test_breakdown_an_extra_predicted_row_is_hallucination_not_a_miss():
     assert bd.hallucinated > 0
 
 
+def _sides_that_disagree_about_which_paths_exist() -> tuple[
+    ReceiptExtraction, ReceiptExtraction
+]:
+    """A prediction carrying one line-item row the truth does not have.
+
+    The invented row contributes sub-paths that exist on the prediction side
+    only and are empty there (a row's ``sku``/``bbox``/``modifiers`` default to
+    nothing), so ``_is_filled`` reads "empty" on both sides while
+    ``field_accuracy`` scores them ``False`` for being present on one side
+    only. That is the exact shape the two pins below are about, and the shape
+    that used to be counted as *correctly* empty.
+    """
+    both = _items()
+    extra = LineItem(position=3, description_raw="ZZZ NOVELTY WIDGET",
+                     qty=D("1"), unit_price=D("5.00"), line_total=D("5.00"))
+    return _extraction(items=both + [extra]), _extraction(items=both)
+
+
+def test_no_class_named_for_agreement_holds_a_path_scored_wrong():
+    """``correctly_empty`` may not contain a path ``field_accuracy`` calls wrong.
+
+    Checked as an identity against the per-path map rather than by re-deriving
+    the classifier's own membership rule, which would mirror the code under
+    test and could never fail: the paths the map scores ``True`` are exactly
+    the ones that may land in a *correct* bucket, and there are only three such
+    buckets. ``hallucinated`` and ``structural_mismatch`` are named for
+    disagreement, so a ``True`` path hiding in either would break the identity
+    from the other side.
+
+    Measured before the fix, on ``eval/golden/labels/r001.json`` scored against
+    an empty extraction: 4 of the 18 paths counted as ``correctly_empty`` were
+    scored ``False`` by the same map the harness commits to the artefact.
+    """
+    predicted, truth = _sides_that_disagree_about_which_paths_exist()
+    acc = field_accuracy(predicted, truth)
+    bd = field_breakdown(predicted, truth)
+
+    assert (
+        bd.transcription_correct + bd.self_report_correct + bd.correctly_empty
+    ) == sum(acc.values())
+
+    # Without this the identity above is vacuous: on a fixture where nothing
+    # falls in the residue, the old membership rule satisfies it too.
+    assert bd.structural_mismatch > 0
+
+
+def test_the_classes_tile_the_path_set():
+    """Every path lands in exactly one class, and none is dropped.
+
+    The bound on ``correctly_empty`` is only safe if the paths it sheds have
+    somewhere to go; this is the half that says they were not simply discarded.
+    ``len(acc)`` is the old every-path denominator, so the sum also shows the
+    classifier still accounts for the whole path set it replaced.
+    """
+    predicted, truth = _sides_that_disagree_about_which_paths_exist()
+    acc = field_accuracy(predicted, truth)
+    bd = field_breakdown(predicted, truth)
+
+    assert (
+        bd.transcription_total
+        + bd.self_report_total
+        + bd.hallucinated
+        + bd.correctly_empty
+        + bd.structural_mismatch
+    ) == len(acc)
+
+
 def test_breakdown_sums_with_plus():
     a = field_breakdown(_extraction(), _extraction())
     b = field_breakdown(_extraction(), _extraction())
     total = a + b
     assert total.transcription_total == a.transcription_total * 2
     assert total.correctly_empty == a.correctly_empty * 2
+    # Every field folds, including the ones added after `__add__` was written:
+    # it builds from `fields(self)` rather than a list of names.
+    assert total.structural_mismatch == a.structural_mismatch * 2
 
 
 def test_ratio_is_none_on_an_empty_denominator_never_zero():
@@ -493,6 +563,8 @@ def test_the_report_carries_each_class_separately(tmp_path):
     assert report.self_report_agreement == 1.0
     assert report.hallucinated_fields == 0
     assert report.correctly_empty_fields > 0
+    # The two sides carry identical path sets here, so nothing is left over.
+    assert report.structural_mismatch_fields == 0
 
 
 def test_a_hallucinated_field_is_counted_and_does_not_touch_transcription(tmp_path):

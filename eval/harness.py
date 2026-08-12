@@ -153,6 +153,7 @@ def _report_to_dict(report: EvalReport) -> dict[str, Any]:
             "self_report_agreement": report.self_report_agreement,
             "hallucinated_fields": report.hallucinated_fields,
             "correctly_empty_fields": report.correctly_empty_fields,
+            "structural_mismatch_fields": report.structural_mismatch_fields,
             "line_item_precision": report.line_item_precision,
             "line_item_recall": report.line_item_recall,
             "line_item_f1": report.line_item_f1,
@@ -182,6 +183,7 @@ def _report_to_dict(report: EvalReport) -> dict[str, Any]:
                 "self_report_total": r.breakdown.self_report_total,
                 "hallucinated": r.breakdown.hallucinated,
                 "correctly_empty": r.breakdown.correctly_empty,
+                "structural_mismatch": r.breakdown.structural_mismatch,
                 # The per-path map, sorted. §16 wants results committed so
                 # regressions show in a diff; two integers cannot show which
                 # field moved, and unsorted keys would make every diff noise.
