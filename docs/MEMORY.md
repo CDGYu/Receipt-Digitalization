@@ -6,38 +6,24 @@ continuity protocol itself — what lives where, and why this snapshot must be
 verified rather than trusted — is **ADR-0019**, extended by **ADR-0021** (whose
 2026-08-02 dated correction widened the freshness check after a docs-only task
 proved invisible to it).
-Last updated: **2026-08-12**, at the end of a session that ended **mid-milestone
-with a branch in flight** — ADR-0021's case, not ADR-0019's.
+Last updated: **2026-08-12**, at the close of the session that made the review
+outcome take focus (**ADR-0041**), closing browser-pass finding **I5**.
 
-**TWO positions, because a branch exists** (ADR-0021 decision 2 — a single
-"where we are" line is ambiguous the moment a branch exists, and this project
-has already lost a whole milestone to an ambiguous stamp):
-
-- **`main` — freshness anchor `6f29aa5`.** That is the last commit on `main`
-  that is **not** this handoff pair, which is what the freshness command below
-  needs. **`git rev-parse main` will be AHEAD of it**, by the pair commits and
-  nothing else — a stamp cannot name the commit that writes it. This session
-  added no code, no ADR and no design to `main`.
-- **`feat/review-outcome-focus @ 3319367`, 11 commits ahead of `main`'s anchor,
-  PUSHED.** Every ADR, design, plan and code change from this session is here,
-  not on `main`.
-
-A stamp cannot name the commit that writes it, so each test is a command:
+**ONE position again, because nothing is in flight: freshness anchor
+`cd308bf`** — the merged tip, and the last commit on `main` that is not this
+handoff pair. **`git rev-parse main` will be AHEAD of it**, by the pair commit
+and nothing else: a stamp cannot name the commit that writes it. The test is a
+command, not a commit and not a count:
 
 ```
-# main is untouched by this session; this must be empty
-git log --oneline 01d6a5a..main -- src tests frontend docs ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
-
-# the branch has not moved since this was written; this must be empty
-git log --oneline 3319367..feat/review-outcome-focus -- src tests frontend docs ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
-
+git log --oneline cd308bf..main -- src tests frontend docs ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
 git log --oneline refs/remotes/origin/main..main   # what a push would send
 git ls-remote --heads origin main                  # authoritative on what is pushed
-git branch --no-merged main                        # WILL name feat/review-outcome-focus
+git branch --no-merged main                        # must name NOTHING
 ```
 
-**`git branch --no-merged main` naming something is correct right now.** It is
-the signal that a branch is in flight, not a fault.
+**Empty means this pair is current.** Anything listed means the tree moved
+after it was written.
 
 **Empty means current.** Anything listed means the tree moved after this was
 written and you are reading something stale.
@@ -58,12 +44,16 @@ committed first; `0cdf6c9` is the last of it.
 
 ## Snapshot
 
-- **A BRANCH IS IN FLIGHT: `feat/review-outcome-focus`, and it does NOT merge
-  until one scoped re-review runs.** See "Review outcome focus — IN FLIGHT"
-  below for exactly what remains. Run `git branch --no-merged main` rather than
-  believing this bullet, which **read "NO BRANCH IN FLIGHT" for three days while
-  one existed**: true when written on 2026-08-07, rotted the moment the
-  corrections branch was cut. **The answer is the command, never the sentence.**
+- **NO BRANCH IN FLIGHT. `git branch --no-merged main` must name nothing** —
+  run it rather than believing this bullet, which **read "NO BRANCH IN FLIGHT"
+  for three days while one existed**: true when written on 2026-08-07, rotted
+  the moment the corrections branch was cut. **The answer is the command, never
+  the sentence.**
+- **The review outcome now takes focus — COMPLETE AND MERGED** (2026-08-12,
+  true fast-forward `7c8dcc5` → `cd308bf`, single parent, zero merge commits).
+  `feat/review-outcome-focus` is kept at its merge point. **ADR-0041** is the
+  decision, and it closes browser-pass finding **I5**. See "Review outcome
+  focus" below.
 - **What eval field accuracy counts is REDEFINED, COMPLETE AND MERGED**
   (2026-08-12, true fast-forward `871f1aa` → `01d6a5a`, single parent, zero
   merge commits). `feat/eval-field-accuracy` is kept at its merge point.
@@ -227,35 +217,41 @@ committed first; `0cdf6c9` is the last of it.
 - **The repo is PUBLIC.** Verified 2026-07-31 via the GitHub API. See
   "Environment / provider" for what that exposes.
 
-## Review outcome focus — IN FLIGHT, NOT MERGED (2026-08-12)
+## Review outcome focus — COMPLETE AND MERGED (2026-08-12)
 
-**Branch `feat/review-outcome-focus @ 3319367`, 11 commits ahead of `main`,
-pushed.** Closes browser-pass finding **I5**. Decision: **ADR-0041** (written and
-on the branch; **not on `main`**). Design:
+**True fast-forward `7c8dcc5` → `cd308bf`, single parent, zero merge commits.**
+Closes browser-pass finding **I5**. Decision: **ADR-0041**. Design:
 `docs/superpowers/specs/2026-08-12-review-outcome-focus-design.md`. Plan:
 `docs/superpowers/plans/2026-08-12-review-outcome-focus.md` — **read its dated
 defect log first.**
 
-### What remains, and it is short
+**The merge needed a replay, and the cause was the controller's.** The handoff
+pair was committed to `main` mid-session while the branch sat on `6f29aa5`, so
+the two diverged and a fast-forward was no longer possible. Resolved by replaying
+the branch's twelve commits onto `main` — verified faithful, the replayed tip
+differing from the old tip by exactly the two pair files — rather than by taking
+a merge commit. **If you refresh the pair mid-milestone, expect this**: either
+rebase before merging, or keep the pair off `main` until the branch lands.
 
-1. **One scoped re-review of the whole-branch fix wave** (`ac0ef96..d8d53f8`,
-   four commits). It was dispatched and interrupted; it never ran. **This is the
-   only gate left**, and the repo's close requires it before any merge.
-2. Then ff-merge, refresh this pair, and ask before pushing `main`.
+### Verified state, with methods
 
-**Nothing else is outstanding.** Both tasks are complete and reviewed, the
-whole-branch review ran, and its fix wave landed.
-
-### Verified state, with methods (ADR-0021 decisions 3 and 6)
-
-- **Five gates PASS at `d8d53f8`, controller-run**: `python scripts/verify.py`,
-  pytest **1081** unmoved (no Python touched), Vitest **27 files / 372 tests**.
-- **Task 1 complete** (`44397e9..5a7fc58`), review **Approved**, no Critical or
-  Important. Controller reproduced **both** mutations personally: removing the
-  focus call fails **three** tests on `expected <body> to be
+- **Five gates PASS at the merged tip `cd308bf`, controller-run**:
+  `python scripts/verify.py`, pytest **1081** unmoved (no Python touched),
+  Vitest **27 files / 372 tests**.
+- **No pre-merge commit SHA is cited here.** The replay described above gave
+  every branch commit a new SHA, so the ranges this section originally named no
+  longer exist in `main`'s history. `git log --oneline 7c8dcc5..cd308bf` is the
+  list, and it cannot go stale.
+- **Task 1** — the outcome region and its focus effect. Review **Approved**, no
+  Critical or Important. Controller reproduced **both** mutations personally:
+  removing the focus call fails **three** tests on `expected <body> to be
   <section tabindex="-1">` — an `activeElement` assertion, not a null-region
   error; moving the alert outside the region fails on `region.contains(alert)`.
-- **Task 2 complete** (`5a7fc58..ac0ef96`), one fix round, review clean.
+- **Task 2** — ADR-0041 and I5's dated verdict. One fix round, review clean.
+- **Whole-branch review** (opus): **no behavioural defect**, one Critical and
+  four Important, **every one about a claim that was not true**. One fix wave,
+  one scoped re-review, then one targeted fix for a defect the re-review found
+  *in the wave's own replacement for the Critical*.
 - **The browser acceptance measurement, reproduced independently by the
   controller** in real Chromium at 1440×900: before the chord
   `approveTop=1195, scrollY=0, inView=false`; after, `regionTop=768,
