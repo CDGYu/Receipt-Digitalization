@@ -104,19 +104,31 @@ but also "an outcome is inside the region" — so a future outcome rendered as a
 sibling is a test failure rather than a silently unfocused element.
 
 > **[Dated note, 2026-08-12 — the second half of the sentence above is not what
-> shipped.]** The suite does assert that today's outcome elements sit inside the
-> region. It does **not** make a future sibling a test failure. Measured against
-> the implementation: render one more element under `hasOutcome` as a *sibling*
-> of the region — a `<p>` with no role — and `npx vitest run` from `frontend/`
-> stays green. Only a sibling carrying `role="alert"` turns the suite red, and
-> it does so through ADR-0024 decision 4's single-alert mechanism
-> (`findByRole('alert')` matching two elements and throwing), not through any
-> containment assertion. The rest of §2 is unaffected: the region does exist
-> exactly when there is an outcome, and it does take focus. Only the
-> "both ends" generalisation is wrong. Recorded by dated note rather than by
-> rewriting §2's body, per the convention this document already uses in §1.1.
-> **ADR-0041's Consequences carries the corrected statement** and is the copy to
-> read.
+> shipped, and the containment half is narrower than it sounds.]** Containment
+> is asserted in exactly two places: on the summary alert in `failed`, and on
+> the terminal card's heading in `lost`. It is **not** asserted on the
+> backend-down explanation, which the bullet above lists as one of the three,
+> and not on `held`'s card. Measured, both gaps are silent — move the
+> explanation's `<p>` out of the region, or render one more element under
+> `hasOutcome` as a *sibling* of the region, and `npx vitest run` from
+> `frontend/` stays green. A sibling carrying `role="alert"` does turn the suite
+> red, but through ADR-0024 decision 4's single-alert mechanism
+> (`findByRole('alert')` matching two elements and throwing) rather than through
+> any containment assertion — and a sibling rendering in a state no single-alert
+> query reaches would be silent as well. §6's *"the outcome elements are inside
+> it"* carries the same overclaim and is corrected by this note.
+>
+> **The first bullet of §2 is also wider than what shipped.** *"everything that
+> tells the reviewer what happened lives inside it"* is not true of the shipped
+> screen: a `field` failure renders the server's sentence a second time beside
+> the input it blames, outside the region, carrying its own `role="alert"` —
+> ADR-0024 decision 5 requires it there, and `visual.spec.ts` asserts both
+> copies. The three elements the bullet then lists are right; only the
+> *"everything"* is wrong. The rest of §2
+> is unaffected: the region does exist exactly when there is an outcome, and it
+> does take focus. Recorded by dated note rather than by rewriting the body, per
+> the convention this document already uses in §1.1. **ADR-0041's Consequences
+> carries the corrected statement** and is the copy to read.
 
 ### 2.1 Two things the rule has to be unambiguous about
 

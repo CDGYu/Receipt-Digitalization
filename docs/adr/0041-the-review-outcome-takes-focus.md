@@ -13,9 +13,8 @@ Derived 2026-08-12 on `feat/review-outcome-focus` at `5a7fc58`. **Re-derive
 rather than quote** (ADR-0028 rule 1): the design this implements was written
 before the code, and the finding it closes understated itself. Every number
 below came out of one of the three probes described here on the day this was
-written, or is a subtraction of two of their outputs. The third was run last,
-at the close of the fix wave, and is the only one whose result contradicts
-something the design assumed.
+written, or is a subtraction of two of their outputs. The third was run last, at
+the close of the fix wave; its result contradicts something the design assumed.
 
 **The layout and the scroll.** A temporary spec under `frontend/e2e/`, run and
 then deleted. `playwright.config.ts` chains build → seed → serve in one
@@ -152,11 +151,12 @@ state renders the region with all three false — an empty box that takes focus,
 which the browser scrolls to and in which the reviewer sees nothing. That is
 this defect again with a green suite. Re-derive it rather than trusting this
 paragraph: move the `lost`/`held` branch out of the region, and in the terminal
-state the region renders empty and focused while exactly one test fails —
-`takes focus when a submit resolves to a terminal state`, on its
-`region.contains(notice)`, which names *this* state's notice. A state added
-later would have no such test. The hazard is genuinely reduced — one focus move
-too many beats an outcome that renders where nobody is looking — and it is not
+state the region renders empty and focused while `review-screen.test.tsx`
+reports a single failure — `takes focus when a submit resolves to a terminal
+state`, on its `region.contains(notice)`, which names *this* state's notice. A
+state added later would have no such test. The hazard is genuinely reduced —
+one focus move too many beats an outcome that renders where nobody is looking —
+and it is not
 removed: putting the new state's outcome inside the region stays the author's
 job, enforced by nothing.
 
@@ -273,12 +273,22 @@ which children always render.
 ## Consequences
 
 - **What a green `verify.py` now certifies**: that focus moved to the region
-  when an outcome appeared, and that *today's* outcome elements are **inside**
-  it. `document.activeElement` is observable in jsdom and the suite already
+  when an outcome appeared, and that two particular elements are **inside** it.
+  The next two bullets say which two, and what that leaves uncovered.
+  `document.activeElement` is observable in jsdom and the suite already
   asserted it elsewhere, so this is not a new capability.
-- **The containment assertions do not reach a future sibling.** They pin where
-  the three elements named in decision 1 sit; they are not a trap a later
-  author's sibling springs. Re-derive rather than trust this: render one more
+- **Containment is asserted twice, and it is not coverage of decision 1's
+  list.** `region.contains(...)` appears in exactly two assertions across
+  `frontend/tests` and `frontend/e2e`: on the **summary alert** in `failed`, and
+  on the **terminal card's heading** in `lost`. Nothing asserts where the
+  backend-down explanation sits, and nothing asserts where `held`'s card sits.
+  Measured: move the explanation's `<p>` out of the region and it renders as an
+  unfocused sibling with the whole suite green — decision 1 names it as one of
+  the three, and no gate holds it there. Re-derive the pair with
+  `grep -rn "\.contains(" frontend/tests/ frontend/e2e/` rather than trusting
+  this bullet; it returns three hits, of which the third is a docstring. A claim
+  about how much a suite covers is exactly the kind that rots.
+- **Neither assertion reaches a future sibling either.** Render one more
   element under `hasOutcome` — a `<p>` with no role, as a *sibling* of the
   region rather than a child — and `npx vitest run` from `frontend/` stays
   green: an outcome rendered where nobody is looking, with every gate passing,

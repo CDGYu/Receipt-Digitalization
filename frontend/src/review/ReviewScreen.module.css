@@ -110,8 +110,11 @@
   line-height: 1.5;
 }
 
-/* The outcome region: everything that tells the reviewer what happened, in one
- * focusable box. It exists because `.screen` is a grid with a gap and these
+/* The outcome region: the backend-down explanation, the summary alert and the
+ * terminal or held card, in one focusable box. Not *everything* that tells the
+ * reviewer what happened -- a `field` failure also renders the server's
+ * sentence beside the input it blames, outside this box, per ADR-0024 decision
+ * 5. It exists because `.screen` is a grid with a gap and these
  * were three separate grid items; collapsing them into one item would have
  * removed the spacing between them, so the gap is restored here.
  *
