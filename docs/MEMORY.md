@@ -6,16 +6,32 @@ continuity protocol itself — what lives where, and why this snapshot must be
 verified rather than trusted — is **ADR-0019**, extended by **ADR-0021** (whose
 2026-08-02 dated correction widened the freshness check after a docs-only task
 proved invisible to it).
-Last updated: **2026-08-12**, at the close of the session that redefined what
-eval field accuracy counts (**ADR-0040**). **One position, because nothing is in
-flight: `main @ 01d6a5a`.** A stamp cannot name the commit that
-writes it, so the test is a command, not a commit and not a count:
+Last updated: **2026-08-12**, at the end of a session that ended **mid-milestone
+with a branch in flight** — ADR-0021's case, not ADR-0019's.
+
+**TWO positions, because a branch exists** (ADR-0021 decision 2 — a single
+"where we are" line is ambiguous the moment a branch exists, and this project
+has already lost a whole milestone to an ambiguous stamp):
+
+- **`main @ 6f29aa5`**, pushed. Unchanged by this session.
+- **`feat/review-outcome-focus @ 3319367`, 11 commits ahead, PUSHED.**
+
+A stamp cannot name the commit that writes it, so each test is a command:
 
 ```
+# main is untouched by this session; this must be empty
 git log --oneline 01d6a5a..main -- src tests frontend docs ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
+
+# the branch has not moved since this was written; this must be empty
+git log --oneline 3319367..feat/review-outcome-focus -- src tests frontend docs ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
+
 git log --oneline refs/remotes/origin/main..main   # what a push would send
 git ls-remote --heads origin main                  # authoritative on what is pushed
+git branch --no-merged main                        # WILL name feat/review-outcome-focus
 ```
+
+**`git branch --no-merged main` naming something is correct right now.** It is
+the signal that a branch is in flight, not a fault.
 
 **Empty means current.** Anything listed means the tree moved after this was
 written and you are reading something stale.
@@ -36,11 +52,12 @@ committed first; `0cdf6c9` is the last of it.
 
 ## Snapshot
 
-- **NO BRANCH IN FLIGHT. `git branch --no-merged main` must name nothing** —
-  run it rather than believing this bullet, which **read "NO BRANCH IN FLIGHT"
-  for three days while one existed**: true when written on 2026-08-07, rotted
-  the moment the corrections branch was cut, and corrected only when Task 4
-  edited the file. **The answer is the command, never the sentence.**
+- **A BRANCH IS IN FLIGHT: `feat/review-outcome-focus`, and it does NOT merge
+  until one scoped re-review runs.** See "Review outcome focus — IN FLIGHT"
+  below for exactly what remains. Run `git branch --no-merged main` rather than
+  believing this bullet, which **read "NO BRANCH IN FLIGHT" for three days while
+  one existed**: true when written on 2026-08-07, rotted the moment the
+  corrections branch was cut. **The answer is the command, never the sentence.**
 - **What eval field accuracy counts is REDEFINED, COMPLETE AND MERGED**
   (2026-08-12, true fast-forward `871f1aa` → `01d6a5a`, single parent, zero
   merge commits). `feat/eval-field-accuracy` is kept at its merge point.
@@ -203,6 +220,62 @@ committed first; `0cdf6c9` is the last of it.
   searching the tracked tree — open ledgers by path.**
 - **The repo is PUBLIC.** Verified 2026-07-31 via the GitHub API. See
   "Environment / provider" for what that exposes.
+
+## Review outcome focus — IN FLIGHT, NOT MERGED (2026-08-12)
+
+**Branch `feat/review-outcome-focus @ 3319367`, 11 commits ahead of `main`,
+pushed.** Closes browser-pass finding **I5**. Decision: **ADR-0041** (written and
+on the branch; **not on `main`**). Design:
+`docs/superpowers/specs/2026-08-12-review-outcome-focus-design.md`. Plan:
+`docs/superpowers/plans/2026-08-12-review-outcome-focus.md` — **read its dated
+defect log first.**
+
+### What remains, and it is short
+
+1. **One scoped re-review of the whole-branch fix wave** (`ac0ef96..d8d53f8`,
+   four commits). It was dispatched and interrupted; it never ran. **This is the
+   only gate left**, and the repo's close requires it before any merge.
+2. Then ff-merge, refresh this pair, and ask before pushing `main`.
+
+**Nothing else is outstanding.** Both tasks are complete and reviewed, the
+whole-branch review ran, and its fix wave landed.
+
+### Verified state, with methods (ADR-0021 decisions 3 and 6)
+
+- **Five gates PASS at `d8d53f8`, controller-run**: `python scripts/verify.py`,
+  pytest **1081** unmoved (no Python touched), Vitest **27 files / 372 tests**.
+- **Task 1 complete** (`44397e9..5a7fc58`), review **Approved**, no Critical or
+  Important. Controller reproduced **both** mutations personally: removing the
+  focus call fails **three** tests on `expected <body> to be
+  <section tabindex="-1">` — an `activeElement` assertion, not a null-region
+  error; moving the alert outside the region fails on `region.contains(alert)`.
+- **Task 2 complete** (`5a7fc58..ac0ef96`), one fix round, review clean.
+- **The browser acceptance measurement, reproduced independently by the
+  controller** in real Chromium at 1440×900: before the chord
+  `approveTop=1195, scrollY=0, inView=false`; after, `regionTop=768,
+  scrollY=460, inView=true`, and `document.activeElement` **is** the region. The
+  browser scrolled 460px purely because focus moved. **The y=1195 baseline has
+  reproduced on three separate runs, from three different states.**
+
+### The measured gap nobody should be surprised by
+
+**Nothing paints on the focused region**, in either theme: `outline-style: none`,
+`box-shadow: none`, and `matches(':focus-visible')` is **false**. `--color-ring`
+exists and is never applied, because `tokens.css` scopes the ring to
+`:where(a, button, input, select, textarea):focus-visible`. **The design asserted
+this change needed no visual treatment; that is now measured and wrong in the
+letter.** Mitigating: the `.terminal` card carries its own visible box, and the
+scroll is the mechanism doing the work. Recorded in ADR-0041, deliberately not
+fixed — adding an indicator is an ADR-0027 token decision, not a last-gate
+change. Corroborated from the stylesheet side: the census entry
+`'.outcome': 'display: flex, flex-direction: column, gap'` is a **gate** that
+would fail if an `outline` were added.
+
+### I5 is closed as FIXED and MEASURED — not as SEEN
+
+A Playwright `inView=true` is a machine measuring geometry. **Nobody has looked
+at this screen** since the styling milestone's browser pass. The design says a
+person looking is what closes I5 as seen.
 
 ## Eval field accuracy — COMPLETE AND MERGED (2026-08-12)
 
@@ -2011,6 +2084,15 @@ measured.**
       records the findings about the counts it sources. Point at the list.
     * **A decision that states a boundary names what enforces it** — or says
       plainly that it is friction. ADR-0031 decision 2 is the worked example.
+    * **A test's NAME is a copy.** Added 2026-08-12. A claim that "a future
+      outcome rendered as a sibling is a test failure" was falsified by
+      measurement — a role-less sibling left the suite at 372/372 — and the
+      correction reached the design, the ADR and the ADR index while the
+      **fourth** copy sat in `it('contains every outcome element, so a future
+      one cannot render unfocused')`. Three separate readers found successive
+      copies; the fourth was found only because a fix wave was told to look for
+      one. **A name that quantifies is a claim, and greps for the *sentence*
+      never reach it.**
 
 26. **A corrected claim survives where the fixing commit never looked, and the
     holdout is invisible to a grep for the thing you changed.** ADR-0040

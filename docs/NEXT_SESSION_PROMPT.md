@@ -20,7 +20,11 @@ it to "fix" a correct sentence in an Accepted ADR to match a wrong measurement.
 
 ---
 
-# NO BRANCH IN FLIGHT. `main` is MERGED AND PUSHED.
+# A BRANCH IS IN FLIGHT: `feat/review-outcome-focus`. ONE GATE REMAINS.
+
+**`main` is untouched at `6f29aa5` and the branch does NOT merge until one
+scoped re-review runs.** This is ADR-0021's case, not ADR-0019's: the session
+ended mid-milestone, deliberately, with the work pushed.
 
 **This header said "NO BRANCH IN FLIGHT" for three days while a branch existed**
 — true when written, rotted the moment the branch was cut. It has also carried
@@ -36,13 +40,27 @@ git ls-remote --heads origin main                 # authoritative on what is pus
 git log --oneline refs/remotes/origin/main..main  # what the pending push would send
 ```
 
-## `main` is merged and pushed — nothing is waiting to go.
+## THE ONE THING THIS SESSION MUST DO FIRST
+
+**Run one scoped re-review of the fix wave `ac0ef96..d8d53f8` (four commits) on
+`feat/review-outcome-focus`.** It was dispatched and interrupted; it never ran.
+It is the only gate left before the merge, and this repo's close requires it.
+See **§0e**.
+
+Everything else on that branch is done: both tasks complete and reviewed, the
+whole-branch review run, its fix wave landed, **five gates PASS at `d8d53f8`**
+(controller-run: pytest 1081, Vitest 27 files / 372 tests).
+
+`git branch --no-merged main` **will** name `feat/review-outcome-focus`. That is
+correct, not a fault.
+
+## `main` is merged and pushed — nothing is waiting to go *on main*.
 
 **The eval field-accuracy redefinition merged by true fast-forward on
-2026-08-12** — `871f1aa` → `01d6a5a`, single parent, zero merge commits,
-`git branch --no-merged main` names nothing. It went in after four task reviews
-with their scoped re-reviews, a whole-branch review returning **MERGE WITH
-FIXES**, one fix wave and one scoped re-review. **ADR-0040** is the decision.
+2026-08-12** — `871f1aa` → `01d6a5a`, single parent, zero merge commits.
+It went in after four task reviews with their scoped re-reviews, a whole-branch
+review returning **MERGE WITH FIXES**, one fix wave and one scoped re-review.
+**ADR-0040** is the decision.
 
 **Every push is on a one-time authorization that the push consumes, and the
 next `main` push needs its own fresh ask.** **No count and no list of past
@@ -55,15 +73,18 @@ count is written down" wrote a count in the same sentence.
 sentence — empty means nothing is waiting to go, and the pair commit that
 writes this necessarily lands after any push it could record.
 
-**Freshness check.** `docs/MEMORY.md`'s stamp names **one** position again now
-that nothing is in flight:
+**Freshness check.** `docs/MEMORY.md`'s stamp names **TWO** positions, because a
+branch is in flight (ADR-0021 decision 2). Both commands must come back empty:
 
 ```
-git log --oneline <STAMP>..main -- src tests frontend docs ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
+git log --oneline <MAIN-STAMP>..main -- src tests frontend docs ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
+git log --oneline <BRANCH-STAMP>..feat/review-outcome-focus -- src tests frontend docs ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
 ```
 
-**Empty means this pair is current.** Anything listed means the tree moved after
-it was written.
+**Empty means this pair is current.** Anything listed means that position moved
+after this was written. **Read the stamp for the two SHAs** — they are not
+written here, because a SHA in two places is a SHA that can disagree with
+itself.
 
 **Gates on `main` after the merge, controller-run: `python scripts/verify.py` —
 all five PASS.** pytest **1081**; Vitest **unmoved**, because no frontend file
@@ -290,9 +311,82 @@ read route (**ADR-0031**) and the CLI `--limit` bound all shipped. §1.6's
 
 # THE WORK, IN ORDER
 
-*(§0d is newest and sits first deliberately. It is lettered `d` rather than
-renumbered to the front because renumbering ages every citation of §0a–§0c, and
-that has already happened twice in this file's history.)*
+*(§0e and §0d are newest and sit first deliberately. They are lettered rather
+than renumbered to the front because renumbering ages every citation of §0a–§0c,
+and that has already happened twice in this file's history.)*
+
+## 0e. Review outcome focus — IN FLIGHT, NOT MERGED. Start here.
+
+**Branch `feat/review-outcome-focus @ 3319367`, 11 commits ahead of `main`,
+pushed.** Closes browser-pass finding **I5**. Decision: **ADR-0041** — written,
+on the branch, **not on `main` yet**.
+
+### What remains
+
+1. **One scoped re-review of the fix wave `ac0ef96..d8d53f8`** (four commits).
+   Dispatched and interrupted; never ran. **The only gate left.** Its findings
+   list, the review package and every artefact are in
+   `.superpowers/sdd/2026-08-12-review-outcome-focus/` — **gitignored, open it
+   by path**; the ledger's last section carries the whole-branch review's
+   findings verbatim and the three controller rulings that closed them.
+2. Then ff-merge, refresh this pair, **and ask before pushing `main`**.
+
+### What is already done, with methods
+
+- **Five gates PASS at `d8d53f8`**, controller-run. pytest **1081** unmoved (no
+  Python touched); Vitest **27 files / 372 tests**.
+- **Task 1** (`44397e9..5a7fc58`): the outcome region and its focus effect.
+  Review **Approved**, no Critical or Important. **Controller reproduced both
+  mutations personally** — removing the focus call fails **three** tests on an
+  `activeElement` assertion, not a null-region error; moving the alert outside
+  the region fails on `region.contains(alert)`.
+- **Task 2** (`5a7fc58..ac0ef96`): ADR-0041 and I5's dated verdict. One fix
+  round, review clean.
+- **Whole-branch review** (opus): **no behavioural defect**, one Critical and
+  four Important, **all about claims that were not true**. Fix wave landed in
+  four commits.
+
+### The defect, and the fix, in one paragraph each
+
+**The defect.** The outcome — the backend-down explanation, the summary alert,
+the terminal or held card — rendered at the end of a long document, and the
+⌘↵ chord is a **`window`** listener, so it fires while the reviewer types at the
+top of the form. Measured: Approve at **y=1195**, below the fold at 1440×900,
+×800 **and ×1080**, with a two-line-item receipt and a **73px** row pitch. A 403
+or 404 — where *the write landed and the task is gone* — produced **no visible
+change at all**.
+
+**The fix.** One `<section tabIndex={-1}>` with **no role** gathers the outcome
+and takes focus when it appears; the browser scrolls a focused element into view
+by itself. Measured after: `regionTop=768, scrollY=460, inView=true`, and
+`document.activeElement` **is** the region.
+
+### Three things to know before touching it
+
+- **The region must stay a `<section>`.** `.screen > div` is the image pane's
+  positional sticky selector, and that stylesheet's own comment calls it "the
+  ONLY direct `<div>` child".
+- **The region carries no role, and that is a user ruling** (ADR-0024 decision 4:
+  a second alert makes `findByRole('alert')` match two elements and throw). For
+  a `<section>`, "no role" and "no accessible name" are the same decision.
+- **Nothing paints on the focused region** — `outline-style: none`,
+  `box-shadow: none`, `:focus-visible` **false**, both themes. Measured, recorded
+  in ADR-0041, deliberately not fixed: adding an indicator is an ADR-0027 token
+  decision. The census entry for `.outcome` is a gate that would fail if one were
+  added.
+
+### I5 is FIXED and MEASURED, not SEEN
+
+A Playwright `inView=true` is a machine measuring geometry. **Nobody has looked
+at this screen** since the styling milestone's browser pass.
+
+### The lesson this milestone paid for
+
+One false claim — *"a future outcome rendered as a sibling is a test failure"* —
+reached **four** documents: the design, ADR-0041, the ADR index, and a test's own
+**name**. It was falsified by measurement (a role-less sibling leaves the suite
+at 372/372) only at the whole-branch review. **Review standard 25 gained a bullet:
+a test's name is a copy, and greps for the sentence never reach it.**
 
 ## 0d. Eval field accuracy is REDEFINED, DONE, MERGED and PUSHED (2026-08-12).
 
@@ -639,15 +733,22 @@ cannot tell accurate from stale.**
 In `docs/superpowers/specs/2026-08-05-review-ui-browser-pass.md` §3, each
 measured. **C1, C2, C3 and I4 are CLOSED and the status note says so.** Open:
 
-- **I5 — re-triaged to CRITICAL, not fixed.** At 1440×900 the terminal states,
-  the summary alert and Approve are below the fold, so **a 403 or a 404 — where
-  the write LANDED and the task is GONE — produces no visible change at all.**
+- **I5 — FIXED ON `feat/review-outcome-focus`, still open on `main`.** This is
+  the ambiguity ADR-0021 warns about, so both halves are stated: on `main` the
+  sentence below is still true; on the branch it is not, and the branch has not
+  merged. Original finding: at 1440×900 the terminal states, the summary alert
+  and Approve are below the fold, so **a 403 or a 404 — where the write LANDED
+  and the task is GONE — produces no visible change at all.** Re-measured
+  2026-08-12: below the fold at **900, 800 and 1080**, and it degrades 73px per
+  line item. See **§0e** and ADR-0041 (on the branch).
 - **I6** the inline field error renders three grid columns from the field it
   blames; **I7** a 401 swaps in the login form with no message and repaints
   restored edits identically to stored data; **I8** the admin tiles tell a
   reviewer "9 open" directly above "No open tasks"; **I9** the 503 says the same
   sentence twice. Every Minor (m10–m16) untouched.
-- **I5 and I7 touch ADR-0024's contract**, so neither is a drive-by fix.
+- **I7 touches ADR-0024's contract**, so it is not a drive-by fix. (This line
+  named I5 too until 2026-08-12; I5 was taken as its own milestone, which is
+  §0e, and it extended ADR-0024 rather than reopening it.)
 
 ### 1.5 Test-shape debt from the same milestone
 
@@ -1137,17 +1238,22 @@ and was measured not to need it.)*
 
 ## Today's goal
 
-**Nothing is in flight, nothing is half-done, and nothing carries over.** The
-eval field-accuracy redefinition merged and was pushed on 2026-08-12 (§0d).
-`git branch --no-merged main` should name nothing, and
-`git log --oneline refs/remotes/origin/main..main` should come out empty.
+**Something IS in flight, and it is one gate from done.** Finish
+`feat/review-outcome-focus` before starting anything else — see **§0e**. The
+work is complete, reviewed and pushed; what is missing is **one scoped
+re-review of the fix wave `ac0ef96..d8d53f8`**, which was dispatched and
+interrupted.
 
-**Run the freshness command in `docs/MEMORY.md`'s stamp before trusting any of
-this.** If it lists anything, the tree moved after this was written — re-run
-`python scripts/verify.py` and re-read §0d before acting.
+`git branch --no-merged main` **will** name that branch. That is the signal it
+is in flight, not a fault.
 
-**Then** pick from the START HERE index, or answer the questions above and let
-that pick for you.
+**Run BOTH freshness commands in `docs/MEMORY.md`'s stamp before trusting any of
+this** — there are two positions now. If either lists anything, that position
+moved after this was written; re-run `python scripts/verify.py` and re-read §0e
+before acting.
+
+**Only after §0e merges** should you pick from the START HERE index or answer
+the questions above.
 
 **Item 1 in "Blocked on me" is still the one that matters**, and §0d did not
 change that: a hosted tool-capable provider and a freshly rotated key is what
