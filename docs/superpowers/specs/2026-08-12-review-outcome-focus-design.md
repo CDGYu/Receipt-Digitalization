@@ -104,6 +104,21 @@ The bounded, structural form:
 but also "an outcome is inside the region" — so a future outcome rendered as a
 sibling is a test failure rather than a silently unfocused element.
 
+> **[Dated note, 2026-08-12 — the second half of the sentence above is not what
+> shipped.]** The suite does assert that today's outcome elements sit inside the
+> region. It does **not** make a future sibling a test failure. Measured against
+> the implementation: render one more element under `hasOutcome` as a *sibling*
+> of the region — a `<p>` with no role — and `npx vitest run` from `frontend/`
+> stays green. Only a sibling carrying `role="alert"` turns the suite red, and
+> it does so through ADR-0024 decision 4's single-alert mechanism
+> (`findByRole('alert')` matching two elements and throwing), not through any
+> containment assertion. The rest of §2 is unaffected: the region does exist
+> exactly when there is an outcome, and it does take focus. Only the
+> "both ends" generalisation is wrong. Recorded by dated note rather than by
+> rewriting §2's body, per the convention this document already uses in §1.1.
+> **ADR-0041's Consequences carries the corrected statement** and is the copy to
+> read.
+
 ### 2.1 Two things the rule has to be unambiguous about
 
 **Every appearance moves focus, not only the first.** A reviewer who submits
@@ -118,6 +133,14 @@ Approve. So focus movement is always the answer to something the reviewer just
 did, never an interruption of typing. This is the property that makes moving
 focus acceptable at all; if a future state could render an outcome without a
 reviewer action, it would need to be reconsidered rather than inherited.
+
+> **[Dated note, 2026-08-12 — "only on ⌘↵ or a click on Approve" is not the
+> whole list.]** `Close task` drives the same `Submit` state, through
+> `closeTaskOnly`, which is the third way an outcome can appear. The property
+> §2.1 is asserting **survives**, because that is a reviewer action too: every
+> path into a submit still starts from something the reviewer did. Only the
+> enumeration was short. Recorded by dated note rather than by rewriting
+> §2.1's body. **ADR-0041's decision 1 carries the corrected sentence.**
 
 ## 3. Where focus lands, and where it must not
 
@@ -211,6 +234,20 @@ focused container's contents and the live region. **This project has never
 tested with a real screen reader** (the browser pass says so: *"No real touch
 device and no real screen reader"*), so this claim ships unverified and is
 recorded as such rather than asserted.
+
+> **[Dated note, 2026-08-12 — the risk above is named in one direction only.]**
+> Double announcement is one direction. The other is at least as likely and is
+> not named here: **moving focus can preempt or drop a pending live-region
+> announcement**, so a screen-reader user may be told *less* than before this
+> change, not more. That matters because I5's own words are that
+> *"a screen-reader user is told; a sighted one is not"* — screen-reader users
+> are the class the defect never harmed. A structural consequence is also
+> unrecorded here: a `<section>` with an accessible name is a `region`
+> landmark and one without maps to `generic`, so "no role" and "no accessible
+> name" are the same decision, and focus lands on an unnamed generic node.
+> §6's conclusion is unaffected — none of it is tested either way. Recorded by
+> dated note rather than by rewriting §6's body. **ADR-0041's decision 3
+> carries both directions and the landmark consequence.**
 
 **Acceptance therefore has two halves**: the gates for the mechanism, and a
 browser measurement — the same Playwright shape used to produce §1.1's table —

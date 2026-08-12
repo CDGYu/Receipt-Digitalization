@@ -16,16 +16,19 @@ below came out of one of the two probes described here on the day this was
 written, or is a subtraction of two of their outputs.
 
 **The layout and the scroll.** A temporary spec under `frontend/e2e/`, run and
-then deleted (the tree is clean; `playwright.config.ts` chains build → seed →
-serve, so `npx playwright test` from `frontend/` needs nothing else). It reads
+then deleted. `playwright.config.ts` chains build → seed → serve in one
+`webServer.command`, so `npx playwright test` from `frontend/` drives that whole
+chain; two of the three links shell `${PYTHON} scripts/seed_review_e2e.py` and
+`${PYTHON} scripts/serve_review_e2e.py`, so a Python interpreter and those two
+scripts are part of what a run needs. The spec reads
 the seed manifest for credentials, signs in, waits for the line-items table,
 and then, at each viewport height with `window.scrollTo(0, 0)`: `boundingBox()`
 on the button named `/^Approve/`, `document.documentElement.scrollHeight`, and
 `window.innerHeight`. Then it fills `Total` with `abc`, which
 `apply_corrections` refuses with a 400, presses `ControlOrMeta+Enter`, and
 reads the region's box,
-`getBoundingClientRect().top` as a second opinion, `window.scrollY`, and
-`document.activeElement`.
+`getBoundingClientRect().top` as a second opinion, `window.scrollY`,
+`document.activeElement`, and `getAttribute('role')` on the region.
 
 **The two jsdom facts**, against the `jsdom` that Vitest's
 `environment: 'jsdom'` loads, from the repo root:
@@ -103,8 +106,15 @@ verdict line, which is that report's own convention.
 
 ### 1. One outcome region, and an outcome that appears takes focus
 
-Everything that tells the reviewer what happened lives inside one region: the
-backend-down explanation, the summary alert, and the terminal or held card.
+Three elements move into one region: the backend-down explanation, the summary
+alert, and the terminal or held card. **The inline field error stays outside
+it**, beside the input it blames and carrying its own `role="alert"`, because
+ADR-0024 decision 5 puts it there and this ADR extends that contract rather than
+reopening it. So on the commonest failure the server's sentence is on screen
+twice — once in the region, once at the field — and focus moves to only one of
+them. `frontend/e2e/visual.spec.ts` already asserts the pair, by filtering
+`getByRole('alert')` on the message text.
+
 Rendering the region and focusing it are **the same mechanism** — the effect
 keys on the submit state and the region's ref is the only thing it reads — so
 the rule is structural rather than a list of states somebody has to remember to
@@ -119,9 +129,22 @@ const hasOutcome = submit.kind !== 'idle' && submit.kind !== 'busy'
 Not "render on `failed`, `lost` and `held`". A rule that enumerates the
 resolved states is an enumerated defence that the next state escapes silently
 (review standard 19). Written as a complement, a state added later **defaults
-into** the region and inherits the focus move by construction, and the failure
-mode is one focus move too many rather than an outcome that renders where
-nobody is looking.
+into** the region and inherits the focus move by construction.
+
+**The complement guarantees the region, not its contents.** What a later state
+inherits is the focus move, not something to show: the region's three inner
+conditionals are still enumerations of `failed`, `lost` and `held`, so a sixth
+state renders the region with all three false — an empty box that takes focus,
+which the browser scrolls to and in which the reviewer sees nothing. That is
+this defect again with a green suite. Re-derive it rather than trusting this
+paragraph: move the `lost`/`held` branch out of the region, and in the terminal
+state the region renders empty and focused while exactly one test fails —
+`takes focus when a submit resolves to a terminal state`, on its
+`region.contains(notice)`, which names *this* state's notice. A state added
+later would have no such test. The hazard is genuinely reduced — one focus move
+too many beats an outcome that renders where nobody is looking — and it is not
+removed: putting the new state's outcome inside the region stays the author's
+job, enforced by nothing.
 
 **Every appearance moves focus, not only the first.** A resubmit that fails
 again goes `failed → busy → failed`, the effect's dependency changes, and focus
@@ -129,11 +152,13 @@ moves a second time. That is intended: a rule that fired once would leave the
 retry silent, which is this defect over again.
 
 **Focus never moves without the reviewer having acted.** The region appears
-only as the resolution of a submit, and a submit happens only on ⌘↵ or a click
-on Approve, so focus movement is always the answer to something the reviewer
-just did. That is the property that makes moving focus acceptable at all. A
-future state that could render an outcome with no reviewer action would need
-this reconsidered rather than inherited.
+only as the resolution of a submit, and every path into a submit starts from a
+reviewer action: ⌘↵, a click on Approve, or a click on `Close task`, which
+drives the same `Submit` state through `closeTaskOnly`. So focus movement is
+always the answer to something the reviewer just did. That is the property that
+makes moving focus acceptable at all. A future state that could render an
+outcome with no reviewer action would need this reconsidered rather than
+inherited.
 
 ### 2. Focus lands on a non-interactive container, never on the exit button
 
@@ -169,11 +194,28 @@ conditional, and it still renders in every failure case. Decision 3 is intact
 by construction: in a terminal state Approve does not render at all, and the
 single exit lives *inside* the terminal card, which is inside this region.
 
-The cost is stated rather than hidden. How a screen reader behaves when focus
-lands on a container wrapping a `role="alert"` is **untested** — some announce
-both the focused container's contents and the live region. This project has
-never tested with a real screen reader; the browser pass says so about itself.
-The claim ships unverified and is recorded as such.
+The cost is stated rather than hidden, and it runs in **both** directions. How a
+screen reader behaves when focus lands on a container wrapping a `role="alert"`
+is **untested**. It may say *more*: some readers announce both the focused
+container's contents and the live region. It may equally say *less* — moving
+focus can preempt or drop a pending live-region announcement, so a reviewer who
+would have been told about the 403 may now be told nothing. That second
+direction is the one worth naming loudest, because the finding's own words are
+that for I5 *"a screen-reader user is told; a sighted one is not"*:
+screen-reader users are the one class this defect never harmed, and they now
+carry a risk introduced to fix it for everyone else. This project has never
+tested with a real screen reader; the browser pass says so about itself.
+Neither direction is tested, and neither is claimed.
+
+**"No role" and "no accessible name" are one decision, not two.** A `<section>`
+carrying an accessible name is a `region` landmark; without one it maps to
+`generic`. Declining the role therefore declines the name, and focus lands on
+an unnamed generic node — measured in Chromium on the terminal state, where
+Playwright's `getByRole('region')` finds nothing on this screen and the
+accessibility tree under the container starts at the inner `alert`, with no
+node for the container above it. That follows from extending ADR-0024 decision
+4 rather than being an oversight, and it is written here because nothing else
+writes it down.
 
 ### 4. Focus, not `scrollIntoView`, and the reason is measured
 
@@ -211,11 +253,21 @@ which children always render.
 ## Consequences
 
 - **What a green `verify.py` now certifies**: that focus moved to the region
-  when an outcome appeared, and that the outcome elements are **inside** it.
-  Both ends, deliberately — the containment half is what makes a future outcome
-  rendered as a sibling a test failure rather than a silently unfocused
-  element. `document.activeElement` is observable in jsdom and the suite
-  already asserted it elsewhere, so this is not a new capability.
+  when an outcome appeared, and that *today's* outcome elements are **inside**
+  it. `document.activeElement` is observable in jsdom and the suite already
+  asserted it elsewhere, so this is not a new capability.
+- **The containment assertions do not reach a future sibling.** They pin where
+  the three elements named in decision 1 sit; they are not a trap a later
+  author's sibling springs. Re-derive rather than trust this: render one more
+  element under `hasOutcome` — a `<p>` with no role, as a *sibling* of the
+  region rather than a child — and `npx vitest run` from `frontend/` stays
+  green: an outcome rendered where nobody is looking, with every gate passing,
+  which is the shape this milestone exists to end. Give that same
+  `<p>` a `role="alert"` and `review-screen.test.tsx` goes red, but through
+  ADR-0024 decision 4's mechanism rather than through containment: a second
+  alert makes `findByRole('alert')` match two elements and throw. A sibling
+  with no role, or one rendering in a state no single-alert query reaches, is
+  silent.
 - **What it still cannot certify**: that anything became *visible*. jsdom
   performs no layout. The scroll is the browser's own side effect of moving
   focus and no gate can see it. This is ADR-0029's boundary exactly — a
@@ -238,11 +290,18 @@ which children always render.
   image link with a `role="alert"` paragraph of its own. So `findByRole('alert')`
   matched two elements and **threw**: two of the five new tests errored on the
   *fixture* rather than failing on their own assertion, and would have gone on
-  erroring after the region existed. The two alerts are not even in the same
-  subtree — `ImagePane` is the second child of `.screen` and the region is the
-  seventh — so a query written to find *the* outcome alert was silently
-  ambiguous about which screen element it meant. `review-screen.test.tsx`
-  carries that measurement inline, beside the stub that fixes it.
+  erroring after the region existed. Neither alert contains the other —
+  `ImagePane` is the second child of `.screen` and the region is the seventh,
+  both inside the same `<main class="screen">` — so a query written to find
+  *the* outcome alert was silently ambiguous about which screen element it
+  meant. `review-screen.test.tsx` carries that measurement inline, beside the
+  stub that fixes it. **The same ambiguity is one fixture away from returning.**
+  Those tests reach the `failed` state through a helper that types nothing, so
+  `buildPatch` returns `{}`, `classifyFailure` cannot match a field path, the
+  400 is `other` rather than `field`, and no inline error renders. A fixture
+  that typed a real field error would render a second `role="alert"` beside the
+  input — deliberately, per ADR-0024 decision 5 — and `findByRole('alert')`
+  would throw again, on a test that had nothing to do with the image.
 - **The load-failure screen is untouched.** `phase.kind === 'failed'` renders a
   different `<main>`: a short, single-column page whose alert is near the top
   with nothing above it, so it has no below-the-fold problem to solve. Named
@@ -279,8 +338,8 @@ restructure that stylesheet asks for, and it still does not get it.
 suppressed by an *enumeration* (`submit.kind === 'lost' || submit.kind ===
 'held'`) while the region is rendered by a *complement*. So a terminal state
 added later would default **into** rendering a retry beside its own outcome —
-the two-exits shape ADR-0024 decision 3 forbids — while correctly defaulting
-into the region. Closing that asymmetry needs something to key on that the
+the retry that cannot work, which ADR-0024 decision 3 forbids — while correctly
+defaulting into the region. Closing that asymmetry needs something to key on that the
 `Submit` union does not carry: there is no `terminal` discriminator on it, and
 inventing one is a change to the submit contract rather than to this render.
 Recorded as an open question, not fixed.

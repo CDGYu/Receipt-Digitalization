@@ -147,8 +147,11 @@ instead of having to be added to a list; the region carries **no role**, which
 extends ADR-0024's decision 4 rather than reopening it; and it is a `<section>`
 because `.screen > div` is the image pane's positional selector. Focus rather
 than `scrollIntoView` because `scrollIntoView` is `undefined` in jsdom — so the
-gates can certify that focus moved and that the outcome sits inside the region,
-and they still cannot certify that anything was *seen*.
+gates can certify that focus moved and that *today's* outcome elements sit
+inside the region. They do not catch a future one rendered as a sibling
+(measured: a sibling with no role leaves the suite green), the inline field
+error is deliberately outside the region per ADR-0024 decision 5, and nothing
+can certify that anything was *seen*.
 
 Primary sources these build on: `RECEIPT_SYSTEM_SPEC.md` (build spec),
 `README.md` (§5 design decisions), `VLM_AND_DATA.md`, and the always-on
