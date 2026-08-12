@@ -33,7 +33,8 @@ for p in sorted(pathlib.Path("eval/golden/labels").glob("*.json")):
           "line_items", f"{bd.line_items_correct}/{bd.line_items_total}",
           "self_report", f"{bd.self_report_correct}/{bd.self_report_total}",
           "hallucinated", bd.hallucinated,
-          "correctly_empty", bd.correctly_empty)
+          "correctly_empty", bd.correctly_empty,
+          "structural_mismatch", bd.structural_mismatch)
 PY
 ```
 
@@ -109,27 +110,77 @@ become a transcription point; a model cannot dilute its error rate by
 hallucinating. This is the property the whole design rests on, and it is why the
 rule is stated as a side rather than as a comparison.
 
-### 2. Four numbers, and two of them are counts
+### 2. Five numbers, and three of them are counts
 
 `transcription_accuracy` (truth filled, group core or line items) and
 `self_report_agreement` (truth filled, group meta) are ratios — `None`, never
-`0.0`, on an empty denominator. `hallucinated_fields` and
-`correctly_empty_fields` are **counts**.
+`0.0`, on an empty denominator. `hallucinated_fields`,
+`correctly_empty_fields` and `structural_mismatch_fields` are **counts**.
 
-Counts on purpose. Their would-be denominator is "fields this receipt does not
-have", which is a property of the **schema**, not of the receipt: adding an
-optional field to `ReceiptExtraction` would move that percentage on every
-receipt with nothing about the model having changed. A count moves only when
-behaviour moves.
+Counts on purpose, but not for the reason first written here. Their would-be
+denominator is "fields this receipt does not have", which is a property of the
+**schema**, not of the receipt: adding an optional field to `ReceiptExtraction`
+would move that percentage on every receipt with nothing about the model having
+changed.
+
+A count is **not** immune to that, and the sentence that used to close the
+paragraph above — "a count moves only when behaviour moves" — was false in
+exactly the way that paragraph argues against. Re-derived: subclassing
+`ReceiptExtraction` with one extra optional scalar field and scoring an empty
+extraction against r001 moves `correctly_empty_fields` from 14 to 15, with the
+model unchanged. The counts are also micro-summed across receipts, so growing
+the golden set (P8.T2, in *What this ADR does not decide*) moves them too.
+
+What a count avoids is **rescaling**. A ratio's denominator is the whole absent
+set, so schema growth shifts every value it has ever produced; a count shifts by
+a bounded amount per receipt — how much depends on how many leaves the new field
+flattens to — and its earlier value stays readable as the same quantity. So the
+comparability rule, stated rather than implied: **two runs' counts are
+comparable over the same schema and the same corpus, and not otherwise.** They
+are read beside the `prompt_version` and receipt count in their own results
+file, never across a schema or golden-set change.
 
 `hallucinated_fields` exists because "null over confident-wrong" is a project
 non-negotiable that was measured by nothing. Under the old scalar, a model that
 invents a cashier name and one that correctly leaves it null differed by a
 single path in forty.
 
+**`correctly_empty_fields` is bounded by the per-path map**, and
+`structural_mismatch_fields` is where the residue of that bound goes. The rule
+is one property: *no class named for agreement may contain a path
+`field_accuracy` scores as disagreement.* It was not always so. Measured on
+r001 against an empty extraction, 4 of the 18 paths the first implementation
+counted as `correctly_empty` were scored `False` by the same map the harness
+commits to the artefact — `line_items` among them, because the prediction's
+empty list and truth's absent leaf both read as "not filled" while the map
+scored the pair wrong. Inventing three line-item rows moved the number printed
+as `Correctly empty fields:` from 18 to 25: a hallucinating model scoring better
+on a count named for agreement.
+
+A path reaches `structural_mismatch` when neither side is filled and the map
+still scores it wrong, which is what a path present on one side only looks like.
+It does not say the model misread a value — values read wrong are in
+`transcription`, values invented are in `hallucinated` — it says the two sides
+disagree about *which paths exist*. Under the shipped rule, r001/r002/r003
+against an empty extraction split as `correctly_empty` 14/12/12 and
+`structural_mismatch` 4/5/6; the probe at the top of this ADR prints both.
+
+**The bound does not stop the count moving when a model invents rows, and is not
+claimed to.** Re-measured on r001 with three invented line-item rows,
+`correctly_empty` goes 14 → 17, and the three paths gained are
+`line_items[0].bbox`, `.modifiers` and `.sku`: producing *a* row zero gives
+truth's own empty sub-paths something to be compared against, and
+`field_accuracy` scores those pairs `True`. So the count still rises, but every
+path it now rises by is a path the map calls agreement — which is the whole of
+what the bound guarantees, and it is checkable. A stronger notion of agreement
+would have to change `field_accuracy` itself, which decision 3 keeps as it is.
+What no longer happens is the count rising on paths the same map scores wrong.
+
 The classes tile the path set — `field_breakdown` assigns every path exactly
 once, and the totals it returns add back to the old denominator. Nothing is
-dropped; the free points are only stopped from inflating a percentage.
+dropped; the free points are only stopped from inflating a percentage. The
+tiling and the bound are pinned separately in `tests/test_eval_metrics.py`,
+because the bound is only safe if the paths it sheds have somewhere to go.
 
 ### 3. Rename, never redefine
 
@@ -152,10 +203,11 @@ than a silently absent key. It also **has callers outside `eval/`**, which is
 the reason this decision exists at all. No set of them is named here: `git grep
 -n "flatten(" -- src eval scripts` is the list, and it is to be read rather than
 trusted to any count — including one written here, which would begin rotting the
-day it was correct. Read it literally: it also matches an unrelated `numpy`
-`.flatten()` in `ingest/dedupe.py`, the function's own recursive calls, and
-prose mentions in docstrings. Deciding which are consumers is the reading this
-sentence refuses to do for you.
+day it was correct. Read it literally, and read what comes back as *matches*
+rather than as callers: a string search cannot tell a consumer from anything
+else that shares the spelling, and some of what it returns is not a consumer at
+all. Sorting those out is the reading this sentence refuses to do for you — as
+is any list of them, which would be this decision's own warning in miniature.
 
 The rule that treats an empty container as *absent* is an **eval** rule and
 lives only in `eval/`.

@@ -126,8 +126,9 @@ before fixing a claim that appears in more than one place. Metric 4 was one
 scalar averaging three unlike things — what the model read, what it correctly
 left empty, and what it said about itself — and an extraction containing
 *nothing* scored 42.50% / 37.50% / 36.59% against the three golden labels; it is
-now four numbers over one classifier that reads *filled* from the truth side
-only, so a model cannot enlarge its own denominator by hallucinating. Its
+now a set of ratios and counts over one classifier that reads *filled* from the
+truth side only, so a model cannot enlarge its own denominator by hallucinating,
+and no class named for agreement holds a path the per-path map scores wrong. Its
 **decision 5** generalises beyond eval: a token grep scoped to the change cannot
 reach the sentences about the changed behaviour that live in files the fixing
 commit never opens, which is verified there against two commits and their

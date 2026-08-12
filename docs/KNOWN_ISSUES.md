@@ -244,10 +244,11 @@ slightly pessimistic.
 > agreement about absence: of r001's 17 free points, 12 were **non-`meta`** paths
 > where neither side was filled — fields the receipt does not have. (The
 > qualifier matters: without it the count is 14, because two `meta.*` paths are
-> `[]` on both sides and are already counted among the 4.) **ADR-0040** is what
-> shipped instead: metric 4 became four numbers over one classifier that reads
-> *filled* from the truth side only. Its probe re-derives every figure in this
-> note.
+> `[]` on both sides, and those two are already counted among the `meta.*`
+> self-reports resting at their schema defaults.) **ADR-0040** is what shipped
+> instead: metric 4 became a set of ratios and counts over one classifier that
+> reads *filled* from the truth side only — its decision 2 is where they are
+> named. Its probe re-derives every figure in this note.
 >
 > The last sentence above — "read per-field accuracy as slightly pessimistic" —
 > was the reading under the old scalar and is left as the record of what was
