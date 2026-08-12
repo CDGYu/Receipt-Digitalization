@@ -74,9 +74,8 @@ outcome down by that much; the whole document is 1263px tall and Approve sits at
 property of the screen, it is a property of the receipt. Any fix stated in
 pixels is wrong on the next receipt.
 
-The measurement was taken with a temporary spec that was deleted afterwards; the
-tree is clean. Re-derive by driving the seeded app rather than by trusting this
-table.
+The measurement was taken with a temporary spec that was deleted afterwards.
+Re-derive by driving the seeded app rather than by trusting this table.
 
 ## 2. The rule
 

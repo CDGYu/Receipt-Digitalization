@@ -12,8 +12,10 @@ every copy)
 Derived 2026-08-12 on `feat/review-outcome-focus` at `5a7fc58`. **Re-derive
 rather than quote** (ADR-0028 rule 1): the design this implements was written
 before the code, and the finding it closes understated itself. Every number
-below came out of one of the two probes described here on the day this was
-written, or is a subtraction of two of their outputs.
+below came out of one of the three probes described here on the day this was
+written, or is a subtraction of two of their outputs. The third was run last,
+at the close of the fix wave, and is the only one whose result contradicts
+something the design assumed.
 
 **The layout and the scroll.** A temporary spec under `frontend/e2e/`, run and
 then deleted. `playwright.config.ts` chains build → seed → serve in one
@@ -29,6 +31,18 @@ on the button named `/^Approve/`, `document.documentElement.scrollHeight`, and
 reads the region's box,
 `getBoundingClientRect().top` as a second opinion, `window.scrollY`,
 `document.activeElement`, and `getAttribute('role')` on the region.
+
+**The focus indicator.** A second temporary spec under `frontend/e2e/`, run and
+then deleted. It signs in to the seeded app at 1440×900, routes
+`**/review/*/complete` to a 403 so the real `lost` outcome renders, fills
+`Total` with a valid amount, presses `ControlOrMeta+Enter`, waits for the
+terminal heading, and then reads, off `document.activeElement`:
+`getComputedStyle` for `outline`, `outline-style`, `outline-width`,
+`outline-color`, `outline-offset`, `box-shadow`, `background-color` and
+`border`; `matches(':focus')` and `matches(':focus-visible')`;
+`getAttribute('role')`; and `--color-ring` off `documentElement`. Run once per
+`colorScheme`, light and dark. Playwright's `getByRole('region')` count and
+`locator.ariaSnapshot()` on the container come from the same run.
 
 **The two jsdom facts**, against the `jsdom` that Vitest's
 `environment: 'jsdom'` loads, from the repo root:
@@ -225,6 +239,12 @@ chord, the region's top is **768** in a 900px viewport and `window.scrollY` is
 anywhere in the component. `boundingBox().y` and `getBoundingClientRect().top`
 agree, so that is the same verdict read twice.
 
+Corroborated from a different state by a different spec: the focus-indicator
+probe drove the `lost` outcome rather than the 400 and read `window.scrollY`
+**460** again. The region's own top is not comparable across the two — a
+`field` 400 also renders an inline error inside the form, above the region — and
+it is the scroll figure that reproduced.
+
 `scrollIntoView` was not merely passed over. In jsdom — the environment every
 rendering test in this project runs in — `HTMLElement.prototype.scrollIntoView`
 is **`undefined`**, while `element.focus()` works and `document.activeElement`
@@ -268,6 +288,21 @@ which children always render.
   alert makes `findByRole('alert')` match two elements and throw. A sibling
   with no role, or one rendering in a state no single-alert query reaches, is
   silent.
+- **The design said the region needs no visual treatment. Measured, that means
+  it gets none.** In **both** themes the focused container computes
+  `outline-style: none` and `box-shadow: none`, with no border and no
+  background, and it **does not match `:focus-visible`** — so the browser's own
+  default ring is not a fallback here either. `tokens.css` scopes the ring to
+  `:where(a, button, input, select, textarea):focus-visible` and a `<section>`
+  is none of those, so `--color-ring` (`#2563eb` light, `#60a5fa` dark) exists
+  and never paints on it. `stylesheets.test.ts`'s census pins `.outcome`'s
+  declarations as exactly `display`, `flex-direction` and `gap`, which is the
+  same fact from the stylesheet's side. Two measured things keep this from being
+  the defect it sounds like: the **scroll** is the mechanism doing the work, not
+  the indicator, and the `.terminal` card the reviewer is scrolled to carries
+  its own surface and border, so there *is* a visible change on screen. What is
+  missing is any mark on the focused element itself. Recorded as a known gap —
+  see *What this ADR does not decide*.
 - **What it still cannot certify**: that anything became *visible*. jsdom
   performs no layout. The scroll is the browser's own side effect of moving
   focus and no gate can see it. This is ADR-0029's boundary exactly — a
@@ -324,6 +359,17 @@ cause, user-scoped out of this milestone.
 recorded above; nothing here moves it. Pinning or sticking the action region
 would fix the everyday ergonomics, and it is a layout change against a screen
 the browser pass validated, and it is not what I5 describes.
+
+**Whether the outcome region gets a focus indicator.** It has none, in either
+theme, and the browser's default is not a fallback because the element does not
+match `:focus-visible` — measured at the last gate before merge, and left
+alone rather than fixed there. Adding one is an ADR-0027 question, not a
+rendering one: the ring token is deliberately scoped to interactive elements,
+so widening that scope, or giving `.outcome` a treatment of its own, changes the
+design system. The case for leaving it is that this element is not tabbable, no
+reviewer navigates to it, and the card it wraps is already visible; the case
+against is that a focused element with no mark is a thing a keyboard user can
+lose. Nobody has taken that decision, and this ADR does not.
 
 **Whether Playwright becomes a sixth gate.** The browser measurement is the
 half of acceptance no gate performs, and it is run by hand. Making it a gate is
