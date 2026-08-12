@@ -1471,9 +1471,13 @@ describe('the outcome reaches the reviewer (I5)', () => {
    *  ("Could not get a link to the receipt image: no stub for GET
    *  /receipts/a1/image"). Measured: without this line `findByRole('alert')`
    *  matched two elements and threw, so the two containment tests below failed
-   *  on the fixture rather than on the region -- and a *passing* containment
-   *  test could have been asserting the image pane's alert, which is not in
-   *  the region and never should be. Same value as `CLAIMED_ROUTES`. */
+   *  on the fixture rather than on the region. A query that took the *first*
+   *  match instead of throwing would be no better: `ImagePane` renders before
+   *  the region and testing-library returns matches in document order, so the
+   *  first alert is the image pane's, `region.contains(alert)` is false, and
+   *  the containment test fails naming the wrong element. It could not have
+   *  passed on the image pane's alert; it would have failed for a reason that
+   *  points at the image. Same value as `CLAIMED_ROUTES`. */
   const IMAGE = {
     '/receipts/a1/image': [200, { url: '/receipts/a1/image/blob?variant=original&exp=1&sig=s' }],
   } as const

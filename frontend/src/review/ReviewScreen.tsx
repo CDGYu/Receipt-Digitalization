@@ -547,8 +547,13 @@ export function ReviewScreen() {
   /** The region exists when the reviewer has something to be told. Written as
    *  the *complement* of the two pending states rather than as a list of the
    *  three resolved ones, deliberately: a state added later defaults into the
-   *  region and gets focus, so the failure mode is one focus move too many
-   *  rather than an outcome that renders silently. */
+   *  region and gets focus.
+   *
+   *  That guarantees the region, not its contents. The three conditionals
+   *  inside it are still an enumeration, so a sixth state renders an empty box
+   *  that takes focus -- and an outcome its author renders as a sibling of
+   *  this region is caught by nothing (measured: a role-less sibling leaves
+   *  the suite green). Reduced, not removed; ADR-0041 decision 1. */
   const hasOutcome = submit.kind !== 'idle' && submit.kind !== 'busy'
   return (
     <main className={styles.screen}>
