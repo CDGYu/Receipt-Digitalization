@@ -1447,9 +1447,9 @@ def cmd_calibrate(args: argparse.Namespace, *, results_dir: Path | None = None) 
        the fifty.
     3. reaches ``--target`` precision.
 
-    ``calibration_curve`` defines precision as ``1.0`` when nothing is
-    approved (``eval/metrics.py:255-257``) and its sweep always includes
-    ``1.0``, above every observed confidence, so a result set that is
+    :func:`~eval.metrics.calibration_curve` defines precision as ``1.0`` when
+    nothing is approved, and its sweep always includes ``1.0``, above every
+    observed confidence, so a result set that is
     critical-incorrect end to end still produces a curve row
     ``(1.0, rate=0.0, precision=1.0)``; condition 2 subsumes the old
     nonzero-rate check that existed to reject it.

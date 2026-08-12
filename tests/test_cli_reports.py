@@ -386,11 +386,18 @@ def _stub_report() -> EvalReport:
 
 
 def _empty_report() -> EvalReport:
-    """What `run_eval` returns for a golden set with no labels in it.
+    """A zero-receipt report whose `auto_approval_precision` is deliberately `1.0`.
 
-    Not invented: `_build_report` really does define `auto_approval_precision`
-    as `1.0` when nothing was approved (`eval/harness.py:104`), and nothing
-    approves anything when nothing was scored.
+    `_build_report` resolves that field to `None` when nothing was approved
+    (P8.T3), so the `1.0` here is *not* what `run_eval` returns today -- it is
+    the pre-P8.T3 value, kept because it is the only value that exercises
+    `format_report`'s zero-denominator guard. Measured: with that guard
+    deleted, `1.0` here still fails
+    `test_format_report_never_prints_a_vacuous_hundred_percent_precision` and
+    `None` leaves it green, because `_pct(None)` renders `n/a` on its own.
+
+    Every other field is what `run_eval` returns for a golden set with no
+    labels in it.
     """
     return EvalReport(
         n_receipts=0, n_auto_approved=0, n_critical_correct=0,
@@ -469,7 +476,7 @@ def test_eval_reports_a_refused_provider_as_exit_one(capsys):
 def test_eval_refuses_a_zero_receipt_run(capsys):
     """`eval` must never print a metric for a run that scored no receipts.
 
-    `_build_report` defines auto-approval precision as `1.0` when nothing was
+    `_build_report` *defined* auto-approval precision as `1.0` when nothing was
     approved, and nothing is approved when nothing was scored -- so a run over
     an empty golden set printed `Auto-approval precision: 100.00%` to an
     operator's terminal and exited 0. That is the exact artifact this project
@@ -556,10 +563,12 @@ def test_format_report_never_prints_a_vacuous_hundred_percent_precision():
     """Belt to `cmd_eval`'s braces: no *caller* of `format_report` can print a
     100% precision that rests on nothing.
 
-    `EvalReport.auto_approval_precision` is `1.0` whenever `n_auto_approved`
-    is 0 -- "of the receipts we approved, all were correct" is vacuously true
+    `EvalReport.auto_approval_precision` *was* `1.0` whenever `n_auto_approved`
+    was 0 -- "of the receipts we approved, all were correct" is vacuously true
     of an empty set -- and this is the line an operator reads as the system's
-    headline metric.
+    headline metric. `_build_report` resolves it to `None` now (P8.T3);
+    `_empty_report` still hands this renderer the old `1.0`, which is what
+    keeps this a pin rather than a restatement of `_pct`.
     """
     approved_nothing = _empty_report()
     rendered = format_report(approved_nothing)
