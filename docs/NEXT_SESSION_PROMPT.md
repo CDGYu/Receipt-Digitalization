@@ -583,9 +583,18 @@ recorded in `frontend/tests/stylesheets.test.ts`'s docblock:
 
 ### 1.2 The citation residual — measured, bounded, and explicitly unaudited
 
-**71 line-number citations remain in live files** (`frontend/src`,
-`frontend/tests`, `docs/adr`, `docs/MEMORY.md`). **32 are in files the close
-never opened; 39 are in files it did.** The close removed ~31 stale ones.
+Line-number citations remain in live files (`frontend/src`, `frontend/tests`,
+`docs/adr`, `docs/MEMORY.md`). **No count is written here, because the count is
+a property of the anchor and not of the tree.** Measured 2026-08-12 over those
+four paths: an anchor requiring a directory separator gives **44**; one that
+does not gives **72**. This section asserted **71** from 2026-08-11 until then,
+alongside a 32/39 split derived from it. **Derive it with the anchor you intend,
+and state the anchor beside the number** (review standard 23).
+
+*This paragraph is itself a worked example of standard 25.* On 2026-08-12 the
+A6 index row was corrected and this section — which the START HERE index itself
+declares authoritative over the row — was not, in the same commit that added
+standard 26 about corrections failing to reach every copy.
 
 **"Unaudited" is not "accurate."** The re-review resolved 15 of the survivors and
 **6 were stale** — so the stale share of what remains is unknown, not zero. An

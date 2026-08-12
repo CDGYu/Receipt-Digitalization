@@ -1159,6 +1159,14 @@ API path moves.
   writes a `pending` row before queueing.
 - **ISSUE-001 (the real baseline) is deferred until the system is built** — the
   user's explicit call. Do not start it unprompted.
+- **`README.md` and `RECEIPT_SYSTEM_SPEC.md` §15's "roughly 70–85%"
+  field-accuracy expectation STAYS until a real baseline exists** (2026-08-12).
+  It was calibrated against the pre-ADR-0040 scalar and means nothing under the
+  new definition — but choosing a *replacement* number is a judgement about a
+  model nobody has run, which is what ISSUE-001 blocks. **Deliberate, not
+  overlooked. Do not re-ask, and do not quietly patch the number.** ADR-0040's
+  "What this ADR does not decide" carries the same ruling for a reader who
+  arrives from `README.md` rather than from here.
 - **Frontend is React 19 + Vite + TypeScript** (ADR-0015).
 - **bbox highlighting is out of scope.** Revisit only if P2.T2 is resolved with
   an OCR pass.
