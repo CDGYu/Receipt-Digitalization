@@ -24,7 +24,7 @@ Design notes that are load-bearing:
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from decimal import Decimal
 from typing import Any
 
@@ -51,6 +51,53 @@ def _norm_text(value: str) -> str:
     — merchant legal suffixes ("CO.", "INC.") carry meaning.
     """
     return _WS.sub(" ", value.strip()).casefold()
+
+
+#: Path prefixes that decide a leaf's family. Structural on purpose: a prefix
+#: test classifies a schema field added next year without anybody deciding it
+#: should be, where a list of field names would silently let it through
+#: (review standard 19 — an enumerated defence never converges).
+_META_PREFIX = "meta."
+_LINE_ITEMS = "line_items"
+
+
+def _group(path: str) -> str:
+    """Which family a dotted path belongs to: ``meta``, ``line_items`` or ``core``.
+
+    Read from the path string alone — never from either side's value.
+    """
+    if path.startswith(_META_PREFIX):
+        return "meta"
+    if path == _LINE_ITEMS or path.startswith(f"{_LINE_ITEMS}["):
+        return "line_items"
+    return "core"
+
+
+def _is_filled(value: object) -> bool:
+    """True when a leaf carries information the model could have read.
+
+    ``None`` is not filled, and neither is an empty container. ``flatten``
+    emits ``[]``/``{}`` as leaves deliberately, so that "had none" is visible
+    rather than absent — but a receipt whose ``totals.tax_breakdown`` is empty
+    has no tax breakdown to transcribe, so it is not a point anyone can earn.
+
+    Written with ``isinstance``/``len`` rather than ``value in (None, [], {})``:
+    that form compares with ``==``, and equality against a container is not a
+    test this rule should rest on.
+    """
+    if value is None:
+        return False
+    return not (isinstance(value, (list, dict)) and len(value) == 0)
+
+
+def ratio(correct: int, total: int) -> float | None:
+    """``correct/total``, or ``None`` when the denominator is zero.
+
+    ``None``, never ``0.0``: a ratio over no decisions is undefined, not bad.
+    Same rule as ``auto_approval_precision`` (P8.T3), applied to the new
+    metrics before it can bite a second time.
+    """
+    return (correct / total) if total else None
 
 
 def _values_equal(a: Any, b: Any) -> bool:
@@ -105,6 +152,100 @@ def field_accuracy(
         else:
             result[path] = _values_equal(pred[path], tru[path])
     return result
+
+
+@dataclass(frozen=True)
+class FieldBreakdown:
+    """One receipt's dotted paths, split into classes that mean different things.
+
+    The old single scalar averaged three unlike quantities — what the model
+    read, what it correctly left empty, and what it said about itself — and the
+    last two dominate: an extraction containing *nothing* scored 42.50% / 37.50%
+    / 36.59% against the three golden labels. See
+    ``docs/superpowers/specs/2026-08-12-eval-field-accuracy-honesty-design.md``.
+
+    Two axes decide a path's class. **Group** comes from the path string;
+    **filled** is read from the *truth* side only. Reading "filled" from the
+    prediction would let a model enlarge its own denominator by inventing
+    fields.
+
+      * ``transcription`` — truth filled, group ``core`` or ``line_items``.
+        The points a model has to earn by reading.
+      * ``self_report`` — truth filled, group ``meta``. Self-description, and
+        in ``meta.notes`` human annotator prose. Reported, never averaged in.
+      * absent — truth not filled. Split into ``hallucinated`` (the model
+        produced a value anyway) and ``correctly_empty``.
+
+    The classes tile the path set: nothing is dropped, it is only stopped from
+    inflating a percentage.
+    """
+
+    transcription_correct: int = 0
+    transcription_total: int = 0
+    core_correct: int = 0
+    core_total: int = 0
+    line_items_correct: int = 0
+    line_items_total: int = 0
+    self_report_correct: int = 0
+    self_report_total: int = 0
+    hallucinated: int = 0
+    correctly_empty: int = 0
+
+    def __add__(self, other: "FieldBreakdown") -> "FieldBreakdown":
+        """Fold two receipts' breakdowns together (micro-averaging)."""
+        if not isinstance(other, FieldBreakdown):
+            return NotImplemented
+        return FieldBreakdown(
+            *(
+                getattr(self, f.name) + getattr(other, f.name)
+                for f in fields(self)
+            )
+        )
+
+
+def field_breakdown(
+    predicted: ReceiptExtraction, truth: ReceiptExtraction
+) -> FieldBreakdown:
+    """Split one receipt's path set into the classes of :class:`FieldBreakdown`.
+
+    Derived from the same :func:`field_accuracy` map the harness records, over
+    the same ``model_dump()`` (python mode) both sides use, so the counts and
+    the per-path map can never disagree.
+    """
+    pred = flatten(predicted.model_dump())
+    tru = flatten(truth.model_dump())
+
+    core_c = core_t = li_c = li_t = sr_c = sr_t = hall = empty = 0
+    for path, ok in field_accuracy(predicted, truth).items():
+        if not _is_filled(tru.get(path)):
+            if _is_filled(pred.get(path)):
+                hall += 1
+            else:
+                empty += 1
+            continue
+        group = _group(path)
+        if group == "meta":
+            sr_t += 1
+            sr_c += int(ok)
+        elif group == "line_items":
+            li_t += 1
+            li_c += int(ok)
+        else:
+            core_t += 1
+            core_c += int(ok)
+
+    return FieldBreakdown(
+        transcription_correct=core_c + li_c,
+        transcription_total=core_t + li_t,
+        core_correct=core_c,
+        core_total=core_t,
+        line_items_correct=li_c,
+        line_items_total=li_t,
+        self_report_correct=sr_c,
+        self_report_total=sr_t,
+        hallucinated=hall,
+        correctly_empty=empty,
+    )
 
 
 def _line_fields_agree(a: LineItem, b: LineItem) -> bool:

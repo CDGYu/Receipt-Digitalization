@@ -13,6 +13,7 @@ from eval.metrics import (
     calibration_curve,
     critical_field_accuracy,
     field_accuracy,
+    field_breakdown,
     line_item_f1,
 )
 from receipts.extract.schema import (
@@ -20,6 +21,7 @@ from receipts.extract.schema import (
     Merchant,
     ReceiptExtraction,
     ReceiptMeta,
+    TaxBand,
     Totals,
 )
 
@@ -89,6 +91,101 @@ def test_field_accuracy_path_present_in_one_only_is_false():
     truth = _extraction(items=both_items[:2])  # one fewer line item
     acc = field_accuracy(predicted, truth)
     assert acc["line_items[2].line_total"] is False
+
+
+# --------------------------------------------------------------------------- #
+# field_breakdown
+# --------------------------------------------------------------------------- #
+
+
+def test_breakdown_counts_a_filled_truth_path_as_transcription():
+    bd = field_breakdown(_extraction(), _extraction())
+    # merchant.name, receipt.date, totals.total ... are all filled in truth.
+    assert bd.transcription_total > 0
+    assert bd.transcription_correct == bd.transcription_total
+
+
+def test_breakdown_never_counts_an_empty_truth_path_as_transcription():
+    # receipt.cashier is None in both fixtures: absent, not transcription.
+    bd = field_breakdown(_extraction(), _extraction())
+    assert bd.correctly_empty > 0
+    assert bd.hallucinated == 0
+
+
+def test_breakdown_puts_meta_paths_in_self_report_not_transcription():
+    bd = field_breakdown(_extraction(), _extraction())
+    assert bd.self_report_total > 0
+    # No meta path may be inside the transcription denominator.
+    assert bd.transcription_total == bd.core_total + bd.line_items_total
+
+
+def test_breakdown_classifies_by_prefix_not_by_a_list_of_names():
+    """A meta path the classifier has never been told about still lands in
+    self_report. This is the property review standard 19 asks for: one bounded
+    rule, not an enumeration that a new schema field silently escapes."""
+    from eval.metrics import _group
+
+    assert _group("meta.some_field_added_next_year") == "meta"
+    assert _group("line_items[7].qty") == "line_items"
+    assert _group("line_items") == "line_items"
+    assert _group("totals.total") == "core"
+
+
+def test_breakdown_counts_an_invented_value_as_hallucination():
+    truth = _extraction()
+    predicted = _extraction()
+    predicted.receipt.cashier = "MARIA"   # truth leaves this None
+    bd = field_breakdown(predicted, truth)
+    assert bd.hallucinated == 1
+
+
+def test_breakdown_treats_an_empty_container_as_absent():
+    """flatten emits ``[]`` as a leaf on purpose, so "had none" stays visible.
+    But a receipt whose tax_breakdown is empty has no tax breakdown to read, so
+    it must not be a point a model can earn.
+
+    Differential, not introspective: it compares two truths differing only in
+    that one field. A test that asked the classifier which paths it counted
+    would mirror the rule under test and could never fail.
+
+    Measured: core_total is 8 with the empty container and 11 with one band
+    (label/base/rate/amount, of which base is None).
+    """
+    empty_truth = _extraction()
+    filled_truth = _extraction()
+    filled_truth.totals.tax_breakdown = [
+        TaxBand(label="VAT", rate=D("0.12"), amount=D("24.00"))
+    ]
+
+    bd_empty = field_breakdown(_extraction(), empty_truth)
+    bd_filled = field_breakdown(_extraction(), filled_truth)
+
+    assert bd_empty.core_total < bd_filled.core_total
+
+
+def test_breakdown_an_extra_predicted_row_is_hallucination_not_a_miss():
+    both = _items()
+    extra = LineItem(position=3, description_raw="ZZZ NOVELTY WIDGET",
+                     qty=D("1"), unit_price=D("5.00"), line_total=D("5.00"))
+    bd = field_breakdown(_extraction(items=both + [extra]), _extraction(items=both))
+    # The invented row's paths are absent in truth, so they are hallucination.
+    assert bd.hallucinated > 0
+
+
+def test_breakdown_sums_with_plus():
+    a = field_breakdown(_extraction(), _extraction())
+    b = field_breakdown(_extraction(), _extraction())
+    total = a + b
+    assert total.transcription_total == a.transcription_total * 2
+    assert total.correctly_empty == a.correctly_empty * 2
+
+
+def test_ratio_is_none_on_an_empty_denominator_never_zero():
+    from eval.metrics import ratio
+
+    assert ratio(0, 0) is None
+    assert ratio(0, 4) == 0.0
+    assert ratio(1, 4) == 0.25
 
 
 # --------------------------------------------------------------------------- #
