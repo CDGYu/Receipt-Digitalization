@@ -200,6 +200,8 @@ export function ReviewScreen() {
    *  succeeded. Cleared on failure, because a failed submission is exactly the
    *  one a reviewer should be able to run again. See the note above. */
   const submittedTask = useRef<string | null>(null)
+  /** The outcome region, when one is on screen. See the focus effect below. */
+  const outcomeRef = useRef<HTMLElement | null>(null)
 
   const load = useCallback(async () => {
     setPhase({ kind: 'loading' })
@@ -445,6 +447,24 @@ export function ReviewScreen() {
     return () => window.removeEventListener('keydown', onKeyDown)
   })
 
+  /** I5: the outcome renders at the end of a long document -- measured at
+   *  y=1195, below the fold at 900, 800 and even 1080 -- and the Ctrl/Cmd+Enter
+   *  chord is a `window` listener, so it fires while the reviewer is typing at
+   *  the top of the form. Without this the reviewer's screen is identical
+   *  before and after a 403, which is the case where the write landed and the
+   *  task is gone.
+   *
+   *  Focus, not `scrollIntoView`: the browser scrolls a focused element into
+   *  view by itself, and `scrollIntoView` is `undefined` in jsdom, so a scroll
+   *  call would break every rendering test that reached this path.
+   *
+   *  Keyed on `submit.kind` so a resubmit that fails again (failed -> busy ->
+   *  failed) moves focus a second time. An outcome the reviewer has already
+   *  been shown is not the same as one they have not. */
+  useEffect(() => {
+    outcomeRef.current?.focus()
+  }, [submit.kind])
+
   if (phase.kind === 'failed') {
     const held = phase.heldTask
     const backendDown = phase.failure.kind === 'backend-down'
@@ -524,6 +544,12 @@ export function ReviewScreen() {
     submit.kind === 'failed' && submit.failure.kind === 'field'
       ? { [submit.failure.path]: submit.failure.message }
       : undefined
+  /** The region exists when the reviewer has something to be told. Written as
+   *  the *complement* of the two pending states rather than as a list of the
+   *  three resolved ones, deliberately: a state added later defaults into the
+   *  region and gets focus, so the failure mode is one focus move too many
+   *  rather than an outcome that renders silently. */
+  const hasOutcome = submit.kind !== 'idle' && submit.kind !== 'busy'
   return (
     <main className={styles.screen}>
       <h1>{receipt.merchant_name_raw ?? 'Unknown merchant'}</h1>
@@ -539,58 +565,72 @@ export function ReviewScreen() {
         onChange={edit}
         errors={fieldErrors}
       />
-      {/* Plain, not a second alert, for the reason the failed phase records.
-          Suppressed once `openTaskId` is set, because there the sentence is
-          simply false: that state is reached only from the `complete` step, so
-          `apply_corrections` already committed. Unsuppressed, a 503 on the
-          close renders "nothing can be saved right now" directly above "Saved,
-          but the task is still open: database unavailable" -- two
-          contradictory claims about one receipt, and the reviewer has no way
-          to tell which is true. `openTaskId !== null` *is* "the write landed",
-          which is why it is the test. */}
-      {submit.kind === 'failed' && submit.failure.kind === 'backend-down' && openTaskId === null ? (
-        <p className={styles.explanation}>
-          The database is unavailable — nothing can be saved right now.
-        </p>
-      ) : null}
-      {submit.kind === 'failed' ? (
-        <p className={styles.alert} role="alert">
-          {submit.message}
-        </p>
-      ) : null}
-      {submit.kind === 'lost' ? (
-        <section className={styles.terminal} role="alert">
-          <h2 className={styles.terminalHeading}>
-            {submit.flavor === 'taken'
-              ? 'Saved, but this task was taken over by someone else'
-              : 'Saved, but this task no longer exists'}
-          </h2>
-          <p className={styles.message}>{submit.message}</p>
-          <button
-            type="button"
-            className={styles.action}
-            onClick={() => {
-              claimed.current = null
-              clearStash()
-              void load()
-            }}
-          >
-            Next receipt
-          </button>
+      {hasOutcome ? (
+        // A <section>, never a <div>: `.screen > div` is the image pane's
+        // positional selector and a new div child would become sticky.
+        // No `role`: ADR-0024 decision 4 forbids a second alert here.
+        <section ref={outcomeRef} tabIndex={-1} className={styles.outcome}>
+          {/* Plain, not a second alert, for the reason the failed phase records.
+              Suppressed once `openTaskId` is set, because there the sentence is
+              simply false: that state is reached only from the `complete` step,
+              so `apply_corrections` already committed. Unsuppressed, a 503 on
+              the close renders "nothing can be saved right now" directly above
+              "Saved, but the task is still open: database unavailable" -- two
+              contradictory claims about one receipt, and the reviewer has no
+              way to tell which is true. `openTaskId !== null` *is* "the write
+              landed", which is why it is the test. */}
+          {submit.kind === 'failed' &&
+          submit.failure.kind === 'backend-down' &&
+          openTaskId === null ? (
+            <p className={styles.explanation}>
+              The database is unavailable — nothing can be saved right now.
+            </p>
+          ) : null}
+          {submit.kind === 'failed' ? (
+            <p className={styles.alert} role="alert">
+              {submit.message}
+            </p>
+          ) : null}
+          {submit.kind === 'lost' ? (
+            <section className={styles.terminal} role="alert">
+              <h2 className={styles.terminalHeading}>
+                {submit.flavor === 'taken'
+                  ? 'Saved, but this task was taken over by someone else'
+                  : 'Saved, but this task no longer exists'}
+              </h2>
+              <p className={styles.message}>{submit.message}</p>
+              <button
+                type="button"
+                className={styles.action}
+                onClick={() => {
+                  claimed.current = null
+                  clearStash()
+                  void load()
+                }}
+              >
+                Next receipt
+              </button>
+            </section>
+          ) : submit.kind === 'held' ? (
+            // `Next receipt` lives **inside** the notice, not in the Approve
+            // slot. Two buttons alternating in one slot are the same DOM node to
+            // React, so the relabel used to happen under the reviewer's finger:
+            // measured, after clicking Approve,
+            // `document.activeElement.textContent` was `"Next receipt"`, it was
+            // the identical node (`focused === approve`), and a bare Enter
+            // advanced the queue (1 -> 2 calls to /review/next). One keystroke
+            // of muscle memory dismissed the warning unread, which is the whole
+            // thing this state exists to prevent. The two are now in different
+            // parents by construction rather than by this ternary: Approve is a
+            // sibling of this region and renders after it, both `Next receipt`
+            // buttons render inside it, and they are different children of
+            // `.screen` -- so the Approve node unmounts instead of being reused,
+            // and focus has nowhere to carry over to.
+            <StoredDifferently outcome={submit.outcome} onAcknowledge={() => void load()} />
+          ) : null}
         </section>
-      ) : submit.kind === 'held' ? (
-        // `Next receipt` lives **inside** the notice, not in the Approve slot.
-        // Two buttons alternating in one slot are the same DOM node to React, so
-        // the relabel used to happen under the reviewer's finger: measured, after
-        // clicking Approve, `document.activeElement.textContent` was
-        // `"Next receipt"`, it was the identical node (`focused === approve`),
-        // and a bare Enter advanced the queue (1 -> 2 calls to /review/next).
-        // One keystroke of muscle memory dismissed the warning unread, which is
-        // the whole thing this state exists to prevent. Rendering it in a
-        // different parent means the Approve node unmounts instead of being
-        // reused, and focus has nowhere to carry over to.
-        <StoredDifferently outcome={submit.outcome} onAcknowledge={() => void load()} />
-      ) : (
+      ) : null}
+      {submit.kind === 'lost' || submit.kind === 'held' ? null : (
         <button
           type="button"
           className={`${styles.action} ${styles.primary}`}

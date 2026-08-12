@@ -22,10 +22,14 @@
  *
  * **The `span 4` on the image is counted, not guessed.** Four children after the
  * heading are unconditional -- findings, rail, form, table -- and the submit
- * ternary always renders a fifth (Approve, or the `lost` section, or the
- * `held` notice). So rows 2..5 always exist and the span creates no implicit
- * row and no stray gap. If that count ever shrinks, the symptom is one extra
- * row gap at the bottom of the column, not a broken layout.
+ * tail always renders a fifth: `.outcome` whenever the reviewer has something
+ * to be told, and the Approve button whenever the submit is still open. Between
+ * them those two conditions cover every submit state -- `idle` and `busy` render
+ * Approve, `lost` and `held` render the region, and `failed` renders both -- so
+ * at least one is always on screen. So rows 2..5 always exist and the span
+ * creates no
+ * implicit row and no stray gap. If that count ever shrinks, the symptom is one
+ * extra row gap at the bottom of the column, not a broken layout.
  *
  * A wrapper element around the right-hand column would make all of this
  * structural instead of positional. That is the single restructure this
@@ -104,6 +108,20 @@
   margin: 0;
   font-size: var(--text-base);
   line-height: 1.5;
+}
+
+/* The outcome region: everything that tells the reviewer what happened, in one
+ * focusable box. It exists because `.screen` is a grid with a gap and these
+ * were three separate grid items; collapsing them into one item would have
+ * removed the spacing between them, so the gap is restored here.
+ *
+ * `display: contents` would have kept the children as grid items and needed no
+ * gap at all, and was rejected: an element with no box is a poor scroll target,
+ * and being scrolled to is the whole mechanism. */
+.outcome {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2xl);
 }
 
 /* The summary alert. Error red is reserved for exactly this kind of thing --

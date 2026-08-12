@@ -443,6 +443,7 @@ const CENSUS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
     '.notice':
       'box-sizing: border-box, display: flex, flex-direction: column, align-items: flex-start, gap, max-width, margin, padding, font-family, color',
     '.message': 'margin, font-size, line-height',
+    '.outcome': 'display: flex, flex-direction: column, gap',
     '.alert':
       'margin, padding, border-left, border-radius, background, color, font-size, font-weight, line-height',
     '.explanation': 'margin, color, font-size, line-height',

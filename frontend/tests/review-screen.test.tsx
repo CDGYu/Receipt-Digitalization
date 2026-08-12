@@ -1443,3 +1443,125 @@ describe('a refused field, beside the field', () => {
     expect(document.getElementById(described!)?.textContent).toBe("not a decimal amount: 'abc'")
   })
 })
+
+// ---------------------------------------------------------------------------
+// I5: the outcome reaches the reviewer
+//
+// Measured on `main` at 6f29aa5: Approve renders at y=1195, below the fold at
+// 1440x900, 1440x800 and 1440x1080, with a two-line-item receipt and a 73px
+// row pitch. The Ctrl/Cmd+Enter chord is a `window` listener, so it fires while
+// the reviewer is typing at the top of the form -- and a 403 produced no
+// visible change at all.
+//
+// jsdom performs no layout, so these pin the *mechanism*: focus moved, and the
+// outcome is inside the thing that took focus. They cannot pin that anything
+// was seen -- ADR-0029, and this task's Step 8.
+// ---------------------------------------------------------------------------
+
+describe('the outcome reaches the reviewer (I5)', () => {
+  /** The region, by the two attributes the design fixes: a `<section>` because
+   *  `.screen > div` is the image pane's positional selector, and `tabindex=-1`
+   *  because it is a focus target rather than a control. */
+  const regionOf = (): HTMLElement | null =>
+    document.querySelector<HTMLElement>('section[tabindex="-1"]')
+
+  /** The image link, stubbed in both fixtures below because leaving it out is
+   *  not neutral: an unstubbed `/receipts/a1/image` is a 404, and `ImagePane`
+   *  answers a failed link with a `role="alert"` paragraph of its own
+   *  ("Could not get a link to the receipt image: no stub for GET
+   *  /receipts/a1/image"). Measured: without this line `findByRole('alert')`
+   *  matched two elements and threw, so the two containment tests below failed
+   *  on the fixture rather than on the region -- and a *passing* containment
+   *  test could have been asserting the image pane's alert, which is not in
+   *  the region and never should be. Same value as `CLAIMED_ROUTES`. */
+  const IMAGE = {
+    '/receipts/a1/image': [200, { url: '/receipts/a1/image/blob?variant=original&exp=1&sig=s' }],
+  } as const
+
+  /** A 403 on complete: the write landed and the task is gone. */
+  const terminalRoutes = {
+    ...IMAGE,
+    '/review/next': [
+      [200, { task: TASK, receipt: SUMMARY }],
+      [200, { task: null }],
+    ],
+    'GET /receipts/a1': [200, RECEIPT],
+    'PATCH /receipts/a1': [200, RECEIPT],
+    '/review/t1/complete': [
+      403,
+      { error: { message: 'only the assignee or an admin may complete this task' } },
+    ],
+  } as const
+
+  /** A 400 on the PATCH: the write was refused and the reviewer can retry. */
+  const failedRoutes = {
+    ...IMAGE,
+    '/review/next': [[200, { task: TASK, receipt: SUMMARY }]],
+    'GET /receipts/a1': [200, RECEIPT],
+    'PATCH /receipts/a1': [400, { error: { message: "not a decimal amount: 'abc'" } }],
+  } as const
+
+  /** Render, then fire the chord from the form -- the path I5 describes. */
+  async function arriveAt(routes: Parameters<typeof stubApi>[0]): Promise<void> {
+    vi.stubGlobal('fetch', stubApi(routes))
+    render(
+      <StrictMode>
+        <ReviewScreen />
+      </StrictMode>,
+    )
+    await screen.findByLabelText('Total')
+    await userEvent.keyboard('{Control>}{Enter}{/Control}')
+  }
+
+  it('takes focus when a submit resolves to a terminal state', async () => {
+    await arriveAt(terminalRoutes)
+
+    const notice = await screen.findByText('Saved, but this task was taken over by someone else')
+    const region = regionOf()
+    expect(region).not.toBeNull()
+    expect(region!.contains(notice)).toBe(true)
+    expect(document.activeElement).toBe(region)
+  })
+
+  it('takes focus when a submit fails', async () => {
+    await arriveAt(failedRoutes)
+
+    await screen.findByText(/not a decimal amount/)
+    const region = regionOf()
+    expect(region).not.toBeNull()
+    expect(document.activeElement).toBe(region)
+  })
+
+  it('never lands focus on the exit button', async () => {
+    // `Next receipt` sharing a slot with Approve is the failure
+    // ReviewScreen.tsx already engineered away: a bare Enter advanced the queue
+    // and dismissed the warning unread. Focusing it re-creates that on purpose.
+    await arriveAt(terminalRoutes)
+
+    const exit = await screen.findByRole('button', { name: 'Next receipt' })
+    expect(document.activeElement).not.toBe(exit)
+    // Asserted positively as well: `not.toBe(exit)` alone would also pass with
+    // focus left on `body`, which is the defect.
+    expect(document.activeElement).toBe(regionOf())
+  })
+
+  it('contains every outcome element, so a future one cannot render unfocused', async () => {
+    await arriveAt(failedRoutes)
+
+    const alert = await screen.findByRole('alert')
+    const region = regionOf()
+    expect(region).not.toBeNull()
+    expect(region!.contains(alert)).toBe(true)
+  })
+
+  it('carries no role, so single-alert queries stay unambiguous', async () => {
+    // ADR-0024 decision 4 is a user ruling: a second alert in this region makes
+    // findByRole('alert') match two elements and throw.
+    await arriveAt(failedRoutes)
+
+    await screen.findByRole('alert')
+    const region = regionOf()
+    expect(region).not.toBeNull()
+    expect(region!.getAttribute('role')).toBeNull()
+  })
+})
