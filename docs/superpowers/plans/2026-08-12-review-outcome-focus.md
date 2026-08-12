@@ -533,3 +533,57 @@ The grep is a weak check by design: React sets `tabIndex` as a property, so the 
 **Task 1 Step 7 is not optional.** Tests that have only ever failed by "selector matched nothing" are not pins. The mutations are what make them pins, and the failure has to name the right thing (review standards 14, 15, 16).
 
 **Existing tests pass unmodified.** This plan authorises no edits to existing tests — only additions, plus one `CENSUS` entry. If something appears to require changing an existing test, stop and report: that would mean the wrapper changed behaviour, which it must not.
+
+---
+
+## Dated defect log
+
+This plan is a historical record and **does not self-amend**: the task text above
+stays as written and is corrected only here. Read this section before applying
+any task block literally. Every entry was found by an implementer or reviewer
+executing rather than reading; every one was the controller's.
+
+### 2026-08-12 — Task 1's test fixtures omitted a route the test file warns about
+
+`terminalRoutes` and `failedRoutes` as written omit `/receipts/a1/image`.
+`ImagePane` renders its **own** `role="alert"` when the image link fails, so
+`findByRole('alert')` matched two elements and threw before any implementation
+existed.
+
+**`review-screen.test.tsx` already documents this trap inline** — *"an unstubbed
+image route makes ImagePane render an alert of its own, and the query then
+matches two elements and throws"* — and the plan was written without reading it.
+
+**Resolution:** both fixtures spread an `IMAGE` constant. Do not remove it.
+
+### 2026-08-12 — Task 1 Step 8's browser spec could not reach the region
+
+Filling a valid `1234.56` clean-advances the seeded queue: the region never
+appears and the page shows "The review queue is empty." Run verbatim, the spec
+fails rather than producing numbers.
+
+**Resolution:** type something the server refuses (`abc`) so the submit resolves
+to `failed`. That changes what the *reviewer types*, not the fixture — a user
+action, not a fixture edit.
+
+### 2026-08-12 — two smaller miscounts in Task 1
+
+Step 1 says the render tail is "five sibling expressions" and then enumerates
+four. Step 7 predicts Mutation A fails "the two focus tests"; it fails **three** —
+`never lands focus on the exit button` also asserts `activeElement` positively,
+because the controller tightened it during the pre-flight scan.
+
+### 2026-08-12 — the design's two false claims, both dated-noted at source
+
+Both were inherited by this plan's briefs and are corrected in
+`docs/superpowers/specs/2026-08-12-review-outcome-focus-design.md`'s dated notes
+and in ADR-0041, which carries the corrected copies:
+
+1. **"That capture predates the styling milestone"** — false. The browser pass
+   ran on `feat/review-ui-styling` at tip `c781f40`, and `bdbfd03` ("style the
+   review screen…") is an *ancestor* of it. What the capture predates is
+   `205d77a`, that milestone's own fix round.
+2. **"a future outcome rendered as a sibling is a test failure"** — false, and
+   the milestone's Critical. Measured: a role-less `<p>` sibling under
+   `hasOutcome` leaves the suite at **372/372**. The claim reached four
+   documents, including a test's own name, before anyone falsified it.
