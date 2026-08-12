@@ -360,6 +360,7 @@ def _write_results(results_dir: Path, *, receipts: int, results: list[dict]) -> 
                     "transcription_accuracy_line_items": 0.0,
                     "self_report_agreement": 0.0, "hallucinated_fields": 0,
                     "correctly_empty_fields": 0,
+                    "structural_mismatch_fields": 0,
                     "line_item_precision": 0.0, "line_item_recall": 0.0,
                     "line_item_f1": 0.0, "cost_per_receipt": None,
                     "p50_latency_s": None, "p95_latency_s": None},
@@ -396,8 +397,14 @@ def _empty_report() -> EvalReport:
     `test_format_report_never_prints_a_vacuous_hundred_percent_precision` and
     `None` leaves it green, because `_pct(None)` renders `n/a` on its own.
 
-    Every other field is what `run_eval` returns for a golden set with no
-    labels in it.
+    The remaining fields are what a zero-receipt report sensibly carries, not a
+    field-by-field recording of `run_eval`'s output. `calibration` is the one
+    worth naming: `_build_report` always assigns `calibration_curve(results)`,
+    and that function's 0.0-1.0 sweep is unconditional, so a real zero-receipt
+    run comes back with eleven curve rows where this fixture carries none.
+    Nothing `format_report` prints reads the curve, which is why the difference
+    costs nothing here -- but it is why this object is a renderer fixture and
+    not a specimen of what the harness returns.
     """
     return EvalReport(
         n_receipts=0, n_auto_approved=0, n_critical_correct=0,
@@ -580,6 +587,100 @@ def test_format_report_never_prints_a_vacuous_hundred_percent_precision():
     assert "100.00%" in format_report(_stub_report())
 
 
+def test_format_report_renders_the_reports_own_breakdown():
+    """The batch table's metric-4 block must come from `report.breakdown`.
+
+    Measured: replacing `format_breakdown(report.breakdown)` inside
+    `format_report` with `format_breakdown(FieldBreakdown())` left every test in
+    this module and in `tests/test_eval_metrics.py`, `tests/test_eval_floor.py`
+    and `tests/test_run_baseline.py` green -- 78 passed. Task 3 pinned the six
+    rendered rows by handing `format_breakdown` a breakdown directly; nothing
+    pinned the wiring that decides *which* breakdown the table renders, so an
+    operator could have read a run's headline metric off a block of zeros.
+
+    `_stub_report`'s `(17/20)` appears nowhere else in the table, so the count
+    pair alone identifies the report's own breakdown rather than any other.
+    """
+    rendered = format_report(_stub_report())
+
+    row = next(line for line in rendered.splitlines()
+               if "Transcription accuracy" in line)
+    assert row.split()[-2:] == ["85.00%", "(17/20)"]
+
+
+def test_the_producer_writes_the_shape_this_module_hand_writes(tmp_path):
+    """`_write_results`/`_results` claim to be the exact shape
+    `eval/harness.py::_report_to_dict` writes, and every `calibrate` test rests
+    on that claim. Nothing checked it.
+
+    Measured, all against the full suite: deleting `hallucinated_fields` and
+    `correctly_empty_fields` from the producer's `metrics` block, deleting the
+    per-class counts from every `results` row, and swapping
+    `transcription_accuracy_core` with `transcription_accuracy_line_items` each
+    left it green. The artefact is the deliverable -- §16 commits results so a
+    regression shows up in a diff -- and it was the one thing unpinned.
+
+    Two halves, both written as properties rather than as lists of key names,
+    because a list is one more enumeration that rots the first time the shape
+    grows (review standard 19):
+
+      * **shape** -- the producer's key sets equal the fixture's, by set
+        equality.
+      * **values** -- every key in the `metrics` block names a metric on
+        `EvalReport` and carries that metric's value. `getattr` does the
+        naming half; the comparison does the rest, and a swapped pair is
+        visible only because this fixture's core and line-item ratios differ.
+    """
+    from eval.harness import run_eval
+    from receipts.extract.schema import (
+        LineItem, Merchant, ReceiptExtraction, ReceiptMeta, Totals,
+    )
+
+    def extraction(qty: str) -> ReceiptExtraction:
+        return ReceiptExtraction(
+            merchant=Merchant(name="SUPERMART INC."),
+            receipt=ReceiptMeta(date="2026-07-20", currency="PHP"),
+            line_items=[LineItem(position=0, description_raw="RICE 5KG",
+                                 qty=D(qty), unit_price=D("100.00"),
+                                 line_total=D("100.00"))],
+            totals=Totals(subtotal=D("100.00"), tax=D("12.00"),
+                          discount=D("0.00"), total=D("112.00")),
+        )
+
+    golden = tmp_path / "golden"
+    (golden / "labels").mkdir(parents=True)
+    # The prediction gets the core fields right and one line-item field wrong,
+    # so the two transcription ratios differ and a swap between them is not
+    # invisible.
+    (golden / "labels" / "r000.json").write_text(
+        extraction("1").model_dump_json(), encoding="utf-8")
+
+    produced_dir = tmp_path / "produced"
+    report = run_eval(golden, lambda _path: (extraction("7"), D("0.95")),
+                      results_dir=produced_dir)
+    produced = json.loads(
+        next(produced_dir.glob("*.json")).read_text(encoding="utf-8"))
+
+    fixture = json.loads(
+        _write_results(tmp_path / "fixture", receipts=1,
+                       results=_results(("0.95", True)))
+        .read_text(encoding="utf-8"))
+
+    assert set(produced) == set(fixture)
+    assert set(produced["counts"]) == set(fixture["counts"])
+    assert set(produced["metrics"]) == set(fixture["metrics"])
+    assert set(produced["results"][0]) == set(fixture["results"][0])
+
+    assert (report.transcription_accuracy_core
+            != report.transcription_accuracy_line_items), (
+        "the fixture no longer distinguishes the two transcription ratios, so "
+        "the value loop below cannot see them swapped"
+    )
+    for key, value in produced["metrics"].items():
+        expected = getattr(report, key)
+        assert value == (str(expected) if isinstance(expected, D) else expected), key
+
+
 def test_cli_imports_without_the_eval_package_or_the_pipeline_extra():
     """`receipts.cli` (and, transitively, every `receipts` command) must not
     require the `eval` package *or* the optional `pipeline` extra to import.
@@ -686,6 +787,7 @@ def _results(*specs: tuple[str, bool], count: int = 1) -> list[dict]:
                 "transcription_correct": int(correct), "transcription_total": 1,
                 "self_report_correct": 0, "self_report_total": 0,
                 "hallucinated": 0, "correctly_empty": 0,
+                "structural_mismatch": 0,
                 "field_results": {},
             })
     return rows
@@ -788,11 +890,13 @@ def test_calibrate_when_no_threshold_clears_the_target_recommends_nothing(tmp_pa
         {"receipt_id": "r001", "confidence": "0.90", "critical_correct": False,
          "transcription_correct": 0, "transcription_total": 1,
          "self_report_correct": 0, "self_report_total": 0,
-         "hallucinated": 0, "correctly_empty": 0, "field_results": {}},
+         "hallucinated": 0, "correctly_empty": 0, "structural_mismatch": 0,
+         "field_results": {}},
         {"receipt_id": "r002", "confidence": "0.95", "critical_correct": False,
          "transcription_correct": 0, "transcription_total": 1,
          "self_report_correct": 0, "self_report_total": 0,
-         "hallucinated": 0, "correctly_empty": 0, "field_results": {}},
+         "hallucinated": 0, "correctly_empty": 0, "structural_mismatch": 0,
+         "field_results": {}},
     ])
     code = cmd_calibrate(
         build_parser().parse_args(["calibrate", "--target", "0.99"]), results_dir=tmp_path)
