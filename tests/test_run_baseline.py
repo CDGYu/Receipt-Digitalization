@@ -94,9 +94,11 @@ def _write_golden(golden: Path) -> None:
     builds a golden set is guarded because it built one.
 
     **What this does not buy, measured.** ``eval.run_baseline`` imports
-    ``receipts.pipeline``, which imports both Pillow and ``pillow_heif`` at
-    module top, so this file cannot be *collected* without either — guard or no
-    guard, the narrowed form turns a skip into a collection error there. That
+    ``receipts.pipeline``, whose module-top import graph reaches Pillow (in
+    ``receipts.pipeline`` itself) and ``pillow_heif`` (in
+    ``receipts.preprocess.image_ops``), so this file cannot be *collected*
+    without either — guard or no guard, the narrowed form turns a skip into a
+    collection error there. That
     costs nothing today: blocking ``pillow_heif`` and collecting
     ``tests/test_cli_reports.py`` and ``tests/test_preprocess_cv.py`` one at a
     time errors on each, so a run without the extra is already interrupted
