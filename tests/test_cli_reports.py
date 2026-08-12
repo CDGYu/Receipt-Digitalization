@@ -675,6 +675,9 @@ def _results(*specs: tuple[str, bool], count: int = 1) -> list[dict]:
                 "receipt_id": f"r{len(rows):03d}", "confidence": confidence,
                 "critical_correct": correct,
                 "transcription_correct": int(correct), "transcription_total": 1,
+                "self_report_correct": 0, "self_report_total": 0,
+                "hallucinated": 0, "correctly_empty": 0,
+                "field_results": {},
             })
     return rows
 
@@ -774,9 +777,13 @@ def test_calibrate_prints_the_sample_behind_every_precision_figure(tmp_path, cap
 def test_calibrate_when_no_threshold_clears_the_target_recommends_nothing(tmp_path, capsys):
     _write_results(tmp_path, receipts=2, results=[
         {"receipt_id": "r001", "confidence": "0.90", "critical_correct": False,
-         "transcription_correct": 0, "transcription_total": 1},
+         "transcription_correct": 0, "transcription_total": 1,
+         "self_report_correct": 0, "self_report_total": 0,
+         "hallucinated": 0, "correctly_empty": 0, "field_results": {}},
         {"receipt_id": "r002", "confidence": "0.95", "critical_correct": False,
-         "transcription_correct": 0, "transcription_total": 1},
+         "transcription_correct": 0, "transcription_total": 1,
+         "self_report_correct": 0, "self_report_total": 0,
+         "hallucinated": 0, "correctly_empty": 0, "field_results": {}},
     ])
     code = cmd_calibrate(
         build_parser().parse_args(["calibrate", "--target", "0.99"]), results_dir=tmp_path)

@@ -66,7 +66,6 @@ class _Accumulator:
     def add(
         self,
         crit: bool,
-        facc: dict[str, bool],
         bd: FieldBreakdown,
         prf: tuple[float, float, float],
     ) -> None:
@@ -86,10 +85,10 @@ class _Accumulator:
         and scores zero on line items.
         """
         self.failures.append((receipt_id, detail))
-        # The empty map and zero breakdown are on purpose: a receipt that
-        # produced nothing must not inflate *or* deflate any denominator, only
-        # the metrics it genuinely bears on.
-        self.add(False, {}, FieldBreakdown(), (0.0, 0.0, 0.0))
+        # The zero breakdown is on purpose: a receipt that produced nothing must
+        # not inflate *or* deflate any denominator, only the metrics it
+        # genuinely bears on.
+        self.add(False, FieldBreakdown(), (0.0, 0.0, 0.0))
 
 
 def _coerce_confidence(value: Any) -> Decimal:
@@ -254,12 +253,15 @@ def run_eval(
                     # the system could not read is not a success.
                     confidence=Decimal("0"),
                     critical_correct=False,
+                    # Empty on purpose, and read: this is what reaches the
+                    # artifact as ``"field_results": {}`` -- a receipt that
+                    # produced nothing scores no path either way.
                     field_acc={},
                 )
             )
             continue
 
-        acc.add(crit, facc, bd, prf)
+        acc.add(crit, bd, prf)
         results.append(
             EvalResult(
                 receipt_id=label_path.stem,

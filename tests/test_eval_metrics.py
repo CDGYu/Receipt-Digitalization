@@ -357,6 +357,47 @@ def test_an_all_failed_run_reports_no_precision_rather_than_a_perfect_one(tmp_pa
     assert written["metrics"]["auto_approval_precision"] is None
 
 
+def test_a_metric_over_no_fields_is_none_rather_than_zero(tmp_path):
+    """The ``None``-over-zero rule, pinned on the report *and* on the JSON.
+
+    The same pair of pins ``auto_approval_precision`` carries directly above,
+    applied to the four ratios that replaced the old scalar. Every receipt
+    fails here, so ``n_receipts`` is 3 -- this is not the zero-receipt case --
+    while every breakdown denominator is 0. A ratio over no decisions is
+    undefined, not bad: a ``0.0`` would read as "measured, and the model read
+    nothing correctly", which is a different and false claim, and it is the
+    claim ``auto_approval_precision`` actually persisted to a committed
+    artifact once.
+    """
+    golden = tmp_path / "golden"
+    labels = golden / "labels"
+    labels.mkdir(parents=True)
+    for name in ("r1", "r2", "r3"):
+        (labels / f"{name}.json").write_text(
+            _extraction(total="224.00").model_dump_json(), encoding="utf-8"
+        )
+
+    def pipeline_fn(path):
+        raise RuntimeError("the provider is down")
+
+    results_dir = tmp_path / "results"
+    report = run_eval(golden, pipeline_fn, results_dir=results_dir)
+
+    assert report.n_receipts == 3
+    assert report.transcription_accuracy is None
+    assert report.transcription_accuracy_core is None
+    assert report.transcription_accuracy_line_items is None
+    assert report.self_report_agreement is None
+
+    metrics = json.loads(
+        next(results_dir.glob("*.json")).read_text(encoding="utf-8")
+    )["metrics"]
+    assert metrics["transcription_accuracy"] is None
+    assert metrics["transcription_accuracy_core"] is None
+    assert metrics["transcription_accuracy_line_items"] is None
+    assert metrics["self_report_agreement"] is None
+
+
 def test_run_eval_survives_a_failing_receipt(tmp_path):
     # A single receipt that raises must not abort the batch. At minutes per call
     # that would throw away the whole run and write no results file at all --
