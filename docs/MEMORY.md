@@ -13,8 +13,14 @@ with a branch in flight** — ADR-0021's case, not ADR-0019's.
 "where we are" line is ambiguous the moment a branch exists, and this project
 has already lost a whole milestone to an ambiguous stamp):
 
-- **`main @ 6f29aa5`**, pushed. Unchanged by this session.
-- **`feat/review-outcome-focus @ 3319367`, 11 commits ahead, PUSHED.**
+- **`main` — freshness anchor `6f29aa5`.** That is the last commit on `main`
+  that is **not** this handoff pair, which is what the freshness command below
+  needs. **`git rev-parse main` will be AHEAD of it**, by the pair commits and
+  nothing else — a stamp cannot name the commit that writes it. This session
+  added no code, no ADR and no design to `main`.
+- **`feat/review-outcome-focus @ 3319367`, 11 commits ahead of `main`'s anchor,
+  PUSHED.** Every ADR, design, plan and code change from this session is here,
+  not on `main`.
 
 A stamp cannot name the commit that writes it, so each test is a command:
 

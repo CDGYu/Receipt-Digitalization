@@ -22,9 +22,16 @@ it to "fix" a correct sentence in an Accepted ADR to match a wrong measurement.
 
 # A BRANCH IS IN FLIGHT: `feat/review-outcome-focus`. ONE GATE REMAINS.
 
-**`main` is untouched at `6f29aa5` and the branch does NOT merge until one
-scoped re-review runs.** This is ADR-0021's case, not ADR-0019's: the session
-ended mid-milestone, deliberately, with the work pushed.
+**`main` carries nothing from this session except this handoff pair, and the
+branch does NOT merge until one scoped re-review runs.** This is ADR-0021's
+case, not ADR-0019's: the session ended mid-milestone, deliberately, with the
+work pushed.
+
+**Do not expect `git rev-parse main` to equal the stamp's anchor.** It will be
+ahead of it by the pair commits, because a stamp cannot name the commit that
+writes it. An earlier draft of this line said "`main` is untouched at
+`6f29aa5`", which the pair commit falsified the instant it landed — ADR-0032 §2,
+in the sentence claiming the document was current.
 
 **This header said "NO BRANCH IN FLIGHT" for three days while a branch existed**
 — true when written, rotted the moment the branch was cut. It has also carried
