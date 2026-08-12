@@ -597,9 +597,6 @@ def test_format_report_renders_the_reports_own_breakdown():
     rendered rows by handing `format_breakdown` a breakdown directly; nothing
     pinned the wiring that decides *which* breakdown the table renders, so an
     operator could have read a run's headline metric off a block of zeros.
-
-    `_stub_report`'s `(17/20)` appears nowhere else in the table, so the count
-    pair alone identifies the report's own breakdown rather than any other.
     """
     rendered = format_report(_stub_report())
 
@@ -633,7 +630,11 @@ def test_the_producer_writes_the_shape_this_module_hand_writes(tmp_path):
     """
     from eval.harness import run_eval
     from receipts.extract.schema import (
-        LineItem, Merchant, ReceiptExtraction, ReceiptMeta, Totals,
+        LineItem,
+        Merchant,
+        ReceiptExtraction,
+        ReceiptMeta,
+        Totals,
     )
 
     def extraction(qty: str) -> ReceiptExtraction:

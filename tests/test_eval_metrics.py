@@ -6,6 +6,8 @@ from __future__ import annotations
 import json
 from decimal import Decimal as D
 
+import pytest
+
 from eval.harness import run_eval
 from eval.metrics import (
     EvalReport,
@@ -170,17 +172,16 @@ def test_breakdown_an_extra_predicted_row_is_hallucination_not_a_miss():
     assert bd.hallucinated > 0
 
 
-def _sides_that_disagree_about_which_paths_exist() -> tuple[
-    ReceiptExtraction, ReceiptExtraction
-]:
-    """A prediction carrying one line-item row the truth does not have.
+_Sides = tuple[ReceiptExtraction, ReceiptExtraction]
+
+
+def _an_invented_row() -> _Sides:
+    """Prediction-only paths: a line-item row the truth does not have.
 
     The invented row contributes sub-paths that exist on the prediction side
     only and are empty there (a row's ``sku``/``bbox``/``modifiers`` default to
     nothing), so ``_is_filled`` reads "empty" on both sides while
-    ``field_accuracy`` scores them ``False`` for being present on one side
-    only. That is the exact shape the two pins below are about, and the shape
-    that used to be counted as *correctly* empty.
+    ``field_accuracy`` scores them ``False`` for being present on one side only.
     """
     both = _items()
     extra = LineItem(position=3, description_raw="ZZZ NOVELTY WIDGET",
@@ -188,7 +189,46 @@ def _sides_that_disagree_about_which_paths_exist() -> tuple[
     return _extraction(items=both + [extra]), _extraction(items=both)
 
 
-def test_no_class_named_for_agreement_holds_a_path_scored_wrong():
+def _a_row_never_produced() -> _Sides:
+    """Truth-only paths: the same shape from the other side.
+
+    Kept as its own case because the two directions are not interchangeable.
+    Measured: a partial revert reading
+    ``elif ok or (path in tru and path not in pred)`` — which re-admits exactly
+    the truth-only paths, and so re-admits three of the four the original defect
+    was reported on — leaves a prediction-only fixture, and the floor pin,
+    entirely green.
+    """
+    both = _items()
+    return _extraction(items=both[:2]), _extraction(items=both)
+
+
+def _an_empty_list_against_a_null() -> _Sides:
+    """Neither direction: the same path on both sides, ``[]`` here, ``None`` there.
+
+    ``LineItem.bbox`` is typed ``list[float] | None``, so both values are legal
+    on one path. Neither is filled, both sides carry the path, and
+    ``_values_equal([], None)`` is ``False`` — so this reaches the residue
+    without anybody disagreeing about which paths *exist*. It is the case that
+    keeps the class's description honest.
+    """
+    truth_items = _items()
+    truth_items[0].bbox = []
+    predicted_items = _items()          # bbox defaults to None
+    return _extraction(items=predicted_items), _extraction(items=truth_items)
+
+
+#: Every shape that reaches ``structural_mismatch``. Both pins run over all of
+#: them: a fixture covering one direction leaves a one-directional revert green.
+_DISAGREEING_SIDES = [
+    _an_invented_row,
+    _a_row_never_produced,
+    _an_empty_list_against_a_null,
+]
+
+
+@pytest.mark.parametrize("case", _DISAGREEING_SIDES, ids=lambda f: f.__name__)
+def test_no_class_named_for_agreement_holds_a_path_scored_wrong(case):
     """``correctly_empty`` may not contain a path ``field_accuracy`` calls wrong.
 
     Checked as an identity against the per-path map rather than by re-deriving
@@ -203,7 +243,7 @@ def test_no_class_named_for_agreement_holds_a_path_scored_wrong():
     an empty extraction: 4 of the 18 paths counted as ``correctly_empty`` were
     scored ``False`` by the same map the harness commits to the artefact.
     """
-    predicted, truth = _sides_that_disagree_about_which_paths_exist()
+    predicted, truth = case()
     acc = field_accuracy(predicted, truth)
     bd = field_breakdown(predicted, truth)
 
@@ -216,7 +256,8 @@ def test_no_class_named_for_agreement_holds_a_path_scored_wrong():
     assert bd.structural_mismatch > 0
 
 
-def test_the_classes_tile_the_path_set():
+@pytest.mark.parametrize("case", _DISAGREEING_SIDES, ids=lambda f: f.__name__)
+def test_the_classes_tile_the_path_set(case):
     """Every path lands in exactly one class, and none is dropped.
 
     The bound on ``correctly_empty`` is only safe if the paths it sheds have
@@ -224,7 +265,7 @@ def test_the_classes_tile_the_path_set():
     ``len(acc)`` is the old every-path denominator, so the sum also shows the
     classifier still accounts for the whole path set it replaced.
     """
-    predicted, truth = _sides_that_disagree_about_which_paths_exist()
+    predicted, truth = case()
     acc = field_accuracy(predicted, truth)
     bd = field_breakdown(predicted, truth)
 
@@ -238,13 +279,18 @@ def test_the_classes_tile_the_path_set():
 
 
 def test_breakdown_sums_with_plus():
-    a = field_breakdown(_extraction(), _extraction())
-    b = field_breakdown(_extraction(), _extraction())
+    # Sides that disagree, so every class carries a nonzero value: on two
+    # identical extractions `structural_mismatch` is 0, and `0 == 0 * 2` holds
+    # under any mutation of `__add__` at all (review standard 14).
+    predicted, truth = _an_invented_row()
+    a = field_breakdown(predicted, truth)
+    b = field_breakdown(predicted, truth)
     total = a + b
     assert total.transcription_total == a.transcription_total * 2
     assert total.correctly_empty == a.correctly_empty * 2
     # Every field folds, including the ones added after `__add__` was written:
     # it builds from `fields(self)` rather than a list of names.
+    assert a.structural_mismatch > 0
     assert total.structural_mismatch == a.structural_mismatch * 2
 
 

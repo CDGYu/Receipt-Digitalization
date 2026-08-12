@@ -185,14 +185,19 @@ class FieldBreakdown:
     ``False`` may be counted in** ``correctly_empty``. Whatever is left over
     lands in ``structural_mismatch``, so the tiling survives the bound.
 
-    ``structural_mismatch`` is that residue. A path reaches it when neither
-    side is filled and the per-path map *still* scores it wrong — which is what
-    happens when the path exists on one side only. A line-item row the model
-    invented brings its own empty sub-paths; a row it never produced leaves
-    truth's empty sub-paths with nothing on the other side to compare against.
-    It does **not** say the model misread a value: values read wrong are
-    counted in ``transcription``, values invented in ``hallucinated``. It says
-    the two sides disagree about *which paths exist*.
+    ``structural_mismatch`` is that residue: neither side filled, and the
+    per-path map *still* scores the path wrong. Usually that means the path
+    exists on one side only — a line-item row the model invented brings its own
+    empty sub-paths, and a row it never produced leaves truth's empty sub-paths
+    with nothing on the other side to compare against. **It is not only that.**
+    ``LineItem.bbox`` is typed ``list[float] | None``, so a truth ``[]``
+    against a predicted ``None`` is two legal, both-unfilled, unequal values on
+    a path *both* sides carry, and it lands here as well.
+
+    So the class means: the two sides disagree about whether a path exists, or
+    about null versus empty on one they share. It does **not** say the model
+    misread a value — values read wrong are counted in ``transcription``, and
+    values invented in ``hallucinated``.
     """
 
     transcription_correct: int = 0

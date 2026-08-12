@@ -110,7 +110,7 @@ become a transcription point; a model cannot dilute its error rate by
 hallucinating. This is the property the whole design rests on, and it is why the
 rule is stated as a side rather than as a comparison.
 
-### 2. Five numbers, and three of them are counts
+### 2. A ratio where its denominator describes the receipt, a count where it describes the schema
 
 `transcription_accuracy` (truth filled, group core or line items) and
 `self_report_agreement` (truth filled, group meta) are ratios — `None`, never
@@ -158,10 +158,14 @@ as `Correctly empty fields:` from 18 to 25: a hallucinating model scoring better
 on a count named for agreement.
 
 A path reaches `structural_mismatch` when neither side is filled and the map
-still scores it wrong, which is what a path present on one side only looks like.
-It does not say the model misread a value — values read wrong are in
-`transcription`, values invented are in `hallucinated` — it says the two sides
-disagree about *which paths exist*. Under the shipped rule, r001/r002/r003
+still scores it wrong. Usually that is a path present on one side only — and it
+is **not only** that. `LineItem.bbox` is typed `list[float] | None`, so a truth
+`[]` against a predicted `None` is two legal, both-unfilled, unequal values on a
+path *both* sides carry; measured, that pair alone moves `structural_mismatch`
+from 0 to 1. So the honest category is: **the two sides disagree about whether a
+path exists, or about null versus empty on one they share.** It does not say the
+model misread a value — values read wrong are in `transcription`, values
+invented are in `hallucinated`. Under the shipped rule, r001/r002/r003
 against an empty extraction split as `correctly_empty` 14/12/12 and
 `structural_mismatch` 4/5/6; the probe at the top of this ADR prints both.
 
