@@ -1549,7 +1549,12 @@ describe('the outcome reaches the reviewer (I5)', () => {
     expect(document.activeElement).toBe(regionOf())
   })
 
-  it('contains every outcome element, so a future one cannot render unfocused', async () => {
+  // Named for what it checks, not for what it would be nice to guarantee. It
+  // does *not* pin that a future outcome cannot render unfocused: measured, a
+  // role-less sibling of the region leaves the whole suite green (ADR-0041's
+  // Consequences carries the mutation). The inline field error is outside the
+  // region too, deliberately -- ADR-0024 decision 5.
+  it('contains the outcome elements this state renders', async () => {
     await arriveAt(failedRoutes)
 
     const alert = await screen.findByRole('alert')
