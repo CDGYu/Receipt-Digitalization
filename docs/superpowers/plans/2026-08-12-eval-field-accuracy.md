@@ -1039,11 +1039,13 @@ Expected: PASS.
 - [ ] **Step 7: Confirm the old name is gone**
 
 ```bash
-git grep -n "\.field_accuracy\b" -- src eval scripts tests
-git grep -n "\"field_accuracy\"\|fields_correct\|fields_total" -- src eval scripts tests
+git grep -nE "\.field_accuracy|\"field_accuracy\"|field_accuracy=" -- src eval scripts tests | grep -v critical_field_accuracy
+git grep -n "fields_correct\|fields_total" -- src eval scripts tests
 ```
 
-Expected: **zero hits** from both, other than `critical_field_accuracy` (a different metric, which keeps its name) and the pure function `field_accuracy(` being *called*. If either returns a hit naming the report's scalar, the rename is incomplete — a name that kept its spelling and changed its meaning is what §3.7 of the design forbids.
+Expected: **zero hits** from both. The pure function `field_accuracy(` being *called* is fine and does not match these anchors; `critical_field_accuracy` is a different metric that keeps its name and is filtered out.
+
+**The `field_accuracy=` alternative is load-bearing and was added on 2026-08-12** — see the dated defect log. The original anchors here were `\.field_accuracy\b` and `"field_accuracy"`, neither of which can match a **keyword argument** (`EvalReport(field_accuracy=0.95, ...)`). Two live constructor sites in `tests/test_run_baseline.py` would have survived a "zero hits" all-clear. Anchors are where rot lives (ADR-0032 §3), including in the step whose only job is catching the rename.
 
 Historical records under `docs/` are out of scope and must keep their old text — see Task 4.
 
@@ -1258,3 +1260,62 @@ r003 15/41 − 2/6 = 13/35.
 and the failure still names the floor rather than raising. Expect
 42.86/37.14/37.14 if you reproduce it. Found by the implementer, who checked
 the number instead of matching it.
+
+### 2026-08-12 — Tasks 2 and 3 are not independently green
+
+**Task 2 leaves the branch red, and no ordering of its own four files fixes
+that.** The rename of `EvalReport.field_accuracy` has exactly one reader and two
+constructor sites outside Task 2's file list, and all three are in Task 3's
+scope:
+
+- `eval/run_baseline.py` — `format_report` renders `report.field_accuracy`,
+  raising `AttributeError`. This also fails three tests in
+  `tests/test_cli_reports.py`, which reach it through `cmd_eval`.
+- `tests/test_run_baseline.py` — two `EvalReport(field_accuracy=0.95)`
+  constructions, raising `TypeError`.
+
+Measured after Task 2: **5 failed, 1065 passed**, every failure tracing to those
+sites.
+
+**Task 2 Step 8's stated expectation — "Run `python -m pytest
+tests/test_cli_reports.py` / Expected: PASS" — is therefore false**, and its
+stop-and-report clause misdiagnoses the cause: the failures are not `calibrate`
+reading more than the plan says (that was verified false — `cmd_calibrate` reads
+only `receipt_id`/`confidence`/`critical_correct`), they are the rename reaching
+Task 3's files.
+
+**Resolution:** Tasks 2 and 3 are a pair. Task 3 runs immediately after Task 2
+and the branch is green only once both have landed. Task 2 was reviewed on its
+own diff, which is unaffected. Making Task 2 close those sites was rejected:
+`format_report` cannot be fixed without deciding what the metric-4 block prints,
+which is Task 3's design.
+
+### 2026-08-12 — Task 3 Step 7's grep could not see a keyword argument
+
+Step 7's original anchors were `\.field_accuracy\b` and `"field_accuracy"`.
+Neither matches `EvalReport(field_accuracy=0.95, ...)`, so the step whose only
+job is proving the rename is complete would have returned **zero hits** while
+two live constructor sites remained in `tests/test_run_baseline.py`.
+
+**Resolution:** Step 7 now anchors on `\.field_accuracy|"field_accuracy"|field_accuracy=`
+with `critical_field_accuracy` filtered out. Corrected in the step itself, since
+a verification command that cannot fail is worse than none.
+
+### 2026-08-12 — Task 2 Step 4's import block would fail the lint gate
+
+Step 4 says to add `ratio` to `eval/harness.py`'s import from `.metrics`. Because
+the ratios became `@property` methods on `EvalReport` (Step 3), `harness.py`
+never calls `ratio`, so importing it is an unused import — **ruff `F401`, a hard
+`scripts/verify.py` gate failure**. The implementer measured this and omitted
+`ratio` from the import.
+
+### 2026-08-12 — Task 2 Step 7's fixture list was incomplete
+
+Step 7 names the `metrics` dict and the result-row literals in
+`tests/test_cli_reports.py`. It misses `_stub_report()` and `_empty_report()` in
+the same file, which construct `EvalReport(field_accuracy=...)` as a **keyword
+argument** — invisible to Step 7's own grep for the same reason the previous
+entry describes. Both were updated as shape changes: `0.85` became
+`FieldBreakdown(transcription_correct=17, transcription_total=20, ...)`, which
+derives the same ratio, and `0.0` became `FieldBreakdown()`, whose derived
+ratios are `None` rather than a `0.0` that would read as "measured, and bad".
