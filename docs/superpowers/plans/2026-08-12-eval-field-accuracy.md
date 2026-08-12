@@ -110,11 +110,27 @@ def test_breakdown_counts_an_invented_value_as_hallucination():
 
 
 def test_breakdown_treats_an_empty_container_as_absent():
-    """flatten emits [] as a leaf on purpose. An empty tax_breakdown is a field
-    the receipt does not have, so it must not be a transcription point."""
-    paths = _transcription_paths(_extraction(), _extraction())
-    assert "totals.tax_breakdown" not in paths
-    assert "totals.total" in paths        # the rule excludes empties, not everything
+    """flatten emits ``[]`` as a leaf on purpose, so "had none" stays visible.
+    But a receipt whose tax_breakdown is empty has no tax breakdown to read, so
+    it must not be a point a model can earn.
+
+    Differential, not introspective: it compares two truths differing only in
+    that one field. A test that asked the classifier which paths it counted
+    would mirror the rule under test and could never fail.
+
+    Measured: core_total is 8 with the empty container and 11 with one band
+    (label/base/rate/amount, of which base is None).
+    """
+    empty_truth = _extraction()
+    filled_truth = _extraction()
+    filled_truth.totals.tax_breakdown = [
+        TaxBand(label="VAT", rate=D("0.12"), amount=D("24.00"))
+    ]
+
+    bd_empty = field_breakdown(_extraction(), empty_truth)
+    bd_filled = field_breakdown(_extraction(), filled_truth)
+
+    assert bd_empty.core_total < bd_filled.core_total
 
 
 def test_breakdown_an_extra_predicted_row_is_hallucination_not_a_miss():
@@ -142,21 +158,17 @@ def test_ratio_is_none_on_an_empty_denominator_never_zero():
     assert ratio(1, 4) == 0.25
 ```
 
-Add this helper just above that section in the same file:
+Extend that file's schema import to add `TaxBand`:
 
 ```python
-def _transcription_paths(predicted: ReceiptExtraction,
-                         truth: ReceiptExtraction) -> set[str]:
-    """Paths the breakdown would count as transcription. Test-local: it mirrors
-    field_breakdown's rule so a test can name a path rather than a count."""
-    from eval.metrics import _group, _is_filled
-    from receipts.extract.paths import flatten
-
-    tru = flatten(truth.model_dump())
-    return {
-        p for p in field_accuracy(predicted, truth)
-        if _is_filled(tru.get(p)) and _group(p) != "meta"
-    }
+from receipts.extract.schema import (
+    LineItem,
+    Merchant,
+    ReceiptExtraction,
+    ReceiptMeta,
+    TaxBand,
+    Totals,
+)
 ```
 
 And extend the existing import block at the top of the file:
@@ -1190,4 +1202,6 @@ Expected: the floor below `0.10`, `hallucinated: 0`, the old key gone, the map p
 
 **Task 1 Step 8 is not optional and not a formality.** A floor test that has only ever been green proves nothing (review standard 14). The mutation is what turns it into a pin, and the failure must name the floor — a failure by `AttributeError` means it landed somewhere else (standard 16).
 
-**Existing tests pass unmodified.** The two exceptions are named and bounded: one assertion rename in `tests/test_eval_metrics.py` (Task 2 Step 1) and the constructor keywords plus label list in `tests/test_run_baseline.py` (Task 3 Step 1). Anything else that seems to need a test changed is a stop-and-report.
+**Existing tests pass unmodified unless the step you are executing tells you, in that step, to change one.** That is the whole bound — no count is given here, because an earlier draft of this sentence said "two exceptions" while the plan mandates three (Task 2 Steps 1 and 7, Task 3 Step 1), which is the enumerated-defence failure this repo has hit repeatedly (review standard 19).
+
+Every authorised change is a **rename or a shape update to match the producer** — never a weakened assertion. If a step's edit would make a test check *less* than it did, stop and report: that is not what any step here intends. Anything else that seems to need a test changed is also a stop-and-report.
