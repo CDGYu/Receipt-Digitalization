@@ -363,6 +363,31 @@ carries none. Review standard 21 (*a citation is a claim too*) failed inside the
 document that best knew better. ADR-0028 §5 is the rule: quote the text, or name
 the symbol.
 
+## Correction (2026-08-14) — "Still open" lists four findings that are closed
+
+The *Still open* section above says **"Five Important findings (I5, I6, I7, I8,
+I9)"**. One is still open. Re-derived 2026-08-14 from the status-note table in
+`docs/superpowers/specs/2026-08-05-review-ui-browser-pass.md`, which carries a
+dated verdict per finding:
+
+| Finding | Verdict there |
+|---|---|
+| I5 | **FIXED 2026-08-12** — `99f0207`, recorded in **ADR-0041** |
+| I6 | **FIXED 2026-08-13** — `e7e5d9e` |
+| I7 | **OPEN**, unchanged |
+| I8 | **FIXED 2026-08-14** — `3f552d1`, reworded at `7a770c3` |
+| I9 | **FIXED 2026-08-14** — the copy at `1322932`, the frame at `fcfc627` |
+
+So **one Important finding, I7, the silent 401 swap**. The seven Minor findings
+(m10–m16) are unchanged and still open, so that half of the sentence stands.
+
+The same paragraph's "**I5 and I7 touch ADR-0024's contract**, so neither is a
+drive-by fix" keeps only its I7 half — and that half is why I7 is the one left.
+
+**None of the four was closed by a person looking at it.** The three 2026-08-14
+rows say **MEASURED, NOT SEEN** in as many words, and the same status note
+records that ADR-0041 closed I5 on the same footing.
+
 ## References
 
 `docs/superpowers/specs/2026-08-05-review-ui-design-system.md` (the design,
