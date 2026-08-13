@@ -13,7 +13,7 @@ import { Value } from '../src/ui/Value'
  *  them would put two of the three outside it.
  *
  *  Nothing below asserts on a class name. Vitest's default is `css: false`, so a
- *  `.module.css` import is a proxy whose keys echo back as strings -- a class
+ *  `.module.css` import is a proxy that answers for any key -- a class
  *  assertion would pass without any stylesheet existing at all, and would say
  *  nothing about what a reviewer sees. The assertions are on text content and
  *  accessible names, which are the parts that survive into a screen reader. */
@@ -117,12 +117,36 @@ describe('Chip — the tone is never the only signal', () => {
 // --------------------------------------------------------------------------- //
 // The visual half of the rule, which no rendering test in this file can see.
 //
-// Vitest's default is `css: false`, so `styles.anything` echoes its own key back
-// as a string. A class renamed on ONE side only -- which is exactly what this
-// task did when it renamed `.null` to `.notExtracted` -- produces
-// `class="undefined"` and ships with every gate green, taking `--color-null` and
-// the hairline left border with it. Those are §4's scannability half, so losing
-// them silently loses half the rule.
+// Vitest's default is `css: false`, so a `.module.css` import is a proxy that
+// answers for ANY key. A class renamed on ONE side only -- which is exactly what
+// this task did when it renamed `.null` to `.notExtracted` -- therefore ships
+// unpainted with every gate green, taking `--color-null` and the hairline left
+// border with it. Those are §4's scannability half, so losing them silently
+// loses half the rule.
+//
+// **What "unpainted" is NOT is `class="undefined"`, and this file said it was in
+// six places until 2026-08-13.** The substance was always right -- the class
+// reaches no rule and the paint is silently gone -- but that spelling names
+// something neither environment produces. Stated once, here, from measurement:
+//
+//   * Under this suite the proxy returns a scoped string built from whatever key
+//     it is handed. Measured: `styles.fieldCellTYPO` is the string
+//     `"_fieldCellTYPO_18fbc4"`, so the element renders
+//     `class="_fieldCellTYPO_18fbc4"` -- a plausible-looking name that no
+//     stylesheet declares.
+//   * In a real build the object is the compiled stylesheet's exports and has no
+//     such key at all, so the value is `undefined` -- and React omits a
+//     `className` of `undefined` rather than stringifying it. Measured:
+//     `<div className={undefined}>` renders with no `class` attribute at all.
+//   * Only `String(undefined)` produces the literal `class="undefined"`, and
+//     nothing in this tree does that.
+//
+// The other sites in this file now say "unpainted", which is the true and
+// mechanism-free half, so there is one copy of the mechanism to keep right
+// rather than six. As of 2026-08-13 the same wrong spelling also stands in
+// `admin-screen.test.tsx`, `review-null-rule.test.tsx` (twice) and
+// `theme-control.test.tsx`, which were outside the permitted set of the round
+// that corrected it here.
 //
 // So: read both sides as text and check they agree, the way `tokens.test.ts`
 // reads the stylesheet rather than trusting prose. Reading the *component* as
@@ -207,6 +231,19 @@ function referencedClasses(tsx: string): Set<string> {
  *  means this occurrence is qualified by something, and a qualified selector does
  *  not match the element the component actually renders.
  *
+ *  The trailing edge is its mirror: walk forward over whitespace and require `{`
+ *  or `,`, so the selector *ends* where this occurrence ends. **Requiring merely
+ *  that whitespace follow is not enough, and that was a live defect until
+ *  2026-08-13.** `.form` and `.form > h2` are two different selectors, and the
+ *  space after `.form` satisfied a bare `[\s{,]` test on its own -- so the second
+ *  rule counted as an occurrence of the first and `declarationsIn` threw
+ *  `2 top-level rules for .form` against a file that declares it exactly once.
+ *  It went unseen because no stylesheet in `COMPONENTS` used a descendant or
+ *  child combinator at all until `ReceiptForm.module.css` joined; it fired the
+ *  moment that entry was added, which is how it was found. The fix is a
+ *  tightening: every shape that passed before still passes, and one that never
+ *  should have no longer does.
+ *
  *  Those three are not everything that can *legally* precede a selector: a `;`
  *  can, after a statement at-rule such as `@import` or `@charset`. That is
  *  deliberately not accepted. It makes a stylesheet with a leading `@import`
@@ -214,9 +251,14 @@ function referencedClasses(tsx: string): Set<string> {
  *  ruling recorded in `declarationsIn`'s bound rather than a case to chase.
  *
  *  Provenance, stated honestly and narrowly, because the first version of this
- *  note overstated it: **no class selector in the five tracked CSS files is
+ *  note overstated it: **no class selector in the six tracked CSS files is
  *  qualified by another class, a tag or an attribute, and none is a descendant or
- *  child of one** -- verified by grep, and that is the shape this edge rejects.
+ *  child of one** -- verified by grep, and that is the shape the leading edge
+ *  rejects. One of them now IS the left-hand side of a child combinator
+ *  (`.form > h2`), which is the shape the trailing edge rejects. Neither is
+ *  claimed from prose: `accepts every shape the real stylesheets actually use`
+ *  runs `declarationsIn` over every declared class in every tracked file, so a
+ *  stylesheet that breaks either edge fails rather than being trusted.
  *  Compound selectors as such certainly do exist here
  *  (`.button:hover:not(:disabled)`, `:root[data-theme='dark']`,
  *  `:where(...):focus-visible`), so "no compound selector anywhere" would have
@@ -224,6 +266,13 @@ function referencedClasses(tsx: string): Set<string> {
  *  is closed on the strength of the property rather than of an observed pattern. */
 function exactlyThisSelector(code: string, at: number, selector: string): boolean {
   if (!/[\s{,]/.test(code[at + selector.length] ?? '')) {
+    return false
+  }
+  let forward = at + selector.length
+  while (forward < code.length && /\s/.test(code[forward] ?? '')) {
+    forward += 1
+  }
+  if (code[forward] !== '{' && code[forward] !== ',') {
     return false
   }
   let back = at - 1
@@ -345,7 +394,7 @@ function declarationsIn(css: string, selector: string): Map<string, string> {
  *  1's docblock claimed they "mirror the union type verbatim, so a tone or
  *  variant added to the type without a rule to paint it fails here" -- and the
  *  re-reviewer disproved it by adding `'critical'` to Chip's union, seeing every
- *  gate stay green, and watching `styles[tone]` ship `class="undefined"`. The
+ *  gate stay green, and watching `styles[tone]` ship unpainted. The
  *  hand-maintained list caught a *deleted* rule and nothing else.
  *
  *  Deriving the same set from the component and requiring the two to agree makes
@@ -374,7 +423,7 @@ function declarationsIn(css: string, selector: string): Map<string, string> {
  *  `// tone: 'error' | ... | 'neutral'` line *above* a union genuinely extended
  *  with `| 'critical'` wins the match, and the tail check then sees `\n  tone:`
  *  rather than `|` and stays quiet -- five stale members, agreeing with the
- *  hand-maintained list, green, with `.critical` shipping `class="undefined"`.
+ *  hand-maintained list, green, with `.critical` shipping unpainted.
  *  G4 through the door round 3's own docblock called closed. Not live today (no
  *  `//` comment in `frontend/src` mentions `tone:` or `variant:`), and closed
  *  anyway, because round 3's stated reasoning already argued for it.
@@ -448,15 +497,33 @@ const COMPONENTS: readonly GuardedComponent[] = [
   // Added 2026-08-06, after the browser pass. The login page got its first
   // stylesheet in that round and arrived unguarded: the fix round could not add
   // itself here, because this file was outside its permitted set. Under
-  // `css: false` a renamed class ships as `class="undefined"` with all five
-  // gates green, and the fix round proved exactly that by hand -- renaming
-  // `.form` made the card, its border and its centring vanish silently. It is
-  // the first screen every reviewer sees, so it is the worst one to leave to a
-  // hand check nobody will repeat.
+  // `css: false` a renamed class ships unpainted with all five gates green, and
+  // the fix round proved exactly that by hand -- renaming `.form` made the card,
+  // its border and its centring vanish silently. It is the first screen every
+  // reviewer sees, so it is the worst one to leave to a hand check nobody will
+  // repeat.
   {
     name: 'LoginPage',
     tsx: 'login/LoginPage.tsx',
     css: 'login/LoginPage.module.css',
+    prop: '',
+    computed: [],
+  },
+  // Added 2026-08-13, by controller ruling, for the same reason as LoginPage
+  // above and found the same way. Task 1 of the I6/I8/I9 pass added `.fieldCell`
+  // -- the whole of that task's deliverable -- and it was reachable by no guard
+  // at all: `stylesheets.test.ts` audits what a stylesheet DECLARES and never
+  // asks whether anything applies it. Measured before this entry existed:
+  // renaming the reference to `styles.fieldCellTYPO` in `ReceiptForm.tsx` left
+  // all 373 tests and `tsc -b` green, so every declaration in the `.fieldCell`
+  // rule painted nothing and no gate said so.
+  //
+  // This entry covers all eight of the component's classes, not just that one.
+  // `.form` is the one with the most to lose -- it carries the grid itself.
+  {
+    name: 'ReceiptForm',
+    tsx: 'review/ReceiptForm.tsx',
+    css: 'review/ReceiptForm.module.css',
     prop: '',
     computed: [],
   },
@@ -498,7 +565,7 @@ describe('every class a component references exists in its stylesheet', () => {
           declared.has(name),
           `${component.name}: ${component.tsx} uses styles.${name} but ` +
             `${component.css} declares no .${name} -- under css:false that ships ` +
-            `as class="undefined" with every gate green`,
+            `unpainted with every gate green`,
         ).toBe(true)
       }
     }
@@ -646,6 +713,32 @@ describe('every class a component references exists in its stylesheet', () => {
     }
   })
 
+  it('reads the selector exactly, so a combinator after it is a different rule', () => {
+    // The trailing edge's other half, and the shape `ReceiptForm.module.css`
+    // brought in when it joined COMPONENTS on 2026-08-13. `.form` and
+    // `.form > h2` are two different selectors; the edge used to require only
+    // that *some* whitespace follow the name, which `.form > h2` satisfies, so
+    // the file's one `.form` rule read as two and the guard threw instead of
+    // guarding. Not hypothetical -- it fired on the real file the moment the
+    // entry was added.
+    const paint = 'color: var(--color-null)'
+    for (const [label, qualified] of [
+      ['a child combinator', '.form > h2'],
+      ['a descendant', '.form h2'],
+    ] as const) {
+      expect(
+        () => declarationsIn(`${qualified} { ${paint} }`, '.form'),
+        `${label}: answered for the unqualified rule`,
+      ).toThrow(/no top-level rule whose selector is exactly/)
+    }
+
+    // ...and beside the real rule it is the real one that is read, exactly once,
+    // which is the case the stylesheet actually presents.
+    const both = '.form { display: grid }\n.form > h2 { grid-column: 1 / -1 }'
+    expect(declarationsIn(both, '.form').get('display')).toBe('grid')
+    expect(declarationsIn(both, '.form').get('grid-column')).toBeUndefined()
+  })
+
   it('accepts every shape the real stylesheets actually use', () => {
     // The other half of the leading edge: it must not reject legitimate CSS. The
     // three things that can precede a complete top-level selector are the top of
@@ -746,7 +839,7 @@ describe('every class a component references exists in its stylesheet', () => {
 
   it('derives each computed list from its union, so a new tone cannot go unpainted', () => {
     // Round 1's docblock claimed the hand-maintained lists did this. They did
-    // not: a union member added without a rule shipped class="undefined" with
+    // not: a union member added without a rule shipped unpainted with
     // every gate green. Deriving the set from the source is what makes the claim
     // true rather than narrowing it.
     const guarded = COMPONENTS.filter((entry) => entry.prop !== '')

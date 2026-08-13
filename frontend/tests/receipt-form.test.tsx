@@ -323,30 +323,36 @@ describe('inline field errors', () => {
     expect(document.getElementById(describedBy!)?.textContent).toContain('at most 3 characters')
   })
 
-  it('renders the error inside its own field cell, not as a child of the grid', () => {
-    render(
-      <ReceiptForm
-        fields={FIELDS}
-        onChange={() => {}}
-        errors={{ 'totals.total': "not a decimal amount: 'abc'" }}
-      />,
-    )
-    const input = screen.getByLabelText('Total') as HTMLInputElement
-    const description = document.getElementById(input.getAttribute('aria-describedby')!)!
-    const label = input.closest('label')!
+  // One case per `.map` block in `ReceiptForm`, and that is the point rather
+  // than thoroughness for its own sake. The first version of this test rendered
+  // `totals.total` alone -- a `MONEY_FIELDS` path -- and the `TEXT_FIELDS`
+  // wrapper was deletable with it green: measured 2026-08-13, 21/21 with
+  // `<div className={styles.fieldCell}>` removed from the text map. The claim
+  // being made is about every field, so it is asserted on one from each half.
+  it.each([
+    ['a money', 'totals.total', 'Total', "not a decimal amount: 'abc'"],
+    ['a text', 'receipt.currency', 'Currency', 'currency holds at most 3 characters'],
+  ])(
+    'renders %s field error inside its own field cell, not as a child of the grid',
+    (_half, path, labelText, message) => {
+      render(<ReceiptForm fields={FIELDS} onChange={() => {}} errors={{ [path]: message }} />)
+      const input = screen.getByLabelText(labelText) as HTMLInputElement
+      const description = document.getElementById(input.getAttribute('aria-describedby')!)!
+      const label = input.closest('label')!
 
-    // The error and its label share a wrapper, and that wrapper is not the grid
-    // itself -- which is what puts the sentence under the field that sent it at
-    // every column count. Before this task both were direct children of
-    // `<section class="form">`, so the shared parent was the grid and the error
-    // began at column 1 while Total sat at column 4.
-    expect(description.parentElement).toBe(label.parentElement)
-    expect(description.parentElement!.tagName).toBe('DIV')
+      // The error and its label share a wrapper, and that wrapper is not the grid
+      // itself -- which is what puts the sentence under the field that sent it at
+      // every column count. Before this task both were direct children of
+      // `<section class="form">`, so the shared parent was the grid and the error
+      // began at column 1 while Total sat at column 4.
+      expect(description.parentElement).toBe(label.parentElement)
+      expect(description.parentElement!.tagName).toBe('DIV')
 
-    // ADR-0024 §5, unchanged and re-asserted here because this task moves the
-    // element that rule is about: a sibling, never a child.
-    expect(label.contains(description)).toBe(false)
-  })
+      // ADR-0024 §5, unchanged and re-asserted here because this task moves the
+      // element that rule is about: a sibling, never a child.
+      expect(label.contains(description)).toBe(false)
+    },
+  )
 
   it('lands a line-item money error on the addressed cell and nowhere else', () => {
     render(
