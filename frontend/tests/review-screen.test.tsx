@@ -468,6 +468,55 @@ describe('ReviewScreen', () => {
     expect(await screen.findByText(/review queue is empty/i)).toBeDefined()
     expect(screen.queryByRole('alert')).toBeNull()
   })
+
+  it('frames the failure notice, and leaves the loading and empty screens bare', async () => {
+    // I9's second half: the failure block was two paragraphs and a button on an
+    // otherwise blank page. `.notice` is the <main> for `failed`, `empty` and
+    // `loading` alike, so the frame is an additional class on the failure
+    // render -- a card around "Loading..." is a screen this finding never
+    // measured, and widening a fix past its finding is its own defect.
+    const fetchMock = stubApi({
+      '/review/next': [200, { task: TASK, receipt: SUMMARY }],
+      'GET /receipts/a1': [503, { error: { message: 'database unavailable' } }],
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    render(
+      <StrictMode>
+        <ReviewScreen />
+      </StrictMode>,
+    )
+    await screen.findByRole('alert')
+    const main = document.querySelector('main')!
+    expect(main.className).toContain('noticeFailed')
+
+    // The second half, which is what makes this test's name true: the other two
+    // phases render the same element and must not pick the frame up. Each is
+    // rendered on its own, so `document.querySelector('main')` has one answer.
+    cleanup()
+    vi.stubGlobal('fetch', stubApi({ '/review/next': [200, { task: null }] }))
+    render(
+      <StrictMode>
+        <ReviewScreen />
+      </StrictMode>,
+    )
+    await screen.findByText(/review queue is empty/i)
+    expect(document.querySelector('main')!.className).not.toContain('noticeFailed')
+
+    // A `fetch` that never settles is what holds the screen on `loading`: the
+    // phase starts there, and nothing moves it off until a call settles.
+    cleanup()
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => new Promise<Response>(() => {})),
+    )
+    render(
+      <StrictMode>
+        <ReviewScreen />
+      </StrictMode>,
+    )
+    await screen.findByText(/^Loading/)
+    expect(document.querySelector('main')!.className).not.toContain('noticeFailed')
+  })
 })
 
 /** The receipt as the server would return it after storing an edit.

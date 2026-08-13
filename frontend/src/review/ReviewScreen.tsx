@@ -469,7 +469,7 @@ export function ReviewScreen() {
     const held = phase.heldTask
     const backendDown = phase.failure.kind === 'backend-down'
     return (
-      <main className={styles.notice}>
+      <main className={`${styles.notice} ${styles.noticeFailed}`}>
         {/* Deliberately NOT a second `role="alert"`. The server's own words
             below already carry the role and announce beside this sentence, and
             a second alert in the same region makes every single-alert query in

@@ -444,6 +444,7 @@ const CENSUS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
       'grid-column, grid-row, align-self: start, position: sticky, top, max-height, overflow: auto',
     '.notice':
       'box-sizing: border-box, display: flex, flex-direction: column, align-items: flex-start, gap, max-width, margin, padding, font-family, color',
+    '.noticeFailed': 'justify-content: center, min-height, border, border-radius, background',
     '.message': 'margin, font-size, line-height',
     '.outcome': 'display: flex, flex-direction: column, gap',
     '.alert':
