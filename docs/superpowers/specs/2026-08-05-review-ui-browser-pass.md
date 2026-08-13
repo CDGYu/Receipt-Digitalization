@@ -148,11 +148,12 @@ is information nobody had.
 > Every claim those three rows and their three entries make **about the result
 > on screen** rests on jsdom, which lays out nothing and paints nothing; on
 > `stylesheets.test.ts`, which reads a stylesheet as text and never asks what
-> it computes to; on the class-name guard in `value.test.tsx`, which joins a
-> name to a name; and, for the one Playwright assertion this milestone touched,
-> on a string compared against the code by eye. **ADR-0041** closed I5 on this
-> same footing, and its acceptance bullet is where the distinction is stated: a
-> person looking at it is the only thing that closes I5 as *seen*.
+> it computes to; on a class-name guard, which joins a name to a name and lives
+> in a different test file for the admin surface than for the other two; and,
+> for the one Playwright assertion this milestone touched, on a string compared
+> against the code by eye. **ADR-0041** closed I5 on this same footing, and its
+> acceptance bullet is where the distinction is stated: a person looking at it
+> is the only thing that closes I5 as *seen*.
 >
 > Named rather than left to be inferred. **No browser, at any width, in either
 > theme**, has rendered the field cell, the caption or the framed notice — so
@@ -378,8 +379,10 @@ against this message it adds none. The block is also unframed — two bare
 paragraphs and a button near the top-left of an otherwise blank screen, with no
 card and no vertical centring.
 **[Corrected 2026-08-14 — "top-left" is half wrong, and the wrong half was never
-true of the shipped stylesheet.** `.notice` sets `max-width: 40rem` and
-`margin: 0 auto`, and has carried both in every revision of
+true of the shipped stylesheet at any width past `max-width: 40rem` — though at
+375 it was accurate, because 40rem is wider than that viewport, so the box fills
+it and the contents sit at the left padding.** `.notice` sets `max-width: 40rem`
+and `margin: 0 auto`, and has carried both in every revision of
 `ReviewScreen.module.css` — including `bdbfd03`, the commit that created the
 file, which is an ancestor of `c781f40`, the tip this pass ran against. The
 element is a `<main>` in normal flow under an unstyled root, so at any viewport
