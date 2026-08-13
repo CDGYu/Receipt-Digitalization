@@ -204,6 +204,57 @@ are written here. Every one of the nine plan-level defects on this milestone was
 the controller's, which matches all nine previous milestones; whether that is a
 fact about controllers or about the role is not settled by one branch.
 
+## Correction (2026-08-13)
+
+**Decision 3's first bullet is wrong where it says *"True forever. Safe."*, and
+the rest of decision 3 stands.** The bullet is left as written: an Accepted
+decision here is corrected by a dated section rather than edited. Decision 1
+does not apply to it — its subject is anchors, not this document's own
+trustworthiness — so it is corrected rather than deleted.
+
+**The claim stays true. The retrievability does not.** *"At that commit the
+count was 40 and 40"* is a true statement about that tree, permanently. But a
+reader can only check it while the commit stays reachable, and **a replay,
+rebase, amend or force-push severs that without touching the citing document and
+without anything going red.** After `git gc` the token names nothing at all.
+*True* and *checkable* are two properties of a closed anchor, and only the first
+is permanent. Decision 3 collapses them into one word.
+
+**Nine citations in this repository demonstrated it.** On 2026-08-12 a branch was
+replayed onto `main` rather than merged. Measured at `e698aca` over every
+backticked seven-character hex token in the tracked non-binary files, each
+resolved with `git cat-file --batch-check` and tested for membership in
+`git rev-list --all`: **nine citation sites in three tracked files** named two
+commits that no ref could reach. Every one of the nine had been derived
+correctly and was still true when it was severed.
+
+**The ordering survives, qualified.** *No number > a number closed to a SHA > a
+number anchored to a moving ref* is unchanged, and a closed SHA is still
+strictly better than a moving ref — it is at least true, where a moving ref
+stops being true. What it is not is **permanent**: its durability is the
+reachability of the commit it names, which is a property of the repository's
+refs rather than of the sentence. A closed anchor is the right choice and not a
+finished one.
+
+**What now enforces it.** `tests/test_sha_citations.py` checks that every
+backticked seven-character hex token in a tracked file resolves to a commit
+reachable from some ref. **ADR-0042** is the decision behind it — reachability
+rather than existence (`git cat-file -e` still succeeds on both orphans, which is
+why an existence check would have been green through the whole defect and would
+first go red at some unrelated `git gc`), any ref
+rather than `main`, and the rule that a document *about* an unreachable commit
+names it bare or at full oid length, because the backticked short form **is** the
+citation.
+
+**And the phrase does not find this bullet.** The claim has a second copy, in
+`docs/MEMORY.md`'s review standard 24. The copy above wraps between `True` at
+the end of one line and `forever.` at the start of the next, so
+`git grep "true forever"` misses this ADR entirely — case-insensitively too.
+Measured, on the sentence being repaired: a fix wave that greps the phrase
+corrects the other copy and leaves the Accepted decision standing. Grep one
+distinctive word — `forever`, or `Closed` — and read the hits, which is
+ADR-0028's Consequences and review standard 25 in the same sentence.
+
 ## References
 
 `.superpowers/sdd/2026-08-10-corrections-read-route/progress.md` (the ledger:

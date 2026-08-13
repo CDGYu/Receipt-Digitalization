@@ -47,6 +47,7 @@ Accepted; supersede it with a new ADR rather than editing history.
 | [0039](0039-the-local-path-is-a-liveness-check.md) | The local path is a liveness check, not a measurement | Accepted |
 | [0040](0040-what-field-accuracy-counts.md) | What eval field accuracy counts, and the three things it used to average | Accepted |
 | [0041](0041-the-review-outcome-takes-focus.md) | The review outcome takes focus, so a 403 is not invisible | Accepted |
+| [0042](0042-a-cited-commit-must-stay-reachable.md) | A cited commit must stay reachable, and a rewrite carries its citations | Accepted |
 
 Read **0001** first: it is the invariant everything else defers to. **0007** is
 the one to read before touching anything that writes card data or money, and
@@ -153,6 +154,22 @@ Containment is pinned nowhere else: not on the backend-down explanation, and not
 on a future outcome rendered as a sibling (measured, both leave the suite
 green). The inline field error is deliberately outside the region per ADR-0024
 decision 5, and nothing can certify that anything was *seen*.
+**0042** is the one to read before citing a commit, before rewriting history
+that other documents cite, or before writing about a commit no ref can reach. A
+branch replayed onto `main` rather than merged left nine citations in three
+tracked files naming commits nothing could resolve — every claim still true, and
+none of them checkable. `tests/test_sha_citations.py` now requires every
+backticked seven-character hex token in a tracked file to name a commit
+**reachable from some ref**: reachability and not existence, because `git
+cat-file -e` succeeds on an orphan until someone runs `git gc`, so an existence
+check would have been green through the whole defect; any ref and not `main`,
+because an ADR is committed before its merge and legitimately cites its own
+branch. **Decision 5 is the one that bites while you write** — the backticked
+short form *is* the citation, so a document about a dead commit names it bare or
+at full oid length, and a sentence cannot show an example of the form without
+instantiating it, which leaves a live commit as the only safe illustration.
+**Read it with ADR-0032's `## Correction (2026-08-13)`**, the decision it
+overturns: a closed anchor's claim is permanent, its retrievability is not.
 
 Primary sources these build on: `RECEIPT_SYSTEM_SPEC.md` (build spec),
 `README.md` (§5 design decisions), `VLM_AND_DATA.md`, and the always-on
