@@ -7,20 +7,21 @@ verified rather than trusted — is **ADR-0019**, extended by **ADR-0021** (whos
 2026-08-02 dated correction widened the freshness check after a docs-only task
 proved invisible to it).
 Last updated: **2026-08-13**, most recently by the session that fixed
-`scripts/verify.py`'s docstring and then closed the freshness gap that fix
-exposed. Earlier the same day: the close of the session that made a cited commit
-stay reachable (**ADR-0042**), which cleared the nine dangling citations the
-2026-08-12 replay left behind. **No count of refreshes is written here** — it is
-a number that moves without its sentence changing, which is review standard 5.
+`scripts/verify.py`'s docstring, closed the freshness gap that fix exposed, and
+then made the freshness check a gate. Earlier the same day: the close of the
+session that made a cited commit stay reachable (**ADR-0042**), which cleared the
+nine dangling citations the 2026-08-12 replay left behind. **No count of
+refreshes is written here** — it is a number that moves without its sentence
+changing, which is review standard 5.
 
-**ONE position, because nothing is in flight: freshness anchor `1f8e86e`** —
+**ONE position, because nothing is in flight: freshness anchor `5a530f4`** —
 the last commit on `main` that is not this handoff pair.
 **`git rev-parse main` will be AHEAD of it**, by the pair commit and nothing
 else: a stamp cannot name the commit that writes it. The test is a command,
 not a commit and not a count:
 
 ```
-git log --oneline 1f8e86e..main -- ":(top,exclude)docs/MEMORY.md" ":(top,exclude)docs/NEXT_SESSION_PROMPT.md"
+git log --oneline 5a530f4..main -- ":(top,exclude)docs/MEMORY.md" ":(top,exclude)docs/NEXT_SESSION_PROMPT.md"
 git log --oneline refs/remotes/origin/main..main   # what a push would send
 git ls-remote --heads origin main                  # authoritative on what is pushed
 git branch --no-merged main                        # must name NOTHING
@@ -39,9 +40,14 @@ tree as it grows: a path is watched unless it is one of the two excluded.
 **`:(top,...)` is not decoration.** Spelled `-- . ":(exclude)…"` the command
 goes silently empty from a subdirectory; spelled `-- ":(exclude)…"` it
 false-alarms on a pair-only commit from a subdirectory. Only the top-anchored
-form is right in both directions from anywhere, and the correction carries the
-measurement. **If you retype this command, retype `:(top,`** — the two shorter
-spellings both look correct and fail quietly.
+form is right in both directions from anywhere.
+
+**This command is now gated, and it is the first thing here that is.**
+`tests/test_freshness_check.py` parses it out of this file — extracted, never
+retyped — and runs it against a throwaway repository holding one commit of each
+shape, from the root and from a subdirectory. Break the command and the suite
+goes red naming this line. **It does not check that the pair is fresh**, only
+that the check still works; staleness is still yours to read.
 
 **No characterisation of the anchor is written here on purpose** — an earlier
 stamp called its SHA "the last *code* commit", and the next commit falsified
@@ -62,7 +68,7 @@ bundling them with an ADR or an index row lists itself as stale. That happened
 three times in the session that wrote ADR-0033. Everything substantive was
 committed first.
 
-*(The previous stamp was 2026-08-13 at `main @ 95113eb`.)*
+*(The previous stamp was 2026-08-13 at `main @ cc3f257`.)*
 
 ## Snapshot
 

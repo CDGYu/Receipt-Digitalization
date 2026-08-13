@@ -1319,12 +1319,18 @@ cited commit must now stay reachable, merged and pushed on 2026-08-13 (§0f).
 this.** If it lists anything, the tree moved after this was written — re-run
 `python scripts/verify.py` and re-read §0f before acting.
 
-**And there is now a gate for one narrow slice of this document's own
-honesty.** `python -m pytest tests/test_sha_citations.py` fails if any
-backticked seven-character hex token in a tracked file names a commit no ref can
-reach. It says nothing about whether a sentence here is *true* — every defect
-found on the branch that added it was found by re-derivation, **none by a
-gate**, and the gates were green throughout.
+**And there are now two gates on narrow slices of this document's own honesty.**
+`tests/test_sha_citations.py` fails if any backticked seven-character hex token
+in a tracked file names a commit no ref can reach.
+`tests/test_freshness_check.py` fails if the freshness command above stops
+detecting what it exists to detect — it parses the command out of the stamp and
+exercises both of its properties, from the root and from a subdirectory.
+
+**Neither says whether a sentence here is *true*.** The second one exists
+because the command it guards had been silently broken twice, each time found by
+a person reading it. Every defect found on the branch that added the first was
+found by re-derivation, **none by a gate**, and the gates were green throughout.
+Freshness itself is still unchecked by anything: run the command.
 
 **Then** pick from the START HERE index, or answer the questions above and let
 that pick for you.
