@@ -768,4 +768,30 @@ describe('every class the admin components reference exists in its stylesheet', 
       expect(missing, `${tsx} reaches classes ${css} does not declare`).toEqual([])
     }
   })
+
+  // The other direction, and it is not symmetry for its own sake. The check
+  // above can only fail on a reference with no declaration, so deleting a
+  // `className` outright is invisible to it -- measured 2026-08-14 by deleting
+  // `<div className={styles.grid}>` from `StatTiles.tsx`, which is the whole of
+  // the fix for the caption defeating `auto-fit`: vitest 377/377, `tsc -b` clean,
+  // build green, and the tiles render as four full-width rows. `stylesheets.ts`'s
+  // census audits declarations without asking whether anything reaches them, and
+  // `value.test.tsx` carries this direction only for the components in its own
+  // COMPONENTS list, which these three are not in.
+  //
+  // The bound: `referencedClasses` matches `styles.NAME` only, so a class reached
+  // by dynamic indexing -- `styles[tone]`, which `ui/Chip` does -- is invisible to
+  // it and would fail here. Measured when this was written: none of the three
+  // components indexes `styles` at all, and `declared \ referenced` is empty for
+  // all three. If one gains dynamic indexing, the answer is a computed list, the
+  // way `value.test.tsx` holds one, not an exception.
+  it('reaches every class its stylesheet declares, so a rule cannot be left dead', () => {
+    for (const { tsx, css } of GUARDED) {
+      const declared = declaredClasses(readAdminFile(css))
+      const referenced = referencedClasses(readAdminFile(tsx))
+      expect(declared.size, `${css} declares no classes`).toBeGreaterThan(0)
+      const dead = [...declared].filter((name) => !referenced.has(name))
+      expect(dead, `${css} declares classes ${tsx} never reaches`).toEqual([])
+    }
+  })
 })
