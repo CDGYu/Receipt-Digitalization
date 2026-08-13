@@ -139,8 +139,10 @@ starting with this one.
 
 **At the anchor the weaker bound admitted nothing extra.** At `e698aca`, tokens
 resolving to a commit **reachable only from a branch and not from `main`: 0** —
-on the day the rule was chosen, a `main`-anchored rule would have rejected
-nothing this repository had already written. **Do not read that 0 as a current
+so on the day the rule was chosen, a `main`-anchored rule would have rejected
+nothing the any-ref rule **accepted**. It would still have rejected the nine
+citations this ADR exists to record: at that anchor they named two commits no ref
+reached, so `main` did not reach them either. **Do not read that 0 as a current
 figure.** It is closed to `e698aca`, and a branch that documents its own work
 moves it by construction: the citations this file carried into its first commit
 **included branch-only ones**, which is the case the bound exists for rather than
