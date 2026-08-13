@@ -368,6 +368,26 @@ inside the region it qualifies, not above it.
 sentence inside the `Queue statistics` region, and `stylesheets.test.ts` pins
 `.caption`'s declarations. **Nothing measures where it sits**:
 `grid-column: 1 / -1` is text to the census and geometry to nobody.
+**[Corrected 2026-08-14 — "declared to span the grid" was this fix's own defect,
+and it is undone.** `grid-column: 1 / -1` put the caption across every repeated
+track, and `auto-fit` collapses only a track that no in-flow item occupies *or
+spans* (CSS Grid §7.2.2.1) — so nothing collapsed and `auto-fit` sized exactly as
+`auto-fill`. Measured in Chromium against the shipped declarations at a 1440px
+viewport: six tracks of ~218.7px, the four tiles 219px wide, and 469px of the row
+blank; the same row before the caption existed computes
+`336px 336px 336px 336px 0px 0px`. At 1024 both shapes compute the same four
+232px tracks — and 1024 is the width of this finding's own evidence capture,
+which is why nothing showed it. The caption is now a **sibling** of the grid:
+`.tiles` is a flex column holding the caption and a new `.grid` element that
+carries the grid declarations, and the measured track list is again
+`336px 336px 336px 336px 0px 0px`. It is still the region's first child, still
+inside `Queue statistics`, and still heads all four tiles rather than labelling
+the first. `grid-column: 1 / 2` was rejected: it restores the row by the same
+collapsing mechanism but makes the caption a label on the first tile. **The
+`grid-column: 1 / -1` clause above is superseded with it; "nothing measures where
+it sits" is not.** No gate computes a track list — the census reads `.grid`'s
+declarations as text, the measurement above is a one-off Chromium run, and
+nobody has looked at this screen.**]**
 
 **I9 — The 503 state says the same thing twice, floating on an empty page.**
 "The database is unavailable — nothing can be saved right now." sits directly

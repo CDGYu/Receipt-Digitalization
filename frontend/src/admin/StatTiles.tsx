@@ -66,10 +66,16 @@ export function StatTiles({ metrics }: { metrics: Metrics }) {
           caption naming reviewers would be false of the rate tile, and one
           calling every figure a count would be false of it too. */}
       <p className={styles.caption}>System-wide, not only your tasks</p>
-      <Tile label="Open backlog" value={countOf(queue?.open)} />
-      <Tile label="In progress" value={countOf(queue?.in_progress)} />
-      <Tile label="Done" value={countOf(queue?.done)} />
-      <Tile label="Auto-approval rate" value={metrics.auto_approval_rate} />
+      {/* The tiles get an element of their own so that the caption is not a grid
+          item: a caption spanning the tracks stops `auto-fit` collapsing any of
+          them. The stylesheet's own note carries the mechanism and the
+          measurement. */}
+      <div className={styles.grid}>
+        <Tile label="Open backlog" value={countOf(queue?.open)} />
+        <Tile label="In progress" value={countOf(queue?.in_progress)} />
+        <Tile label="Done" value={countOf(queue?.done)} />
+        <Tile label="Auto-approval rate" value={metrics.auto_approval_rate} />
+      </div>
     </section>
   )
 }

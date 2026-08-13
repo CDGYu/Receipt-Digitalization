@@ -287,8 +287,12 @@ const CENSUS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
     '.truncated': 'margin, color, font-size, line-height',
   },
   'admin/StatTiles.module.css': {
-    '.tiles': 'display: grid, grid-template-columns, gap, margin, padding',
-    '.caption': 'grid-column, margin, color, font-family, font-size, line-height',
+    '.tiles': 'display: flex, flex-direction: column, gap, margin, padding',
+    '.caption': 'margin, color, font-family, font-size, line-height',
+    // The grid is on `.grid` and not on `.tiles` because a caption spanning the
+    // tracks stops `auto-fit` collapsing any of them; the rule's own docblock
+    // carries the measurement.
+    '.grid': 'display: grid, grid-template-columns, gap',
     '.tile':
       'display: flex, flex-direction: column, gap, box-sizing: border-box, padding, border, border-radius, background, box-shadow',
     '.label':

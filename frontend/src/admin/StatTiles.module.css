@@ -11,20 +11,38 @@
  *
  * ## Placed by class
  *
- * `.tiles` is a grid; `.caption` and `.tile` are its items. Nothing selects a
- * child by position, so the day a fifth tile lands -- or the four are
- * reordered -- the layout is unchanged. `ReviewScreen.module.css` records what
- * the other approach costs.
+ * `.grid` is the grid and `.tile` is its only item; `.tiles` is the region that
+ * stacks the caption above it. Nothing selects a child by position, so the day a
+ * fifth tile lands -- or the four are reordered -- the layout is unchanged.
+ * `ReviewScreen.module.css` records what the other approach costs.
  *
  * `auto-fit` with a `minmax` floor rather than a fixed `repeat(4, 1fr)`: four
  * tiles at 1fr each on a narrow window squeeze "Auto-approval rate" onto three
  * lines under a two-character number. The floor is what makes them wrap to two
  * rows instead, and it is expressed in `rem` so it follows the reader's text
- * size rather than fighting it. */
+ * size rather than fighting it.
+ *
+ * ## The caption is outside the grid, and that is what leaves `auto-fit` working
+ *
+ * `auto-fit` collapses a repeated track that no in-flow item occupies *or spans*
+ * (CSS Grid section 7.2.2.1). A caption declared `grid-column: 1 / -1` spans
+ * every track, so no track is ever empty, nothing collapses, and `auto-fit`
+ * sizes exactly as `auto-fill` would. Measured in Chromium at a 1440px viewport,
+ * with that declaration: six tracks of ~218.7px, the four tiles 219px wide, and
+ * 469px of the row blank. With the caption outside the grid: `336px 336px 336px
+ * 336px 0px 0px`, which is the track list this row had before a caption existed.
+ * Hence a `.grid` element between the region and the tiles -- which is also what
+ * keeps the caption ahead of every tile in reading order and a heading for all
+ * four rather than a label on the first, the thing `grid-column: 1 / -1` was
+ * reaching for.
+ *
+ * At 1024px the two shapes are the same four 232px tracks: four tiles fill four
+ * tracks and there is nothing to collapse. 1024 is the width of the finding's
+ * own evidence capture, which is why this was invisible for as long as it was. */
 
 .tiles {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  display: flex;
+  flex-direction: column;
   gap: var(--space-xl);
   margin: 0;
   padding: 0;
@@ -35,16 +53,21 @@
  * backlog directly above "No open tasks, and none assigned to you". The empty
  * state names its scope already; this is the other half of that symmetry.
  *
- * Muted and small: it qualifies the figures, it is not one of them. Spanning
- * the grid so it reads as a heading for all four tiles rather than a label
- * belonging to the first. */
+ * Muted and small: it qualifies the figures, it is not one of them. It sits
+ * above the whole grid rather than inside it, so it reads as a heading for all
+ * four tiles rather than a label belonging to the first. */
 .caption {
-  grid-column: 1 / -1;
   margin: 0;
   color: var(--color-muted-foreground);
   font-family: var(--font-sans);
   font-size: var(--text-sm);
   line-height: 1.5;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  gap: var(--space-xl);
 }
 
 .tile {
