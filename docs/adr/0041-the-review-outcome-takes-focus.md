@@ -9,7 +9,7 @@ div`'s own record), ADR-0028 (claims about the tree are re-derived), ADR-0029
 (what the gates certify and what they cannot), ADR-0033 (a correction goes to
 every copy)
 
-Derived 2026-08-12 on `feat/review-outcome-focus` at `5a7fc58`. **Re-derive
+Derived 2026-08-12 on `feat/review-outcome-focus` at `99f0207`. **Re-derive
 rather than quote** (ADR-0028 rule 1): the design this implements was written
 before the code, and the finding it closes understated itself. Every number
 below came out of one of the three probes described here on the day this was

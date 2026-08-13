@@ -23,7 +23,7 @@ Design: `docs/superpowers/specs/2026-08-12-review-outcome-focus-design.md`. Read
 - Frontend gates: `npm test` (Vitest), `npm run typecheck`, `npm run build`. **Vitest sets `css: false`**, so class names are unpinnable by rendering tests — guard CSS by reading the stylesheet as text.
 - **Stage by explicit path, never `git add -A`.** Verify with `git diff --cached --stat` before committing.
 - **The destructive-commands hook false-positives on reading config files via `cat`/`sed`.** Use the Read tool.
-- **This plan's claims about existing artefacts were probed at `d2fffc0`, not recalled.** They can still be wrong. Read the real file before trusting any line here that describes one, and **report the discrepancy rather than working around it** — every plan defect across the last eleven milestones was the controller's.
+- **This plan's claims about existing artefacts were probed at `e0481f4`, not recalled.** They can still be wrong. Read the real file before trusting any line here that describes one, and **report the discrepancy rather than working around it** — every plan defect across the last eleven milestones was the controller's.
 
 ## File Structure
 
@@ -280,7 +280,7 @@ and define `hasOutcome` beside the other derived values:
 
 **Preserve the "different parent" property.** Approve is now a *sibling* of the region and *Next receipt* lives inside it, so the two are in different parents by construction — a stronger version of what the existing comment achieves with the ternary. Keep that comment, adjusting only what became inaccurate.
 
-**No import change is needed.** Measured at `d2fffc0`: `ReviewScreen.tsx`'s first line is already `import { useCallback, useEffect, useRef, useState } from 'react'`. Re-read it rather than trusting this sentence; if it differs, that is a plan defect and I want it reported.
+**No import change is needed.** Measured at `e0481f4`: `ReviewScreen.tsx`'s first line is already `import { useCallback, useEffect, useRef, useState } from 'react'`. Re-read it rather than trusting this sentence; if it differs, that is a plan defect and I want it reported.
 
 - [ ] **Step 5: Add the CSS and its census entry**
 
@@ -318,7 +318,7 @@ cd frontend && npx vitest run && npm run typecheck && npm run build
 
 Expected: all pass, including the five new tests and the census.
 
-**If a pre-existing test fails, stop and report it rather than editing it.** The probe at `d2fffc0` found that the terminal card is queried by text and role, not by structure — so a wrapper should break nothing. `review-null-rule.test.tsx` is the file with structural queries (`parentElement`, `closest`, `querySelector`), but they target the form and the line-items table, not the outcome. If that probe was wrong, the plan is wrong and I want to know.
+**If a pre-existing test fails, stop and report it rather than editing it.** The probe at `e0481f4` found that the terminal card is queried by text and role, not by structure — so a wrapper should break nothing. `review-null-rule.test.tsx` is the file with structural queries (`parentElement`, `closest`, `querySelector`), but they target the form and the line-items table, not the outcome. If that probe was wrong, the plan is wrong and I want to know.
 
 - [ ] **Step 7: Prove the pins red BY MUTATION — this step is the point of the task**
 
@@ -461,7 +461,7 @@ In `docs/adr/README.md`, append to the table, matching the existing row format e
 
 Then add a prose paragraph below the table in the style of the `**0040**` paragraph that precedes it.
 
-**Check the table is still complete before you add to it:** `ls docs/adr/*.md | grep -v README | wc -l` against `grep -cE '^\| \[00[0-9][0-9]\]' docs/adr/README.md`. They were 40 and 40 at `d2fffc0`; if they disagree, say so — that table has silently fallen behind before.
+**Check the table is still complete before you add to it:** `ls docs/adr/*.md | grep -v README | wc -l` against `grep -cE '^\| \[00[0-9][0-9]\]' docs/adr/README.md`. They were 40 and 40 at `e0481f4`; if they disagree, say so — that table has silently fallen behind before.
 
 - [ ] **Step 3: Give I5 its verdict line**
 
@@ -587,3 +587,19 @@ and in ADR-0041, which carries the corrected copies:
    the milestone's Critical. Measured: a role-less `<p>` sibling under
    `hasOutcome` leaves the suite at **372/372**. The claim reached four
    documents, including a test's own name, before anyone falsified it.
+
+### 2026-08-13 — the probe anchor was orphaned by the merge replay
+
+Every d2fffc0 in the body above now reads `e0481f4` — the dead token is written
+bare here for the reason ADR-0042 gives. The two are the same
+change — `git show` of each produces byte-identical patches — but the branch was
+replayed onto `main` at the merge rather than fast-forwarded, so the original
+commit is reachable from no ref and the four citations named nothing a reader
+could look up.
+
+**No claim in this plan changed.** A citation is a pointer, and it now points at
+the commit that carries the tree the probes were run against. The counts in the
+ADR-table step are deliberately untouched: 40 and 40 were correct at that commit
+and are 41 and 41 today, which is that step's check working.
+
+The general rule is ADR-0042, and `tests/test_sha_citations.py` enforces it.
