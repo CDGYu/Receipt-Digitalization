@@ -964,3 +964,31 @@ not run. Anything they find is appended here.
     remedied by deletion, and every one written in the sentence explaining a fix
     rather than in the fix.** The pattern is stable enough to state as a rule: on
     this branch the risk was never in the change, it was in the prose justifying it.
+
+13. **Task 5's brief dated all three findings 2026-08-13; two of them are
+    2026-08-14.** `git log --date=iso` puts I6's fix at 23:19 on the 13th and the
+    tiles reword, the copy split and the frame all after midnight. One command
+    refutes the brief. The implementer changed the dates rather than transcribing
+    what it was given.
+
+14. **Task 5's brief cited the wrong document for its own precedent.** It told the
+    implementer that the browser-pass report's I5 entry already used a "FIXED AND
+    MEASURED, not SEEN" form and to follow it. It did not — `grep MEASURED` over
+    that report returns only the rows this task wrote. The phrase lives in
+    `docs/NEXT_SESSION_PROMPT.md`; the controller conflated two documents. The
+    implementer anchored on **ADR-0041's acceptance bullet** instead, quoted
+    verbatim after reading it. **Second time on this branch a controller citation
+    was checked and found pointing at the wrong file.**
+
+15. **The controller's correction to I9 over-reached, and the over-reach shipped
+    into the report before review caught it.** The brief said the finding's "near
+    the top-left" half "was never true of the shipped stylesheet", because `.notice`
+    has always carried `max-width: 40rem; margin: 0 auto`. That reasoning holds only
+    above 640px. **`40rem` is 640px, the browser pass captured these error states at
+    375 as well as 1440, and `var/e2e/visual/` still holds the 375 captures** — at
+    that width the box fills the viewport and its contents sit at the left padding,
+    so the original finding was accurate there. The finding was wrong at 1440 and
+    right at 375; the correction asserted it was never right. **A correction to an
+    over-reaching claim that over-reaches in the opposite direction** — the fifth
+    instance of this shape on the branch, and the first written by the controller
+    into a brief rather than by an implementer into a comment.
