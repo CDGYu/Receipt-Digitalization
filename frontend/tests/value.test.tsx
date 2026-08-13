@@ -532,10 +532,9 @@ const COMPONENTS: readonly GuardedComponent[] = [
   // proxy's echo of the component's own reference, so the DOM assertion in
   // `review-screen.test.tsx` proves the TSX side alone, and
   // `stylesheets.test.ts` audits the stylesheet without asking whether anything
-  // applies it. A rename on one side only is invisible to both. Measured when
-  // this entry was added: renaming `styles.noticeFailed` in the TSX, and
-  // renaming `.noticeFailed` in the CSS, each fail here -- and the DOM
-  // assertion stays green through both.
+  // applies it. Measured when this entry was added: renaming
+  // `styles.noticeFailed` in the TSX, and renaming `.noticeFailed` in the CSS,
+  // each fail here -- and the DOM assertion stays green through both.
   {
     name: 'ReviewScreen',
     tsx: 'review/ReviewScreen.tsx',
