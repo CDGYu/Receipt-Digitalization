@@ -190,8 +190,10 @@ committed first.
   authorization was consumed by it**. The standing ask-first rule for `main`
   continues — **the next push needs its own fresh ask.**
   pytest on `main`: **979**; Vitest **346 across 25 files**; five gates PASS.
-- **All 14 merged `feat/*` branches are ancestors of `main`, and all are
-  pushed** — including `feat/review-ui-styling` at `be6d7c0`. Audited
+- **Every merged `feat/*` branch is an ancestor of `main`, and all are
+  pushed** — **no count is written here**; this bullet read "All 14" until
+  2026-08-13, by which time there were more. `git branch -a --no-merged main`
+  is the check, and it must name nothing. Audited
   2026-08-05 for the first 13: `git branch --no-merged main` named none of them
   and every one adds **+0** commits, so they are historical merge points, kept
   per the standing rule.

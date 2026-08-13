@@ -57,9 +57,14 @@ pushes is written here** — an earlier version of this paragraph enumerated the
 the list rotted twice on 2026-08-11, and the commit that replaced it with "no
 count is written down" wrote a count in the same sentence.
 **Every merged `feat/*` branch is kept at its merge point and pushed**;
-`git branch -r --merged main` is the answer, and it names no SHA so nothing in
-it can be severed — but it reads a local cache, so `git ls-remote` is what is
-authoritative about the remote. Run
+`git branch -r --merged main` answers **reachability only, which is weaker than
+that rule** — it passed throughout the period `feat/eval-field-accuracy`'s remote
+ref sat six commits behind its merge point (found and fast-forwarded 2026-08-13).
+Being reachable from `main` is not the same as being *at* the merge point, and
+comparing each local ref with its `origin/` counterpart is what catches the
+difference. The command names no SHA, so nothing in it can be severed, but it
+reads a local cache — `git ls-remote` is what is authoritative about the remote.
+Run
 `git log --oneline refs/remotes/origin/main..main` rather than believing this
 sentence — empty means nothing is waiting to go, and the pair commit that
 writes this necessarily lands after any push it could record.
