@@ -168,8 +168,10 @@ branch. **Decision 5 is the one that bites while you write** — the backticked
 short form *is* the citation, so a document about a dead commit names it bare or
 at full oid length, and a sentence cannot show an example of the form without
 instantiating it, which leaves a live commit as the only safe illustration.
-**Read it with ADR-0032's `## Correction (2026-08-13)`**, the decision it
-overturns: a closed anchor's claim is permanent, its retrievability is not.
+**Read it with ADR-0032's `## Correction (2026-08-13)`**, which **corrects**
+decision 3 rather than overturning it: a closed anchor's claim is permanent, its
+retrievability is not, and decision 3's ordering survives, qualified — a closed
+SHA is still better than a moving ref, it is simply not permanent.
 
 Primary sources these build on: `RECEIPT_SYSTEM_SPEC.md` (build spec),
 `README.md` (§5 design decisions), `VLM_AND_DATA.md`, and the always-on

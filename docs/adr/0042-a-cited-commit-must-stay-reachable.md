@@ -128,16 +128,24 @@ sitting in the store.
 
 An ADR records the tree it was derived from and is committed **before** its
 merge, so it legitimately cites a commit that is on the branch and not yet on
-`main`. **This ADR is an instance of exactly that**: it cites `42e8483`, which is
-on this branch and not on `main` — `git merge-base --is-ancestor 42e8483 main`
-exits non-zero — and ADR-0041's own derivation line records the branch commit it
-was probed at. CI fires on every push (ADR-0037), so a `main`-anchored rule would
-fail every branch that documents its own work, starting with this one.
+`main`. **This ADR was an instance of exactly that when it was committed**: it
+cites `42e8483`, which was then on this branch and not on `main`. Re-derive with
+`git merge-base --is-ancestor 42e8483 main`, which answered non-zero on
+2026-08-13 and answers zero once this branch lands — both answers are expected,
+and neither makes the sentence wrong. ADR-0041's own derivation line records the
+branch commit it was probed at. CI fires on every push (ADR-0037), so a
+`main`-anchored rule would fail every branch that documents its own work,
+starting with this one.
 
-The weaker bound costs nothing measurable today. At `e698aca`, tokens resolving
-to a commit **reachable only from a branch and not from `main`: 0.** And it
-still catches this defect, because a replay orphans its commits from **every**
-ref, not merely from `main`.
+**At the anchor the weaker bound admitted nothing extra.** At `e698aca`, tokens
+resolving to a commit **reachable only from a branch and not from `main`: 0** —
+on the day the rule was chosen, a `main`-anchored rule would have rejected
+nothing this repository had already written. **Do not read that 0 as a current
+figure.** It is closed to `e698aca`, and a branch that documents its own work
+moves it by construction: the citations this file carried into its first commit
+**included branch-only ones**, which is the case the bound exists for rather than
+a cost it failed to anticipate. And the weaker bound still catches this defect,
+because a replay orphans its commits from **every** ref, not merely from `main`.
 
 **The limit is `git rev-list --all`, which answers over the refs the running
 clone has.** A citation to a commit that exists only on an unpushed local branch
@@ -234,10 +242,25 @@ rewrite a historical document's substance.
 ### 7. The nine were remapped, not deleted
 
 Every one of the nine sentences is a derivation record — *"I probed the tree at
-X; re-derive rather than trust me."* The anchor is the point of the sentence,
-which is the one case ADR-0032 decision 3 grants that a number earns its
-maintenance cost. Deleting the anchor would leave the next reader unable to tell
-a stale probe from a wrong one.
+X; re-derive rather than trust me."* The anchor is the point of those sentences,
+so deleting it would leave the next reader unable to tell a stale probe from a
+wrong one.
+
+**This sits in tension with ADR-0032 decision 3, which does not grant the case —
+it excludes it.** Decision 3's words are that a count is worth its anchor's
+maintenance cost *"only where the count is the point. A freshness stamp earns it.
+**An ADR does not.**"* One of the nine remapped anchors is ADR-0041's own
+derivation line, so decision 3 read literally says that anchor should not have
+been written at all.
+
+**This ADR governs for derivation anchors, and decision 3 continues to govern
+counts** — which is what decision 3's own text is about. The ground for the split
+is narrow: a derivation anchor is not a count. It is the identifier of the tree a
+claim was measured against, and ADR-0028 rule 2 obliges a writer to record the
+method beside the result — a method needs a tree to have been run against, and a
+commit is how this repository names one. Whether
+an ADR should carry a derivation anchor at all is a live disagreement between two
+Accepted decisions, and it is named here rather than papered over.
 
 ## Consequences
 
@@ -308,9 +331,16 @@ anchors and their numbers live.
 whether a token **resolves**, never whether a sentence is **right**, and it needs
 no human to interpret its output. A sweep does.
 
-**The six non-commit hex tokens** in ADR-0018, ADR-0027 and the browser-pass
-spec. Decision 4's rule does not match them, so there is nothing to fix and they
-stay exactly as they are. Narrowing the rule is what made them a non-question;
+**The six non-commit hex tokens** — a date, three Fira Code tabular-figure width
+samples, an Alembic revision id, and a PAN-masking example. **Named by kind
+rather than by file**, as the guard's docstring names them: they are spread
+across `docs/adr/`, `docs/superpowers/`, `semantic-review/` and
+`alembic/versions/`, so any short file list here would be a membership claim
+nothing checks — a right count laundering a wrong membership, which is review
+standard 23 and ADR-0032 decision 5. Regenerate their homes by scanning the
+tracked tree for backticked `[0-9a-f]{8,40}` rather than reading a list.
+Decision 4's rule matches none of them, so there is nothing to fix and they stay
+exactly as they are. Narrowing the rule is what made them a non-question;
 listing them as exceptions would have been the enumerated defence.
 
 **Whether any of this can be extended to prose.** It cannot, by ADR-0028's and

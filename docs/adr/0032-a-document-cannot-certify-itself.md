@@ -246,14 +246,19 @@ rather than `main`, and the rule that a document *about* an unreachable commit
 names it bare or at full oid length, because the backticked short form **is** the
 citation.
 
-**And the phrase does not find this bullet.** The claim has a second copy, in
-`docs/MEMORY.md`'s review standard 24. The copy above wraps between `True` at
-the end of one line and `forever.` at the start of the next, so
-`git grep "true forever"` misses this ADR entirely — case-insensitively too.
+**And the phrase does not find that bullet.** The claim has a second copy, in
+`docs/MEMORY.md`'s review standard 24. Decision 3's bullet wraps between `True`
+at the end of one line and `forever.` at the start of the next, so a grep for
+those two words as one phrase does not match it — case-insensitively either.
 Measured, on the sentence being repaired: a fix wave that greps the phrase
-corrects the other copy and leaves the Accepted decision standing. Grep one
-distinctive word — `forever`, or `Closed` — and read the hits, which is
-ADR-0028's Consequences and review standard 25 in the same sentence.
+corrects the other copy and leaves the Accepted decision standing.
+
+**This paragraph deliberately does not spell that phrase out.** Writing it here
+would make the phrase grep match this file, and the trap would stop reproducing
+from the one document that describes it — which is decision 2, a claim falsified
+by the commit that carries it, firing inside its own ADR. Grep one distinctive
+word — `forever`, or `Closed` — and read the hits, which is ADR-0028's
+Consequences and review standard 25 in the same sentence.
 
 ## References
 
