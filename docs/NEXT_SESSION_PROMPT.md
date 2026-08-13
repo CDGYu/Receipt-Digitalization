@@ -186,11 +186,10 @@ read route (**ADR-0031**) and the CLI `--limit` bound all shipped. §1.6's
    styling one records twenty-five plan defects and "THE CLOSE".
    **`.superpowers/` is gitignored — open ledgers by path; nothing in them is
    findable by searching the tracked tree.**
-3. **`docs/adr/README.md`, then the ADRs (0001–0040** — count the files rather
-   than trusting that range**).** *This* file's range has tracked each ADR as it
-   landed; it was **`docs/MEMORY.md`'s** copy that sat at `0001–0026` while four
-   more ADRs shipped, and it was corrected on 2026-08-10. Derived per-commit
-   with `git show <sha>:docs/NEXT_SESSION_PROMPT.md | grep -oE "0001.00[23][0-9]"`.
+3. **`docs/adr/README.md`, then the ADRs** — **no range is written here; count
+   them.** Compare the two answers **to each other** rather than to any number
+   in this file: `ls docs/adr/*.md | grep -v README | wc -l` (how many ADRs) and
+   `grep -cE "^\| *\[?0[0-9]{3}" docs/adr/README.md` (how many index rows).
    Mandatory before touching the matching area:
    - **0039** — the local path is a liveness check. **Read before running the
      eval harness or believing its output.** A local run prints the six §16

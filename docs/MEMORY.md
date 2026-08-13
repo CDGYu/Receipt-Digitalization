@@ -2059,10 +2059,25 @@ measured.**
       is a property of a sentence *at a commit*, and the commit boundary is not
       a safe unit.
     * **Anchors are where rot lives, so prefer no number to a well-anchored
-      one.** Closed anchors (a fixed SHA) are true forever; open ones (`HEAD`, a
-      growing range, a milestone *name*) rot silently with nothing going red.
-      Where a stamp is genuinely needed, hand over **the command, not the
-      answer** — which is what ADR-0019 already does for this file's own stamp.
+      one.** Open anchors (`HEAD`, a growing range, a milestone *name*) rot
+      silently with nothing going red. **And a closed anchor — a fixed SHA — is
+      durable only while the commit it names stays reachable.** Its claim stays
+      true forever; its *checkability* does not. A replay, rebase, amend or
+      force-push severs that without touching the citing document, and once
+      `git gc` prunes the object the token names nothing at all. The 2026-08-12
+      replay did exactly that to citations in this repository — every one of
+      them correctly derived when it was written — and **no gate saw it**.
+      `tests/test_sha_citations.py`, added 2026-08-13, is the gate that sees it
+      now: it goes red on a backticked seven-character hex token no ref can
+      reach. **ADR-0042** is the decision; ADR-0032's
+      `## Correction (2026-08-13)` corrects its decision 3.
+      **The ordering survives, qualified:**
+      no number > a number closed to a SHA > a number anchored to a moving ref
+      is unchanged, and a closed SHA is still strictly better than a moving ref
+      — it is at least true, where a moving ref stops being true. What it is not
+      is permanent. Where a stamp is genuinely needed, hand over **the command,
+      not the answer** — which is what ADR-0019 already does for this file's own
+      stamp.
 
 25. **The handoff pair goes last and alone, and a correction goes to every
     copy.** ADR-0033, earned at the corrections-read-route close, where three
@@ -2134,15 +2149,22 @@ with an entry point gets run from outside the repository.
 - `docs/NEXT_SESSION_PROMPT.md` — the ordered task list and reading order.
 - `IMPLEMENTATION_PLAN.md` · `README.md` (§5 design decisions) · `VLM_AND_DATA.md`
 - **`docs/KNOWN_ISSUES.md`** — ISSUE-001 with its diagnosis and resume steps.
-- **`docs/adr/` — 0001–0040** (re-derived at the 2026-08-12 merge:
-  `ls docs/adr/*.md` minus `README.md` counts **40**, the four-digit
-  prefixes are contiguous from 0001, and the index table carries **40 rows**
-  — it had **33 rows for 39 ADRs** until 2026-08-12, six milestones each having
-  added a prose paragraph and no row); see `docs/adr/README.md`. **This range read `0001–0026` until
-  2026-08-10** — it was written at ADR-0026 and never touched again while 0027,
-  0028, 0029 and 0030 landed. **Count the files; do not trust the range**, and
-  do not trust this sentence either the next time an ADR is added. Read
-  **0001** first;
+- **`docs/adr/`** — **no range is written here; derive it.** Compare the two
+  answers **to each other** rather than to any number in this file:
+  `ls docs/adr/*.md | grep -v README | wc -l` (how many ADRs) and
+  `grep -cE "^\| *\[?0[0-9]{3}" docs/adr/README.md` (how many index rows). They
+  must agree, and the four-digit prefixes are contiguous from 0001, so the file
+  count is also the highest ADR number. **The index is the half that lags** — it
+  sat below the file count until 2026-08-12, milestones having added a prose
+  paragraph and no index row. **A range written here rots and nothing goes
+  red:** this entry carried a stale one until 2026-08-10 — written at ADR-0026
+  and untouched while later ADRs landed — and carried another until 2026-08-13,
+  that second one in an entry that told the reader not to trust it, which
+  changed nothing, because **a warning addressed to a future reader is not a
+  check** (**ADR-0042** Context; ADR-0032 §3). Both are in
+  `git log -p -- docs/MEMORY.md`; no literal range is quoted back here, so a
+  sweep for a stale one does not land on this sentence. See
+  `docs/adr/README.md`. Read **0001** first;
   **0018 then 0020 (with corrections)** before touching `_PAN_RE`/`redact_pan`;
   **0022** before touching any failure-text egress; **0024** before touching
   the review UI's error surfaces (`failure.ts`, `stash.ts`,
