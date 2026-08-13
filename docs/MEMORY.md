@@ -31,8 +31,7 @@ written and you are reading something stale.
 **No characterisation of `0cdf6c9` is written here on purpose** — an earlier
 stamp called its SHA "the last *code* commit", and the next commit falsified
 that by editing a docstring under `src/`. **ADR-0032 §2**: a claim can be
-derived correctly and rot inside the commit that carries it. The SHA plus the
-command cannot rot; a sentence about what the SHA *is* can.
+derived correctly and rot inside the commit that carries it.
 
 **This refresh touches the pair and nothing else — ADR-0033 §1.** The freshness
 check excludes exactly these two files and watches `docs` otherwise, so a commit
@@ -241,7 +240,7 @@ rebase before merging, or keep the pair off `main` until the branch lands.
 - **No pre-merge commit SHA is cited here.** The replay described above gave
   every branch commit a new SHA, so the ranges this section originally named no
   longer exist in `main`'s history. `git log --oneline 7c8dcc5..cd308bf` is the
-  list, and it cannot go stale.
+  list.
 - **Task 1** — the outcome region and its focus effect. Review **Approved**, no
   Critical or Important. Controller reproduced **both** mutations personally:
   removing the focus call fails **three** tests on `expected <body> to be
@@ -2068,8 +2067,8 @@ measured.**
       replay did exactly that to citations in this repository — every one of
       them correctly derived when it was written — and **no gate saw it**.
       `tests/test_sha_citations.py`, added 2026-08-13, is the gate that sees it
-      now: it goes red on a backticked seven-character hex token no ref can
-      reach. **ADR-0042** is the decision; ADR-0032's
+      now: it goes red on a backticked seven-character hex token in a tracked
+      file that no ref can reach. **ADR-0042** is the decision; ADR-0032's
       `## Correction (2026-08-13)` corrects its decision 3.
       **The ordering survives, qualified:**
       no number > a number closed to a SHA > a number anchored to a moving ref
@@ -2162,9 +2161,7 @@ with an entry point gets run from outside the repository.
   that second one in an entry that told the reader not to trust it, which
   changed nothing, because **a warning addressed to a future reader is not a
   check** (**ADR-0042** Context; ADR-0032 §3). Both are in
-  `git log -p -- docs/MEMORY.md`; no literal range is quoted back here, so a
-  sweep for a stale one does not land on this sentence. See
-  `docs/adr/README.md`. Read **0001** first;
+  `git log -p -- docs/MEMORY.md`. See `docs/adr/README.md`. Read **0001** first;
   **0018 then 0020 (with corrections)** before touching `_PAN_RE`/`redact_pan`;
   **0022** before touching any failure-text egress; **0024** before touching
   the review UI's error surfaces (`failure.ts`, `stash.ts`,
