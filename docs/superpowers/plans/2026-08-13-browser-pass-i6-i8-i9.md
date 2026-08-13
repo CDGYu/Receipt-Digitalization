@@ -893,3 +893,21 @@ not run. Anything they find is appended here.
    `theme-control.test.tsx`, and two more in `docs/adr/0027` and `docs/adr/0029`
    carry the related rotted count; all are recorded for the whole-branch review.
    The body keeps the false sentence, per the rule at the head of this log.
+
+7. **The controller refuted a correct finding by truncating its own query.** During
+   Task 2 an implementer reported that *Done* also fails a distributive reading,
+   because a path closes tasks on auto-approval without a reviewer. It named the
+   function `close_task_for_receipt`, which does not exist. The controller grepped
+   `git grep -n "close_task" -- src | head`, saw the complete route as the only
+   caller, and recorded the finding as refuted. **`head` truncated the list.** The
+   real function is `close_review_for_receipt`; it calls `close_task`, it is called
+   from `pipeline.py`, and its own docstring says a task left open after
+   auto-approval "would keep inflating the `/metrics` backlog". So the implementer
+   was substantively right, a wrong function name was allowed to discredit a
+   correct claim, and the refutation was itself false. Caught by the scoped
+   re-review, which flagged it precisely so the refutation would not be recorded as
+   stated. **A universal claim is answered by an enumeration, not an argument, and
+   a query's anchor belongs beside its number** — both violated in the act of
+   correcting someone else for imprecision. No code changed: the shipped caption
+   claims scope rather than composition, so it is true under either account, which
+   is the property that made it the right choice.
