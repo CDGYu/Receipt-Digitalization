@@ -101,10 +101,10 @@ committed first.
   what it correctly left empty and what it said about itself, so an extraction
   containing **nothing at all** scored 42.50% / 37.50% / 36.59% against the
   three golden labels. See "Eval field accuracy" below.
-- **`main` is merged AND PUSHED.** **No count is written here** — every push is
-  on a one-time authorization the push consumes, an earlier version of this
-  bullet enumerated them, and the enumeration rotted. **The next `main` push
-  needs its own fresh ask.** Run
+- **Whether `main` is pushed is a command, not a sentence.** **No count is
+  written here** — every push is on a one-time authorization the push consumes,
+  an earlier version of this bullet enumerated them, and the enumeration rotted.
+  **The next `main` push needs its own fresh ask.** Run
   `git log --oneline refs/remotes/origin/main..main` rather than believing this
   sentence — empty means nothing is waiting to go.
 - **CI RUNS AGAIN** (2026-08-11, true fast-forward `a6c4392` → `743cacb`,

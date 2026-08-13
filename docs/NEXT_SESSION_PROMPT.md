@@ -20,7 +20,7 @@ it to "fix" a correct sentence in an Accepted ADR to match a wrong measurement.
 
 ---
 
-# NO BRANCH IN FLIGHT. `main` is MERGED AND PUSHED.
+# BRANCH AND PUSH STATE — the commands below are the answer, not this heading.
 
 **Do not expect `git rev-parse main` to equal the stamp's anchor.** It will be
 ahead of it by the pair commit, because a stamp cannot name the commit that
@@ -42,7 +42,7 @@ git ls-remote --heads origin main                 # authoritative on what is pus
 git log --oneline refs/remotes/origin/main..main  # what the pending push would send
 ```
 
-## `main` is merged and pushed — nothing is waiting to go.
+## What last merged, and how to check what is pushed.
 
 **The dangling-citation repair merged by true fast-forward on 2026-08-13** —
 `e698aca` → `29a5a88`, eighteen commits, single parent each, zero merge
@@ -1336,8 +1336,9 @@ and was measured not to need it.)*
 
 **Nothing is in flight, nothing is half-done, and nothing carries over.** A
 cited commit must now stay reachable, merged and pushed on 2026-08-13 (§0f).
-`git branch --no-merged main` should name nothing, and
-`git log --oneline refs/remotes/origin/main..main` should come out empty.
+**Run `git branch --no-merged main` and
+`git log --oneline refs/remotes/origin/main..main` rather than reading an answer
+here** — the header above says what each can legitimately show.
 
 **Run the freshness command in `docs/MEMORY.md`'s stamp before trusting any of
 this.** If it lists anything, the tree moved after this was written — re-run
