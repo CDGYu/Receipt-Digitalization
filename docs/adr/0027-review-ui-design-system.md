@@ -384,9 +384,9 @@ So **one Important finding, I7, the silent 401 swap**. The seven Minor findings
 The same paragraph's "**I5 and I7 touch ADR-0024's contract**, so neither is a
 drive-by fix" keeps only its I7 half — and that half is why I7 is the one left.
 
-**None of the four was closed by a person looking at it.** The three 2026-08-14
-rows say **MEASURED, NOT SEEN** in as many words, and the same status note
-records that ADR-0041 closed I5 on the same footing.
+**None of the four was closed by a person looking at it.** The I6, I8 and I9 rows
+say **MEASURED, NOT SEEN** in as many words, and the same status note records
+that ADR-0041 closed I5 on the same footing.
 
 ## References
 
