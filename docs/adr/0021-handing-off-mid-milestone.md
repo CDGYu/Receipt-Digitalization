@@ -187,17 +187,39 @@ out of the tracked pair — extracted, never retyped, or the test would certify 
 copy of itself — and runs it against a throwaway repository holding one commit of
 each shape, from the root and from a subdirectory, in both directions.
 
-**What it deliberately does not assert is that the pair is currently fresh.**
-That is state rather than mechanism: the stamp legitimately trails the tree for
-most of a working session, `scripts/verify.py` runs mid-session, and CI runs it on
-every push (ADR-0037), so a freshness assertion would be red through ordinary work
-and learned as noise. The pair being stale stays something a human reads. The
-command still working is the gate.
+**The state is gated too, as far as state can be.** Three properties of the last
+refresh, each fixed on a range that stops moving so ordinary work cannot redden
+them: the anchor was current when the pair was last written; that commit touched
+nothing but the pair (ADR-0033 §1, promoted from discipline to assertion); and the
+anchor is an ancestor of HEAD that is not itself a pair commit, which is decision 2
+above turned into a check.
 
-Proven red before it was believed: dropping `top,` from one exclude, swapping to
-`-- . ":(exclude)…"`, and restoring the old enumeration each turn the suite red —
-the first on the exclusion half, the other two on detection — and the stamp was
-restored byte-for-byte after each.
+The first is the one worth having. **A wrong anchor looks exactly like a right
+one** — the command still runs, still comes back empty, still reads as "current" —
+while measuring from too early a point and skipping everything before it. Nothing
+in the tree could previously tell those two apart.
+
+**What is still not asserted is that the pair is fresh right now**, because the
+stamp legitimately trails the tree for most of a working session, `scripts/verify.py`
+runs mid-session, and CI runs it on every push (ADR-0037): the assertion would be
+red through ordinary work and learned as noise. **Nor can anything catch a session
+that ended without refreshing the pair at all** — this repository's most expensive
+handoff failure, and one no gate can see, because no gate can observe a session
+ending. Both stay something a human reads.
+
+Proven red before any of it was believed, each mutation isolated to the assertion
+it should break. Mechanism: dropping `top,` from one exclude, swapping to
+`-- . ":(exclude)…"`, and restoring the old enumeration — the first breaking the
+exclusion half, the other two detection. State: re-pointing the anchor behind the
+refresh, and at the refresh itself. The bundling assertion was driven by `69429aa`,
+a real commit that carried the pair together with `docs/adr/0031` — one of the three
+incidents ADR-0033 was written about, so the check is known to fire on the defect it
+names rather than on a constructed likeness. Every touched file was restored
+byte-for-byte after each run.
+
+Measured while doing it: **33 of 112 pair-touching commits in this history bundled
+something else, and none of the most recent 30 did.** The discipline took hold when
+ADR-0033 was written; this keeps it held.
 
 ## References
 

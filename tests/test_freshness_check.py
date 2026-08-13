@@ -17,16 +17,28 @@ weeks apart in fact. This module runs it instead.
 
 What is gated, and what is not
 ------------------------------
-**Gated: the command still has both of its properties.** It must list a commit that
-is not the pair, and must not list a commit that is only the pair. A check that lost
-the first property reports "clean" for a tree that moved; one that lost the second
-false-alarms on the very commit that refreshes the pair, which is ADR-0033's finding.
+**The mechanism: the command still has both of its properties.** It must list a
+commit that is not the pair, and must not list a commit that is only the pair. A
+check that lost the first reports "clean" for a tree that moved; one that lost the
+second false-alarms on the very commit that refreshes the pair -- ADR-0033's finding,
+which cost three repair commits in one session.
 
-**Not gated: whether the pair is fresh right now.** That is state, not mechanism. The
-stamp legitimately trails the tree for the whole of a working session -- and
-``scripts/verify.py`` runs mid-session, and CI runs it on every push (ADR-0037) -- so
-asserting freshness here would be red through ordinary work and learned as noise. The
-pair being stale stays a thing a human reads; the command still working is a gate.
+**The state, as far as state can be gated.** Three properties of the last refresh,
+each fixed on a range that stops moving, so ordinary work does not turn them red: the
+anchor was current when the pair was last written; that commit touched nothing but
+the pair (ADR-0033 §1); and the anchor is an ancestor of HEAD that is not itself a
+pair commit (ADR-0021 decision 2, *a stamp cannot name the commit that writes it*).
+
+The first is the quiet one. A wrong anchor looks exactly like a right one, and every
+freshness run after it measures from the wrong baseline and under-reports -- the check
+answers confidently and answers about the wrong range.
+
+**Not gated: whether the pair is fresh right now.** The stamp legitimately trails the
+tree for the whole of a working session -- and ``scripts/verify.py`` runs mid-session,
+and CI runs it on every push (ADR-0037) -- so asserting that here would be red through
+ordinary work and learned as noise. Nor can anything here catch a session that ended
+without refreshing the pair at all, which is this repository's most expensive handoff
+failure: no gate can observe a session ending. Both stay something a human reads.
 
 Why the pathspec is extracted rather than written here
 ------------------------------------------------------
@@ -267,4 +279,148 @@ def test_every_live_copy_of_the_check_is_the_top_anchored_form() -> None:
         "settled on:\n" + "\n".join(wrong) + "\nNo inclusion paths -- every tracked "
         "path is watched because none is listed -- and the pair excluded "
         "top-anchored so the command means the same from any directory."
+    )
+
+
+# --------------------------------------------------------------------------------
+# The state half: three properties of the last refresh. Each is a claim about a
+# historical range rather than about now, which is what keeps it quiet while the
+# tree moves underneath it.
+# --------------------------------------------------------------------------------
+
+
+def _stamp_anchor() -> str:
+    """The commit the stamp measures from, parsed from its own command.
+
+    Read from ``docs/MEMORY.md`` alone. The prompt's copy carries a ``<STAMP>``
+    placeholder on purpose -- "a SHA in two places is a SHA that can disagree with
+    itself" -- so there is exactly one place this can be read from.
+    """
+    stamp = REPO_ROOT / PAIR[0]
+    for line in stamp.read_text(encoding="utf-8").splitlines():
+        words = shlex.split(line.strip()) if line.strip().startswith("git log") else []
+        if "--" not in words or not all(path in line for path in PAIR):
+            continue
+        span = words[words.index("--") - 1]
+        head, _, tail = span.partition("..")
+        if tail == "main" and len(head) == 7 and all(c in "0123456789abcdef" for c in head):
+            return head
+        pytest.fail(
+            f"the freshness command in {PAIR[0]} measures from {span!r}, which is not "
+            "the `<seven-hex>..main` form this module and `test_sha_citations` both "
+            "read. Either the stamp lost its anchor or the range was rewritten."
+        )
+    pytest.fail(f"no freshness command with an anchor found in {PAIR[0]}")
+
+
+def _changed_files(commit: str, *, cwd: Path) -> list[str]:
+    """The paths a commit changed, as forward-slash repository-relative strings."""
+    listed = _git("show", "--name-only", "--format=", commit, cwd=cwd).splitlines()
+    return sorted(path.strip() for path in listed if path.strip())
+
+
+def _outside_the_pair(commit: str, *, cwd: Path) -> list[str]:
+    """Paths in ``commit`` that are not the pair. Empty means a clean refresh.
+
+    Shared by the assertion over real history and by the synthetic control that
+    proves this detector can fail -- an assertion never shown failing is not a pin.
+    """
+    return [path for path in _changed_files(commit, cwd=cwd) if path not in PAIR]
+
+
+def _last_pair_commit() -> str:
+    """The most recent commit touching either pair file."""
+    found = _git("log", "-1", "--format=%h", "--", *PAIR, cwd=REPO_ROOT).strip()
+    if not found:
+        pytest.fail(
+            "no commit in this repository has ever touched "
+            + " or ".join(PAIR)
+            + ", which cannot be true of a tracked handoff pair. Something is wrong "
+            "with the query, not with the history."
+        )
+    return found
+
+
+def test_the_anchor_was_current_when_the_pair_was_last_written() -> None:
+    """The quiet defect: a stamp that measures from the wrong commit.
+
+    Nothing about a wrong anchor looks wrong. The command still runs, still comes
+    back empty, and still reads as "this pair is current" -- while measuring a range
+    that starts too early and skipping everything before it.
+    """
+    anchor = _stamp_anchor()
+    refresh = _last_pair_commit()
+    missed = _git(
+        "log", "--oneline", f"{anchor}..{refresh}", "--", *EXPECTED_PATHSPEC, cwd=REPO_ROOT
+    ).strip()
+    assert not missed, (
+        f"the stamp measures from `{anchor}`, but these commits landed between it and "
+        f"`{refresh}`, the commit that last wrote the pair:\n{missed}\nThe anchor is "
+        "therefore behind the refresh that set it, and every freshness run measures "
+        "from too early a point and under-reports. Re-point it at the last commit "
+        "that is not the pair (ADR-0021 decision 2)."
+    )
+
+
+def test_the_last_pair_commit_touched_nothing_else() -> None:
+    """ADR-0033 section 1, asserted instead of remembered.
+
+    A commit carrying the pair *plus* anything else lists itself in its own freshness
+    check, so the next reader is told the pair is stale in the very commit that wrote
+    it. That happened three times in one session and each needed a repair commit.
+    """
+    refresh = _last_pair_commit()
+    bundled = _outside_the_pair(refresh, cwd=REPO_ROOT)
+    assert not bundled, (
+        f"`{refresh}` wrote the handoff pair and also changed:\n"
+        + "".join(f"  {path}\n" for path in bundled)
+        + "so it lists itself in its own freshness check and reads as stale on "
+        "arrival. Commit everything substantive first, then the pair alone "
+        "(ADR-0033 section 1)."
+    )
+
+
+def test_the_bundling_detector_notices_a_bundled_commit(synthetic) -> None:
+    """The positive control for the test above, which passes by finding nothing.
+
+    Without this, that assertion is green both when the last refresh was clean and
+    when ``_outside_the_pair`` has quietly stopped returning anything at all.
+    """
+    root = synthetic["root"]
+    assert isinstance(root, Path)
+    (root / PAIR[0]).write_text("bundled refresh\n", encoding="utf-8")
+    (root / "scripts" / "verify.py").write_text("carried along\n", encoding="utf-8")
+    _git("add", "-A", cwd=root)
+    _git("commit", "-m", "refresh the pair AND change something else", cwd=root)
+
+    bundled = _outside_the_pair("HEAD", cwd=root)
+    assert bundled == ["scripts/verify.py"], (
+        "the bundling detector did not report a commit that changed the pair and "
+        f"scripts/verify.py together; it reported {bundled}. The assertion it backs "
+        "would then be green for the wrong reason."
+    )
+
+
+def test_the_anchor_is_an_ancestor_and_not_itself_a_pair_commit() -> None:
+    """ADR-0021 decision 2: a stamp cannot name the commit that writes it.
+
+    An anchor that is a pair commit makes the check measure from the refresh rather
+    than from the work before it, so the range is empty by construction and the
+    command answers "current" without ever having looked at anything.
+    """
+    anchor = _stamp_anchor()
+    result = subprocess.run(
+        ["git", "merge-base", "--is-ancestor", anchor, "HEAD"],
+        cwd=str(REPO_ROOT), capture_output=True, text=True, timeout=120,
+    )
+    assert result.returncode == 0, (
+        f"the stamp's anchor `{anchor}` is not an ancestor of HEAD, so the range it "
+        "names does not describe this history at all. A rebase or replay severs an "
+        "anchor without touching the document that cites it (ADR-0042)."
+    )
+    assert _outside_the_pair(anchor, cwd=REPO_ROOT), (
+        f"the stamp's anchor `{anchor}` is itself a commit touching only the pair. "
+        "The range then starts at the refresh instead of before it and is empty by "
+        "construction, so the check reports 'current' without looking at anything. "
+        "The anchor is the last commit that is NOT the pair (ADR-0021 decision 2)."
     )
