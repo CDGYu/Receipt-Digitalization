@@ -820,3 +820,59 @@ git commit -m "docs: dated verdicts for I6, I8 and I9, and I9's stale half"
 - **The handoff pair.** `docs/MEMORY.md` and `docs/NEXT_SESSION_PROMPT.md` are
   refreshed at session end, in a commit touching nothing else (ADR-0033 §1).
   No task above may touch them.
+
+---
+
+## Dated defect log
+
+**Read this before the body above.** The body does not self-amend: it records what
+was planned, and this log records where that plan was wrong. Every entry below is
+the controller's defect, which is where all of this project's plan defects have
+come from across eleven milestones — each one found by an implementer or reviewer
+who executed instead of trusting.
+
+**One distinction this log draws deliberately.** Defects found at the *pre-flight
+scan*, before any implementer was dispatched, were corrected **in the body**,
+because the task briefs are extracted from the body and a stale body hands an
+implementer wrong requirements. Defects found *during execution* are recorded here
+only, and the body keeps its original text — erasing it would destroy the evidence
+that the plan specified something false, which is the most useful thing a later
+reader can learn from it.
+
+### Corrected in the body at the pre-flight scan (2026-08-13, before Task 1)
+
+1. **Global Constraints contradicted Task 3.** They authorised "exactly two named
+   exceptions" to the pass-unmodified rule while Task 3 Step 1 names three, (a),
+   (b) and (c). An implementer honouring the constraint would have stopped at (c)
+   — the assertion that goes vacuous under the reword, and so the one that mattered
+   most.
+2. **Task 2's test called `screen.getByRole` with nothing rendered.** It would have
+   gone red with "unable to find role" rather than on the missing caption: a RED for
+   the wrong reason, sending an implementer after a defect that is not there. Its
+   four sibling tests each render `<StatTiles metrics={…} />` inline; there is no
+   `beforeEach`.
+3. **Task 3 Step 1 specified a test that could not fail.** It compared two string
+   constants declared in its own body, so it would have passed with both render
+   sites deleted. The plan labelled it vacuous and told a reviewer to delete it,
+   which is not a defence.
+
+### Found during execution — body left as written
+
+4. **Task 1's test fixture pinned one of the two `.map` blocks.** Step 1 specifies
+   an error on `'totals.total'`, which is a `MONEY_FIELDS` path, so deleting the
+   wrapper from the `TEXT_FIELDS` map left 21/21 passing and half the deliverable
+   unpinned. Found twice independently — by controller mutation and by the task
+   review. Closed in Task 1's fix round 1 by covering `'receipt.currency'` too.
+5. **Task 2's caption text was false.** The plan specified "Across all reviewers".
+   `queue_stats` groups `ReviewTask` by `state` and never reads `assigned_to`, and
+   an OPEN task is held by nobody by construction; the fourth tile is not a task
+   count at all — `auto_approval_rate` is a `Receipt.status` ratio with no review
+   task and no reviewer in it. The implementer flagged it, used the specified
+   wording verbatim as instructed, and reported; the task review then found the
+   fourth-tile half neither of us had. Replaced in Task 2's fix round 1 with
+   "System-wide, not only your tasks", which claims scope only — it negates a
+   restriction rather than asserting a composition, which is why it survives across
+   three task-state counts and one receipt ratio.
+
+**This log is incomplete while the plan is still executing.** Tasks 3, 4 and 5 have
+not run. Anything they find is appended here.
