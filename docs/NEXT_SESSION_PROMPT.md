@@ -1323,14 +1323,20 @@ this.** If it lists anything, the tree moved after this was written — re-run
 `tests/test_sha_citations.py` fails if any backticked seven-character hex token
 in a tracked file names a commit no ref can reach.
 `tests/test_freshness_check.py` fails if the freshness command above stops
-detecting what it exists to detect — it parses the command out of the stamp and
-exercises both of its properties, from the root and from a subdirectory.
+detecting what it exists to detect, and also if the last refresh was unsound —
+a stamp measuring from the wrong commit, a refresh commit that carried something
+else, or an anchor that is itself a pair commit.
 
-**Neither says whether a sentence here is *true*.** The second one exists
-because the command it guards had been silently broken twice, each time found by
-a person reading it. Every defect found on the branch that added the first was
-found by re-derivation, **none by a gate**, and the gates were green throughout.
-Freshness itself is still unchecked by anything: run the command.
+**Neither says whether a sentence here is *true*.** The second exists because the
+command it guards had been silently broken twice, each time found by a person
+reading it. Every defect found on the branch that added the first was found by
+re-derivation, **none by a gate**, and the gates were green throughout.
+
+**Two gaps it leaves on purpose, so you know to cover them yourself:** whether
+this pair is fresh *right now* — run the command, no gate can assert it without
+being red through ordinary work — and whether a session ended without refreshing
+the pair at all, which is the most expensive failure in this project's history and
+which nothing can observe.
 
 **Then** pick from the START HERE index, or answer the questions above and let
 that pick for you.

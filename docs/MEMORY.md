@@ -8,20 +8,20 @@ verified rather than trusted — is **ADR-0019**, extended by **ADR-0021** (whos
 proved invisible to it).
 Last updated: **2026-08-13**, most recently by the session that fixed
 `scripts/verify.py`'s docstring, closed the freshness gap that fix exposed, and
-then made the freshness check a gate. Earlier the same day: the close of the
+then gated both that check and the anchor it measures from. Earlier the same day: the close of the
 session that made a cited commit stay reachable (**ADR-0042**), which cleared the
 nine dangling citations the 2026-08-12 replay left behind. **No count of
 refreshes is written here** — it is a number that moves without its sentence
 changing, which is review standard 5.
 
-**ONE position, because nothing is in flight: freshness anchor `5a530f4`** —
+**ONE position, because nothing is in flight: freshness anchor `4c870bf`** —
 the last commit on `main` that is not this handoff pair.
 **`git rev-parse main` will be AHEAD of it**, by the pair commit and nothing
 else: a stamp cannot name the commit that writes it. The test is a command,
 not a commit and not a count:
 
 ```
-git log --oneline 5a530f4..main -- ":(top,exclude)docs/MEMORY.md" ":(top,exclude)docs/NEXT_SESSION_PROMPT.md"
+git log --oneline 4c870bf..main -- ":(top,exclude)docs/MEMORY.md" ":(top,exclude)docs/NEXT_SESSION_PROMPT.md"
 git log --oneline refs/remotes/origin/main..main   # what a push would send
 git ls-remote --heads origin main                  # authoritative on what is pushed
 git branch --no-merged main                        # must name NOTHING
@@ -42,12 +42,19 @@ goes silently empty from a subdirectory; spelled `-- ":(exclude)…"` it
 false-alarms on a pair-only commit from a subdirectory. Only the top-anchored
 form is right in both directions from anywhere.
 
-**This command is now gated, and it is the first thing here that is.**
-`tests/test_freshness_check.py` parses it out of this file — extracted, never
-retyped — and runs it against a throwaway repository holding one commit of each
-shape, from the root and from a subdirectory. Break the command and the suite
-goes red naming this line. **It does not check that the pair is fresh**, only
-that the check still works; staleness is still yours to read.
+**This command is now gated, and so is the anchor above it.**
+`tests/test_freshness_check.py` parses both out of this file — extracted, never
+retyped — and checks two things. That the command still works: run against a
+throwaway repository holding one commit of each shape, from the root and from a
+subdirectory, it must list a non-pair commit and ignore a pair-only one. And that
+the last refresh was sound: the anchor was current when the pair was last written,
+that commit touched nothing else, and the anchor is an ancestor of HEAD that is not
+itself a pair commit. Break any of it and the suite goes red naming this block.
+
+**Two things it still cannot tell you.** Whether the pair is fresh *right now* —
+that would be red through ordinary work, so run the command. And whether a session
+ended without refreshing the pair at all, which is the failure that has cost this
+project the most and which no gate can observe.
 
 **No characterisation of the anchor is written here on purpose** — an earlier
 stamp called its SHA "the last *code* commit", and the next commit falsified
@@ -68,7 +75,7 @@ bundling them with an ADR or an index row lists itself as stale. That happened
 three times in the session that wrote ADR-0033. Everything substantive was
 committed first.
 
-*(The previous stamp was 2026-08-13 at `main @ cc3f257`.)*
+*(The previous stamp was 2026-08-13 at `main @ ccc1e96`.)*
 
 ## Snapshot
 
