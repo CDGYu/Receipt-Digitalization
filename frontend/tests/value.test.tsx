@@ -526,6 +526,23 @@ const COMPONENTS: readonly GuardedComponent[] = [
     prop: '',
     computed: [],
   },
+  // Added 2026-08-14 by controller ruling, for the same reason as the two
+  // entries above. Task 4 added `.noticeFailed` and reported this hole rather
+  // than taking it: under `css: false` the class name on the element is the
+  // proxy's echo of the component's own reference, so the DOM assertion in
+  // `review-screen.test.tsx` proves the TSX side alone, and
+  // `stylesheets.test.ts` audits the stylesheet without asking whether anything
+  // applies it. A rename on one side only is invisible to both. Measured when
+  // this entry was added: renaming `styles.noticeFailed` in the TSX, and
+  // renaming `.noticeFailed` in the CSS, each fail here -- and the DOM
+  // assertion stays green through both.
+  {
+    name: 'ReviewScreen',
+    tsx: 'review/ReviewScreen.tsx',
+    css: 'review/ReviewScreen.module.css',
+    prop: '',
+    computed: [],
+  },
 ]
 
 describe('every class a component references exists in its stylesheet', () => {

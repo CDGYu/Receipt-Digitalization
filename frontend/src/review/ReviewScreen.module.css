@@ -107,11 +107,7 @@
 /* The failure notice only. `.notice` is the <main> for the loading and empty
  * phases too, and a card around "Loading..." is a different screen from the one
  * finding I9 measured. Composed rather than overridden, so the loading and
- * empty renders keep exactly the declarations they had.
- *
- * `min-height` with `justify-content: center` is the vertical centring the
- * finding names; `.notice` already supplies the horizontal half via
- * `max-width` and `margin: 0 auto`. */
+ * empty renders keep exactly the declarations they had. */
 .noticeFailed {
   justify-content: center;
   min-height: 60vh;
