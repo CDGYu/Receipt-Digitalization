@@ -317,12 +317,21 @@ exactly.
 
 ### 6.1 The nine citations — remapped, not deleted
 
-Every one of the nine sentences is a derivation record: *"I probed the tree at
-X, re-derive rather than trust me."* The anchor is the point of the sentence,
-which is the one case ADR-0032 §3 grants that a number earns its maintenance
-cost. Deleting it would leave a reader unable to tell a stale probe from a wrong
-one. Both replacements are verified patch-identical (§2.2), so each sentence
-stays exactly as true as it was.
+The anchor is the point of these sentences: *"I probed the tree at X, re-derive
+rather than trust me."* Deleting it would leave a reader unable to tell a stale
+probe from a wrong one. Both replacements are verified patch-identical (§2.2),
+so each sentence stays exactly as true as it was.
+
+**This sits in tension with ADR-0032 §3, and an earlier draft of this paragraph
+hid that** by claiming the anchors were "the one case §3 grants that a number
+earns its maintenance cost". §3 grants it "only where the **count** is the
+point. A freshness stamp earns it. **An ADR does not**" — and one of the nine is
+ADR-0041's own derivation line, so §3 excludes precisely this case rather than
+blessing it. ADR-0042 states the tension in the open and rules on it: §3 governs
+**counts**, ADR-0042 governs **derivation anchors**, and a derivation anchor
+earns its keep because ADR-0028 rule 2 requires the method recorded beside the
+result. Not every one of the nine is a probe record either — four are
+fix-provenance lines in the browser-pass spec.
 
 ### 6.2 The plan's body is edited, and the edit is logged
 
@@ -391,9 +400,15 @@ trustworthiness (ADR-0032 §1).
   stands at *no*, and nothing here reopens it. The property in §4 is a different
   thing: it checks whether a token **resolves**, never whether a sentence is
   **right**, and it needs no human to interpret its output.
-* **The 6 non-commit hex tokens** in ADR-0018, ADR-0027 and the browser-pass
-  spec stay as they are. §4.1's rule does not match them, so there is nothing to
-  fix.
+* **The 6 non-commit hex tokens** stay as they are — §4.1's rule does not match
+  them, so there is nothing to fix. **Named by kind, not by file:** a date,
+  three Fira Code tabular-figure width samples, an Alembic revision id and a
+  PAN-masking example. An earlier draft of this line said they live "in
+  ADR-0018, ADR-0027 and the browser-pass spec"; **only four of the six do** —
+  the date is in `semantic-review/` and the Alembic id in `alembic/versions/`
+  and a 2026-07-28 plan. Right count, wrong membership, which is review
+  standard 23 and ADR-0032 decision 5. Regenerate their homes by scanning for
+  backticked `[0-9a-f]{8,40}` rather than reading a list.
 * **The tree-wide `path:NNN` population.** Measured at **139 across 37 files**
   (separator anchor, whole tracked tree) so the number is not re-derived later
   under the impression it is small. Not acted on.
