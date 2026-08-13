@@ -243,10 +243,16 @@ rewrite a historical document's substance.
 
 ### 7. The nine were remapped, not deleted
 
-Every one of the nine sentences is a derivation record — *"I probed the tree at
-X; re-derive rather than trust me."* The anchor is the point of those sentences,
-so deleting it would leave the next reader unable to tell a stale probe from a
-wrong one.
+**Five of the nine sentences are derivation records** — *"I probed the tree at X;
+re-derive rather than trust me."* They are ADR-0041's own derivation line and the
+2026-08-12 plan's four probe records, per the site list in Context above. **The
+other four are fix-provenance lines** in
+`docs/superpowers/specs/2026-08-05-review-ui-browser-pass.md`, of the form
+*"FIXED 2026-08-12 — `99f0207`, recorded in ADR-0041"*.
+
+The anchor is the point of both kinds, so deleting it would leave the next reader
+unable to tell a stale probe from a wrong one, or to reach the commit a spec says
+closed a finding.
 
 **This sits in tension with ADR-0032 decision 3, which does not grant the case —
 it excludes it.** Decision 3's words are that a count is worth its anchor's
@@ -320,6 +326,20 @@ Accepted decisions, and it is named here rather than papered over.
   same choice review standard 19 forces everywhere else.
 
 ## What this ADR does not decide
+
+**Whether a seven-hex token written *inside* a larger backticked span is a
+citation.** `_SHA_PATTERN` needs a backtick immediately on both sides, so a token
+sitting in a range or a `ref @ sha` span is invisible to the guard, and decision
+5's form table is the choice offered to a document *about* a dead commit rather
+than an enumeration of every place a token can sit. Measured over the tracked
+non-binary files at `c58531d` — a later anchor than this file's `e698aca`,
+because the boundary was found at the branch tip — with the population taken by
+`\b[0-9a-f]{7}\b` and the guard's set by backticked `[0-9a-f]{7}`: **131**
+distinct tokens, **115** standalone-backticked somewhere and so checked, **16**
+never, of which **9** resolve to commits — two are the orphans this ADR writes
+bare, and the other seven are live anchors the guard does not read. All nine sites of the defect this ADR records were standalone-backticked,
+so decision 1's property held where it mattered; widening the pattern would be a
+new decision and is not taken here.
 
 **The `path:NNN` citations.** Out of scope, and deliberately: existence is
 mechanical, accuracy is not, and resolving each against the line it points at is

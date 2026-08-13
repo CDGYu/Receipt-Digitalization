@@ -795,7 +795,7 @@ the real file before trusting any line above that describes one, and report the
 discrepancy rather than working around it. Every defect below is the plan
 author's.)*
 
-### 2026-08-13 — five plan defects, all found by execution
+### 2026-08-13 — plan defects
 
 **1. The abbreviation pin was never driven red.** Task 1 Step 4 originally
 demonstrated that `git -c core.abbrev=8 rev-parse --short HEAD` returns eight
@@ -830,6 +830,27 @@ the wrong-reason failure the module exists to avoid. Reproduced against a real
 exit 128: the pre-fix module reported *"no citations found at all, which means
 the pattern stopped matching"* — blaming the regex for a `safe.directory`
 refusal. Both raise paths were then executed, not asserted.
+
+**6. Task 3 Step 3's "Three ADRs already carry one" was never true.** Measured
+with `git grep -l "^## Correction" -- docs/adr`: **8** files at `c58531d` and
+**7** at `e698aca`, `main`'s tip when this branch opened. Three is not a count
+this repository has had. The sentence wraps between `carry` and `one`, so an
+exact-phrase grep does not reach it — the same failure mode this branch kept
+paying for. Found by the whole-branch review rather than by execution: the
+step's *instruction* was right, so nothing an implementer did would have gone
+red.
+
+**7. Task 3 Step 4's "true forever" count rotted inside the commit that carried
+it.** The block claims `git grep "true forever" -- docs` finds **one** hit and
+`git grep -i "true forever"` also **one**. True at `e698aca`: one each. Already
+false at `5736a55`, this plan's own commit — `git grep -c "true forever" -- docs`
+totals **8** hits over three files and `git grep -ic "true forever" -- docs`
+totals **10**, because the plan carries the phrase five times and the design
+twice. At `c58531d` those same two queries total **8** and **11**. The
+number was never anchored; *"Measured 2026-08-13"* names a day, not a tree. The
+wrap explanation and the advice it supports — grep one distinctive word, not the
+phrase — are both sound and stand. This is ADR-0032 decision 2 happening to the
+plan that cites it: a correctly-derived claim falsified by its own commit.
 
 ### 2026-08-13 — where this document now diverges from what shipped
 

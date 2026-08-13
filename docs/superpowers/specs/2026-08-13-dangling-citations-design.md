@@ -1,7 +1,7 @@
 # Design — a cited SHA must resolve, and a rewrite carries its citations
 
 **Date:** 2026-08-13
-**Status:** proposed
+**Status:** approved 2026-08-13. Decision recorded in **ADR-0042**.
 **Anchor for every measurement below:** `main` at `e698aca`, working tree clean.
 Each number states the query that produced it. Re-derive rather than quote
 (ADR-0028 rule 1); several numbers here are *supposed* to change the moment the
@@ -262,11 +262,14 @@ weaker bound loses nothing today: *reachable only from a branch, not from `main`
 
 ### 5.1 Mechanics
 
-Two subprocesses, both timed at `e698aca`:
+Two subprocesses, both timed 2026-08-13 with the working tree at `e698aca`.
+`git rev-list --all` answers over the refs the running clone happens to have
+rather than over a commit, so the size of the set it returns cannot be anchored
+and is not quoted here:
 
 | step | command | measured |
 |---|---|---|
-| build the reachable set | `git rev-list --all` | **398** commits, **0.030s** |
+| build the reachable set | `git rev-list --all` | one call, **0.030s** |
 | resolve every abbreviation | `git cat-file --batch-check`, all tokens on stdin | one call; prints `missing` for a non-object |
 
 Membership is then a set lookup, so the cost does not scale with the number of
