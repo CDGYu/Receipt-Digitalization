@@ -109,9 +109,14 @@ exported constant disagree, and again if the script acquires `type="module"`,
 
 Fourteen cases on the module, six on the component, four on the HTML. **No test
 asserts a class name** — Vitest runs with `css: false`, so a `.module.css`
-import returns a proxy whose keys echo back and a renamed class would ship as
-`class="undefined"` with every rendering test green (ADR-0029). The stylesheet
-is guarded as text by `stylesheets.test.ts`'s census instead.
+import returns a proxy whose keys echo back and a renamed class ships unpainted
+with every rendering test green (ADR-0029). The stylesheet is guarded as text by
+`stylesheets.test.ts`'s census instead.
+**[Corrected 2026-08-14 — this said such a class ships as `class="undefined"`.**
+Neither environment produces that literal. The measurement is in
+`frontend/tests/value.test.tsx`, kept in one place rather than copied here, and
+what this sentence rests on is unchanged: the class reaches no rule, nothing
+paints, and every rendering test stays green.**]**
 
 ### Proven red, five ways
 
