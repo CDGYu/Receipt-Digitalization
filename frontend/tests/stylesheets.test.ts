@@ -420,7 +420,7 @@ const CENSUS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
     '.form':
       'display: grid, grid-template-columns, gap, align-items: start, border, border-radius, background, padding',
     '.form > h2': 'grid-column, margin, font-family, font-size, font-weight, line-height',
-    '.form > p': 'grid-column',
+    '.fieldCell': 'display: flex, flex-direction: column, gap, min-width',
     '.field': 'display: flex, flex-direction: column, gap, min-width, color, font-family, font-size',
     '.input':
       'width, min-height, box-sizing: border-box, padding, border, border-radius, background, color, font-family, font-size',

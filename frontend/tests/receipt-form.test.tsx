@@ -323,6 +323,31 @@ describe('inline field errors', () => {
     expect(document.getElementById(describedBy!)?.textContent).toContain('at most 3 characters')
   })
 
+  it('renders the error inside its own field cell, not as a child of the grid', () => {
+    render(
+      <ReceiptForm
+        fields={FIELDS}
+        onChange={() => {}}
+        errors={{ 'totals.total': "not a decimal amount: 'abc'" }}
+      />,
+    )
+    const input = screen.getByLabelText('Total') as HTMLInputElement
+    const description = document.getElementById(input.getAttribute('aria-describedby')!)!
+    const label = input.closest('label')!
+
+    // The error and its label share a wrapper, and that wrapper is not the grid
+    // itself -- which is what puts the sentence under the field that sent it at
+    // every column count. Before this task both were direct children of
+    // `<section class="form">`, so the shared parent was the grid and the error
+    // began at column 1 while Total sat at column 4.
+    expect(description.parentElement).toBe(label.parentElement)
+    expect(description.parentElement!.tagName).toBe('DIV')
+
+    // ADR-0024 §5, unchanged and re-asserted here because this task moves the
+    // element that rule is about: a sibling, never a child.
+    expect(label.contains(description)).toBe(false)
+  })
+
   it('lands a line-item money error on the addressed cell and nowhere else', () => {
     render(
       <LineItemsTable

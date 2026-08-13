@@ -1,27 +1,40 @@
 /* The receipt's own seventeen controls -- design §5.1, §6. Tokens only; no raw
  * hex.
  *
- * ## The layout is selector-driven, because there is nowhere to hang a class
+ * ## One `.fieldCell` per text and money field, and one element selector left
  *
- * `ReceiptForm` renders one `<section>` whose children are, flattened: the
- * heading, then eight text fields, then six money fields, then a select and two
- * checkboxes -- and each field is a `<label>` plus, when the server refused it, a
- * sibling `<p role="alert">`. There is no wrapper around the fields and this task
- * may not add one, so the grid lives on the section itself and the two children
- * that must span it are reached by element:
+ * The grid lives on the `<section>`. Its children are the heading, then
+ * fourteen `.fieldCell` wrappers -- eight text fields, then six money fields --
+ * then the select and the two checkboxes, which stay bare `<label>`s because
+ * none of the three has an error slot to hold (`ReceiptForm.tsx` records why).
+ * Each `.fieldCell` is one grid item holding a `<label>` and, when the server
+ * refused that field, a sibling `<p role="alert">`.
  *
- *   `.form > h2` -- the heading, which is the only `<h2>` here.
- *   `.form > p`  -- an inline error. It is a *sibling* of its label rather than a
- *                   child (ADR-0024 §5: nesting it would pollute the field's
- *                   accessible name), so in a grid it would otherwise land in the
- *                   next column's cell instead of under the field it blames.
- *                   Spanning the row keeps the server's words on their own line,
- *                   directly after the control that sent them.
+ * The error is a *sibling* of its label and never a child: ADR-0024 §5, because
+ * nesting it would make the server's sentence part of the field's accessible
+ * name. The wrapper is what lets that rule and the layout hold at once -- the
+ * cell is the grid item, so the pair travels together into whatever column
+ * auto-fill puts it in.
  *
- * Both selectors are exact today and would need revisiting if this section grew
- * a second heading or a paragraph that was not an error. That coupling is the
- * price of `className`-only, and it is written down rather than left to be
- * discovered.
+ * `.form > h2` is still reached by element, and legitimately: the heading is the
+ * only `<h2>` here, and it is now the one child that spans the row rather than
+ * sitting in a cell.
+ *
+ * ### The coupling recorded here has been paid off, not forgotten
+ *
+ * This section used to open "the layout is selector-driven, because there is
+ * nowhere to hang a class", and there was a second element selector, `.form > p`,
+ * spanning an inline error across the whole row. It closed with: "that coupling
+ * is the price of `className`-only, and it is written down rather than left to be
+ * discovered." The browser pass then found what spanning costs -- finding I6,
+ * whose mechanism the `.fieldCell` rule below states once -- and `.fieldCell` is
+ * the wrapper that note recorded as out of scope at the time. The price is no
+ * longer owed.
+ *
+ * The wrapper is added at the *call site* in `ReceiptForm`, and that is the
+ * constraint that shaped it: `MoneyInput` renders six fields in this grid AND
+ * three cells per row in `LineItemsTable`, so a wrapper inside `MoneyInput`
+ * would reach every money cell of that table too.
  *
  * ## Every input keeps its visible label
  *
@@ -50,8 +63,19 @@
   line-height: 1.3;
 }
 
-.form > p {
-  grid-column: 1 / -1;
+/* One grid cell per field: the `<label>` and, when the server refused it, the
+ * error paragraph that is its sibling (ADR-0024 §5). The cell is the grid item,
+ * so the error is under the field that sent it at every column count -- which
+ * `grid-column: 1 / -1` on the paragraph could not do, because it put the
+ * sentence at column 1 while its field sat wherever auto-fill had placed it.
+ *
+ * `min-width: 0` for the reason `.field` carries it: without it a long server
+ * message refuses to shrink below its content and blows the column out. */
+.fieldCell {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  min-width: 0;
 }
 
 /* The same shape as `MoneyInput.module.css`'s `.field`, so a text field and a

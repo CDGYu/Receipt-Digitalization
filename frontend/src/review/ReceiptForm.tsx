@@ -212,23 +212,25 @@ export function ReceiptForm({ fields, onChange, errors }: ReceiptFormProps) {
     <section className={styles.form}>
       <h2>Receipt</h2>
       {TEXT_FIELDS.map(([path, label]) => (
-        <TextField
-          key={path}
-          label={label}
-          value={fields[path]}
-          error={errors?.[path]}
-          onChange={(value) => onChange(path, value)}
-        />
+        <div className={styles.fieldCell} key={path}>
+          <TextField
+            label={label}
+            value={fields[path]}
+            error={errors?.[path]}
+            onChange={(value) => onChange(path, value)}
+          />
+        </div>
       ))}
 
       {MONEY_FIELDS.map(([path, label]) => (
-        <MoneyInput
-          key={path}
-          label={label}
-          value={fields[path]}
-          error={errors?.[path]}
-          onChange={(value) => onChange(path, value)}
-        />
+        <div className={styles.fieldCell} key={path}>
+          <MoneyInput
+            label={label}
+            value={fields[path]}
+            error={errors?.[path]}
+            onChange={(value) => onChange(path, value)}
+          />
+        </div>
       ))}
 
       {/* No error slot on the three below: `_coerce_legibility` and
