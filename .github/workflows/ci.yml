@@ -37,6 +37,13 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        # Full history, not the default single commit. `tests/test_sha_citations.py`
+        # resolves every commit the documentation cites and asserts it is still
+        # reachable from a ref (ADR-0042). Under `fetch-depth: 1` every citation
+        # resolves as missing, so that test refuses to run rather than passing
+        # vacuously -- which is the failure mode ADR-0037 was written about.
+        with:
+          fetch-depth: 0
 
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
@@ -107,6 +114,10 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        # Matched to the `gates` job deliberately: two jobs checking out
+        # differently is a difference a future reader has to explain.
+        with:
+          fetch-depth: 0
 
       # The Dockerfile is an artefact nothing else exercises. Without this it is
       # known-good only on the day somebody last built it by hand, and the first
