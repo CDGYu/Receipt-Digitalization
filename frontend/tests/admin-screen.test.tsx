@@ -391,7 +391,7 @@ describe('design section 5.7 -- a rate that was never defined is not zero', () =
     expect(tiles.textContent).not.toContain('undefined')
   })
 
-  it('says the tile counts are global, so they do not contradict a scoped table', () => {
+  it('says the tile figures are global, so they do not contradict a scoped table', () => {
     // The tiles come from `GET /metrics`, which is global; the table below is
     // scoped by role. Both are true, and a reviewer holding nothing saw
     // "Open backlog 9" directly above "No open tasks, and none assigned to

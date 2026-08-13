@@ -992,3 +992,15 @@ not run. Anything they find is appended here.
     over-reaching claim that over-reaches in the opposite direction** — the fifth
     instance of this shape on the branch, and the first written by the controller
     into a brief rather than by an implementer into a comment.
+
+16. **Task 2's test name outlived the correction the same task wrote.** Step 1 above
+    names the test `says the tile counts are global, so they do not contradict a
+    scoped table`, and it shipped under that name — while `7a770c3`, that task's fix
+    round, changed `StatTiles.module.css`'s docblock from "reports a count" to
+    "reports a figure", for the reason defect 5 records: `auto_approval_rate` is a
+    ratio over receipt statuses, not a count. The branch wrote the name and then
+    wrote the sentence contradicting it. Renamed at the whole-branch fix wave to
+    `says the tile figures are global, so they do not contradict a scoped table`.
+    The body above keeps the old name, per the rule at the head of this log — and
+    its citation is a plan step prescribing a test, not a claim that a test by that
+    name exists.
