@@ -44,11 +44,12 @@ git log --oneline refs/remotes/origin/main..main  # what the pending push would 
 
 ## `main` is merged and pushed — nothing is waiting to go.
 
-**The eval field-accuracy redefinition merged by true fast-forward on
-2026-08-12** — `871f1aa` → `01d6a5a`, single parent, zero merge commits.
-It went in after four task reviews with their scoped re-reviews, a whole-branch
-review returning **MERGE WITH FIXES**, one fix wave and one scoped re-review.
-**ADR-0040** is the decision.
+**The dangling-citation repair merged by true fast-forward on 2026-08-13** —
+`e698aca` → `29a5a88`, eighteen commits, single parent each, zero merge
+commits. It went in after four task reviews with their scoped re-reviews, a
+whole-branch review returning **MERGE WITH FIXES**, one fix wave, one scoped
+re-review, and one controller deletion of a false claim that re-review found.
+**ADR-0042** is the decision, and it **corrects ADR-0032 decision 3**.
 
 **Every push is on a one-time authorization that the push consumes, and the
 next `main` push needs its own fresh ask.** **No count and no list of past
@@ -56,7 +57,9 @@ pushes is written here** — an earlier version of this paragraph enumerated the
 the list rotted twice on 2026-08-11, and the commit that replaced it with "no
 count is written down" wrote a count in the same sentence.
 **Every merged `feat/*` branch is kept at its merge point and pushed**;
-`git branch -r --merged main` is the answer and it cannot go stale. Run
+`git branch -r --merged main` is the answer, and it names no SHA so nothing in
+it can be severed — but it reads a local cache, so `git ls-remote` is what is
+authoritative about the remote. Run
 `git log --oneline refs/remotes/origin/main..main` rather than believing this
 sentence — empty means nothing is waiting to go, and the pair commit that
 writes this necessarily lands after any push it could record.
@@ -73,26 +76,29 @@ it was written. **Read the stamp for the SHA** — it is not written here, becau
 a SHA in two places is a SHA that can disagree with itself.
 
 **Gates on `main` after the merge, controller-run: `python scripts/verify.py` —
-all five PASS.** pytest **1081**; Vitest **unmoved**, because no frontend file
-was in any task's file set. **No before/after pytest delta is given** — the
-number moves with every milestone and this line's did. Run it.
+all five PASS.** **No pytest count and no delta is given** — the number moves
+with every milestone and an earlier version of this line's did. Run it.
 
-**The gates went red once during this milestone and the controller's independent
-run is what caught it.** The fix wave's own report said "Gates not run — yours",
-and `ruff` failed `I001` on a function-local import in the wave's new test.
-Four of five gates passed. **Re-running the gates yourself is not ceremony.**
+**Re-running the gates yourself is not ceremony**, and this milestone is the
+sharpest evidence yet for the complementary point: **every defect found on the
+2026-08-13 branch was found by a person or an agent re-deriving a claim, and
+none by a gate.** The five gates stayed green throughout, including while each
+defect was live. The gates certify that the code runs; they cannot read a
+sentence for truth, which is what **ADR-0029** says and what **ADR-0042** now
+says again from the other side.
 
-**And the pre-merge check re-derived each task's deliverable from the built code
-rather than from the ledger:** `field_accuracy`'s signature unchanged at
-`(predicted, truth) -> dict[str, bool]`, `_group` answering on a path it has
-never seen, `ratio(0, 0) is None`, the harness run end-to-end producing a floor
-of **5.77%** micro-averaged with the old attribute and JSON key both gone and
-the per-path map present and sorted, `format_report` embedding the same block
-`format_breakdown` renders, and — the real cross-boundary risk —
-**`receipts calibrate` reading the new artefact without error**.
+**And the pre-merge check re-derived each task's deliverable from the built
+artefact rather than from the ledger:** the guard driven red three ways (a
+citation remapped back to its dead token, a fabricated token naming no commit,
+and a real `--depth 1` clone failing on `fetch-depth` rather than skipping), the
+fast-forward verified as eighteen single-parent commits with zero merges, and —
+the one that mattered — **the two commits this branch cited on its own branch
+confirmed reachable from `main` after the merge**, because a replay instead of
+a fast-forward would have orphaned them and turned the branch's own guard red
+on contact.
 
 **All four tasks are complete**, each with a task review and a scoped
-re-review. The close then ran in full, and §0d is its record.
+re-review. The close then ran in full, and §0f is its record.
 
 ---
 
@@ -191,6 +197,19 @@ read route (**ADR-0031**) and the CLI `--limit` bound all shipped. §1.6's
    in this file: `ls docs/adr/*.md | grep -v README | wc -l` (how many ADRs) and
    `grep -cE "^\| *\[?0[0-9]{3}" docs/adr/README.md` (how many index rows).
    Mandatory before touching the matching area:
+   - **0042** — a cited commit must stay reachable, and a rewrite carries its
+     citations. **Read before citing a commit, before rewriting history other
+     documents cite, and before writing about a commit no ref can reach.**
+     `tests/test_sha_citations.py` enforces it: reachability not existence
+     (`git cat-file -e` succeeds on an orphan until `gc`), any ref not `main`
+     (an ADR cites its own branch before the merge), a shallow clone **fails**
+     rather than skips. **It corrects ADR-0032 decision 3** — a closed anchor's
+     claim is permanent, its retrievability is not. Its decision 5 is the one
+     that bites while you write: the backticked short form *is* the citation,
+     so a dead commit is named bare or at full oid, and no sentence can show an
+     example of the form without instantiating it. **Its coverage boundary is
+     stated in the ADR and is narrower than the one-line version** — a token
+     inside a larger backticked span is invisible.
    - **0039** — the local path is a liveness check. **Read before running the
      eval harness or believing its output.** A local run prints the six §16
      metrics and licenses only "the pipeline completes"; liveness artefacts stay
@@ -299,6 +318,65 @@ read route (**ADR-0031**) and the CLI `--limit` bound all shipped. §1.6's
 *(§0e and §0d are newest and sit first deliberately. They are lettered rather
 than renumbered to the front because renumbering ages every citation of §0a–§0c,
 and that has already happened twice in this file's history.)*
+
+## 0f. A cited commit must stay reachable — DONE, MERGED and PUSHED (2026-08-13).
+
+**Nothing carries over.** True fast-forward `e698aca` → `29a5a88`, eighteen
+commits, single parent each, zero merge commits. Decision: **ADR-0042**, which
+**corrects ADR-0032 decision 3**. Design:
+`docs/superpowers/specs/2026-08-13-dangling-citations-design.md`. Plan:
+`docs/superpowers/plans/2026-08-13-dangling-citations.md` — **read its dated
+defect log first; it records seven plan defects and the divergence between its
+own code block and what shipped.** Ledger:
+`.superpowers/sdd/2026-08-13-dangling-citations/` — **gitignored, open by
+path.**
+
+**The defect.** Nine citations in three tracked files named commits no ref could
+reach, orphaned by §0e's replay. Every claim built on them stayed true; none
+stayed checkable. §0e recorded that the replay renumbered everything — and
+applied that warning to §0e's own prose and to nothing else.
+
+**What shipped.** `tests/test_sha_citations.py`, three guarantees: every
+backticked seven-character hex token **in a tracked file** resolves to a commit
+**reachable from some ref**; a shallow repository **fails** rather than skips
+(so `fetch-depth: 1` cannot make it vacuous on GitHub); and `git rev-parse
+--short HEAD` is still seven characters, so the pattern cannot silently narrow
+as git widens `core.abbrev`. Plus `fetch-depth: 0` on both `actions/checkout`
+steps.
+
+### Four things to know before touching it
+
+- **Reachability, not existence.** `git cat-file -e` succeeds on an orphan until
+  `git gc` prunes it, so an existence check would have been green throughout.
+- **Any ref, not `main`.** An ADR is committed before its merge and cites its own
+  branch; CI fires on every push. This branch was itself an instance until the
+  fast-forward landed.
+- **The guard's boundary is narrower than a one-line summary of it.** A token
+  inside a *larger* backticked span — `main @ <sha>`, `<sha>..<sha>` — is
+  invisible, and live anchors of that shape exist. ADR-0042 names the boundary
+  with its query. Widening the regex is a new decision, deliberately not taken.
+- **Write a dead commit bare or at full oid**, never in single backticks — the
+  short backticked form *is* the citation. A sentence cannot show an example of
+  the form without instantiating it, so the only safe illustration is a commit
+  that resolves.
+
+### The lesson this milestone paid for
+
+**Every defect on this branch was found by re-derivation; none by a gate**, and
+the five stayed green throughout. **No count is written down** — findings,
+rounds and instances give three different answers, which is ADR-0032 §5's trap
+and this branch tripped it twice. Three were the controller's own
+reasoning, corrected by subagents. **Five consecutive rounds shipped a new false
+claim while closing an old one** — the last being the fix wave correcting a
+*stale* claim by calling it *never true*, which a 2026-08-02 ancestor of `main`
+falsifies. Two rulings came out of it and are now in `docs/MEMORY.md`'s review
+standards: **an empty grep is not evidence until you have shown the grep can
+match what you are looking for**, and **a permanence claim about a command is a
+copy of ADR-0042's correction when the command's anchor is closed**.
+
+**Reported, not fixed:** `scripts/verify.py`'s docstring still says
+`.github/workflows/` is untracked and Actions does not run — false since
+ADR-0037, and this milestone edited the tracked `ci.yml`.
 
 ## 0e. Review outcome focus is DONE, MERGED and PUSHED (2026-08-12).
 
@@ -1230,23 +1308,39 @@ and was measured not to need it.)*
 
 ## Today's goal
 
-**Nothing is in flight, nothing is half-done, and nothing carries over.** The
-review outcome now takes focus, merged and pushed on 2026-08-12 (§0e).
+**Nothing is in flight, nothing is half-done, and nothing carries over.** A
+cited commit must now stay reachable, merged and pushed on 2026-08-13 (§0f).
 `git branch --no-merged main` should name nothing, and
 `git log --oneline refs/remotes/origin/main..main` should come out empty.
 
 **Run the freshness command in `docs/MEMORY.md`'s stamp before trusting any of
 this.** If it lists anything, the tree moved after this was written — re-run
-`python scripts/verify.py` and re-read §0e before acting.
+`python scripts/verify.py` and re-read §0f before acting.
+
+**And there is now a gate for one narrow slice of this document's own
+honesty.** `python -m pytest tests/test_sha_citations.py` fails if any
+backticked seven-character hex token in a tracked file names a commit no ref can
+reach. It says nothing about whether a sentence here is *true* — every defect
+found on the branch that added it was found by re-derivation, **none by a
+gate**, and the gates were green throughout.
 
 **Then** pick from the START HERE index, or answer the questions above and let
 that pick for you.
 
-**Item 1 in "Blocked on me" is still the one that matters**, and §0d did not
-change that: a hosted tool-capable provider and a freshly rotated key is what
-gates every real accuracy number. What §0d *did* change is that the number
+**Item 1 in "Blocked on me" is still the one that matters**, and neither §0d nor
+§0f changed that: a hosted tool-capable provider and a freshly rotated key is
+what gates every real accuracy number. What §0d *did* change is that the number
 waiting on the other side of it is now worth reading. Everything but the key is
 verified — only a human can do the remaining step.
+
+**One thing §0f left open on purpose, and it is a live false claim in a shipped
+file:** `scripts/verify.py`'s module docstring still says "`.github/workflows/`
+is untracked in this repository and GitHub Actions does not run for it, so a
+committed workflow would be a gate that never executes". **ADR-0037 reversed
+that untracking on 2026-08-11**, `ci.yml` is tracked, and §0f edited it. It was
+out of the dangling-citation milestone's scope — a stale prose claim, not a
+dangling citation — so it was reported and not fixed. It is a small, real,
+unclaimed piece of work.
 
 **One thing §0d left open on purpose:** the two `format_breakdown` tests are the
 only tests of the shared renderer, and they sit in a module that skips whole

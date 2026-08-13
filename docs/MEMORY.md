@@ -6,17 +6,18 @@ continuity protocol itself — what lives where, and why this snapshot must be
 verified rather than trusted — is **ADR-0019**, extended by **ADR-0021** (whose
 2026-08-02 dated correction widened the freshness check after a docs-only task
 proved invisible to it).
-Last updated: **2026-08-12**, at the close of the session that made the review
-outcome take focus (**ADR-0041**), closing browser-pass finding **I5**.
+Last updated: **2026-08-13**, at the close of the session that made a cited
+commit stay reachable (**ADR-0042**), closing the nine dangling citations the
+2026-08-12 replay left behind.
 
-**ONE position again, because nothing is in flight: freshness anchor
-`cd308bf`** — the merged tip, and the last commit on `main` that is not this
-handoff pair. **`git rev-parse main` will be AHEAD of it**, by the pair commit
-and nothing else: a stamp cannot name the commit that writes it. The test is a
-command, not a commit and not a count:
+**ONE position, because nothing is in flight: freshness anchor `29a5a88`** —
+the merged tip, and the last commit on `main` that is not this handoff pair.
+**`git rev-parse main` will be AHEAD of it**, by the pair commit and nothing
+else: a stamp cannot name the commit that writes it. The test is a command,
+not a commit and not a count:
 
 ```
-git log --oneline cd308bf..main -- src tests frontend docs ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
+git log --oneline 29a5a88..main -- src tests frontend docs ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
 git log --oneline refs/remotes/origin/main..main   # what a push would send
 git ls-remote --heads origin main                  # authoritative on what is pushed
 git branch --no-merged main                        # must name NOTHING
@@ -25,21 +26,26 @@ git branch --no-merged main                        # must name NOTHING
 **Empty means this pair is current.** Anything listed means the tree moved
 after it was written.
 
-**Empty means current.** Anything listed means the tree moved after this was
-written and you are reading something stale.
-
-**No characterisation of `0cdf6c9` is written here on purpose** — an earlier
+**No characterisation of the anchor is written here on purpose** — an earlier
 stamp called its SHA "the last *code* commit", and the next commit falsified
 that by editing a docstring under `src/`. **ADR-0032 §2**: a claim can be
 derived correctly and rot inside the commit that carries it.
+
+**And as of 2026-08-13 the anchor itself carries a caveat.** A SHA in this
+stamp is a *closed* anchor, and **ADR-0042** established that a closed anchor
+is durable only while its commit stays reachable — a replay, rebase or
+force-push severs it without touching this file. The stamp is safe because it
+hands over a **command**, and `tests/test_sha_citations.py` now goes red if a
+backticked seven-character hex token in a tracked file names a commit no ref
+can reach.
 
 **This refresh touches the pair and nothing else — ADR-0033 §1.** The freshness
 check excludes exactly these two files and watches `docs` otherwise, so a commit
 bundling them with an ADR or an index row lists itself as stale. That happened
 three times in the session that wrote ADR-0033. Everything substantive was
-committed first; `0cdf6c9` is the last of it.
+committed first.
 
-*(The previous stamp was 2026-08-11 at `main @ 0cdf6c9`.)*
+*(The previous stamp was 2026-08-12 at `main @ cd308bf`.)*
 
 ## Snapshot
 
@@ -48,6 +54,11 @@ committed first; `0cdf6c9` is the last of it.
   for three days while one existed**: true when written on 2026-08-07, rotted
   the moment the corrections branch was cut. **The answer is the command, never
   the sentence.**
+- **A cited commit must stay reachable — COMPLETE AND MERGED** (2026-08-13,
+  true fast-forward `e698aca` → `29a5a88`, eighteen commits, single parent
+  each, zero merge commits). `feat/dangling-citations` is kept at its merge
+  point. **ADR-0042** is the decision, and it **corrects ADR-0032 decision 3**,
+  which called a closed anchor "true forever". See "Dangling citations" below.
 - **The review outcome now takes focus — COMPLETE AND MERGED** (2026-08-12,
   true fast-forward `7c8dcc5` → `cd308bf`, single parent, zero merge commits).
   `feat/review-outcome-focus` is kept at its merge point. **ADR-0041** is the
@@ -215,6 +226,70 @@ committed first; `0cdf6c9` is the last of it.
   searching the tracked tree — open ledgers by path.**
 - **The repo is PUBLIC.** Verified 2026-07-31 via the GitHub API. See
   "Environment / provider" for what that exposes.
+
+## Dangling citations — COMPLETE AND MERGED (2026-08-13)
+
+**True fast-forward `e698aca` → `29a5a88`, eighteen commits, single parent
+each, zero merge commits.** Decision: **ADR-0042**, which **corrects ADR-0032
+decision 3**. Design:
+`docs/superpowers/specs/2026-08-13-dangling-citations-design.md`. Plan:
+`docs/superpowers/plans/2026-08-13-dangling-citations.md` — **read its dated
+defect log first.** Ledger:
+`.superpowers/sdd/2026-08-13-dangling-citations/` — **gitignored, open it by
+path.**
+
+**The defect.** Nine citations in three tracked files named commits no ref
+could reach. They were orphaned on 2026-08-12 when the review-outcome-focus
+branch was replayed onto `main` rather than merged. Every claim built on them
+stayed true; none stayed checkable, and `git gc` would have made the tokens
+name nothing at all. The handoff recorded that the replay renumbered
+everything and then applied that warning to its own section and nowhere else.
+
+**What shipped.** `tests/test_sha_citations.py` — three guarantees: every
+backticked seven-character hex token **in a tracked file** resolves to a commit
+**reachable from some ref**; a shallow repository **fails** rather than skips;
+and `git rev-parse --short HEAD` is still seven characters, so the pattern
+cannot silently narrow. `fetch-depth: 0` on both `actions/checkout` steps, so
+the guard means the same thing on GitHub as it does here.
+
+**Three things to know before you touch it:**
+
+- **Reachability, not existence.** `git cat-file -e` succeeds on an orphan
+  until it is pruned, so an existence check would have been green through the
+  whole defect and would first have gone red on some unrelated `git gc`.
+- **Any ref, not `main`.** An ADR is committed before its merge and
+  legitimately cites its own branch, and CI fires on every push. The weaker
+  bound admitted nothing extra at the anchor, and this branch was itself an
+  instance — it cited two of its own commits until the fast-forward landed.
+- **The guard's boundary is narrower than its sentence.** A token inside a
+  *larger* backticked span — `main @ <sha>`, `<sha>..<sha>` — is invisible to
+  it, and live anchors of that shape exist. ADR-0042 names the boundary with
+  its query. Widening the pattern is a new decision, deliberately not taken.
+
+**A document about a dead commit names it bare or at full oid length**, because
+the backticked short form *is* the citation. A sentence cannot show an example
+of the form without instantiating it, so the only safe illustration is a commit
+that resolves.
+
+**What this milestone cost, and it is why the defect log is worth reading:**
+**every defect found on this branch was found by a person or an agent
+re-deriving a claim, and none by a gate** — the five gates stayed green
+throughout, including while each defect was live. **No count is written here**;
+the ledger lists them and a count over it depends on whether you count findings,
+rounds or instances, which is the trap ADR-0032 §5 names. Three were the
+controller's own reasoning, corrected by subagents. **Five consecutive rounds
+shipped a new false claim while closing an old one** — including the final fix
+wave, which corrected a *stale* claim by asserting it was *never true*, which a
+2026-08-02 ancestor of `main` falsifies. That is ADR-0032 §6 reproducing itself
+under observation, and it is the strongest argument in the tree for **delete,
+don't rewrite**.
+
+**Reported, not fixed:** `scripts/verify.py`'s module docstring still says
+"`.github/workflows/` is untracked in this repository and GitHub Actions does
+not run for it, so a committed workflow would be a gate that never executes".
+ADR-0037 reversed that untracking on 2026-08-11 and this milestone edited the
+tracked `ci.yml`. Out of scope here; it is a live false claim in a shipped
+file.
 
 ## Review outcome focus — COMPLETE AND MERGED (2026-08-12)
 
