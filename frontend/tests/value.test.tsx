@@ -138,8 +138,7 @@ describe('Chip — the tone is never the only signal', () => {
 //     such key at all, so the value is `undefined` -- and React omits a
 //     `className` of `undefined` rather than stringifying it. Measured:
 //     `<div className={undefined}>` renders with no `class` attribute at all.
-//   * Only `String(undefined)` produces the literal `class="undefined"`, and
-//     nothing in this tree does that.
+//   * Only `String(undefined)` produces the literal `class="undefined"`.
 //
 // The other sites in this file now say "unpainted", which is the true and
 // mechanism-free half, so there is one copy of the mechanism to keep right
@@ -578,8 +577,8 @@ describe('every class a component references exists in its stylesheet', () => {
   // Task 2's round 5 parked an item: the guard should gain the other direction,
   // `declared` subset of `referenced`, and it "would pass as-is, 18 declared
   // classes, all referenced today". **That form is wrong and the count had
-  // rotted.** Measured at the time of writing: 24 declared classes across the
-  // five components, of which EIGHT are unreferenced -- Button's `danger`,
+  // rotted.** Measured at the time of writing: of the classes declared across
+  // the components in `COMPONENTS`, the unreferenced ones are Button's `danger`,
   // `primary` and `secondary`, and Chip's `error`, `info`, `neutral`, `positive`
   // and `warn`. They are not orphans. `Button.tsx` applies `styles[variant]` and
   // `Chip.tsx` applies `styles[tone]`, and `referencedClasses` matches
@@ -588,7 +587,7 @@ describe('every class a component references exists in its stylesheet', () => {
   // already derived from the component's own union type by `unionMembers`.
   //
   // So the correct form is `declared` subset of (`referenced` union `computed`),
-  // which holds 24/24. The "18" was true at e216af4 and rotted by six when
+  // which holds. The "18" was true at e216af4 and rotted by six when
   // LoginPage.module.css was added.
   //
   // What it buys, and it is not symmetry for its own sake: the guard's other
@@ -599,7 +598,7 @@ describe('every class a component references exists in its stylesheet', () => {
   // without asking whether anything reaches them, so this is the only check in
   // the tree that says a rule in a guarded component is dead.
   //
-  // The bound: it covers the five components in COMPONENTS and nothing else.
+  // The bound: it covers the components in COMPONENTS and nothing else.
   // `LineItemsTable.module.css`'s `.rowActive` is declared and referenced by
   // nothing today -- deliberately, per its own comment -- and would fail this if
   // that file were guarded here.

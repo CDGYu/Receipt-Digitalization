@@ -323,8 +323,9 @@ describe('inline field errors', () => {
     expect(document.getElementById(describedBy!)?.textContent).toContain('at most 3 characters')
   })
 
-  // One case per `.map` block in `ReceiptForm`, and that is the point rather
-  // than thoroughness for its own sake. The first version of this test rendered
+  // One case per field `.map` block in `ReceiptForm` -- the text fields and the
+  // money fields -- and that is the point rather than thoroughness for its own
+  // sake. The first version of this test rendered
   // `totals.total` alone -- a `MONEY_FIELDS` path -- and the `TEXT_FIELDS`
   // wrapper was deletable with it green: measured 2026-08-13, 21/21 with
   // `<div className={styles.fieldCell}>` removed from the text map. The claim
