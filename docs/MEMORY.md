@@ -2076,7 +2076,13 @@ measured.**
       — it is at least true, where a moving ref stops being true. What it is not
       is permanent. Where a stamp is genuinely needed, hand over **the command,
       not the answer** — which is what ADR-0019 already does for this file's own
-      stamp.
+      stamp. **And a permanence claim about a command is a copy of this
+      correction when the command's own anchor is closed.** Added 2026-08-13.
+      `git branch -r --merged main` names no commit, so it carries no closed
+      anchor and the claim does not reach it; a sentence promising that a
+      command embedding **two** closed anchors "cannot go stale" was this same
+      claim in disguise, and was deleted. Sweep by that predicate, not by the
+      anchor's phrasing.
 
 25. **The handoff pair goes last and alone, and a correction goes to every
     copy.** ADR-0033, earned at the corrections-read-route close, where three
@@ -2096,6 +2102,13 @@ measured.**
       copy that survives is the one worded differently. The **review standards
       list is the highest-risk copy**, because the reading order sends every
       session here.
+    * **An empty grep is not evidence until you have shown the grep can match
+      what you are looking for.** Added 2026-08-13. A fix round confirmed a
+      literal was gone with a case-sensitive `git grep "true forever"` and read
+      the silence as proof; the copy it missed capitalises `True` **and** wraps
+      across a line break, so the `-i` form would not have reached it either.
+      Run the grep against a string you know is present before believing its
+      silence.
     * **A count anchored to the ledger falsifies itself**, because the ledger
       records the findings about the counts it sources. Point at the list.
     * **A decision that states a boundary names what enforces it** — or says
