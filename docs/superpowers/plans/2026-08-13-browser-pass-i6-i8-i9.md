@@ -49,9 +49,10 @@ Every task's requirements implicitly include all of these.
   inside table cells; a wrapper added inside `MoneyInput` reaches every money
   cell of the line-items table.
 - **`src/` is not to be modified.** No route, no schema, no coercer.
-- **Existing tests pass unmodified**, with exactly two named exceptions in
-  Task 3. Anything else that needs a test changed is a **stop-and-report**, not
-  a fix.
+- **Existing tests pass unmodified**, with exactly three named exceptions —
+  assertions (a), (b) and (c) in Task 3 Step 1, plus the two comments and the
+  one e2e assertion in Task 3 Step 5, all of which are listed there by name.
+  Anything else that needs a test changed is a **stop-and-report**, not a fix.
 - **Vitest sets `css: false`.** A `.module.css` import returns a key-echoing
   proxy, so class names are unpinnable by rendering tests — a renamed class
   ships as `class="undefined"` with every gate green. Anything asserting *which*
@@ -321,15 +322,18 @@ address the region:
     // scoped by role. Both are true, and a reviewer holding nothing saw
     // "Open backlog 9" directly above "No open tasks, and none assigned to
     // you". The empty state already names its scope; this is the other half.
+    render(<StatTiles metrics={METRICS} />)
+
     const tiles = screen.getByRole('region', { name: 'Queue statistics' })
     expect(tiles.textContent).toContain('Across all reviewers')
   })
 ```
 
-Place it inside the same `describe` the other `Queue statistics` tests live in,
-and follow that block's existing setup — read how those four tests render the
-screen and reach the region before writing this one, rather than inventing a new
-harness.
+Put it in the `describe('design section 5.7 -- a rate that was never defined is
+not zero')` block, where the four existing `Queue statistics` tests live. **They
+render `<StatTiles metrics={…} />` directly inside each `it` — there is no
+`beforeEach`** — so this one carries its own `render` call, exactly as written
+above. `METRICS` is the fixture those four already use.
 
 - [ ] **Step 2: Run it and confirm it fails for the right reason**
 
@@ -417,7 +421,7 @@ git commit -m "fix(ui): the queue tiles say their counts are global"
 
 ## Task 3: I9a — two sites, two sentences
 
-**This task changes two existing test assertions. That is authorised here and
+**This task changes three existing test assertions. That is authorised here and
 nowhere else in this plan.** Both are named in Step 1 and both must be proven
 red before the implementation lands.
 
@@ -487,32 +491,19 @@ string that will exist nowhere once the reword lands, so it would pass because
 nothing can match it — green even with the `openTaskId === null` gate deleted.
 Re-pointed, it pins the suppression again.
 
-Then add one new test, which is the pin I9 was actually about:
+**Add no fourth test.** An earlier draft of this plan added one asserting that
+the two sentence constants differ and that neither contains the server's words.
+It was **removed at the pre-flight scan**: it compares two literals declared in
+its own body, so it cannot fail against the application — it would pass with
+both render sites deleted. Three tests that could not fail shipped on the
+2026-08-12 branch and review caught all three; this plan does not add a fourth,
+and "but it is labelled as vacuous" is not a defence.
 
-```tsx
-  it('does not say the same sentence on the load path and the submit path', () => {
-    // I9: one sentence rendered in two states, apt in only one of them. On the
-    // load path nothing was being saved, so "nothing can be saved right now"
-    // answered a question nobody asked; on the submit path it was the only
-    // place the reviewer's edits could be spoken for. Identical wording is what
-    // hid that. Neither may restate the server's own words, because restating
-    // them is what ADR-0024 decision 4's explanation exists NOT to do.
-    const LOAD = 'Your assigned tasks are unaffected — this is a server problem, not a change to your queue.'
-    const SUBMIT = 'Your edits are still on this page and have not been discarded.'
-    expect(LOAD).not.toBe(SUBMIT)
-    expect(LOAD.toLowerCase()).not.toContain('the database is unavailable')
-    expect(SUBMIT.toLowerCase()).not.toContain('the database is unavailable')
-  })
-```
-
-> **This last test is a constant-only assertion and cannot fail against the
-> app.** It is a readable statement of the constraint, not a pin — the pins are
-> (a), (b) and (c), which do address the rendered DOM. It is included because
-> the constraint is otherwise written down nowhere in the suite. **If a reviewer
-> judges it vacuous, delete it — do not "strengthen" it into something that
-> re-derives the component's own strings.** Three tests that could not fail
-> shipped on the 2026-08-12 branch and review caught all three; this one is
-> declared rather than disguised.
+The constraint it was reaching for — neither sentence may restate *"the database
+is unavailable"* — is enforced by (a) and (b), which assert the real rendered
+text, and is recorded in the design doc. **If you find yourself wanting to pin
+the constraint more directly, stop and report rather than inventing an assertion
+over constants.**
 
 - [ ] **Step 2: Run and confirm the two re-pointed assertions fail**
 
