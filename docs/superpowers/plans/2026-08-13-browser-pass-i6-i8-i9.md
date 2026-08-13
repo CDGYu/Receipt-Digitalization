@@ -941,3 +941,26 @@ not run. Anything they find is appended here.
     in a workspace artefact is a finding that does not survive the workspace**, and
     this log is the mechanism that fixes it — which is why entries are written here
     as they are found rather than at the close.
+
+11. **Task 4 Step 3 prescribed a false claim, and the controller's check for it was
+    scoped past the plan itself.** The step's CSS block asserts that `min-height`
+    with `justify-content: center` "is the vertical centring the finding names". It
+    is not: that centres the children *inside* the card, and nothing centres the
+    card — `src/main.tsx` renders a `<header>` above the `<main>`, so the block
+    lands roughly a third of the way down. The task review found it, the
+    implementer deleted it from the stylesheet, and the controller then verified
+    the deletion with a grep **scoped to `frontend/`** — so the claim still stands
+    verbatim in the plan block above that prescribed it. **Same anchoring mistake as
+    defect 8, by the same person, four tasks later.** The body keeps it, per the
+    rule at the head of this log.
+
+12. **The fourth over-reaching correction on this branch was written while closing
+    two real defects.** Task 4's fix round added, to the new guard entry's comment,
+    "A rename on one side only is invisible to both" — false in the CSS direction,
+    since the census compares by selector with `toEqual` and reds on a one-sided CSS
+    rename. The implementer's own Mutation E was the contradiction: it had to be the
+    rename *plus* the census transcription precisely because a CSS-only rename is
+    visible. Closed by deletion in a second round. **Four instances now, all four
+    remedied by deletion, and every one written in the sentence explaining a fix
+    rather than in the fix.** The pattern is stable enough to state as a rule: on
+    this branch the risk was never in the change, it was in the prose justifying it.
