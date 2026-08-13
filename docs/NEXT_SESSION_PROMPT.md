@@ -153,16 +153,19 @@ the timing alone).
 
 | # | Task | Where the detail is |
 |---|---|---|
-| A1 | **I6** — the inline field error renders three grid columns from the field it blames | §1.4; browser-pass report §3 |
-| A2 | **I8** — admin tiles say "9 open" directly above "No open tasks" | §1.4 |
-| A3 | **I9** — the 503 sentence is printed twice | §1.4 |
+| ~~A1~~ | ~~**I6**~~ — **CLOSED 2026-08-14 (§0g).** | — |
+| ~~A2~~ | ~~**I8**~~ — **CLOSED 2026-08-14 (§0g).** | — |
+| ~~A3~~ | ~~**I9**~~ — **CLOSED 2026-08-14 (§0g).** | — |
 | A4 | Test-shape debt: the row-highlight pin on `.style.background`, the vacuous `getByText(/carol/)`, the class-name guard's three parked leaks | §1.5 |
 | A5 | §1.3's shipped residuals — the hardcoded `0.85`/`0.60` band, `.screen > div`, per-row labels, `--color-null` on `surface-active`, `SignOutControl`'s 4.39:1 `.error` in dark | §1.3 |
 | A6 | The citation residual — `path:NNN` citations, ~unaudited; resolve each against the line it points at. **No count: it is anchor-dependent** — measured 2026-08-12, requiring a directory separator gives 44 and not requiring one gives 72, against the 71 this row used to assert. Derive it with the anchor you intend | §1.2, ADR-0028 §5 |
 
-**A5's contrast item and A1–A3 are visual.** ADR-0029 §4 is the list of what a
-green `verify.py` cannot see; jsdom renders no colour, so these need a browser
-and a person.
+**A5's contrast item is visual, and so was everything A1–A3 closed.** ADR-0029 §4
+is the list of what a green `verify.py` cannot see; jsdom renders no colour and
+lays nothing out, so these need a browser and a person. **§0g is what that costs
+when nobody looks**: the milestone that closed A1–A3 shipped a layout regression
+past all five gates and ten reviews, and it was found only by measuring a
+browser. **The three screens it changed have still not been seen by a person.**
 
 ### B. Needs a ruling from the user — do not guess
 
@@ -347,6 +350,73 @@ read route (**ADR-0031**) and the CLI `--limit` bound all shipped. §1.6's
 *(§0e and §0d are newest and sit first deliberately. They are lettered rather
 than renumbered to the front because renumbering ages every citation of §0a–§0c,
 and that has already happened twice in this file's history.)*
+
+## 0g. Browser-pass I6, I8 and I9 are CLOSED — DONE and MERGED (2026-08-14).
+
+**Nothing carries over.** True fast-forward `d5be9da` → `f92b497`, thirty-three
+commits, single parent each, zero merge commits. **No ADR was written and nothing
+under `src/` changed.** Design:
+`docs/superpowers/specs/2026-08-13-browser-pass-i6-i8-i9-design.md` — **read its
+two dated notes; they correct its own body.** Plan:
+`docs/superpowers/plans/2026-08-13-browser-pass-i6-i8-i9.md` — **read its dated
+defect log FIRST; fifteen controller defects, written as found.** Ledger:
+`.superpowers/sdd/2026-08-13-browser-pass-i6-i8-i9/` — **gitignored, open by
+path**; twenty-five rulings, each with what it costs if wrong.
+
+**I7 is the one that stays OPEN**, by design: it touches ADR-0024's contract and
+needs a ruling from you. It is item 12 in "Blocked on me".
+
+### What shipped
+
+**I6** — every text and money field is wrapped in a `.fieldCell` at the call site
+in `ReceiptForm`, so the error sits under the field that sent it at every column
+count. The wrapper is at the call site and **not inside `MoneyInput`**, because
+`LineItemsTable` uses that component three times per row inside table cells.
+**I8** — the tiles region opens with a caption naming the figures' scope.
+**I9** — the duplicated 503 sentence became two site-appropriate ones, and the
+failure notice gained a card applied only on the failure render.
+
+### The one behavioural defect, and it beat every gate
+
+`.caption` shipped with `grid-column: 1 / -1`. **A grid item spanning a track
+makes that track non-empty**, so `auto-fit` stopped collapsing and behaved as
+`auto-fill`. Measured in Chromium: at 1440 the tiles went **336px → 219px with
+469px of the row blank**. At 1024 there is no difference — and 1024 is the width
+of the finding's own evidence capture, which is why it survived.
+
+**It passed all five gates, five task reviews and five scoped re-reviews.** The
+whole-branch review found it by measuring a browser. If you take one thing from
+this milestone, take that: **jsdom lays nothing out, so no gate here can see a
+layout regression at all.**
+
+### Four things to know before touching this area
+
+- **`grid-column: 1 / -1` on a grid item defeats `auto-fit` collapsing.** If you
+  need a full-width child inside an `auto-fit` grid, put the grid on an inner
+  element instead — which is what `.tiles` now does.
+- **Neither class guard joins a class to the DOM.** Both compare `styles.X`
+  references in the TSX against declarations in the CSS. A wrapper that loses its
+  `className` entirely is invisible unless the guard runs in **both** directions;
+  the admin guard gained its reverse direction on 2026-08-14 for that reason.
+- **CSS *values* are pinned by presence, not by value**, wherever the value is a
+  quantity — a stated bound of the census. `min-width: 0`, `min-height: 60vh`,
+  `border`, `background` are all swappable with the census byte-identical.
+- **A quotation is a copy that ages.** Two docblocks on this branch quoted UI copy
+  and went stale the moment it was reworded; both now describe by role instead.
+
+### The lesson this milestone paid for
+
+**Seven fix rounds across five tasks produced exactly one behavioural defect.**
+Everything else was a sentence. **Four corrections over-reached while closing a
+real defect, and all four were fixed by deletion** rather than a better rewrite.
+**Six verifications passed vacuously** — including two controller greps scoped to
+the wrong directory and a reviewer's own mutation batch defeated by CRLF. And
+**briefing a fix as a bounded property instead of a list closed six claims where
+the list named two**, after both enumerations had come back incomplete.
+
+All fifteen plan and brief defects were the controller's; implementers and
+reviewers found every one, including two corrections to the controller's own
+corrections.
 
 ## 0f. A cited commit must stay reachable — DONE, MERGED and PUSHED (2026-08-13).
 
@@ -1063,11 +1133,20 @@ so is a sentence *about* one.
   `Get-Content` defaults to ANSI without a BOM, so corruption happens on the
   **read**. **Use the Read/Write/Edit tools for anything non-ASCII** — which is
   nearly every file here.
-- **Vitest sets `css: false`** — a `.module.css` import returns a proxy whose
-  keys echo back, so **class names are unpinnable by rendering tests**; a
-  renamed class ships as `class="undefined"` with every gate green. Guard by
-  reading the stylesheet as text (`frontend/tests/stylesheets.test.ts` is the
-  census; `review-null-rule.test.tsx` has the simpler example).
+- **Vitest sets `css: false`** — a `.module.css` import returns a proxy that
+  answers for **any** key, so **class names are unpinnable by rendering tests**;
+  a renamed class ships **unpainted** with every gate green. Measured 2026-08-14
+  in both environments: under this suite the proxy returns a *scoped* string, so
+  a typo renders a plausible-looking name no stylesheet declares; in a real build
+  the key is absent and React omits the attribute rather than stringifying it.
+  **It does not render `class="undefined"`** — this bullet said so until
+  2026-08-14, and so did six places in `value.test.tsx`. Guard by reading the
+  stylesheet as text (`frontend/tests/stylesheets.test.ts` is the census) **and**
+  by a reference-to-declaration guard (`value.test.tsx`'s `COMPONENTS`, or
+  `admin-screen.test.tsx`'s copy for the admin surface). **Neither joins a class
+  to the DOM** — both compare references in the TSX against declarations in the
+  CSS, so a wrapper that loses its `className` entirely is invisible to both
+  unless the guard runs in *both* directions.
 - **Vitest's environment pragma is matched ANYWHERE in a file**, including
   inside a docblock that merely quotes it. It silently moved a suite to Node and
   killed 11 rendering tests.
@@ -1322,6 +1401,25 @@ measured text disagree, the measurement wins.**
     > shape to close by construction versus by enumeration is a single
     > question, and review standard 19 says answer it as one bounded property
     > rather than two narrowings.
+12. **Browser-pass finding I7** — a 401 mid-review swaps the whole screen for the
+    login form with no message, and repaints restored edits identically to stored
+    data. **Deliberately left OPEN by the 2026-08-14 milestone (§0g)** which
+    closed I6, I8 and I9 beside it, because it touches **ADR-0024's contract**:
+    the error-recovery rules about what renders, what announces, and what the
+    stash may hold. Closing it is a contract change, not a fix.
+    > **Recommended: rule on it before anyone builds it.** The three findings
+    > merged beside it needed no ruling and cost seven fix rounds; this one needs
+    > a decision about ADR-0024 first, and the milestone that closed its
+    > neighbours is the cheapest moment to make it, while the surface is fresh.
+13. **A browser pass on the three screens §0g changed.** Not a ruling so much as
+    a call on whether it happens: the field cell, the tiles caption and the
+    framed failure notice have been measured and never seen.
+    > **Recommended: yes, and sooner than the rest of this list.** That milestone
+    > shipped a layout regression past all five gates and ten reviews — tiles 35%
+    > narrower with a third of the row blank at 1440 — and it was found only
+    > because the final reviewer measured a browser. **jsdom lays nothing out.**
+    > Everything else on this list is bounded; this one is the known blind spot
+    > with a demonstrated cost.
 **If you want the short version:** **1 is the one that matters** — it gates all
 calibration and Phase 6's only metric, and everything but the key is verified.
 Say no to **4** and **6**. Leave **8**, **9** and **10** until 1 lands. **7 is
@@ -1339,15 +1437,27 @@ and was measured not to need it.)*
 
 ## Today's goal
 
-**Nothing is in flight, nothing is half-done, and nothing carries over.** A
-cited commit must now stay reachable, merged and pushed on 2026-08-13 (§0f).
-**Run `git branch --no-merged main` and
-`git log --oneline refs/remotes/origin/main..main` rather than reading an answer
-here** — the header above says what each can legitimately show.
+**Nothing is in flight and nothing is half-done.** Browser-pass I6, I8 and I9
+were closed and merged on 2026-08-14 (§0g). **Run `git branch --no-merged main`
+and `git log --oneline refs/remotes/origin/main..main` rather than reading an
+answer here** — the header above says what each can legitimately show.
+
+**One thing DOES carry over, and it is the first thing to decide.** `main` was
+merged but **not pushed** at the end of that session: the merge is thirty-three
+commits and `main` also carried one older pair commit, and every `main` push
+needs its own fresh authorization, which was not given before the session ended.
+So the pending-push list is long rather than empty, and that is expected rather
+than a defect. **Ask, then push.**
 
 **Run the freshness command in `docs/MEMORY.md`'s stamp before trusting any of
 this.** If it lists anything, the tree moved after this was written — re-run
-`python scripts/verify.py` and re-read §0f before acting.
+`python scripts/verify.py` and re-read §0g before acting.
+
+**And the sharpest thing §0g leaves you is not a task, it is a warning.** That
+milestone's only behavioural defect passed all five gates, five task reviews and
+five scoped re-reviews, and was caught by measuring a browser. **jsdom lays
+nothing out**, so no gate in this repo can see a layout regression. Three screens
+changed and **nobody has looked at any of them.**
 
 **And there are now two gates on narrow slices of this document's own honesty.**
 `tests/test_sha_citations.py` fails if any backticked seven-character hex token

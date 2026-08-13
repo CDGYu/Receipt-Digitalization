@@ -6,22 +6,23 @@ continuity protocol itself — what lives where, and why this snapshot must be
 verified rather than trusted — is **ADR-0019**, extended by **ADR-0021** (whose
 2026-08-02 dated correction widened the freshness check after a docs-only task
 proved invisible to it).
-Last updated: **2026-08-13**, most recently by the session that fixed
-`scripts/verify.py`'s docstring, closed the freshness gap that fix exposed, and
-then gated both that check and the anchor it measures from. Earlier the same day: the close of the
-session that made a cited commit stay reachable (**ADR-0042**), which cleared the
-nine dangling citations the 2026-08-12 replay left behind. **No count of
-refreshes is written here** — it is a number that moves without its sentence
-changing, which is review standard 5.
+Last updated: **2026-08-14**, by the session that closed browser-pass findings
+**I6, I8 and I9** — the inline field error that rendered three grid columns from
+the field it blamed, the admin tiles that contradicted the table beneath them,
+and the 503 that said one sentence twice in two states where only one of them
+made it apt. Earlier the same day: the session that fixed `scripts/verify.py`'s
+docstring and gated both the freshness check and the anchor it measures from.
+**No count of refreshes is written here** — it is a number that moves without its
+sentence changing, which is review standard 5.
 
-**ONE position, because nothing is in flight: freshness anchor `4c870bf`** —
+**ONE position, because nothing is in flight: freshness anchor `f92b497`** —
 the last commit on `main` that is not this handoff pair.
 **`git rev-parse main` will be AHEAD of it**, by the pair commit and nothing
 else: a stamp cannot name the commit that writes it. The test is a command,
 not a commit and not a count:
 
 ```
-git log --oneline 4c870bf..main -- ":(top,exclude)docs/MEMORY.md" ":(top,exclude)docs/NEXT_SESSION_PROMPT.md"
+git log --oneline f92b497..main -- ":(top,exclude)docs/MEMORY.md" ":(top,exclude)docs/NEXT_SESSION_PROMPT.md"
 git log --oneline refs/remotes/origin/main..main   # what a push would send
 git ls-remote --heads origin main                  # authoritative on what is pushed
 git branch --no-merged main                        # must name NOTHING
@@ -75,7 +76,7 @@ bundling them with an ADR or an index row lists itself as stale. That happened
 three times in the session that wrote ADR-0033. Everything substantive was
 committed first.
 
-*(The previous stamp was 2026-08-13 at `main @ ccc1e96`.)*
+*(The previous stamp was 2026-08-13 at `main @ 4c870bf`.)*
 
 ## Snapshot
 
@@ -84,6 +85,18 @@ committed first.
   for three days while one existed**: true when written on 2026-08-07, rotted
   the moment the corrections branch was cut. **The answer is the command, never
   the sentence.**
+- **Browser-pass I6, I8 and I9 are CLOSED — COMPLETE AND MERGED** (2026-08-14,
+  true fast-forward `d5be9da` → `f92b497`, thirty-three commits, single parent
+  each, zero merge commits). `feat/browser-pass-i6-i8-i9` is kept at its merge
+  point. **No ADR was written and nothing under `src/` changed.** I7 stays OPEN
+  by design — it touches ADR-0024's contract and needs a user ruling.
+  **The milestone's one behavioural defect was found by the whole-branch review,
+  after every gate and ten task-level reviews had passed it**: the tiles caption
+  spanned `grid-column: 1 / -1`, and a grid item spanning a track makes that
+  track non-empty, so `auto-fit` stopped collapsing and behaved as `auto-fill`.
+  Measured in Chromium at 1440: tiles 336px → 219px with 469px of the row blank;
+  invisible at 1024, which is the width of the finding's own evidence capture.
+  See "Browser-pass I6, I8 and I9" below.
 - **A cited commit must stay reachable — COMPLETE AND MERGED** (2026-08-13,
   true fast-forward `e698aca` → `29a5a88`, eighteen commits, single parent
   each, zero merge commits). `feat/dangling-citations` is kept at its merge
@@ -260,6 +273,69 @@ committed first.
   searching the tracked tree — open ledgers by path.**
 - **The repo is PUBLIC.** Verified 2026-07-31 via the GitHub API. See
   "Environment / provider" for what that exposes.
+
+## Browser-pass I6, I8 and I9 — COMPLETE AND MERGED (2026-08-14)
+
+**True fast-forward `d5be9da` → `f92b497`, thirty-three commits, single parent
+each, zero merge commits.** **No ADR.** **Nothing under `src/` changed** — no
+route, no schema, no coercer. Design:
+`docs/superpowers/specs/2026-08-13-browser-pass-i6-i8-i9-design.md` — **read its
+two dated notes; they correct its own body.** Plan:
+`docs/superpowers/plans/2026-08-13-browser-pass-i6-i8-i9.md` — **read its dated
+defect log first; it records fifteen controller defects, written as they were
+found rather than at the close.** Ledger:
+`.superpowers/sdd/2026-08-13-browser-pass-i6-i8-i9/` — gitignored, open by path;
+it holds twenty-five rulings with what each costs if wrong.
+
+**What shipped.** I6: every text and money field is wrapped in a `.fieldCell` at
+the call site in `ReceiptForm`, so the inline error sits under the field that
+sent it at every column count. I8: the tiles region opens with a caption naming
+the figures' scope, so global counts no longer read against the role-scoped table
+below them. I9: one duplicated 503 sentence became two site-appropriate ones —
+the load path speaks for the queue, the submit path for the reviewer's edits —
+and the failure notice gained a card, applied only on the failure render.
+**I7 stays OPEN**: it touches ADR-0024's contract and needs a user ruling.
+
+### The one behavioural defect, and why nothing caught it
+
+`.caption` carried `grid-column: 1 / -1`. **A grid item spanning a track makes
+that track non-empty**, so `auto-fit` stopped collapsing and behaved as
+`auto-fill`. Measured in Chromium against the real declarations: at 1440 the four
+tiles went **336px → 219px with 469px of the row blank**; at 1024 there is no
+difference at all — and 1024 is the width of the finding's own evidence capture.
+
+It passed **all five gates, five task reviews and five scoped re-reviews**, and
+was found by the whole-branch review measuring a browser. jsdom lays out nothing,
+so nothing in the pipeline could have caught it. **This is the concrete answer to
+"a green suite cannot see what a person sees"** — the fix was verified the same
+way, by a Chromium harness that was itself proven able to report failure first.
+
+### What this milestone measured about its own process
+
+- **Seven fix rounds across five tasks produced exactly one behavioural defect.**
+  Every other finding was a sentence.
+- **Four corrections over-reached while closing a real defect**, and all four were
+  remedied by **deletion** rather than a better rewrite. Briefing the last rounds
+  that way is what stopped the sequence ADR-0032 records as never converging.
+- **Briefing a fix as a bounded property instead of a list closed six claims
+  where the list named two** — and both prior enumerations, the controller's and
+  a reviewer's, had been incomplete. Review standard 19, demonstrated.
+- **Six verifications passed vacuously** — a grep anchored past its target, a test
+  whose search string existed nowhere after a reword, a shell check writing to a
+  path Git Bash does not have, two controller greps scoped to the wrong
+  directory, and a reviewer's mutation batch defeated by CRLF. Every one was
+  caught by someone proving the check could fail.
+- **All fifteen plan and brief defects were the controller's**, and implementers
+  and reviewers found every one — including two corrections to the controller's
+  own corrections, and one case where a correct finding was wrongly refuted
+  because a `git grep` had been truncated with `| head`.
+
+### Nobody has looked at this
+
+No browser, at any width, in either theme, has rendered the field cell, the
+caption or the framed notice. The browser-pass report closes all three as
+**MEASURED, NOT SEEN**, following ADR-0041's precedent for I5. The regression
+above is why that distinction is not a formality.
 
 ## Dangling citations — COMPLETE AND MERGED (2026-08-13)
 
