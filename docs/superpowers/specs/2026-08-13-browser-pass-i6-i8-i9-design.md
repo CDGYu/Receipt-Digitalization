@@ -188,6 +188,24 @@ rather than four times across the labels. The visible caption and the region's
 accessible name move together, so a screen-reader user and a sighted user get
 the same qualification.
 
+> **Dated note — 2026-08-13, from the plan's probe. Two corrections to the
+> paragraph above; read them before re-deriving anything from it.**
+>
+> **The accessible name does not move.** Four tests in
+> `frontend/tests/admin-screen.test.tsx` address the tiles by
+> `getByRole('region', { name: 'Queue statistics' })`. Changing the region's
+> accessible name breaks all four and buys nothing: a visible caption *inside*
+> the region is announced as its first content, so a screen-reader user gets the
+> qualification either way. `aria-label="Queue statistics"` therefore stays, and
+> the caption is an element within the region. This keeps the milestone inside
+> the standing bound that existing tests pass unmodified.
+>
+> **There is no scope to plumb.** `GET /metrics` calls `queue_stats(session)`
+> with no user filter, so the tiles are global for every role, always — not
+> "whatever scope this render happens to have". `StatTiles` needs **no new
+> prop**; the caption is static and says the counts are global. Simpler than
+> this paragraph implies, and the simplification is the accurate one.
+
 This mirrors what §5.6 already did for the empty state, and that symmetry is the
 argument: the screen currently names a scope in one of the two places it shows
 counts, and the unqualified one is the one that reads as broken.
@@ -219,6 +237,21 @@ stop being identical.
 Exact wording is settled in the implementation plan and reviewed there; the
 constraint recorded here is that neither sentence may restate
 *"the database is unavailable"*, because restating it is the defect.
+
+> **Dated note — 2026-08-13, from the plan's probe. One existing test goes
+> vacuous under this change and must move with it.**
+>
+> `a 503 on the close does not also claim nothing could be saved` asserts
+> `queryByText('The database is unavailable — nothing can be saved right now.')`
+> is `null`. That is a real pin today, because the string renders elsewhere. The
+> moment §5.1 reworders both sites, **the string exists nowhere**, and the
+> assertion passes because nothing can match it rather than because the
+> suppression works. It would be green with the suppression deleted.
+>
+> The test must be re-pointed at the *new* submit-path sentence, and the
+> re-pointed version proven red by deleting the `openTaskId === null` gate.
+> This is review standard 15: a test that passes for the wrong reason proves
+> nothing, and standard 14: a pin never proven red is not a pin.
 
 ### 5.2 The framing
 
