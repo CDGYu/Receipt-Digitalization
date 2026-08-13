@@ -10,11 +10,15 @@ Five gates, in this order:
     vitest      npm test                      the component and unit suites
     build       npm run build                 tsc -b && vite build
 
-**Why a script and not a CI workflow.** `.github/workflows/` is untracked in
-this repository and GitHub Actions does not run for it, so a committed workflow
-would be a gate that never executes -- a false signal, which is worse than no
-signal. This script is tracked, so it is the copy that cannot drift out of the
-repository, and it runs wherever the person making the change is.
+**Why the gate list is here and not in the workflow.** `.github/workflows/ci.yml`
+is tracked and runs on every push; its "Run the gates" step is
+`python scripts/verify.py`. The workflow deliberately does not re-list the gates,
+because a second copy in YAML is one more thing to keep in agreement -- the
+version of that file that predated ADR-0037 listed `pytest`, `ruff` and `mypy`
+and ran none of the three frontend gates, so a green run said less than it
+looked like it said. This file is the one definition of "did this pass"
+(ADR-0017) and CI is a consumer of it, and it also runs wherever the person
+making the change is, which is the cheapest place for a gate to fail.
 
 **Why the Node half is not optional.** `npm test` does not type-check.
 Measured on this branch: rewriting `SubmitError`'s fields in the
@@ -46,9 +50,8 @@ configured by `frontend/.oxlintrc.json`). Measured: it exits 0 while printing a
 `react(only-export-components)` warning, which is what its configuration asks
 for -- so its exit status cannot tell "clean" from "warned", and a gate here is
 a command whose exit status decides a verdict. Promoting it would mean deciding
-first what its warnings are for; nothing in this repository records such a
-decision (`oxlint` appears in `package.json`, its own config and the lockfile,
-and in no prose). Until that is decided it is named here rather than left to
+first what its warnings are for, and ADR-0017 records that nobody has made that
+decision. Until it is made, `npm run lint` is named here rather than left to
 look like an oversight.
 """
 
