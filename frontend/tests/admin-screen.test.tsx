@@ -390,6 +390,17 @@ describe('design section 5.7 -- a rate that was never defined is not zero', () =
     expect(within(tiles).getAllByRole('img', { name: 'not extracted' })).toHaveLength(3)
     expect(tiles.textContent).not.toContain('undefined')
   })
+
+  it('says the tile counts are global, so they do not contradict a scoped table', () => {
+    // The tiles come from `GET /metrics`, which is global; the table below is
+    // scoped by role. Both are true, and a reviewer holding nothing saw
+    // "Open backlog 9" directly above "No open tasks, and none assigned to
+    // you". The empty state already names its scope; this is the other half.
+    render(<StatTiles metrics={METRICS} />)
+
+    const tiles = screen.getByRole('region', { name: 'Queue statistics' })
+    expect(tiles.textContent).toContain('Across all reviewers')
+  })
 })
 
 // --------------------------------------------------------------------------- //

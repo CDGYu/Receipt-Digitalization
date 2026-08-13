@@ -55,6 +55,7 @@ export function StatTiles({ metrics }: { metrics: Metrics }) {
     // reader can jump to, and it is what lets a test address the tiles apart
     // from the table below, which repeats two of these words as row states.
     <section className={styles.tiles} aria-label="Queue statistics">
+      <p className={styles.caption}>Across all reviewers</p>
       <Tile label="Open backlog" value={countOf(queue?.open)} />
       <Tile label="In progress" value={countOf(queue?.in_progress)} />
       <Tile label="Done" value={countOf(queue?.done)} />

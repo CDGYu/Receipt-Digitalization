@@ -30,6 +30,23 @@
   padding: 0;
 }
 
+/* The counts above are global -- `GET /metrics` has no user filter -- while the
+ * table below is scoped by role, so a reviewer holding nothing reads a backlog
+ * of nine directly above "No open tasks, and none assigned to you". The empty
+ * state names its scope already; this is the other half of that symmetry.
+ *
+ * Muted and small: it qualifies the figures, it is not one of them. Spanning
+ * the grid so it reads as a heading for all four tiles rather than a label
+ * belonging to the first. */
+.caption {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--color-muted-foreground);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
 .tile {
   display: flex;
   flex-direction: column;

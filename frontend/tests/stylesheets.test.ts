@@ -288,6 +288,7 @@ const CENSUS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
   },
   'admin/StatTiles.module.css': {
     '.tiles': 'display: grid, grid-template-columns, gap, margin, padding',
+    '.caption': 'grid-column, margin, color, font-family, font-size, line-height',
     '.tile':
       'display: flex, flex-direction: column, gap, box-sizing: border-box, padding, border, border-radius, background, box-shadow',
     '.label':
