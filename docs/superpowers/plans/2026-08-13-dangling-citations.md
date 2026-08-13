@@ -355,14 +355,30 @@ there; expect `test_the_repository_history_is_not_shallow` to **fail naming
 
 - [ ] **Step 4: Prove guarantee 3 red — the abbreviation pin**
 
-Run: `git -c core.abbrev=8 rev-parse --short HEAD`
+This one is driven red **directly**. `_git()` runs with `cwd=REPO_ROOT`, so it
+reads `.git/config`; setting `core.abbrev` there changes the value the assertion
+reads.
 
-Expected: an **8**-character oid, confirming the knob moves the value the test
-reads. The test asserts on `_git("rev-parse", "--short", "HEAD")`, which does not
-inherit that `-c`, so demonstrate the mechanism this way and say so plainly in
-your report rather than claiming the assertion itself was driven red.
+```bash
+git config core.abbrev 8
+python -m pytest tests/test_sha_citations.py::test_git_still_abbreviates_to_seven_characters
+git config --unset core.abbrev
+git config core.abbrev            # must print nothing and exit 1
+python -m pytest tests/test_sha_citations.py::test_git_still_abbreviates_to_seven_characters
+```
 
-**This is the one guarantee whose red proof is indirect. Do not overstate it.**
+Expected: **FAIL** naming *"git now abbreviates to 8 characters"*, then — after
+the unset — **PASS**.
+
+**Unset it even if the test run crashes.** A left-behind `core.abbrev` makes this
+test fail permanently and will look like a real defect to the next task. The
+fourth command above is the check that it is gone; do not skip it. Verified
+2026-08-13: `git config core.abbrev 8` turns `git rev-parse --short HEAD` from
+seven characters into eight, and unsetting restores it.
+
+Do not use `git -c core.abbrev=8 python …` — the `-c` binds to that one git
+invocation and is not inherited by the test's own subprocess, which would
+demonstrate the knob without driving the assertion.
 
 - [ ] **Step 5: Remap the five citations of 5a7fc58**
 
