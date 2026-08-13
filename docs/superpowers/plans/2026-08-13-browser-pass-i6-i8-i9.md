@@ -911,3 +911,33 @@ not run. Anything they find is appended here.
    correcting someone else for imprecision. No code changed: the shipped caption
    claims scope rather than composition, so it is true under either account, which
    is the property that made it the right choice.
+
+8. **Task 3 Step 7's completeness grep passes while a stale site survives.** The
+   step tells the implementer to run `git grep -n "nothing can be saved right now"
+   -- frontend/` and requires no output. After the reword that grep is empty — and
+   `frontend/src/review/ReviewScreen.module.css` still opened its `.explanation`
+   rule with `"The database is unavailable" is the plain-language explanation…`,
+   quoting the sentence's **first** half, which the grep is anchored past. So the
+   plan's own completeness check reported success over a live stale quotation.
+   **An empty grep is not evidence until the grep has been shown able to match
+   what you are looking for** — a rule this plan states in Task 3's own Step 5 and
+   then breaks in Step 7. Found by the implementer, verified by the controller,
+   closed in Task 3's fix round. A second aged site,
+   `docs/adr/0024-review-ui-error-recovery-contract.md`, is left for the
+   whole-branch review: only a rationale clause aged, and decision 4 is unamended
+   by constraint.
+
+9. **Task 3 Step 6 refers to "the new test" that Step 1 no longer creates.** The
+   pre-flight scan removed the fourth test (defect 3 above) but left this dangling
+   reference to it. Harmless — the implementer added none and said so — but it is a
+   plan step citing a deleted artefact.
+
+10. **The plan gave the controller no way to get an execution finding into the
+    tracked tree.** Task 3's implementer reported defect 8 correctly, in its report
+    file — which lives under `.superpowers/`, which is gitignored. The Task 4
+    implementer opens the very file that defect names and would have had no string
+    to grep for and no record to read. The commit message, which *is* tracked, said
+    "All four moved" and did not mention the fifth site. **A finding recorded only
+    in a workspace artefact is a finding that does not survive the workspace**, and
+    this log is the mechanism that fixes it — which is why entries are written here
+    as they are found rather than at the close.
