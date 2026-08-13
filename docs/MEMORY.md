@@ -6,18 +6,19 @@ continuity protocol itself — what lives where, and why this snapshot must be
 verified rather than trusted — is **ADR-0019**, extended by **ADR-0021** (whose
 2026-08-02 dated correction widened the freshness check after a docs-only task
 proved invisible to it).
-Last updated: **2026-08-13**, at the close of the session that made a cited
-commit stay reachable (**ADR-0042**), closing the nine dangling citations the
-2026-08-12 replay left behind.
+Last updated: **2026-08-13**, twice. First at the close of the session that made
+a cited commit stay reachable (**ADR-0042**), closing the nine dangling citations
+the 2026-08-12 replay left behind; then by the short session that fixed the
+`scripts/verify.py` docstring that close had reported and deliberately left.
 
-**ONE position, because nothing is in flight: freshness anchor `29a5a88`** —
-the merged tip, and the last commit on `main` that is not this handoff pair.
+**ONE position, because nothing is in flight: freshness anchor `b4a9c23`** —
+the last commit on `main` that is not this handoff pair.
 **`git rev-parse main` will be AHEAD of it**, by the pair commit and nothing
 else: a stamp cannot name the commit that writes it. The test is a command,
 not a commit and not a count:
 
 ```
-git log --oneline 29a5a88..main -- src tests frontend docs ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
+git log --oneline b4a9c23..main -- src tests frontend docs ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
 git log --oneline refs/remotes/origin/main..main   # what a push would send
 git ls-remote --heads origin main                  # authoritative on what is pushed
 git branch --no-merged main                        # must name NOTHING
@@ -25,6 +26,17 @@ git branch --no-merged main                        # must name NOTHING
 
 **Empty means this pair is current.** Anything listed means the tree moved
 after it was written.
+
+**The check does not watch `scripts/`, and 2026-08-13 is when that mattered.**
+The pathspec is `src tests frontend docs`; `scripts/` is in none of them, so a
+commit touching only `scripts/` — a gate-runner or seed-script change — leaves
+this command empty and the pair reads as current. Verified with a positive
+control rather than an empty result: the same command over a past
+`scripts/verify.py` commit lists it under `-- frontend` and not under
+`-- src tests docs`. `git status --short` catches it while it is uncommitted,
+and `refs/remotes/origin/main..main` above while it is unpushed; once pushed,
+nothing here does. Widening the pathspec is unclaimed work, and is the same gap
+ADR-0021's 2026-08-02 correction closed for `docs`.
 
 **No characterisation of the anchor is written here on purpose** — an earlier
 stamp called its SHA "the last *code* commit", and the next commit falsified
@@ -45,7 +57,7 @@ bundling them with an ADR or an index row lists itself as stale. That happened
 three times in the session that wrote ADR-0033. Everything substantive was
 committed first.
 
-*(The previous stamp was 2026-08-12 at `main @ cd308bf`.)*
+*(The previous stamp was 2026-08-13 at `main @ b182736`.)*
 
 ## Snapshot
 
@@ -284,12 +296,14 @@ wave, which corrected a *stale* claim by asserting it was *never true*, which a
 under observation, and it is the strongest argument in the tree for **delete,
 don't rewrite**.
 
-**Reported, not fixed:** `scripts/verify.py`'s module docstring still says
-"`.github/workflows/` is untracked in this repository and GitHub Actions does
-not run for it, so a committed workflow would be a gate that never executes".
-ADR-0037 reversed that untracking on 2026-08-11 and this milestone edited the
-tracked `ci.yml`. Out of scope here; it is a live false claim in a shipped
-file.
+**Reported here, then fixed on 2026-08-13 in the session after this one:**
+`scripts/verify.py`'s module docstring claimed `.github/workflows/` was
+untracked and Actions did not run for it — false since ADR-0037 reversed that
+untracking on 2026-08-11. **A second false claim in the same docstring went
+with it**, found only because every claim in the file was re-derived rather
+than just the reported one: the parenthetical asserting `oxlint` appears "in no
+prose" is contradicted by ADR-0017, ADR-0029 and this pair. Both were deleted
+rather than re-listed. Five gates PASS after the edit.
 
 ## Review outcome focus — COMPLETE AND MERGED (2026-08-12)
 

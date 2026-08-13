@@ -374,9 +374,11 @@ standards: **an empty grep is not evidence until you have shown the grep can
 match what you are looking for**, and **a permanence claim about a command is a
 copy of ADR-0042's correction when the command's anchor is closed**.
 
-**Reported, not fixed:** `scripts/verify.py`'s docstring still says
-`.github/workflows/` is untracked and Actions does not run — false since
-ADR-0037, and this milestone edited the tracked `ci.yml`.
+**Reported here, then fixed on 2026-08-13 in the session after this one:**
+`scripts/verify.py`'s docstring said `.github/workflows/` is untracked and
+Actions does not run — false since ADR-0037. Re-deriving the rest of the
+docstring found a second false claim that nobody had reported, and both were
+deleted rather than rewritten.
 
 ## 0e. Review outcome focus is DONE, MERGED and PUSHED (2026-08-12).
 
@@ -1333,14 +1335,20 @@ what gates every real accuracy number. What §0d *did* change is that the number
 waiting on the other side of it is now worth reading. Everything but the key is
 verified — only a human can do the remaining step.
 
-**One thing §0f left open on purpose, and it is a live false claim in a shipped
-file:** `scripts/verify.py`'s module docstring still says "`.github/workflows/`
-is untracked in this repository and GitHub Actions does not run for it, so a
-committed workflow would be a gate that never executes". **ADR-0037 reversed
-that untracking on 2026-08-11**, `ci.yml` is tracked, and §0f edited it. It was
-out of the dangling-citation milestone's scope — a stale prose claim, not a
-dangling citation — so it was reported and not fixed. It is a small, real,
-unclaimed piece of work.
+**The one thing §0f left open on purpose is closed (2026-08-13).**
+`scripts/verify.py`'s module docstring no longer claims `.github/workflows/` is
+untracked; ADR-0037 had reversed that on 2026-08-11 and the claim outlived it by
+two days. The paragraph now says what is true — the workflow is tracked, runs on
+every push, and its `Run the gates` step runs this script — and says why the
+gate list is not duplicated in YAML.
+
+**Two things that closure is worth more than:** re-deriving the *rest* of the
+docstring found a second false claim that nobody had reported — the
+parenthetical asserting `oxlint` appears "in no prose", contradicted by
+ADR-0017, ADR-0029 and this file — so the reported defect was **not** the only
+one, and a fix scoped to the report would have shipped the other. And the
+freshness check in `docs/MEMORY.md`'s stamp **cannot see either edit**: its
+pathspec omits `scripts/`. That is recorded at the stamp, where the command is.
 
 **One thing §0d left open on purpose:** the two `format_breakdown` tests are the
 only tests of the shared renderer, and they sit in a module that skips whole
