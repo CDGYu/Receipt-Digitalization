@@ -69,8 +69,10 @@ The counts above are anchored at `e698aca`; the commands answer for whatever
 tree the reader has.
 
 **The six that do not resolve are false positives of that anchor, not defects.**
-Three are PAN digit-strings (`0000000000`, `1111111111`, `9999999999`, in
-ADR-0027 and the browser-pass spec), one is a PAN test value
+Three are Fira Code tabular-figure width samples (`0000000000`, `1111111111`,
+`9999999999`, in ADR-0027 and the browser-pass spec, which record that each
+"measure[s] exactly 96px at 16px" — **not** PAN digit-strings, as an earlier
+draft of this sentence called them), one is a PAN masking example
 (`41111111111111111111`, ADR-0018), one is a date (`20260727`), and one is an
 Alembic revision id (`b9342906a5a6`). The anchor is mine and it over-matches;
 §4.1 is where that is dealt with, and it is dealt with by narrowing the rule
@@ -334,9 +336,12 @@ performed; remapping it to a patch-identical commit changes no claim the plan
 makes. ADR-0042 records this as the narrow exception it is, so the next reader
 does not take it as licence to rewrite a plan's substance.
 
-Line 464 is worth reading after the remap, because it becomes a worked example
-of the check working: *"They were 40 and 40 at `e0481f4`"* is true of that
-commit, and they are 41 and 41 today.
+The plan's ADR-table step is worth reading after the remap, because it becomes a
+worked example of the check working: *"They were 40 and 40 at `e0481f4`"* is true
+of that commit, and the two commands beside it answer higher today. **No current
+number is written here**, because this milestone's own Task 3 adds an ADR and an
+index row, so any figure would rot before the branch merged — which is ADR-0032
+decision 3, and it caught this document twice.
 
 ### 6.3 CI
 

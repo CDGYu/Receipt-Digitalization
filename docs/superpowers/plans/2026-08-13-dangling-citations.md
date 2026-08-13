@@ -407,9 +407,11 @@ and the ADR-table check.
 
 **The last one is worth reading after you change it.** It says the ADR count and
 the index row count "were 40 and 40" at that commit. That stays true of the
-commit. They are **41 and 41** today, which is the check in that very sentence
-working as intended. Do not update the 40s — they are correctly closed to a
-commit that now resolves.
+commit, and the two commands beside it answer higher today — which is the check
+in that very sentence working as intended. Do not update the 40s: they are
+correctly closed to a commit that now resolves. **And do not write today's
+figure either** — Task 3 of this plan adds an ADR and an index row, so any
+number written here rots before the branch merges.
 
 - [ ] **Step 7: Record the remap in that plan's dated defect log**
 
@@ -429,7 +431,7 @@ could look up.
 **No claim in this plan changed.** A citation is a pointer, and it now points at
 the commit that carries the tree the probes were run against. The counts in the
 ADR-table step are deliberately untouched: 40 and 40 were correct at that commit
-and are 41 and 41 today, which is that step's check working.
+and are higher today, which is that step's check working.
 
 The general rule is ADR-0042, and `tests/test_sha_citations.py` enforces it.
 ```
@@ -788,7 +790,59 @@ catches *today's* nine, not that it catches a *new* one.
 
 ## Dated defect log
 
-*(Empty at the time of writing. Append every plan defect found during execution
-here, with its measurement. This plan's claims about existing artefacts were
-probed at `42e8483` — read the real file before trusting any line above that
-describes one, and report the discrepancy rather than working around it.)*
+*(This plan's claims about existing artefacts were probed at `42e8483` — read
+the real file before trusting any line above that describes one, and report the
+discrepancy rather than working around it. Every defect below is the plan
+author's.)*
+
+### 2026-08-13 — five plan defects, all found by execution
+
+**1. The abbreviation pin was never driven red.** Task 1 Step 4 originally
+demonstrated that `git -c core.abbrev=8 rev-parse --short HEAD` returns eight
+characters — which shows the knob moves the value without ever making the
+assertion fail. That is review standard 14: a pin never proven red is not a pin.
+Found by the pre-flight scan, before any implementer was dispatched. Measured
+fix: `_git()` runs with `cwd=REPO_ROOT` and so reads `.git/config`, so
+`git config core.abbrev 8` drives the assertion red directly. Step 4 rewritten,
+including an unset-and-verify.
+
+**2. The docstring's "six" stated a population it did not match.** The block in
+Step 1 read *"all six backticked hex tokens that are not commits are 8, 10, 12 or
+20"*. Re-derived at `e698aca`: **49** backticked all-hex tokens tree-wide are not
+commits. Six is the count only inside a 7-to-40-character window the sentence
+never stated. Review standard 23.
+
+**3. And it asserted the converse of what was measured.** *"All 112 genuine
+commit citations are exactly seven characters"* is a claim about commit citations
+at other lengths. What was actually measured — and what carries "no exclusion
+list needed" — is that all 112 backticked seven-hex tokens **are** commits, zero
+false positives. Measured during the fix round to close the gap: 18 backticked
+hex tokens of 4-6 characters exist and **none** resolves to a commit.
+
+**4. Three tokens were misdescribed as PAN digit-strings.** `0000000000`,
+`1111111111` and `9999999999` are **Fira Code tabular-figure width samples** —
+ADR-0027 records that each "measure[s] exactly 96px at 16px, so a transposed
+digit does break the column". Found by the implementer re-deriving rather than
+trusting the block, and confirmed by the re-review independently.
+
+**5. `_git()` discarded `returncode` and `stderr`**, so any git failure became
+the wrong-reason failure the module exists to avoid. Reproduced against a real
+exit 128: the pre-fix module reported *"no citations found at all, which means
+the pattern stopped matching"* — blaming the regex for a `safe.directory`
+refusal. Both raise paths were then executed, not asserted.
+
+### 2026-08-13 — where this document now diverges from what shipped
+
+**Step 1's embedded code block is NOT the docstring that shipped.** Defects 2, 3
+and 4 were fixed in `tests/test_sha_citations.py` during fix round 1 and the
+block above was deliberately left as it was issued, so the record of what was
+instructed survives. **Read the file, not the block.**
+
+**Step 6's guidance and Step 7's defect-log template were edited after Task 1
+consumed them.** Both carried "41 and 41", a count this plan's own Task 3
+falsifies by adding an ADR and an index row — a claim that rots before the branch
+merges, inside the milestone that exists to stop that. The same claim had four
+copies: one in the file Task 1 repaired, two here, one in the design document.
+All four are now de-numbered (ADR-0033: a correction goes to every copy).
+Recorded rather than silent, because editing already-consumed step text changes
+the record of what was instructed.
