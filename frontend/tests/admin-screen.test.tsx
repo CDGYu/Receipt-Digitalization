@@ -399,7 +399,7 @@ describe('design section 5.7 -- a rate that was never defined is not zero', () =
     render(<StatTiles metrics={METRICS} />)
 
     const tiles = screen.getByRole('region', { name: 'Queue statistics' })
-    expect(tiles.textContent).toContain('Across all reviewers')
+    expect(tiles.textContent).toContain('System-wide, not only your tasks')
   })
 })
 

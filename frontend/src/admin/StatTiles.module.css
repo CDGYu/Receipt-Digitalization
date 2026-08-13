@@ -1,8 +1,8 @@
 /* The queue at a glance -- design section 5.7. Tokens only; no raw hex.
  *
- * ## Four tiles, and none of them is a severity
+ * ## Nothing here is a severity
  *
- * A statistics tile reports a count, not a judgement. ADR-0027 section 2
+ * A statistics tile reports a figure, not a judgement. ADR-0027 section 2
  * reserves error red, warn amber and info blue outright, so nothing here paints
  * a backlog amber because it looks large -- the number is the signal, and the
  * threshold at which it becomes a problem is not a fact this component has.
@@ -11,10 +11,10 @@
  *
  * ## Placed by class
  *
- * `.tiles` is a grid and `.tile` is its item. Nothing selects a child by
- * position, so the day a fifth tile lands -- or the four are reordered -- the
- * layout is unchanged. `ReviewScreen.module.css` records what the other approach
- * costs.
+ * `.tiles` is a grid; `.caption` and `.tile` are its items. Nothing selects a
+ * child by position, so the day a fifth tile lands -- or the four are
+ * reordered -- the layout is unchanged. `ReviewScreen.module.css` records what
+ * the other approach costs.
  *
  * `auto-fit` with a `minmax` floor rather than a fixed `repeat(4, 1fr)`: four
  * tiles at 1fr each on a narrow window squeeze "Auto-approval rate" onto three
@@ -30,9 +30,9 @@
   padding: 0;
 }
 
-/* The counts above are global -- `GET /metrics` has no user filter -- while the
- * table below is scoped by role, so a reviewer holding nothing reads a backlog
- * of nine directly above "No open tasks, and none assigned to you". The empty
+/* The figures above are global -- `GET /metrics` has no user filter -- while the
+ * table below is scoped by role, so a reviewer holding nothing read an open
+ * backlog directly above "No open tasks, and none assigned to you". The empty
  * state names its scope already; this is the other half of that symmetry.
  *
  * Muted and small: it qualifies the figures, it is not one of them. Spanning

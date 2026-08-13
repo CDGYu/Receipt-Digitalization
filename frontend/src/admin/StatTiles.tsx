@@ -4,8 +4,8 @@ import styles from './StatTiles.module.css'
 
 /** The queue at a glance -- design section 5.7, fed by `GET /metrics`.
  *
- * Four tiles: the open backlog, what is being worked, what is closed, and the
- * auto-approval rate.
+ * A caption naming the scope, then four tiles: the open backlog, what is being
+ * worked, what is closed, and the auto-approval rate.
  *
  * ## The rate is where section 4's rule bites hardest
  *
@@ -55,7 +55,17 @@ export function StatTiles({ metrics }: { metrics: Metrics }) {
     // reader can jump to, and it is what lets a test address the tiles apart
     // from the table below, which repeats two of these words as row states.
     <section className={styles.tiles} aria-label="Queue statistics">
-      <p className={styles.caption}>Across all reviewers</p>
+      {/* The scope goes inside the region, never into its accessible name:
+          `Queue statistics` is the handle both the unit tests and the visual
+          spec address this region by. As the region's first child the caption
+          precedes every tile in reading order.
+
+          It claims scope and nothing else. `queue_stats` groups review tasks by
+          state and never reads `assigned_to`, and `auto_approval_rate` is a
+          ratio over receipt statuses with no task and no reviewer in it -- so a
+          caption naming reviewers would be false of the rate tile, and one
+          calling every figure a count would be false of it too. */}
+      <p className={styles.caption}>System-wide, not only your tasks</p>
       <Tile label="Open backlog" value={countOf(queue?.open)} />
       <Tile label="In progress" value={countOf(queue?.in_progress)} />
       <Tile label="Done" value={countOf(queue?.done)} />
