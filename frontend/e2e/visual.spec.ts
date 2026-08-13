@@ -1210,13 +1210,17 @@ test('ADR-0024 state 1 of 5: the distinct 503, with the Skip escape suppressed',
           json(route, 503, envelope('the database is unavailable')),
         )
         await page.goto('/app/review')
-        // The explanation, addressed by the half of its sentence the server's own
-        // words do not repeat: `getByText('The database is unavailable')` matches
-        // BOTH this paragraph and the alert below it (Playwright's text match is
-        // a case-insensitive substring), which is a strict-mode violation --
-        // measured, and a small piece of evidence for how close the two
-        // sentences read.
-        await expect(page.getByText('nothing can be saved right now')).toBeVisible()
+        // The load path's explanation, addressed by its whole sentence: neither
+        // it nor the server's words below is a substring of the other, so the
+        // locator is unambiguous. Playwright's text match is a case-insensitive
+        // substring, which is why, while this paragraph still restated the
+        // server's words, only a fragment of it could be addressed without
+        // matching both -- a strict-mode violation, measured.
+        await expect(
+          page.getByText(
+            'Your assigned tasks are unaffected — this is a server problem, not a change to your queue.',
+          ),
+        ).toBeVisible()
         await expect(page.getByRole('alert')).toHaveText('the database is unavailable')
         await expect(page.getByRole('button', { name: 'Skip this receipt' })).toHaveCount(0)
         s.expectHits('review/next', 'receipt')

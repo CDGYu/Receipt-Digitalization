@@ -1132,7 +1132,7 @@ describe('terminal submit and load states', () => {
     await userEvent.keyboard('{Control>}{Enter}{/Control}')
 
     const sentence = await screen.findByText(
-      'The database is unavailable — nothing can be saved right now.',
+      'Your edits are still on this page and have not been discarded.',
     )
     // Deliberately NOT a second alert -- a dated user ruling (design §6.1).
     // The message alert renders beside this sentence and already announces; a
@@ -1147,11 +1147,13 @@ describe('terminal submit and load states', () => {
 
   it('a 503 on the close does not also claim nothing could be saved', async () => {
     // Both sentences render in the same place, and on this one path the first
-    // is false: `apply_corrections` commits in its own transaction, so the
-    // PATCH landed before `complete` was ever called. Unsuppressed, the screen
-    // said "The database is unavailable — nothing can be saved right now."
-    // directly above "Saved, but the task is still open: database unavailable",
-    // which is a contradiction a reviewer cannot resolve from the screen.
+    // understates what happened: `apply_corrections` commits in its own
+    // transaction, so the PATCH landed before `complete` was ever called, and
+    // the edits are in the database and not only on the page. Unsuppressed, the
+    // screen renders "Your edits are still on this page and have not been
+    // discarded." directly above "Saved, but the task is still open: database
+    // unavailable", speaking for the reviewer's work as though the page were
+    // the only place it survived.
     const fetchMock = stubApi({
       ...DRAINING,
       'POST /review/t1/complete': [503, { error: { message: 'database unavailable' } }],
@@ -1165,7 +1167,7 @@ describe('terminal submit and load states', () => {
       'Saved, but the task is still open: database unavailable',
     )
     expect(
-      screen.queryByText('The database is unavailable — nothing can be saved right now.'),
+      screen.queryByText('Your edits are still on this page and have not been discarded.'),
     ).toBeNull()
     // The narrow retry is still right to stay: a 503 is transient, and the only
     // thing left to do is close the task.
@@ -1185,7 +1187,7 @@ describe('terminal submit and load states', () => {
     )
 
     const sentence = await screen.findByText(
-      'The database is unavailable — nothing can be saved right now.',
+      'Your assigned tasks are unaffected — this is a server problem, not a change to your queue.',
     )
     // The same dated ruling (design §6.1), at the failed-load render site.
     // This half is the one the pre-existing suite already reacted to -- adding

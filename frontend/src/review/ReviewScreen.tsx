@@ -480,7 +480,8 @@ export function ReviewScreen() {
             text alone the ruling held only by the code agreeing with itself. */}
         {backendDown ? (
           <p className={styles.explanation}>
-            The database is unavailable — nothing can be saved right now.
+            Your assigned tasks are unaffected — this is a server problem, not a change to your
+            queue.
           </p>
         ) : null}
         <p className={styles.alert} role="alert">
@@ -576,19 +577,20 @@ export function ReviewScreen() {
         // No `role`: ADR-0024 decision 4 forbids a second alert here.
         <section ref={outcomeRef} tabIndex={-1} className={styles.outcome}>
           {/* Plain, not a second alert, for the reason the failed phase records.
-              Suppressed once `openTaskId` is set, because there the sentence is
-              simply false: that state is reached only from the `complete` step,
-              so `apply_corrections` already committed. Unsuppressed, a 503 on
-              the close renders "nothing can be saved right now" directly above
-              "Saved, but the task is still open: database unavailable" -- two
-              contradictory claims about one receipt, and the reviewer has no
-              way to tell which is true. `openTaskId !== null` *is* "the write
-              landed", which is why it is the test. */}
+              Suppressed once `openTaskId` is set: that state is reached only
+              from the `complete` step, so `apply_corrections` already
+              committed, and the edits are in the database and not only on the
+              page. Unsuppressed, a 503 on the close renders "Your edits are
+              still on this page and have not been discarded." directly above
+              "Saved, but the task is still open: database unavailable" --
+              speaking for the reviewer's work as though the page were the only
+              place it survived. `openTaskId !== null` *is* "the write landed",
+              which is why it is the test. */}
           {submit.kind === 'failed' &&
           submit.failure.kind === 'backend-down' &&
           openTaskId === null ? (
             <p className={styles.explanation}>
-              The database is unavailable — nothing can be saved right now.
+              Your edits are still on this page and have not been discarded.
             </p>
           ) : null}
           {submit.kind === 'failed' ? (
