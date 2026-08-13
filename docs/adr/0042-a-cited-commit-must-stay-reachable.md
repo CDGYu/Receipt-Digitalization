@@ -252,9 +252,10 @@ a stale probe from a wrong one.
   you believe the run. This ADR was staged before its own verification for
   exactly that reason.
 - **The suite now shells out to `git`, which it never did before.** Four test
-  modules already use `subprocess` and none of them invoked `git` —
-  `git grep -n "\"git\"" e698aca -- tests/ scripts/` returns nothing, and the
-  anchor is load-bearing because the same query answers differently today.
+  modules already use `subprocess` — `git grep -l "subprocess" e698aca -- tests/`
+  — and none of them invoked `git`:
+  `git grep -n "\"git\"" e698aca -- tests/ scripts/` returns nothing. Both
+  anchors are load-bearing, because both queries answer differently today.
   `git` on `PATH` is a new assumption of the suite. It holds locally
   and in CI, where `actions/checkout` needs it anyway, and the container does
   not run tests. It is offline and Node-free either way, so the non-negotiable
