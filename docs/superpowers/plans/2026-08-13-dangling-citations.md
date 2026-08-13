@@ -833,8 +833,8 @@ refusal. Both raise paths were then executed, not asserted.
 
 **6. Task 3 Step 3's "Three ADRs already carry one" was never true.** Measured
 with `git grep -l "^## Correction" -- docs/adr`: **8** files at `c58531d` and
-**7** at `e698aca`, `main`'s tip when this branch opened. Three is not a count
-this repository has had. The sentence wraps between `carry` and `one`, so an
+**7** at `e698aca`, `main`'s tip when this branch opened. The sentence wraps
+between `carry` and `one`, so an
 exact-phrase grep does not reach it — the same failure mode this branch kept
 paying for. Found by the whole-branch review rather than by execution: the
 step's *instruction* was right, so nothing an implementer did would have gone
