@@ -27,13 +27,29 @@ still catches a replay, which orphans commits from *every* ref.
 
 Why exactly seven hex characters
 --------------------------------
-Measured over the tracked tree at ``e698aca``: all 112 genuine commit citations
-are exactly seven characters, and all six backticked hex tokens that are *not*
-commits are 8, 10, 12 or 20 -- PAN digit-strings, a date, an Alembic revision id.
-So the rule needs no exclusion list, which is what makes it a property rather
-than an enumerated defence (review standard 19). Its one silent-drift path --
-``core.abbrev`` is auto and git widens it as the object count grows -- is pinned
-by ``test_git_still_abbreviates_to_seven_characters``.
+Two measurements over the tracked non-binary files at ``e698aca``, each stated
+with the query that produced it, so a later reader can re-run it instead of
+trusting it.
+
+*Nothing this pattern matches is a false positive* -- the direction the rule
+actually rests on. Query ``_SHA_PATTERN`` itself, a backticked
+``[0-9a-f]{7}``: 112 distinct tokens, and all 112 resolve to a commit object.
+None needs excluding, which is what makes this a property rather than an
+enumerated defence (review standard 19).
+
+*Nothing genuine is written at another length* -- a separate and weaker claim,
+true of this tree on that day rather than by construction. Backticked
+``[0-9a-f]{4,6}``: 18 distinct tokens, none a commit. Backticked
+``[0-9a-f]{8,40}``: 6 distinct tokens, none a commit -- a date, three
+tabular-figure digit samples, a 20-digit PAN-masking example, an Alembic
+revision id. Widen the query to backticked hex of *any* length and 49 of 161
+distinct tokens are not commits, 43 of those 49 being one to five characters --
+ADR numbers, HTTP status codes, round figures. A count quoted here without its
+query would therefore mean very little.
+
+The one silent-drift path -- ``core.abbrev`` is auto and git widens it as the
+object count grows -- is pinned by
+``test_git_still_abbreviates_to_seven_characters``.
 
 A consequence worth knowing before editing any document about a dead commit: the
 seven-character backticked form IS the citation, so a document discussing an
@@ -62,8 +78,28 @@ _SKIP_SUFFIXES = (
 )
 
 
+def _git_failed(command: str, result: subprocess.CompletedProcess[str]) -> str:
+    """Message for a git call that did not exit zero."""
+    stderr = result.stderr.strip() or "(git wrote nothing to stderr)"
+    return (
+        f"{command} exited {result.returncode}, so this module checked nothing. "
+        "That is an environment failure, not a citation defect: a missing git, a "
+        "bad working directory, or an unconfigured safe.directory all land here. "
+        f"git said:\n{stderr}"
+    )
+
+
 def _git(*args: str) -> str:
-    """Run git at the repository root and return stdout."""
+    """Run git at the repository root and return stdout.
+
+    A non-zero exit raises rather than returning empty output. Silence here
+    reaches the assertions wearing the costume of a citation defect: if
+    ``ls-files`` fails, the vacuity check reports "no citations found at all"
+    and blames this module's pattern; if ``rev-list`` fails, every citation in
+    the tree reports as unreachable. Both are the wrong-reason failure the
+    module exists to avoid, and git's "detected dubious ownership" (exit 128,
+    empty stdout) is a common way to reach them.
+    """
     result = subprocess.run(
         ["git", *args],
         cwd=str(REPO_ROOT),
@@ -73,6 +109,8 @@ def _git(*args: str) -> str:
         errors="replace",
         timeout=120,
     )
+    if result.returncode != 0:
+        raise RuntimeError(_git_failed("git " + " ".join(args), result))
     return result.stdout
 
 
@@ -117,6 +155,8 @@ def _resolve(tokens: list[str]) -> dict[str, str]:
         errors="replace",
         timeout=120,
     )
+    if proc.returncode != 0:
+        raise RuntimeError(_git_failed("git cat-file --batch-check", proc))
     lines = proc.stdout.splitlines()
     if len(lines) != len(tokens):
         raise AssertionError(

@@ -600,6 +600,6 @@ could look up.
 **No claim in this plan changed.** A citation is a pointer, and it now points at
 the commit that carries the tree the probes were run against. The counts in the
 ADR-table step are deliberately untouched: 40 and 40 were correct at that commit
-and are 41 and 41 today, which is that step's check working.
+and are higher today, which is that step's check working.
 
 The general rule is ADR-0042, and `tests/test_sha_citations.py` enforces it.
