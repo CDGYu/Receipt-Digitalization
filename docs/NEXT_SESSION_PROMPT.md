@@ -68,7 +68,7 @@ writes this necessarily lands after any push it could record.
 that nothing is in flight:
 
 ```
-git log --oneline <STAMP>..main -- src tests frontend docs ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
+git log --oneline <STAMP>..main -- ":(top,exclude)docs/MEMORY.md" ":(top,exclude)docs/NEXT_SESSION_PROMPT.md"
 ```
 
 **Empty means this pair is current.** Anything listed means the tree moved after
