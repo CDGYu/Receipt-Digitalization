@@ -125,7 +125,10 @@ is information nobody had.
 > | C3 | **FIXED** — `205d77a`. `frontend/src/login/` got its first stylesheet; all three controls clear 44px. |
 > | I4 | **FIXED** — `205d77a`. `--color-null` → `#7C8CA2` in both dark blocks; sub-4.5:1 records 35 → 0. |
 > | **I5** | **RE-TRIAGED TO CRITICAL** (user ruling, 2026-08-06), then **FIXED 2026-08-12** — `99f0207`, recorded in **ADR-0041**. The outcome region takes focus when it appears, so the browser scrolls it into view. See its own entry. |
-> | I6, I7, I8, I9 | **OPEN**, unchanged. |
+> | **I6** | **FIXED 2026-08-13 — MEASURED, NOT SEEN** — `e7e5d9e`; the guard that joins the class to the DOM and covers both field maps landed at `d4cbba2`. Every text and money field is wrapped in a `.fieldCell` at the call site in `ReceiptForm`, so the error is a child of a grid *item* rather than of the grid. See its own entry. |
+> | I7 | **OPEN**, unchanged. It touches **ADR-0024**'s error-recovery contract, so it waits on a user ruling rather than on anyone's time. |
+> | **I8** | **FIXED 2026-08-14 — MEASURED, NOT SEEN** — `3f552d1`, reworded at `7a770c3`. The tiles region opens with a caption naming the figures' scope, so the global counts no longer read against the role-scoped table below them. See its own entry. |
+> | **I9** | **FIXED 2026-08-14 — MEASURED, NOT SEEN** — the copy at `1322932`, the frame at `fcfc627`. Two site-appropriate sentences replace the one that was said twice, and the failure notice is framed. Its entry also carries a dated correction: one half of the finding was never true. |
 > | m10–m16 | **OPEN**, unchanged. |
 >
 > **The fixes were pinned only afterwards, and that is the milestone's headline
@@ -139,6 +142,28 @@ is information nobody had.
 > inside `.confirm`, which paints `--color-surface-raised` — 4.39:1 in dark,
 > below AA.** Recorded here with its measurement; not fixed, because it is a
 > source change.
+>
+> **[Added 2026-08-14, with the I6/I8/I9 rows — what "MEASURED, NOT SEEN"
+> means, once, for all three.** Nobody has opened a browser on any of that work.
+> Every claim those three rows and their three entries make **about the result
+> on screen** rests on jsdom, which lays out nothing and paints nothing; on
+> `stylesheets.test.ts`, which reads a stylesheet as text and never asks what
+> it computes to; on the class-name guard in `value.test.tsx`, which joins a
+> name to a name; and, for the one Playwright assertion this milestone touched,
+> on a string compared against the code by eye. **ADR-0041** closed I5 on this
+> same footing, and its acceptance bullet is where the distinction is stated: a
+> person looking at it is the only thing that closes I5 as *seen*.
+>
+> Named rather than left to be inferred. **No browser, at any width, in either
+> theme**, has rendered the field cell, the caption or the framed notice — so
+> nothing here is evidence about a colour, a box or a column. **The Playwright
+> visual run is not one of the five gates**; `scripts/verify.py` names it under
+> *"Not a gate"* in its own docstring, so a green run after these three fixes
+> certifies nothing about `frontend/e2e/`. And **the re-pointed assertion in
+> `frontend/e2e/visual.spec.ts` was verified by static string comparison** —
+> read against the JSX it has to match — **and not by running it.**
+> **ADR-0029** is the standing list of what a green `verify.py` cannot see, and
+> these three fixes escape none of it.**]**
 
 ### Critical
 
@@ -272,6 +297,36 @@ ADR-0024 §5's "beside the input that sent it" holds in the DOM and in the
 accessibility tree (`aria-describedby`), and not on screen.
 *Owning file:* `frontend/src/review/ReceiptForm.module.css`.
 *Evidence:* `error-400-field-form--1440-light.png`.
+***FIXED 2026-08-13 (`e7e5d9e`) — MEASURED, NOT SEEN.*** Every text and money
+field is now wrapped in a `.fieldCell` at the call site in `ReceiptForm`, and
+the `.form > p` rule is gone. The wrapper is the grid item, so a label and the
+error that belongs to it travel together into whatever column auto-fill puts
+them in.
+**The rule this entry names was a repair, not the defect.** The error is a
+*sibling* of its label — ADR-0024 §5 forbids nesting it, because the sentence
+would join the field's accessible name — so as a bare grid child it takes a cell
+of its own: the next one auto-placement has free, which is the column after its
+label, or the first column of the row below when the label sits in the last
+column. `grid-column: 1 / -1` traded that for the start of a full-width row in
+every case, which is the gap this entry measures at 1440. Deleting the rule on
+its own would have exchanged one wrong position for another rather than
+restoring the right one.
+**The wrapper went at the call site, and that is what kept the fix inside this
+form.** `MoneyInput` renders every money field in this form *and* three cells in
+every row of `LineItemsTable`, so a wrapper inside `MoneyInput` would have
+reached that table's money cells too. Neither `MoneyInput` nor `LineItemsTable`
+was touched.
+The *owning file* named above took half of it: the `.fieldCell` rule replaced
+`.form > p` there, and the wrapper itself is in `ReceiptForm.tsx`.
+*What is measured, and what is not:* `receipt-form.test.tsx` asserts that the
+error and its label share a parent, that the parent is a `<div>` and not the
+grid, and that the error is still not a child of the label — once for a text
+field and once for a money field, one per `.map` block, because the first
+version of that test reached only one of the two. `value.test.tsx` joins
+`.fieldCell` in the stylesheet to the reference in the component, and
+`stylesheets.test.ts` pins the rule's declarations. **No gate places anything in
+a column.** jsdom performs no grid layout, so the column the sentence paints in
+is exactly what stays unseen.
 
 **I7 — A 401 mid-review swaps the whole screen for the login form and says
 nothing.** Measured end to end: type into Total, ⌘↵, the PATCH answers 401, and
@@ -295,6 +350,23 @@ reads as broken.
 *Owning files:* `frontend/src/admin/StatTiles.tsx` (the labels),
 `frontend/src/admin/AdminScreen.tsx` (the composition).
 *Evidence:* `admin-reviewer-empty--1024-light.png`.
+***FIXED 2026-08-14 (`3f552d1`, reworded at `7a770c3`) — MEASURED, NOT SEEN.***
+The tiles region's first child is now a caption reading "System-wide, not only
+your tasks", declared to span the grid so that it heads every tile rather than
+labelling the first.
+**It claims scope and nothing else, which is narrower than it sounds.**
+`queue_stats` groups review tasks by state and never reads `assigned_to`, and
+`auto_approval_rate` is a ratio over receipt statuses with no task and no
+reviewer in it — so a caption naming reviewers would be false of the rate tile,
+and one calling every figure a count would be false of it too. The wording tried
+first named reviewers; this milestone's plan carries how that was caught, in its
+dated defect log.
+`AdminScreen`, the co-owner named above, was not touched — the caption went
+inside the region it qualifies, not above it.
+*What is measured, and what is not:* `admin-screen.test.tsx` asserts the
+sentence inside the `Queue statistics` region, and `stylesheets.test.ts` pins
+`.caption`'s declarations. **Nothing measures where it sits**:
+`grid-column: 1 / -1` is text to the census and geometry to nobody.
 
 **I9 — The 503 state says the same thing twice, floating on an empty page.**
 "The database is unavailable — nothing can be saved right now." sits directly
@@ -305,8 +377,45 @@ violation. The explanation exists to add plain language to the server's words;
 against this message it adds none. The block is also unframed — two bare
 paragraphs and a button near the top-left of an otherwise blank screen, with no
 card and no vertical centring.
+**[Corrected 2026-08-14 — "top-left" is half wrong, and the wrong half was never
+true of the shipped stylesheet.** `.notice` sets `max-width: 40rem` and
+`margin: 0 auto`, and has carried both in every revision of
+`ReviewScreen.module.css` — including `bdbfd03`, the commit that created the
+file, which is an ancestor of `c781f40`, the tip this pass ran against. The
+element is a `<main>` in normal flow under an unstyled root, so at any viewport
+wider than that box the block was already centred left to right; narrower, the
+box fills the width, which is what a `max-width` does. Re-derive with
+`git log --format=%h -- frontend/src/review/ReviewScreen.module.css` and read
+the `.notice` rule at each. **What the rest of the sentence says — near the top,
+no card, no vertical centring — was true**, and that is what the fix addressed.
+The finding keeps its original text.**]**
 *Owning files:* `frontend/src/review/ReviewScreen.tsx` (the copy),
 `frontend/src/review/ReviewScreen.module.css` (`.notice`).
+***FIXED 2026-08-14 — the copy at `1322932`, the frame at `fcfc627` — MEASURED,
+NOT SEEN.*** Neither explanation restates the server's words any more. One
+string served both sites; each now has its own sentence, saying what that site
+can actually promise — on the load path, that the reviewer's assigned tasks are
+unaffected; on the submit path, that their edits are still on the page and have
+not been discarded. The submit path's sentence stays suppressed on the one path
+where the write already landed.
+The failure render composes `.noticeFailed` onto `.notice`: a border, a radius
+and a surface background, with `min-height: 60vh` and `justify-content: center`
+placing the notice's own contents in the middle of that taller box. **The frame
+is on the failure render only** — `.notice` is the `<main>` for the loading and
+empty phases too, and a card around "Loading…" is a screen this finding never
+measured.
+**What it does not do is centre the block in the window.** `main.tsx` renders a
+`<header>` above the `<main>` and nothing centres the notice itself. The claim
+that it did was written into the stylesheet while this was being fixed and
+deleted from it in the round after — recorded because the same sentence still
+stands in the plan step that prescribed it.
+*What is measured, and what is not:* `review-screen.test.tsx` asserts both
+sentences at their sites, the suppression on the path where the write already
+landed, and that `.noticeFailed` is on the failure `<main>` and on neither the
+empty nor the loading one; `value.test.tsx` joins the class to the component's
+reference; `stylesheets.test.ts` pins its declarations. **The Playwright
+scenario asserting the load-path sentence was re-pointed by reading the scenario
+and comparing the string, not by running it** — `frontend/e2e` is not a gate.
 
 ### Minor
 
