@@ -876,3 +876,20 @@ reader can learn from it.
 
 **This log is incomplete while the plan is still executing.** Tasks 3, 4 and 5 have
 not run. Anything they find is appended here.
+
+6. **The Global Constraints above carry a false mechanism claim, and this log is
+   how you find out.** They state that under `css: false` "a renamed class ships as
+   `class="undefined"`". Measured during Task 1, in both environments: under this
+   suite the CSS-module proxy returns a *scoped* string, so a typo renders
+   `class="_fieldCellTYPO_18fbc4"` — a plausible-looking name no stylesheet
+   declares; and in a real build the key is genuinely absent, so React omits the
+   attribute entirely rather than stringifying it. Only `String(undefined)`
+   produces the literal, which happens where a `className` template literal
+   interpolates a `styles.*` value. **The substance the constraint depends on is
+   unaffected** — a renamed class reaches no rule, paints nothing, and every gate
+   stays green — so no task was misled. Task 1 corrected the same claim in
+   `value.test.tsx`, where it had stood in six places. Four copies survive in
+   `admin-screen.test.tsx`, `review-null-rule.test.tsx` and
+   `theme-control.test.tsx`, and two more in `docs/adr/0027` and `docs/adr/0029`
+   carry the related rotted count; all are recorded for the whole-branch review.
+   The body keeps the false sentence, per the rule at the head of this log.
