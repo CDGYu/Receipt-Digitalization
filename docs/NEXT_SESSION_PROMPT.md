@@ -79,6 +79,30 @@ a SHA in two places is a SHA that can disagree with itself.
 all five PASS.** **No pytest count and no delta is given** — the number moves
 with every milestone and an earlier version of this line's did. Run it.
 
+**CI can be read without credentials.**
+`gh` is not logged in on this machine, `GH_TOKEN` is unset, and the GitHub MCP
+server has no Actions tool — but the repository is public, so the REST API answers
+anonymously:
+
+```
+curl -s "https://api.github.com/repos/CDGYu/Receipt-Digitalization/actions/runs?per_page=5"
+curl -s "https://api.github.com/repos/CDGYu/Receipt-Digitalization/actions/runs/<id>/jobs"
+```
+
+The first gives `head_sha`, `status` and `conclusion` per run; the second locates
+which job failed when a run-level `failure` does not say enough. **No verdict or
+run count is written here** — both move with the next push, which is the whole
+reason the command is given instead.
+
+**What is worth knowing rather than re-deriving: the 2026-08-13 guards hold on
+Linux, not only on the Windows machine that wrote them.** `gates (py3.11)` and
+`gates (py3.13)` both pass with `tests/test_freshness_check.py` in the suite, and
+that module shells out to `git init`, `git show --name-only` and
+`merge-base --is-ancestor`, and re-derives its state assertions against the real
+commit graph of a fresh `fetch-depth: 0` clone. That is the class of coupling
+**ADR-0014** warns about and **ADR-0037**'s first red run actually found — seven
+tests that passed locally only because a package happened to be installed.
+
 **Re-running the gates yourself is not ceremony**, and this milestone is the
 sharpest evidence yet for the complementary point: **every defect found on the
 2026-08-13 branch was found by a person or an agent re-deriving a claim, and

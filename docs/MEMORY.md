@@ -111,8 +111,10 @@ committed first.
   single parent, three branch commits). `feat/ci-workflow` is kept at its merge
   point and pushed. **ADR-0037.** `.github/workflows/` is **no longer
   gitignored**. The workflow runs `scripts/verify.py` on Python 3.11 and 3.13
-  and builds the image; **it is green on `3ad51c6`**, and its first run found a
-  real environment coupling. See "CI runs again" below.
+  and builds the image, and its first run found a real environment coupling.
+  **No run verdict is pinned here** — it moves with the next push, and
+  `docs/NEXT_SESSION_PROMPT.md` carries the command that answers it without
+  needing credentials. See "CI runs again" below.
 - **The containerisation is COMPLETE AND MERGED** (2026-08-11, true
   fast-forward `45660cf` → `8646980`, single parent, one branch commit).
   `feat/containerisation` is kept at its merge point and pushed. One image runs
