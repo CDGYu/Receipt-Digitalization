@@ -129,6 +129,58 @@ and `b3f5dbd`, which the narrow one missed and found respectively. `061425f`,
 `docs/adr/0021-handing-off-mid-milestone.md` alongside the pair, and each is
 invisible to the command when its pair paths are the only ones offered.
 
+## Correction (2026-08-13)
+
+**The widened filter was still an enumeration, and `scripts/` was never in it.**
+The 2026-08-02 correction added `docs` because a docs-only commit had slipped
+through. It closed the shape it had found and left the class open: the pathspec
+named four directories, so a commit touching only `scripts/` — the gate runner,
+the seed scripts — leaves the command empty and the pair reads as current.
+
+Measured on `main`: `b4a9c23` changed `scripts/verify.py` and nothing else, and
+
+```
+git log --oneline b182736..b4a9c23 -- src tests frontend docs \
+  ":(exclude)docs/MEMORY.md" ":(exclude)docs/NEXT_SESSION_PROMPT.md"
+```
+
+returns **empty**. A stamp written directly on top of that commit would have
+tested clean. This was found by re-deriving the check while fixing an unrelated
+docstring, not by the check itself — nothing in the tree was going to report it.
+
+**So the filter stops enumerating what is watched and names only what is not:**
+
+```
+git log --oneline <anchor>..main -- \
+  ":(top,exclude)docs/MEMORY.md" ":(top,exclude)docs/NEXT_SESSION_PROMPT.md"
+```
+
+Every tracked path is watched **because none is listed**. There is no directory
+list left to fall behind the repository, so the next `eval/`, `.github/` or
+root-level file needs no amendment here. This is the enumerated-defence failure
+resolved the way ADR-0032 §3 asks: one bounded property — *any tracked change
+that is not the pair* — instead of a list of the shapes seen so far.
+
+**`:(top,...)` is load-bearing, and a measurement chose it.** The two obvious
+spellings are each silently wrong when run from a subdirectory, in opposite
+directions:
+
+| spelling | lists a non-pair commit | never lists a pair-only commit |
+|---|---|---|
+| `-- . ":(exclude)…"` | **no** — empty from `frontend/` | yes |
+| `-- ":(exclude)…"` | yes | **no** — lists the pair from `frontend/` |
+| `-- ":(top,exclude)…"` | yes | yes |
+
+A stale-check that answers "clean" from the wrong directory is the same false
+signal in a new place, so the spelling is part of the decision rather than a
+detail of it.
+
+Verified 2026-08-13 from the repository root, from `frontend/` and from `docs/`,
+in **both** directions at each: `b182736..b4a9c23` (a `scripts/`-only commit)
+lists, and `b4a9c23..95113eb` (a pair-only commit) comes back empty. The
+exclusion half is what the 2026-08-02 correction established and this change must
+not break; it is checked here rather than assumed.
+
 ## References
 
 ADR-0019 (the handoff pair, the promotion rule, and the kickoff verification

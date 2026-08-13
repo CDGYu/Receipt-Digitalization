@@ -25,9 +25,12 @@ existing ADRs do not name.
 ### 1. The freshness check false-alarmed three times, and each needed a repair commit
 
 The check excludes exactly two paths — `docs/MEMORY.md` and
-`docs/NEXT_SESSION_PROMPT.md` — and watches `docs` otherwise. So **any commit
+`docs/NEXT_SESSION_PROMPT.md` — and watched `docs` otherwise. So **any commit
 carrying the pair *plus* anything else under `docs/`** lists itself in its own
-freshness check. Three times in one session a commit bundled the pair with a new
+freshness check. (ADR-0021's 2026-08-13 correction dropped the inclusion list
+altogether, so the trigger is now anything else **at all**, not only something
+under `docs/`. The finding below is unchanged; only its reach grew.)
+Three times in one session a commit bundled the pair with a new
 ADR or an index row, and each time the next reader would have been told the pair
 was stale when it had been written in that very commit. Each needed a follow-up
 commit touching the pair alone to restore the invariant.
