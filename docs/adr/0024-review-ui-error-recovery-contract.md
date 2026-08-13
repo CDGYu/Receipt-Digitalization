@@ -169,3 +169,36 @@ re-declare the receipt shape.
 * Nothing in this milestone was ever viewed in a browser. The error surfaces
   are unstyled `<p>` elements; the gates prove they render and build, not
   that they read well.
+
+## Correction (2026-08-14)
+
+**Decision 4's rationale names a sentence the app no longer renders, and the one
+that replaced it does not fail in the way that one did.** The decision, the
+suppression, its gate and the user ruling under it are all unchanged. Only the
+*because* is wrong, and only that is corrected here.
+
+Decision 4 suppresses the distinct sentence on the `complete` step *"because
+'nothing can be saved right now' is false once `apply_corrections` has
+committed"*. That is the reason the gate carries, and it rests on copy that is
+gone: `1322932` — the copy half of browser-pass finding I9's fix — gave the two
+sites different sentences. Measured 2026-08-14,
+`git grep -n "nothing can be saved right now" -- frontend/` returns nothing, and
+the string survives in this repository only as a quotation in documents that
+record what it used to say, this section included.
+
+**The replacement understates rather than lies, and the suppression still
+follows.** The submit block now renders *"Your edits are still on this page and
+have not been discarded."* Once `apply_corrections` has committed, that sentence
+is true and incomplete: the edits really are still on the page — they are also in
+the database, which is the half a reviewer most needs. `ReviewScreen.tsx` states
+that at the conditional itself, and this section borrows its words rather than
+composing a second pair: unsuppressed, the sentence speaks "for the reviewer's
+work as though the page were the only place it survived".
+
+So `openTaskId !== null` *is* "the write landed", exactly as decision 4 says, and
+it stays the test. What changes is why the sentence it gates is worth
+suppressing: it understates in that state, rather than being false in it.
+
+**Why a clause is worth a section.** I7 is deferred *because* it touches this
+contract, so the next person to open this file is the one who can least afford a
+rationale that no longer describes the tree.
