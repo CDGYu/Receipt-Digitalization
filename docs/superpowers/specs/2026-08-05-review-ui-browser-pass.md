@@ -376,11 +376,9 @@ spans* (CSS Grid §7.2.2.1) — so nothing collapsed and `auto-fit` sized exactl
 viewport: six tracks of ~218.7px, the four tiles 219px wide, and 469px of the row
 blank; the same row before the caption existed computes
 `336px 336px 336px 336px 0px 0px`. At 1024 both shapes compute the same four
-232px tracks — and 1024 is the width of this finding's own evidence capture, so
-the one artefact that could have shown this did not. No gate could have, at any
+232px tracks. No gate could have, at any
 width: none of the five lays a grid out. The caption is now a **sibling** of the
-grid:
-`.tiles` is a flex column holding the caption and a new `.grid` element that
+grid: `.tiles` is a flex column holding the caption and a new `.grid` element that
 carries the grid declarations, and the measured track list is again
 `336px 336px 336px 336px 0px 0px`. It is still the region's first child, still
 inside `Queue statistics`, and still heads all four tiles rather than labelling
