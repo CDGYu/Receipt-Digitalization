@@ -250,7 +250,7 @@ function referencedClasses(tsx: string): Set<string> {
  *  ruling recorded in `declarationsIn`'s bound rather than a case to chase.
  *
  *  Provenance, stated honestly and narrowly, because the first version of this
- *  note overstated it: **no class selector in the six tracked CSS files is
+ *  note overstated it: **no class selector in the tracked CSS files is
  *  qualified by another class, a tag or an attribute, and none is a descendant or
  *  child of one** -- verified by grep, and that is the shape the leading edge
  *  rejects. One of them now IS the left-hand side of a child combinator
@@ -337,11 +337,11 @@ function exactlyThisSelector(code: string, at: number, selector: string): boolea
  *  What this is **not**: a CSS parser. The guarantee above is about locating a
  *  rule, and it says nothing about parsing one. Reading the body assumes rules do
  *  not nest inside a top-level rule and that values carry no braces or
- *  semicolons. That holds for these four stylesheets and is not claimed beyond
+ *  semicolons. That holds for the tracked stylesheets and is not claimed beyond
  *  them.
  *
- *  **And the property itself is bounded to stylesheets of the shape these four
- *  have: no functional selector lists and no statement at-rules.** Inside
+ *  **And the property itself is bounded to stylesheets of the shape the tracked
+ *  ones have: no functional selector lists and no statement at-rules.** Inside
  *  `:is(...)` or `:where(...)` a selector is read imprecisely, and a leading
  *  `@import` makes the lookup throw with a message that misdescribes the cause.
  *  Both are ruled parked rather than pursued -- the first is harmless (the rule
@@ -517,7 +517,7 @@ const COMPONENTS: readonly GuardedComponent[] = [
   // all 373 tests and `tsc -b` green, so every declaration in the `.fieldCell`
   // rule painted nothing and no gate said so.
   //
-  // This entry covers all eight of the component's classes, not just that one.
+  // This entry covers every class the component declares, not just that one.
   // `.form` is the one with the most to lose -- it carries the grid itself.
   {
     name: 'ReceiptForm',

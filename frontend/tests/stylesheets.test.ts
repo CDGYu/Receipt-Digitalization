@@ -19,9 +19,10 @@ import { describe, expect, it } from 'vitest'
  * asserted anywhere -- `tokens.css`'s token block, `ui/Value.module.css`'s
  * `.notExtracted`, and `LineItemsTable.module.css`'s `.scroller`. Every other
  * declaration in the tree was deletable in silence. The class-*name* guard in
- * `value.test.tsx` covers eleven files and cannot see this at all: it compares
- * the two sides' class names, so emptying every rule body to `{}` while keeping
- * the names leaves it perfectly green, and that mutation was run.
+ * `value.test.tsx` covers only the files its `COMPONENTS` list names, and cannot
+ * see this at all: it compares the two sides' class names, so emptying every
+ * rule body to `{}` while keeping the names leaves it perfectly green, and that
+ * mutation was run.
  *
  * ## The property, stated once and bounded
  *
@@ -79,7 +80,7 @@ import { describe, expect, it } from 'vitest'
  *     element, a specificity change, an `!important` -- none of that is visible
  *     to a text reader, and none of it is claimed.
  *   * **Whether a rule is reached at all.** `value.test.tsx` owns that for the
- *     five guarded components. `LineItemsTable.module.css`'s `.rowActive` is
+ *     components it guards. `LineItemsTable.module.css`'s `.rowActive` is
  *     declared and referenced by nothing today (its own comment records why),
  *     and the census is content with that: it audits declarations, not reach.
  */
