@@ -181,6 +181,24 @@ lists, and `b4a9c23..95113eb` (a pair-only commit) comes back empty. The
 exclusion half is what the 2026-08-02 correction established and this change must
 not break; it is checked here rather than assumed.
 
+**And it is now a gate.** Twice this command was found broken by someone reading
+it, which is not a mechanism. `tests/test_freshness_check.py` parses the command
+out of the tracked pair — extracted, never retyped, or the test would certify a
+copy of itself — and runs it against a throwaway repository holding one commit of
+each shape, from the root and from a subdirectory, in both directions.
+
+**What it deliberately does not assert is that the pair is currently fresh.**
+That is state rather than mechanism: the stamp legitimately trails the tree for
+most of a working session, `scripts/verify.py` runs mid-session, and CI runs it on
+every push (ADR-0037), so a freshness assertion would be red through ordinary work
+and learned as noise. The pair being stale stays something a human reads. The
+command still working is the gate.
+
+Proven red before it was believed: dropping `top,` from one exclude, swapping to
+`-- . ":(exclude)…"`, and restoring the old enumeration each turn the suite red —
+the first on the exclusion half, the other two on detection — and the stamp was
+restored byte-for-byte after each.
+
 ## References
 
 ADR-0019 (the handoff pair, the promotion rule, and the kickoff verification
