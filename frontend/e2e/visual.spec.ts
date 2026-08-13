@@ -1210,12 +1210,9 @@ test('ADR-0024 state 1 of 5: the distinct 503, with the Skip escape suppressed',
           json(route, 503, envelope('the database is unavailable')),
         )
         await page.goto('/app/review')
-        // The load path's explanation, addressed by its whole sentence: neither
-        // it nor the server's words below is a substring of the other, so the
-        // locator is unambiguous. Playwright's text match is a case-insensitive
-        // substring, which is why, while this paragraph still restated the
-        // server's words, only a fragment of it could be addressed without
-        // matching both -- a strict-mode violation, measured.
+        // The load path's explanation, quoted in full: this string is exactly
+        // what the JSX transform emits for that paragraph, so a reword there
+        // must move it here.
         await expect(
           page.getByText(
             'Your assigned tasks are unaffected — this is a server problem, not a change to your queue.',

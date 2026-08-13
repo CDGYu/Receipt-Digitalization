@@ -142,12 +142,11 @@
   line-height: 1.5;
 }
 
-/* "The database is unavailable" is the plain-language explanation beside the
- * server's own words, and it deliberately carries no `role="alert"` (ADR-0024
- * §4, a user ruling). It is painted quieter than `.alert` for the same reason:
- * it explains, the alert announces. Muted rather than red, so that a reader
- * scanning for the failure lands on the message that actually carries the
- * server's words. */
+/* The plain-language explanation beside the server's own words, which
+ * deliberately carries no `role="alert"` (ADR-0024 §4, a user ruling). It is
+ * painted quieter than `.alert` for the same reason: it explains, the alert
+ * announces. Muted rather than red, so that a reader scanning for the failure
+ * lands on the message that actually carries the server's words. */
 .explanation {
   margin: 0;
   color: var(--color-muted-foreground);
