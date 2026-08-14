@@ -793,6 +793,10 @@ by `prompt_bundle_hash()`.
 - Modify: `src/receipts/pipeline.py` (the `extract` stage; `_attempt_prompt_hash`;
   `_persist_outcome`'s call to it)
 - Test: `tests/test_pipeline_merchant_hints.py`
+- **Modify: `tests/test_process_receipt.py`** — it pins the `STAGES` tuple by
+  exact equality, so adding `"merchant"` to `STAGES` necessarily reddens it.
+  Update the pin, and add a `merchant`-stage case beside the other per-stage §18
+  failure tests, which that file keeps one of per stage.
 
 **Interfaces:**
 - Consumes: `lookup` (Task 1), `few_shots_for` (Task 3).
@@ -982,7 +986,7 @@ Expected: FAIL. Restore, and confirm PASS.
 - [ ] **Step 7: Commit**
 
 ```bash
-git add src/receipts/pipeline.py tests/test_pipeline_merchant_hints.py
+git add src/receipts/pipeline.py tests/test_pipeline_merchant_hints.py tests/test_process_receipt.py
 git commit -m "feat(pipeline): merchant hints reach the prompt and the recorded hash"
 ```
 
