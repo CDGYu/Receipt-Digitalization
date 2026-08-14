@@ -100,11 +100,40 @@ unverified example teaches the model your errors."
   a garbage guess can never create a row.
 - `increment(session, merchant) -> None` — bump `receipt_count`.
 
-`few_shots_for(session, merchant, limit)` selects examples under D5. It lives
-here because it is a merchant-scoped query. **It knows nothing about tiers** —
-the pipeline decides whether to call it at all, which is where D1 is enforced.
-A function that returned `[]` "because the tier is local" would be a second
-place for that rule to live, and the two would eventually disagree.
+`few_shots_for(session, storage, merchant, limit)` selects examples under D5. It
+lives here because it is a merchant-scoped query. **It knows nothing about
+tiers** — the pipeline decides whether to call it at all, which is where D1 is
+enforced. A function that returned `[]` "because the tier is local" would be a
+second place for that rule to live, and the two would eventually disagree.
+
+> ### Dated note, 2026-08-14 — where a few-shot extraction comes from
+>
+> **Written while planning, because the obvious source is actively harmful and
+> the signature above changed.** `FewShot` needs an `image_b64` *and* a
+> `ReceiptExtraction`, so this function needs the storage backend too — hence
+> the extra parameter.
+>
+> **Do not rebuild the extraction with `review/serializers.py`'s
+> `_export_extraction`.** It is private and explicitly lossy: its own docstring
+> says `merchant.address`, `tax_id`, `phone`, `branch` and several `meta` fields
+> "are not columns on `receipts` … left at their schema defaults, never
+> invented." A few-shot built from it would teach the model that
+> **`merchant.tax_id` is always null** — the one field §2 calls the strongest
+> identifier on this corpus. That is worse than no few-shot at all.
+>
+> **Use `extraction_runs.raw_response` instead**, which is JSONB and holds the
+> complete model output. D5 is what makes this sound: `status='reviewed'` with
+> **zero** rows in `corrections` means the human changed nothing, so the raw
+> response *is* the verified extraction.
+>
+> **One ambiguity, closed conservatively.** `extract_with_repair` returns the
+> **best** attempt, not the last, and `_persist_outcome` writes *every* attempt
+> to `extraction_runs` without marking which one was kept. Rather than add a
+> column, this milestone only accepts a receipt as a few-shot candidate when it
+> has **exactly one** `extraction_runs` row with `pass_name='extract'`. A clean
+> single-pass extraction is then unambiguous. This narrows the candidate pool,
+> which is acceptable — few-shot needs a handful of examples, not all of them —
+> and it needs no migration.
 
 ## 5. Flow
 
