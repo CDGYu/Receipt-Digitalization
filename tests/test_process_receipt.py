@@ -771,7 +771,8 @@ def _assert_terminal_needs_review(result, session_factory, stage: str) -> None:
 
 def test_stage_names_are_declared_in_order():
     assert STAGES == (
-        "load", "preprocess", "dedupe", "triage", "extract", "normalize", "score", "persist",
+        "load", "preprocess", "dedupe", "triage", "merchant", "extract", "normalize",
+        "score", "persist",
     )
 
 
@@ -817,6 +818,28 @@ def test_triage_failure_reaches_needs_review(
                   session_factory, storage, settings)
 
     _assert_terminal_needs_review(result, session_factory, "triage")
+
+
+def test_merchant_failure_reaches_needs_review(
+    session_factory, storage, settings, monkeypatch, existing_row
+):
+    """A registry that is down costs the receipt its hints, not the receipt.
+
+    The merchant lookup is a *prompting aid*: nothing downstream needs it, so
+    the tempting shape is to swallow the error and carry on unhinted. That is
+    the silent drop §18 forbids -- a registry broken for a week would leave no
+    trace anywhere while every receipt quietly extracted without its hints.
+    Wrapped as its own stage, the failure is named and a human is asked.
+    """
+
+    def boom(*args, **kwargs):
+        raise RuntimeError("merchant registry offline")
+
+    monkeypatch.setattr(pipeline_module.registry, "lookup", boom)
+    job = existing_row(_job(storage))
+    result = _run(job, _Client([_triage()]), session_factory, storage, settings)
+
+    _assert_terminal_needs_review(result, session_factory, "merchant")
 
 
 def test_extract_failure_reaches_needs_review(

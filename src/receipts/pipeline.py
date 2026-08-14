@@ -58,6 +58,7 @@ from .extract.schema import ReceiptExtraction, TriageResult
 from .ingest.dedupe import compute_phash
 from .ingest.ingest import ReceiptJob, ingest_file
 from .ingest.storage import StorageBackend
+from .merchants import registry
 from .normalize import normalize
 from .persist.models import PassName
 from .persist.repository import (
@@ -96,6 +97,7 @@ STAGES: tuple[str, ...] = (
     "preprocess",
     "dedupe",
     "triage",
+    "merchant",
     "extract",
     "normalize",
     "score",
@@ -391,10 +393,11 @@ def process_receipt(
 
     Stages, in order (:data:`STAGES`): read the original bytes from storage ->
     preprocess and perceptually hash them -> check for a duplicate image ->
-    triage -> extract with the repair loop (normalization applied inside it) ->
-    score -> route -> persist. Dependencies are injected exactly the way
-    :func:`run_receipt` and :func:`build_eval_pipeline` take theirs, which is
-    what keeps the whole suite offline.
+    triage -> look the merchant up for its hints -> extract with the repair loop
+    (normalization applied inside it) -> score -> route -> persist. Dependencies
+    are injected exactly the way :func:`run_receipt` and
+    :func:`build_eval_pipeline` take theirs, which is what keeps the whole suite
+    offline.
 
     **Nothing is ever silently dropped** (§18). Every stage is wrapped: any
     exception marks the receipt ``needs_review`` with the failing stage as the
@@ -449,8 +452,8 @@ def process_receipt(
     so :func:`~receipts.persist.repository.find_duplicate_by_content` would
     degenerate to "same date and same total" across all merchants and merge two
     genuinely different purchases. A missed duplicate is recoverable; a silent
-    merge of two receipts is not. Wire it in with M5. Self-consistency (M6),
-    merchant hints and few-shot (M5) plug in at the marked points.
+    merge of two receipts is not. Wire it in with M5. Self-consistency (M6) and
+    few-shot examples plug in at the marked points.
     """
     settings = settings or Settings()
     # A fresh context per run: extract_with_repair assigns ctx.triage, and a
@@ -483,13 +486,30 @@ def process_receipt(
         with _stage("triage"):
             triage_result, triage_response = triage(image, guarded)
 
+        with _stage("merchant"):
+            hints: P.MerchantHints | None = None
+            with session_factory() as session:
+                merchant = registry.lookup(session, triage_result.merchant_name_guess)
+                if merchant is not None and merchant.hints:
+                    hints = P.MerchantHints(
+                        merchant_name=merchant.canonical_name,
+                        hints=list(merchant.hints),
+                    )
+            # Few-shot IMAGES are Cloud-tier only (spec D1): on the local model
+            # each example multiplies inference cost by one whole image. The
+            # selector exists (registry.few_shots_for) and is deliberately not
+            # called here -- the local-to-Cloud escalation is its own milestone
+            # (spec §10), so there is no Cloud tier here to attach images to.
+            few_shots: list[P.FewShot] = []
+
         with _stage("extract"):
-            # merchant hints and few-shot examples plug in here (M5).
             outcome = extract_with_repair(
                 image,
                 guarded,
                 triage_result=triage_result,
                 ctx=ctx,
+                hints=hints,
+                few_shots=few_shots,
                 max_repairs=max(0, settings.max_repair_attempts),
                 normalize_fn=_normalizer(settings.default_currency),
             )
@@ -526,6 +546,8 @@ def process_receipt(
                 priority=priority,
                 reason=reason,
                 cost=cost_guard.spent,
+                hints=hints,
+                few_shots=few_shots,
             )
     except _StageFailure as failure:
         return _persist_failure(session_factory, job, failure, phash, cost_guard.spent)
@@ -639,6 +661,8 @@ def _persist_outcome(
     priority: int,
     reason: str,
     cost: Decimal,
+    hints: P.MerchantHints | None = None,
+    few_shots: list[P.FewShot] | None = None,
 ) -> ProcessResult:
     """Write the receipt, its findings, its audit rows, and its review task.
 
@@ -694,7 +718,10 @@ def _persist_outcome(
                 _pass_name(attempt.pass_name),
                 attempt_number,
                 attempt.response,
-                _attempt_prompt_hash(attempt, outcome.attempts, attempt_number, triage_result),
+                _attempt_prompt_hash(
+                    attempt, outcome.attempts, attempt_number, triage_result,
+                    hints, few_shots or [],
+                ),
             )
 
         if status is not ReceiptStatus.AUTO_APPROVED and priority >= 0:
@@ -827,15 +854,19 @@ def _attempt_prompt_hash(
     attempts: list[Attempt],
     attempt_number: int,
     triage_result: TriageResult,
+    hints: P.MerchantHints | None = None,
+    few_shots: list[P.FewShot] | None = None,
 ) -> str:
     """Reconstruct the ``prompt_hash`` for one attempt.
 
     Prompt building is pure, so rebuilding the prompt from what produced it
     gives the same 16-char hash the call used -- cheaper than threading prompts
     back out of the repair loop, and it cannot drift as long as the arguments
-    match those in :func:`~receipts.extract.extractor.extract`. When merchant
-    hints and few-shot examples are threaded into ``extract_with_repair`` (M5),
-    the same values must be passed here.
+    match those in :func:`~receipts.extract.extractor.extract`. **The hints and
+    few-shots passed here must be the identical objects passed to**
+    :func:`~receipts.extract.extractor.extract_with_repair` -- a mismatch
+    produces a hash for a prompt that was never sent, and nothing else in the
+    system would notice.
     """
     if attempt.pass_name == "repair":
         previous = attempts[attempt_number - 2]
@@ -845,7 +876,8 @@ def _attempt_prompt_hash(
             )
         )
     return P.prompt_hash(
-        P.build_extraction_prompt(triage_result, None, []) + P.SYSTEM_EXTRACTION
+        P.build_extraction_prompt(triage_result, hints, few_shots or [])
+        + P.SYSTEM_EXTRACTION
     )
 
 
