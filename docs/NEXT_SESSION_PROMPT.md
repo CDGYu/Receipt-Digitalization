@@ -36,7 +36,7 @@ sentence (ADR-0028 §1):
 ```
 git status --short                                # must be empty
 git log --oneline -6
-git branch --no-merged main                       # must name NOTHING
+git branch --no-merged main                       # 2026-08-15: names feat/merchant-fingerprinting
 git rev-parse main                                # merged tip
 git ls-remote --heads origin main                 # authoritative on what is pushed
 git log --oneline refs/remotes/origin/main..main  # what the pending push would send
@@ -85,6 +85,12 @@ git log --oneline <STAMP>..main -- ":(top,exclude)docs/MEMORY.md" ":(top,exclude
 **Empty means this pair is current.** Anything listed means the tree moved after
 it was written. **Read the stamp for the SHA** — it is not written here, because
 a SHA in two places is a SHA that can disagree with itself.
+
+**While `feat/merchant-fingerprinting` is unmerged, run that command with `HEAD`
+in place of `main`.** The pair is committed on the branch, not on `main`, so
+`main`'s copy is older rather than stale. The stamp explains why it cannot be
+written the other way round without reddening `tests/test_freshness_check.py`,
+which parses its anchor out of a `<seven-hex>..main` range.
 
 **Gates on `main` after the merge, controller-run: `python scripts/verify.py` —
 all five PASS.** **No pytest count and no delta is given** — the number moves
@@ -144,6 +150,51 @@ work was scattered across nine sections. **This index is a pointer, not a
 second source** — each row names where the detail lives, and where a row and its
 section disagree, **the section wins** (ADR-0030: a finding is a claim, and so
 is a summary of one).
+
+### There are TWO tracks now, and one of them is half-finished
+
+| track | state | where |
+|---|---|---|
+| **T1 — finish Phase 6** | **A branch is in flight.** Built, 7 tasks, Task 7 unreviewed, no whole-branch review, not merged. | **§0h** (ordered list R1–R4), ADR-0043 |
+| **T2 — make accuracy measurable** | Blocked on hardware and one user action. Nothing in T1 can be validated until this moves. | §C below, `docs/KNOWN_ISSUES.md` ISSUE-001 |
+
+**T1 is the one with momentum and the one that rots.** An unmerged branch with an
+unreviewed task on it is the most perishable state this project has ever ended a
+session in. Do §0h first unless you have a reason not to.
+
+**T2's ordered steps, all recorded in ISSUE-001's 2026-08-14 ruling block:**
+
+1. **Pick the Ollama runtime.** The user ruled **Ollama only — no hosted APIs**,
+   and **high extraction accuracy** as the goal. Those two plus this machine
+   (2-core i3, no usable GPU, one 2.5B model) are **over-constrained**. Decided
+   2026-08-14: keep `granite3.2-vision:2b` local as primary, add **Ollama Cloud**
+   as a confidence-triggered fallback, and move to a better-specced machine.
+2. **Give granite one fair test at `max_edge=2048`.** It has never completed a run
+   at the pipeline's own default — every completed run was forced to 768 where
+   `resize_for_model` logged *"estimated text height 7.7px is below 12px"*. The
+   "reads nothing" verdict rests entirely on input the code flagged as unreadable.
+   This is the empirical decider for whether it is a primary at all.
+3. **Stand up Ollama Cloud** (`ollama signin`; still Ollama, no code change) and
+   check two unverified things: whether a strong enough vision model is offered,
+   and whether it accepts a `tools` payload.
+4. **Set `VLM_USE_TOOLS=true`.** `factory.py`'s `_TOOLS_OFF_BY_DEFAULT` contains
+   `ollama`, so the local path has **never** used schema-constrained tool-use —
+   it runs in JSON mode, against ADR-0002 and the steering rule.
+5. **Build the local→Cloud escalation.** Real design work: `make_client` returns
+   one client, and nothing records which model produced a kept extraction — without
+   that no eval can attribute accuracy to a model, and a good number could be
+   hiding the fact that everything escalated. Report the escalation *rate* beside
+   the accuracy figure. Probably an ADR.
+6. **Run the first real baseline**, detached, and commit the results file.
+7. **Grow the golden set.** Three receipts cannot validate any accuracy claim —
+   one receipt is 33 percentage points. This gates the goal more fundamentally
+   than the model does.
+8. **Calibrate thresholds** (P3.T6 / P8.T1) on a held-out split.
+
+**Also outstanding, security not accuracy:** the exposed Gemini key still sits
+commented in `.env` at 55 characters, unrotated since it was echoed to a terminal
+on 2026-07-28, in a repo that is public. Revoking it survives the Ollama-only
+ruling; reissuing it does not.
 
 ### Step 0 — always, before anything
 
@@ -367,6 +418,80 @@ read route (**ADR-0031**) and the CLI `--limit` bound all shipped. §1.6's
 *(§0e and §0d are newest and sit first deliberately. They are lettered rather
 than renumbered to the front because renumbering ages every citation of §0a–§0c,
 and that has already happened twice in this file's history.)*
+
+## 0h. Phase 6 merchant fingerprinting — BUILT, IN FLIGHT, NOT MERGED (2026-08-15).
+
+**Branch `feat/merchant-fingerprinting`, cut from `main` at `8f0b413`.** Seven
+tasks, all committed. **This is the work to finish.**
+
+**Read in this order:**
+
+1. **ADR-0043** — `docs/adr/0043-merchant-identity-is-two-phase.md`. Ten
+   decisions. Read it before touching merchants, dedupe, or the prompt hash.
+   It **corrects ADR-0011**, whose "semantic dedupe is deliberately not wired"
+   bullet is now false and carries its own dated correction.
+2. **The design** — `docs/superpowers/specs/2026-08-14-merchant-fingerprinting-design.md`.
+   **Read its dated notes**; one rules out the obvious few-shot source, another
+   scopes its own opening table as a pre-milestone snapshot that is no longer
+   current.
+3. **The plan** — `docs/superpowers/plans/2026-08-14-merchant-fingerprinting.md`.
+   **Read its dated CORRECTED blocks first. Two of its own code listings were
+   wrong** and would have shipped green.
+4. **The ledger** — `.superpowers/sdd/2026-08-14-merchant-fingerprinting/progress.md`.
+   **Gitignored — open it by path.** Every ruling, every deferred minor, and what
+   each costs if wrong. Nothing in it is findable by searching the tracked tree.
+
+### What remains, in order
+
+**R1. Review Task 7.** It is the only task on this branch with no review. Commit
+`c36b68f`, files `src/receipts/cli.py` and `tests/test_cli_reports.py`. It made
+`receipts merchants list` print the real `receipt_count`, deleted four claims
+saying nothing increments it, and **replaced** rather than inverted the test whose
+*name* asserted the opposite. Its replacement description discloses that the count
+can read high. Verify that disclosure is accurate, and that
+`git grep -n "_RECEIPT_COUNT_NOT_TRACKED"` returns only plan-document hits.
+
+**R2. Whole-branch review, on the strongest model.** None has run. Point it at the
+ledger's deferred-minor and parked lines so it can triage which must be fixed
+before merge. **Carry these to it explicitly:**
+
+- **The pre-existing defect this branch found but did not fix.**
+  `_attempt_prompt_hash`'s **repair** branch hashes `build_repair_prompt(...)`
+  alone, while `repair()` actually sends `system=P.SYSTEM_EXTRACTION` — and the
+  extract branch *does* append it. Same "recorded hash names a prompt that was
+  never sent" class as ADR-0043 decision 8, in the same function, **present on
+  `main` before this branch existed.** `re_extract` is correct.
+- `run_receipt` — the `build_eval_pipeline` path — still extracts **unhinted**, so
+  eval measures a different prompt than production sends.
+- `session.rollback()` in the merchant stage is entirely unpinned; removing it
+  passes the full suite.
+- The design doc's own `**Status:** … Not yet implemented` line is now stale.
+
+**R3. Fix wave, then ONE scoped re-review.** Then merge by true fast-forward, and
+**ask before pushing `main`** — every `main` push is a one-time authorization.
+
+**R4. Refresh this pair last and alone** (ADR-0033), and restore the "must name
+nothing" instruction to `git branch --no-merged main` once the branch has landed.
+
+### What the branch does NOT do, so nobody looks for it
+
+- **No accuracy is validated.** Nothing here is measurable until ISSUE-001 runs.
+  "Hints improve extraction" is a hypothesis, and ADR-0043 says so.
+- **`few_shots_for` is built, tested, and deliberately never called** — few-shot
+  images are Cloud-tier-only and no Cloud tier exists. Not dead code; a recorded
+  decision. Do not "fix" it.
+- **No `fingerprint.py`.** `normalize_merchant_name` already existed.
+- **`image_phash`-based merchant matching** is explicitly out of scope.
+
+### Three things that will bite you
+
+- **A populated `merchant_id` does NOT mean the TIN was read.** The name-lookup
+  fallback populates it too. Semantic dedupe keys off that column.
+- **Semantic dedupe never saves a model call.** It runs post-extraction, so the
+  extraction is already paid for. ADR-0011's §18 cost-control reasoning is about
+  the *image* path; citing it here cites the wrong path.
+- **Same-merchant, same-date, same-total repeat purchases WILL merge.** Inherent
+  to the key. Survivable only because the duplicate keeps its extraction.
 
 ## 0g. Browser-pass I6, I8 and I9 are CLOSED — DONE, MERGED and PUSHED (2026-08-14).
 
@@ -1071,16 +1196,26 @@ branch.
    wrapper exists, in the user scripts directory, which is not on `PATH`. Never
    a packaging defect.** See §1.6 itself and ADR-0035's closing note.
 
-## 3. Phase 6 — merchants & few-shot (P6.T1)
+## 3. Phase 6 — merchants & few-shot (P6.T1) — **BUILT, IN FLIGHT, NOT MERGED**
 
-`merchants/{fingerprint,registry}.py` is greenfield; few-shot images first,
-target last; hints end "trust the image"; measure top-10-merchant accuracy
-before/after — **blocked on ISSUE-001**, so Phase 6 can be built but not
-validated. Five things unblock here: semantic dedupe into `process_receipt`; the
-same hints into `_attempt_prompt_hash`; `merchant_default_currency` at its
-plug-in point in `pipeline.py` (**locate it by symbol, not by line — the file
-has grown**); the `image_phash` gap; `Merchant.receipt_count` (nothing writes
-it). `VAT Reg. TIN` is the strongest fingerprint on this corpus.
+**This section described work to do. It is now work that exists on a branch.**
+See **§0h**, which is the live record; **ADR-0043** is the decision; the design is
+`docs/superpowers/specs/2026-08-14-merchant-fingerprinting-design.md` and the plan
+is `docs/superpowers/plans/2026-08-14-merchant-fingerprinting.md` — **read the
+plan's dated correction blocks, because two of its own code listings were wrong.**
+
+Of the five things this section said would unblock: **semantic dedupe, the hints
+into `_attempt_prompt_hash`, `merchant_default_currency`, and
+`Merchant.receipt_count` are all done.** The `image_phash` gap is **not** — no
+merchant matching keys off it, and ADR-0043 puts it explicitly out of scope.
+
+`merchants/registry.py` is the only new module; there is **no `fingerprint.py`**,
+because `normalize_merchant_name` already existed and its own docstring says it is
+"for FINGERPRINTING". `VAT Reg. TIN` remains the strongest fingerprint on this
+corpus, and ADR-0043 decision 1 is built on exactly that.
+
+**Still true and still blocking:** top-10-merchant accuracy cannot be measured
+until ISSUE-001 runs. Phase 6 was built and cannot be validated.
 
 ## 4. Phase 7 — self-consistency (P7.T1)
 
@@ -1527,13 +1662,32 @@ and was measured not to need it.)*
 
 ## Today's goal
 
-**Nothing is in flight and nothing is half-done.** Browser-pass I6, I8 and I9
-were closed and merged on 2026-08-14 (§0g), a person then looked at the three
-screens they changed, and the session after that verified this pair against the
-repo, repaired what had rotted, and wrote what you are reading. **Run
-`git branch --no-merged main` and
-`git log --oneline refs/remotes/origin/main..main` rather than reading an answer
-here** — the header above says what each can legitimately show.
+# ⚠ A BRANCH IS IN FLIGHT. This is the first time that has been true across a session boundary.
+
+**`feat/merchant-fingerprinting` is cut, built, and NOT merged.** Every previous
+version of this document told you `git branch --no-merged main` **must name
+nothing**. That instruction is suspended: it will name this branch, and that is
+correct rather than a defect. **Read §0h before anything else.**
+
+**You are not starting a milestone. You are finishing one.** Tasks 1–6 are
+complete and each had a task review, a fix round and a scoped re-review. **Task 7
+is committed but was never reviewed** — its implementer was cut off by a
+connection drop after editing and before committing; the controller verified the
+diff, ran the suite, and committed it saying so in the commit body. **No
+whole-branch review has run.** The milestone is not merge-eligible.
+
+**Run these first, and believe them over this document:**
+
+```
+git branch --show-current                         # expect feat/merchant-fingerprinting
+git status --short                                # must be empty
+git branch --no-merged main                       # WILL name feat/merchant-fingerprinting
+git log --oneline main..feat/merchant-fingerprinting
+python scripts/verify.py                          # background it; exceeds a 2-min timeout
+```
+
+**Last known good, controller-run 2026-08-15 at `c36b68f`: `python -m pytest` →
+1157 passed, `python -m ruff check .` clean.** Re-run rather than trusting it.
 
 **What that verification found is the case for doing it again. No count is given
 — the list is the evidence, and an earlier draft of this very sentence

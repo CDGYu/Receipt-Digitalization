@@ -6,25 +6,38 @@ continuity protocol itself — what lives where, and why this snapshot must be
 verified rather than trusted — is **ADR-0019**, extended by **ADR-0021** (whose
 2026-08-02 dated correction widened the freshness check after a docs-only task
 proved invisible to it).
-Last updated: **2026-08-14**, by the session that verified this pair against the
-repo, found it stale in four places, and repaired the copies the browser pass
-left behind. Earlier the same day, in order: the session that closed
-browser-pass findings **I6, I8 and I9** and merged them; the session that opened
-a browser on the three screens they changed and wrote down what it saw
-(`cd42e4f`) — and then ended without refreshing this pair, which is why the
-paragraph above exists; and, before both, the session that fixed
-`scripts/verify.py`'s docstring and gated the freshness check and its anchor.
+Last updated: **2026-08-15**, by the session that built Phase 6 merchant
+fingerprinting and **left it on a branch rather than merging it**. That session
+also verified the previous pair against the repo and found it false in four
+places, ruled Ollama-only and high-accuracy as project constraints (recorded in
+`docs/KNOWN_ISSUES.md`'s ISSUE-001 ruling block), and wrote **ADR-0043**.
 **No count of refreshes is written here** — it is a number that moves without its
 sentence changing, which is review standard 5.
 
-**ONE position, because nothing is in flight: freshness anchor `231d2f2`** —
-the last commit on `main` that is not this handoff pair.
+**Freshness anchor `ce9782a`** — the last commit that is not this handoff pair.
+
+**A BRANCH IS IN FLIGHT, and that changes how you run the command below.** This
+pair is committed on **`feat/merchant-fingerprinting`, not on `main`** —
+deliberately: §0e's lesson was that committing the pair to `main` mid-milestone
+diverges the two and forces a replay instead of a fast-forward. The branch carries
+the pair onto `main` when it lands.
+
+**So the command below is written for the merged state and is the wrong command
+today. While the branch is unmerged, run it with `HEAD` in place of `main`** —
+same anchor, same pathspec, only the far end changes.
+
+That substitution is not papering over a mistake. `tests/test_freshness_check.py`
+parses the anchor out of a `<seven-hex>..main` range and fails on any other shape,
+so a second literal command here would redden the very gate this stamp exists to
+satisfy — **which it did, and was caught by running it before committing rather
+than after.** The moment the branch fast-forwards onto `main`, the command below
+becomes exactly right and this paragraph should be deleted.
 **`git rev-parse main` will be AHEAD of it**, by the pair commit and nothing
 else: a stamp cannot name the commit that writes it. The test is a command,
 not a commit and not a count:
 
 ```
-git log --oneline 231d2f2..main -- ":(top,exclude)docs/MEMORY.md" ":(top,exclude)docs/NEXT_SESSION_PROMPT.md"
+git log --oneline ce9782a..main -- ":(top,exclude)docs/MEMORY.md" ":(top,exclude)docs/NEXT_SESSION_PROMPT.md"
 git log --oneline refs/remotes/origin/main..main   # what a push would send
 git ls-remote --heads origin main                  # authoritative on what is pushed
 git branch --no-merged main                        # must name NOTHING
@@ -87,11 +100,22 @@ answer.)*
 
 ## Snapshot
 
-- **NO BRANCH IN FLIGHT. `git branch --no-merged main` must name nothing** —
-  run it rather than believing this bullet, which **read "NO BRANCH IN FLIGHT"
-  for three days while one existed**: true when written on 2026-08-07, rotted
-  the moment the corrections branch was cut. **The answer is the command, never
-  the sentence.**
+- **⚠ A BRANCH IS IN FLIGHT — the first to survive a session boundary here.**
+  `git branch --no-merged main` **will name `feat/merchant-fingerprinting`**, and
+  that is correct. Every earlier version of this bullet said it must name nothing;
+  that instruction is **suspended until the branch lands**, and restoring it is
+  part of the merge. Run the command rather than believing any sentence — this
+  bullet read "NO BRANCH IN FLIGHT" for three days while one existed, in 2026-08.
+- **Phase 6 merchant fingerprinting is BUILT and NOT MERGED** (2026-08-15,
+  `feat/merchant-fingerprinting`, cut from `main` at `8f0b413`). Seven tasks.
+  **Tasks 1–6 each had a task review, a fix round and a scoped re-review. Task 7
+  has no review at all** — its implementer was cut off mid-work; the controller
+  verified the diff was green and committed it saying so. **No whole-branch review
+  has run, so this is not merge-eligible.** Decision: **ADR-0043**, which
+  **corrects ADR-0011**. Ledger:
+  `.superpowers/sdd/2026-08-14-merchant-fingerprinting/progress.md` (gitignored —
+  open by path). `docs/NEXT_SESSION_PROMPT.md` §0h is the ordered list of what
+  remains.
 - **Browser-pass I6, I8 and I9 are CLOSED — COMPLETE AND MERGED** (2026-08-14,
   true fast-forward `d5be9da` → `f92b497`, thirty-three commits, single parent
   each, zero merge commits). `feat/browser-pass-i6-i8-i9` is kept at its merge
@@ -2020,10 +2044,17 @@ measured.**
 - Reprocessing a `reviewed` receipt records **no** `extraction_runs` — the
   transaction rolls back (ADR-0013's dated correction).
 - Move confidence penalty weights into `config/rules.yaml` (P3.T6).
-- `_attempt_prompt_hash` must receive merchant hints / few-shot values when
-  they land, or the stored hash drifts.
-- **Semantic dedupe is deliberately not wired** into `process_receipt` until
-  Phase 6 (ADR-0011).
+- ~~`_attempt_prompt_hash` must receive merchant hints / few-shot values when
+  they land, or the stored hash drifts.~~ **DONE on `feat/merchant-fingerprinting`
+  (Task 4).** It receives them, and the coupling is pinned by a test that compares
+  the stored hash against the string the client actually received. **Measured:
+  with the coupling broken, 1139 of 1140 tests still passed.** ADR-0043 decision 8.
+- ~~**Semantic dedupe is deliberately not wired** into `process_receipt` until
+  Phase 6 (ADR-0011).~~ **WIRED on `feat/merchant-fingerprinting` (Task 6).**
+  ADR-0011 carries its own `## Correction (2026-08-14)`; ADR-0043 decisions 9 and
+  10 are the design. It runs **post-extraction** and therefore never saves a model
+  call, and the pipeline requires a non-NULL `merchant_id` on **both** sides —
+  stricter than `find_duplicate_by_content`'s own contract, which permits NULL.
 - `save_extraction` takes `report` but does **not** write findings — the
   pipeline calls `save_findings` separately.
 - `_build_line_items` falls back to list order when emitted positions aren't
