@@ -166,6 +166,48 @@ is information nobody had.
 > **ADR-0029** is the standing list of what a green `verify.py` cannot see, and
 > these three fixes escape none of it.**]**
 
+> **[SUPERSEDED IN PART, 2026-08-14 — the three screens have now been SEEN.**
+> The block above was true when written. The Playwright acceptance run was then
+> executed against the merged tree — `npx playwright test visual`, **15/15
+> passing**, 97 screenshots, 64 measurement records, 408 table cells checked —
+> and the captures were read. **The re-pointed assertion is no longer verified
+> only statically**: `ADR-0024 state 1 of 5: the distinct 503` passes against a
+> running browser.
+>
+> **Invocation note, because the suite says so itself and it cost a run:** the
+> whole suite consumes its single queued task in `review.spec.ts` by design, so
+> `npx playwright test` leaves `visual.spec.ts` with an empty queue and a
+> self-diagnosing failure. **Run `npx playwright test visual`, which re-seeds.**
+>
+> **What the captures show, at 1440 and 375, light:**
+>
+> * **I6 — correct, and unambiguously so.** `not a decimal amount: 'abc'` renders
+>   directly beneath the Total field in the fourth column, with that input
+>   outlined in the error colour. Before the fix the sentence sat at the far left,
+>   under Subtotal.
+> * **I8 — correct, and the `auto-fit` repair holds in a real browser.** The four
+>   tiles span the row edge to edge with no blank remainder, and the caption heads
+>   all four rather than labelling the first. This is the visual confirmation of a
+>   fix that had only ever been verified by computing a track list.
+> * **I9 — the frame is there and the finding is closed, but the result raises a
+>   new question the fix did not.** The card renders with its border, radius and
+>   surface, and its contents are vertically centred. **It is also mostly empty:**
+>   at 1440, three small elements sit in a 60vh box with roughly 350px of blank
+>   above and 370px below; at 375 the box fills the viewport width with the same
+>   proportions. Whether `min-height: 60vh` is right for a block this small is a
+>   judgement no measurement can make, and it is now a live question rather than a
+>   hypothetical one.
+> * **A parked finding is CONFIRMED by eye.** The 2026-08-14 milestone parked, for
+>   the visual pass, that `.alert` and `.action` both paint `--color-surface` and
+>   would lose their separation against a card of the same fill. They do: the
+>   alert is distinguished only by its left border rule, and `Try again` reads as
+>   a thin outline on the card's own white. Predicted, deferred, and now seen.
+>
+> **Still not seen:** dark theme at any width, 768, and every surface these three
+> fixes did not touch. This note closes I6 and I8 as *seen at 1440 and 375 in
+> light*, and closes I9's *frame* on the same footing while opening the question
+> above.**]**
+
 ### Critical
 
 **C1 — The line-items table's three money columns are unreadable, at every
