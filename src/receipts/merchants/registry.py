@@ -2,12 +2,26 @@
 
 from __future__ import annotations
 
-from sqlalchemy import select
+import base64
+import logging
+
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from receipts.extract import prompts as P
 from receipts.extract.schema import ReceiptExtraction
+from receipts.ingest.storage import StorageBackend
 from receipts.normalize import normalize_merchant_name
-from receipts.persist.models import Merchant
+from receipts.persist.models import (
+    Correction,
+    ExtractionRun,
+    Merchant,
+    PassName,
+    Receipt,
+)
+from receipts.score.confidence import ReceiptStatus
+
+log = logging.getLogger(__name__)
 
 
 def _keys(merchant: Merchant) -> set[str]:
@@ -131,3 +145,90 @@ def confirm(
 def increment(session: Session, merchant: Merchant) -> None:
     """Bump `receipt_count`. Callers commit; this only stages the change."""
     merchant.receipt_count = (merchant.receipt_count or 0) + 1
+
+
+def few_shots_for(
+    session: Session,
+    storage: StorageBackend,
+    merchant: Merchant | None,
+    limit: int = 2,
+) -> list[P.FewShot]:
+    """Verified prior extractions for this merchant, as in-context examples.
+
+    Three conditions, and every one of them is about trust:
+
+    * `status='reviewed'` -- a human looked at it;
+    * **zero** rows in `corrections` -- the human changed nothing, so the stored
+      extraction is what the model produced AND what the human accepted;
+    * **exactly one** `extraction_runs` row with `pass_name='extract'` --
+      `extract_with_repair` returns the best attempt rather than the last, and
+      `_persist_outcome` does not record which one won, so more than one leaves
+      the winner ambiguous.
+
+    The extraction is rebuilt from `extraction_runs.raw_response["parsed"]`,
+    **not** from the receipt row: `review/serializers.py`'s `_export_extraction`
+    is lossy on `merchant.tax_id`, and an example asserting a null TIN would
+    teach the model to omit the strongest identifier on this corpus.
+
+    Newest first, by `created_at`, with `id` breaking ties. Recency is what
+    makes an example representative -- a merchant that changes its receipt
+    layout should stop being taught the old one -- and `Receipt.id` alone
+    cannot express that, being a random UUID: it would freeze on whichever
+    candidates happen to sort lowest and keep teaching them as the corpus grows.
+    The `id` tie-break is not decoration. The ordering must be **total** or the
+    same rows can yield different examples on two calls, and `pipeline.py`'s
+    `_attempt_prompt_hash` rebuilds this prompt afterwards to recover its hash;
+    a different pick there records a hash that no call ever used. `created_at`
+    is not total on its own: it defaults to `now()`, which is the *transaction*
+    timestamp on Postgres and one-second resolution on SQLite, so receipts
+    written together tie exactly.
+
+    A receipt whose blob is missing is skipped rather than raised on -- a
+    prompting aid must never be the reason a receipt fails to process.
+    """
+    if merchant is None or limit <= 0:
+        return []
+
+    corrected = select(Correction.receipt_id).distinct()
+    extract_counts = (
+        select(ExtractionRun.receipt_id, func.count().label("n"))
+        .where(ExtractionRun.pass_name == PassName.EXTRACT)
+        .group_by(ExtractionRun.receipt_id)
+        .subquery()
+    )
+
+    rows = session.execute(
+        select(Receipt, ExtractionRun)
+        .join(extract_counts, extract_counts.c.receipt_id == Receipt.id)
+        .join(
+            ExtractionRun,
+            (ExtractionRun.receipt_id == Receipt.id)
+            & (ExtractionRun.pass_name == PassName.EXTRACT),
+        )
+        .where(
+            Receipt.merchant_id == merchant.id,
+            Receipt.status == ReceiptStatus.REVIEWED,
+            Receipt.id.notin_(corrected),
+            extract_counts.c.n == 1,
+        )
+        .order_by(Receipt.created_at.desc(), Receipt.id)
+        .limit(limit)
+    ).all()
+
+    shots: list[P.FewShot] = []
+    for receipt, run in rows:
+        parsed = (run.raw_response or {}).get("parsed")
+        if not parsed:
+            continue
+        try:
+            data = storage.get(receipt.image_key)
+        except (KeyError, FileNotFoundError, OSError):
+            log.warning("Few-shot blob missing for receipt %s; skipping", receipt.id)
+            continue
+        shots.append(
+            P.FewShot(
+                image_b64=base64.b64encode(data).decode("ascii"),
+                extraction=ReceiptExtraction.model_validate(parsed),
+            )
+        )
+    return shots
