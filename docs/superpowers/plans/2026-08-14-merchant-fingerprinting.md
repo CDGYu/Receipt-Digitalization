@@ -541,6 +541,9 @@ def _candidate(
         id=receipt_id,
         merchant_id=merchant.id,
         image_key=f"receipts/{receipt_id}/original.jpg",
+        image_phash="",  # NOT NULL with no default -- omit it and every test
+                         # in this file dies on IntegrityError, not on the
+                         # behaviour it means to assert.
         status=status,
     )
     session.add(receipt)
