@@ -384,9 +384,20 @@ So **one Important finding, I7, the silent 401 swap**. The seven Minor findings
 The same paragraph's "**I5 and I7 touch ADR-0024's contract**, so neither is a
 drive-by fix" keeps only its I7 half — and that half is why I7 is the one left.
 
-**None of the four was closed by a person looking at it.** The I6, I8 and I9 rows
-say **MEASURED, NOT SEEN** in as many words, and the same status note records
-that ADR-0041 closed I5 on the same footing.
+**[Corrected 2026-08-14, later the same day. This said "None of the four was
+closed by a person looking at it", and cited the I6, I8 and I9 rows as saying
+MEASURED, NOT SEEN in as many words.** Both halves died within the day. The
+Playwright acceptance run was executed against the merged tree and its captures
+were read, so **I6, I8 and I9 have been seen**; those rows no longer carry that
+phrase, which is also why the citation had to go rather than be re-aimed.
+
+**The note that records it makes no claim about I5**, so I5's footing is
+unchanged by it — which is also why this correction does not say "all four".
+The seen-status of **I6, I8 and I9** is in the *SUPERSEDED IN PART* block in §3
+of `docs/superpowers/specs/2026-08-05-review-ui-browser-pass.md`, and the widths,
+the theme and the one question it opened are deliberately **not** copied into
+this ADR. A verdict in two documents is a verdict that can disagree with
+itself.**]**
 
 ## References
 

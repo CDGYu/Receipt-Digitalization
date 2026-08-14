@@ -125,10 +125,10 @@ is information nobody had.
 > | C3 | **FIXED** — `205d77a`. `frontend/src/login/` got its first stylesheet; all three controls clear 44px. |
 > | I4 | **FIXED** — `205d77a`. `--color-null` → `#7C8CA2` in both dark blocks; sub-4.5:1 records 35 → 0. |
 > | **I5** | **RE-TRIAGED TO CRITICAL** (user ruling, 2026-08-06), then **FIXED 2026-08-12** — `99f0207`, recorded in **ADR-0041**. The outcome region takes focus when it appears, so the browser scrolls it into view. See its own entry. |
-> | **I6** | **FIXED 2026-08-13 — MEASURED, NOT SEEN** — `e7e5d9e`; the guard that joins `.fieldCell` in the stylesheet to the reference in the component landed at `d4cbba2`. Every text and money field is wrapped in a `.fieldCell` at the call site in `ReceiptForm`, so the error is a child of a grid *item* rather than of the grid. See its own entry. |
+> | **I6** | **FIXED 2026-08-13 — MEASURED, THEN SEEN** (scope in §3's *SUPERSEDED IN PART* block) — `e7e5d9e`; the guard that joins `.fieldCell` in the stylesheet to the reference in the component landed at `d4cbba2`. Every text and money field is wrapped in a `.fieldCell` at the call site in `ReceiptForm`, so the error is a child of a grid *item* rather than of the grid. See its own entry. |
 > | I7 | **OPEN**, unchanged. It touches **ADR-0024**'s error-recovery contract, so it waits on a user ruling rather than on anyone's time. |
-> | **I8** | **FIXED 2026-08-14 — MEASURED, NOT SEEN** — `3f552d1`, reworded at `7a770c3`. The tiles region opens with a caption naming the figures' scope, so the global counts no longer read against the role-scoped table below them. See its own entry. |
-> | **I9** | **FIXED 2026-08-14 — MEASURED, NOT SEEN** — the copy at `1322932`, the frame at `fcfc627`. Two site-appropriate sentences replace the one that was said twice, and the failure notice is framed. Its entry also carries a dated correction: one half of the finding was never true. |
+> | **I8** | **FIXED 2026-08-14 — MEASURED, THEN SEEN** (scope in §3's *SUPERSEDED IN PART* block) — `3f552d1`, reworded at `7a770c3`. The tiles region opens with a caption naming the figures' scope, so the global counts no longer read against the role-scoped table below them. See its own entry. |
+> | **I9** | **FIXED 2026-08-14 — MEASURED, THEN SEEN** (scope in §3's *SUPERSEDED IN PART* block, which also opens a new question this row does not answer) — the copy at `1322932`, the frame at `fcfc627`. Two site-appropriate sentences replace the one that was said twice, and the failure notice is framed. Its entry also carries a dated correction: one half of the finding was never true. |
 > | m10–m16 | **OPEN**, unchanged. |
 >
 > **The fixes were pinned only afterwards, and that is the milestone's headline
@@ -207,6 +207,18 @@ is information nobody had.
 > fixes did not touch. This note closes I6 and I8 as *seen at 1440 and 375 in
 > light*, and closes I9's *frame* on the same footing while opening the question
 > above.**]**
+
+> **[Amended 2026-08-14 — the six copies now point at the block above instead of
+> repeating its verdict.** The three status rows and the three per-finding
+> entries each said **MEASURED, NOT SEEN** in their own words, so the *"what
+> MEASURED, NOT SEEN means"* block names rows that no longer carry the phrase.
+> That is a citation ageing the moment the claim it cited was closed — review
+> standard 21, inside the report that records the practice. All six now read
+> *MEASURED, THEN SEEN* and send the reader up. **The widths, the theme and the
+> one open question are stated once, in the block above, and nowhere else** —
+> including in `docs/adr/0027-review-ui-design-system.md`, whose 2026-08-14
+> correction cited those rows and has been corrected in turn. A verdict in two
+> documents is a verdict that can disagree with itself.**]**
 
 ### Critical
 
@@ -340,7 +352,8 @@ ADR-0024 §5's "beside the input that sent it" holds in the DOM and in the
 accessibility tree (`aria-describedby`), and not on screen.
 *Owning file:* `frontend/src/review/ReceiptForm.module.css`.
 *Evidence:* `error-400-field-form--1440-light.png`.
-***FIXED 2026-08-13 (`e7e5d9e`) — MEASURED, NOT SEEN.*** Every text and money
+***FIXED 2026-08-13 (`e7e5d9e`) — MEASURED, THEN SEEN; scope in §3's
+SUPERSEDED IN PART block.*** Every text and money
 field is now wrapped in a `.fieldCell` at the call site in `ReceiptForm`, and
 the `.form > p` rule is gone. The wrapper is the grid item, so a label and the
 error that belongs to it travel together into whatever column auto-fill puts
@@ -393,7 +406,8 @@ reads as broken.
 *Owning files:* `frontend/src/admin/StatTiles.tsx` (the labels),
 `frontend/src/admin/AdminScreen.tsx` (the composition).
 *Evidence:* `admin-reviewer-empty--1024-light.png`.
-***FIXED 2026-08-14 (`3f552d1`, reworded at `7a770c3`) — MEASURED, NOT SEEN.***
+***FIXED 2026-08-14 (`3f552d1`, reworded at `7a770c3`) — MEASURED, THEN SEEN;
+scope in §3's SUPERSEDED IN PART block.***
 The tiles region's first child is now a caption reading "System-wide, not only
 your tasks", declared to span the grid so that it heads every tile rather than
 labelling the first.
@@ -457,7 +471,9 @@ The finding keeps its original text.**]**
 *Owning files:* `frontend/src/review/ReviewScreen.tsx` (the copy),
 `frontend/src/review/ReviewScreen.module.css` (`.notice`).
 ***FIXED 2026-08-14 — the copy at `1322932`, the frame at `fcfc627` — MEASURED,
-NOT SEEN.*** Neither explanation restates the server's words any more. One
+THEN SEEN; scope in §3's SUPERSEDED IN PART block, which also opens a question
+about `min-height: 60vh` that this entry does not answer.*** Neither explanation
+restates the server's words any more. One
 string served both sites; each now has its own sentence, saying what that site
 can actually promise — on the load path, that the reviewer's assigned tasks are
 unaffected; on the submit path, that their edits are still on the page and have
