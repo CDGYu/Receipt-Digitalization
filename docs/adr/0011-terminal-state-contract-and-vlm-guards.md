@@ -101,6 +101,31 @@ call sites to keep in step.
   would make `spent` NaN, and `NaN >= ceiling` is always `False`, so the ceiling
   would silently never fire — the same shape of bug ADR-0007 records.
 
+## Correction (2026-08-14)
+
+The consequence above — **"Semantic (merchant + date + total) dedupe is
+deliberately not wired in"** — is closed. It is wired, inside `_persist_outcome`
+and therefore inside the `persist` stage, and the condition it was waiting on
+("wire it with M5") is the merchant registry that now populates
+`receipts.merchant_id`.
+
+The degeneration it feared is what `pipeline._find_duplicate_content` refuses: a
+NULL `merchant_id` matches nothing there, so two receipts with no merchant are
+never merged on a shared date and total alone. `find_duplicate_by_content` still
+permits NULL-to-NULL — that is the right contract for a lookup and it is
+unchanged; the restriction is the pipeline's, applied where the merge happens.
+
+Two things about the phash bullet below do **not** carry over to this path:
+
+- **It saves no model call.** All three keys come out of the extraction, so a
+  semantic duplicate is only detectable once the extraction has been paid for in
+  full. The §18 cost-control argument covers a re-uploaded *image* and nothing
+  else.
+- **The rejected row keeps its extraction.** A phash duplicate is stored empty
+  because no model was called; here one was, so the amounts, line items,
+  findings and `extraction_runs` are all persisted alongside `duplicate_of`.
+  That is what makes a *wrong* merge readable rather than merely undoable.
+
 ## References
 
 SPEC §14.10 (`process_receipt`), §18 (silent drops, cost control); ADR-0001

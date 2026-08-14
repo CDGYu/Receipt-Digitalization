@@ -35,6 +35,7 @@ import traceback
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field, replace
+from datetime import date as date_cls
 from decimal import Decimal
 from pathlib import Path
 from typing import Callable, Iterable
@@ -62,6 +63,7 @@ from .merchants import registry
 from .normalize import normalize
 from .persist.models import PassName
 from .persist.repository import (
+    find_duplicate_by_content,
     find_duplicate_by_phash,
     get_receipt,
     mark_duplicate,
@@ -396,8 +398,9 @@ def process_receipt(
     preprocess and perceptually hash them -> check for a duplicate image ->
     triage -> look the merchant up for its hints and its currency -> extract
     with the repair loop (normalization applied inside it) -> score -> route ->
-    persist, resolving the merchant again from the finished extraction and
-    writing it to ``receipts.merchant_id``. Dependencies
+    persist, resolving the merchant again from the finished extraction, writing
+    it to ``receipts.merchant_id``, and checking that merchant plus the date and
+    the total against the receipts already stored. Dependencies
     are injected exactly the way :func:`run_receipt` and
     :func:`build_eval_pipeline` take theirs, which is what keeps the whole suite
     offline.
@@ -450,11 +453,18 @@ def process_receipt(
     receipt id here; a PDF that reached this function would fail cleanly at
     ``preprocess`` rather than silently extracting only its first page.
 
-    Not done here, on purpose: **semantic (merchant + date + total) dedupe**.
-    Nothing calls :func:`~receipts.persist.repository.find_duplicate_by_content`
-    yet. A missed duplicate is recoverable; a silent merge of two receipts is
-    not. Self-consistency (M6) and few-shot examples plug in at the marked
-    points.
+    **Semantic (merchant + date + total) dedupe runs inside the ``persist``
+    stage, not beside the image check.** It cannot run where image dedupe runs:
+    that stage is pre-extraction, and none of ``merchant_id``, ``txn_date`` or
+    ``total`` exists until the model has answered. It therefore **saves no model
+    call** -- by the time a semantic duplicate is detectable the extraction has
+    already been paid for in full, so the §18 cost-control argument that covers
+    a re-uploaded *image* does not reach this path. What it buys is a ledger
+    that does not hold two rows for one purchase. See
+    :func:`_find_duplicate_content` for the guard that keeps the merge narrow
+    and :func:`_persist_outcome` for what the rejected row keeps.
+
+    Self-consistency (M6) and few-shot examples plug in at the marked points.
     """
     settings = settings or Settings()
     # A fresh context per run: extract_with_repair assigns ctx.triage, and a
@@ -618,6 +628,51 @@ def _find_duplicate_image(
         session.close()
 
 
+def _find_duplicate_content(
+    session: Session,
+    job: ReceiptJob,
+    merchant_id: uuid.UUID | None,
+    txn_date: date_cls | None,
+    total: Decimal | None,
+) -> uuid.UUID | None:
+    """The id of an already-stored receipt this one duplicates, or ``None``.
+
+    The twin of :func:`_find_duplicate_image`, and deliberately unlike it in
+    three ways.
+
+    **It runs after the model call, not before**, on the caller's session rather
+    than one of its own. ``merchant_id``, ``txn_date`` and ``total`` are all
+    products of the extraction, so this cannot be moved earlier and cannot save
+    a call: the image check saves an inference, this one saves a duplicated row
+    in the ledger.
+
+    **A NULL ``merchant_id`` matches nothing here.** That is the one restriction
+    the pipeline adds over
+    :func:`~receipts.persist.repository.find_duplicate_by_content`, whose own
+    contract permits NULL-to-NULL and is right to -- an unresolved merchant
+    matching only other unresolved merchants is a coherent rule for a lookup.
+    It is the wrong rule for a **merge**. Merchant resolution is
+    exact-match-only, so early receipts routinely have no merchant at all, and
+    without this guard two genuinely different shops that happened to share a
+    date and a total would be merged on the strength of the two keys that say
+    nothing about *which shop*. The repository's contract is left alone; the
+    restriction lives here, next to the consequence.
+
+    **The keys are read off the row that was just written**, not derived a
+    second time from the extraction. A second derivation is how the stored
+    ``txn_date`` and the dedupe key come to disagree:
+    :func:`~receipts.persist.repository.save_extraction` stores NULL and parks
+    an unparseable date in ``date_raw``, and a re-parse that decided otherwise
+    would key a merge on a date the row does not hold.
+    """
+    if merchant_id is None:
+        return None
+    existing = find_duplicate_by_content(
+        session, merchant_id, txn_date, total, exclude_id=job.id
+    )
+    return existing.id if existing is not None else None
+
+
 def _persist_duplicate(
     session_factory: Callable[[], Session],
     job: ReceiptJob,
@@ -697,6 +752,28 @@ def _persist_outcome(
     here only to compare against the merchant the extraction actually resolved
     to. They can differ; see the warning below.
 
+    **A semantic duplicate keeps everything it paid for.** The check runs
+    *after* :func:`~receipts.persist.repository.save_extraction`, so the
+    duplicate branch decorates a stored extraction rather than replacing one --
+    the row is flipped to ``rejected`` and given a ``duplicate_of``, and it
+    keeps its amounts, its line items, its findings and its ``extraction_runs``.
+    That is the whole reason this design was accepted: image dedupe writes an
+    empty row because no model was called, but here one was and the money is
+    spent either way, so storing the extraction costs nothing and is what lets a
+    human read a **wrong** merge -- see the amounts that were merged over and
+    disagree -- instead of only being able to undo one. ``priority`` drops to
+    ``-1`` with it: ``rejected`` is terminal, and a duplicate is not work for a
+    reviewer. The transient window in which the row carries the routed status
+    before being flipped is inside this function's single transaction, so
+    nothing outside it observes that state.
+
+    The merchant is still credited for a receipt that turns out to be a
+    duplicate -- ``_resolve_merchant`` has already run and incremented by the
+    time the duplicate is known. That leaves ``merchants.receipt_count`` one
+    high per re-upload: the same bounded imprecision in a display-only counter
+    that :func:`_resolve_merchant` documents from the other side, and cheaper
+    than the decrement path it declines for the same reason.
+
     Three details are easy to get wrong and are therefore spelled out:
 
       * :func:`~receipts.persist.repository.save_extraction` takes the report but
@@ -731,6 +808,21 @@ def _persist_outcome(
             session, job, outcome.extraction, outcome.report, confidence, status,
             image_phash=phash, merchant_id=merchant_id, confidence_reasons=reasons,
         )
+
+        # Semantic dedupe, keyed on what the row now actually holds. The write
+        # above is unconditional and already done, which is the point: the
+        # branch below can only ever *add* a rejection and a link on top of a
+        # stored extraction, never stand in place of storing one.
+        duplicate_id = _find_duplicate_content(
+            session, job, merchant_id, receipt.txn_date, receipt.total
+        )
+        if duplicate_id is not None:
+            status = ReceiptStatus.REJECTED
+            priority = -1
+            reason = f"duplicate of receipt {duplicate_id}"
+            receipt.status = status
+            mark_duplicate(session, receipt.id, duplicate_id)
+
         save_findings(session, receipt.id, outcome.report)
 
         repaired = [
@@ -802,6 +894,7 @@ def _persist_outcome(
         confidence=confidence,
         reason=reason,
         review_priority=priority,
+        duplicate_of=duplicate_id,
         cost_usd=cost,
     )
 
