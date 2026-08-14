@@ -489,10 +489,10 @@ def _add_merchants(sub: argparse._SubParsersAction) -> None:
         help="list every merchant: id, canonical name, tax id, receipt count",
         description=(
             "List every merchant: id, canonical name, tax id, receipt count. "
-            "The receipt count prints as `-`, not a number: nothing increments "
-            "`merchants.receipt_count` until the merchant registry lands "
-            "(Phase 6), so the stored value is 0 for every merchant and "
-            "printing it would state a wrong number confidently."
+            "The receipt count is a running tally that can read high: a "
+            "re-uploaded duplicate is counted, and a receipt that moves to "
+            "another merchant on reprocessing is not taken off the first "
+            "merchant's total."
         ),
     )
 
@@ -1101,11 +1101,6 @@ def cmd_export(
 #: the day a merchant changes its receipt format.
 _TRUST_THE_IMAGE = "trust the image"
 
-#: Printed in ``merchants list``'s receipt-count column in place of the stored
-#: ``merchants.receipt_count``. Nothing increments that column until Phase 6,
-#: so it is ``0`` on every row; see :func:`cmd_merchants`.
-_RECEIPT_COUNT_NOT_TRACKED = "-"
-
 
 def cmd_merchants(args: argparse.Namespace, *, session_factory) -> int:
     """Dispatch ``merchants list|hints``. The caller commits.
@@ -1115,16 +1110,6 @@ def cmd_merchants(args: argparse.Namespace, *, session_factory) -> int:
     optionally mutating them first -- ``--add`` appends, ``--clear``
     empties -- and always re-prints the resulting list. An unknown id
     prints to stderr and is :data:`EXIT_FAILED`.
-
-    **The receipt count prints as** :data:`_RECEIPT_COUNT_NOT_TRACKED`,
-    never as the stored integer. Nothing anywhere writes
-    ``merchants.receipt_count`` -- it is declared with ``default=0`` and no
-    code increments it until the merchant registry lands (Phase 6) -- so
-    every merchant reads back ``0``. A column of confident zeros on an
-    operator's screen is a wrong number, which this system treats as worse
-    than a missing one; ``-`` says "not tracked yet" and cannot be misread
-    as "this merchant has no receipts". Restore the real value here on the
-    day something maintains it.
 
     **The JSON-mutation trap (verified against ``persist/models.py`` before
     this was written).** ``Merchant.hints`` is a plain ``sa.JSON()`` column
@@ -1143,7 +1128,7 @@ def cmd_merchants(args: argparse.Namespace, *, session_factory) -> int:
         for merchant in merchants:
             print(
                 f"{merchant.id}\t{merchant.canonical_name}\t"
-                f"{merchant.tax_id or ''}\t{_RECEIPT_COUNT_NOT_TRACKED}"
+                f"{merchant.tax_id or ''}\t{merchant.receipt_count}"
             )
         return EXIT_OK
 

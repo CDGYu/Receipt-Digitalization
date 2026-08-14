@@ -167,9 +167,15 @@ def _pending_receipt_row(session_factory) -> uuid.UUID:
     return _receipt(session_factory, status=ReceiptStatus.PENDING)
 
 
-def _merchant(session_factory, *, canonical_name: str, tax_id: str | None = None) -> uuid.UUID:
+def _merchant(
+    session_factory, *, canonical_name: str, tax_id: str | None = None,
+    receipt_count: int = 0,
+) -> uuid.UUID:
     """One merchants row. ``name_variants``/``hints`` default to [] via the ORM."""
-    merchant = Merchant(id=uuid.uuid4(), canonical_name=canonical_name, tax_id=tax_id)
+    merchant = Merchant(
+        id=uuid.uuid4(), canonical_name=canonical_name, tax_id=tax_id,
+        receipt_count=receipt_count,
+    )
     with session_factory() as session:
         session.add(merchant)
         session.commit()
@@ -293,22 +299,28 @@ def test_merchants_list_prints_each_merchant(session_factory, capsys):
     assert "METRO OIL SUBIC, INC." in capsys.readouterr().out
 
 
-def test_merchants_list_does_not_print_a_confident_zero_receipt_count(session_factory, capsys):
-    """`merchants.receipt_count` is never incremented before Phase 6.
+def test_merchants_list_prints_the_real_receipt_count(session_factory, capsys):
+    """Phase 6 increments `receipt_count`, so printing it is no longer a lie.
 
-    Every merchant reads back the column default, so the list printed a column
-    of `0`s -- a wrong number stated confidently, which this system treats as
-    strictly worse than a missing one, and one an operator would read as "this
-    merchant has no receipts" rather than "nothing counts them yet".
+    This replaces a test that pinned a `-` placeholder. The placeholder existed
+    because nothing incremented the column and a column of `0`s would have read
+    as "no receipts" rather than "not counted".
     """
-    _merchant(session_factory, canonical_name="METRO OIL SUBIC, INC.", tax_id="221 193 789 09013")
+    _merchant(
+        session_factory,
+        canonical_name="METRO OIL SUBIC, INC.",
+        tax_id="221 193 789 09013",
+        receipt_count=3,
+    )
 
-    cmd_merchants(build_parser().parse_args(["merchants", "list"]),
-                  session_factory=session_factory)
+    code = cmd_merchants(
+        build_parser().parse_args(["merchants", "list"]),
+        session_factory=session_factory,
+    )
 
+    assert code == EXIT_OK
     line = capsys.readouterr().out.strip()
-    assert line.split("\t")[-1] == cli_module._RECEIPT_COUNT_NOT_TRACKED
-    assert line.split("\t")[-1] != "0"
+    assert line.split("\t")[-1] == "3"
 
 
 def test_merchants_hints_add_appends_trust_the_image(session_factory):
