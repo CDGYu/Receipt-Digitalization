@@ -198,8 +198,9 @@ def run_receipt(
     handed to :func:`~receipts.normalize.normalize` as the last link of the §9
     chain: it fills the currency only when the receipt printed no ISO code, which
     is the norm for PH BIR invoices. Left ``None`` the currency stays ``None``
-    rather than becoming a guess. The merchant's own ``default_currency`` outranks
-    it and plugs in here once the merchant registry lands (M5).
+    rather than becoming a guess. A merchant's own ``default_currency`` outranks
+    it and is applied by :func:`process_receipt`; this path has no database, so
+    there is no merchant here to ask.
 
     Returns a triple of the normalized winning extraction, the validation report
     for that attempt, and the triage result. The report reflects what the model
@@ -228,8 +229,8 @@ def run_receipt(
         ctx=ctx,
         max_repairs=max(0, max_attempts - 1),
     )
-    # merchant_default_currency stays unset until the merchant registry exists
-    # (M5); it outranks the system default and plugs in right here.
+    # merchant_default_currency stays unset: this path takes no session, so the
+    # registry cannot be reached from here. process_receipt supplies it.
     normalized = normalize(
         outcome.extraction, system_default_currency=default_currency
     )
@@ -393,8 +394,10 @@ def process_receipt(
 
     Stages, in order (:data:`STAGES`): read the original bytes from storage ->
     preprocess and perceptually hash them -> check for a duplicate image ->
-    triage -> look the merchant up for its hints -> extract with the repair loop
-    (normalization applied inside it) -> score -> route -> persist. Dependencies
+    triage -> look the merchant up for its hints and its currency -> extract
+    with the repair loop (normalization applied inside it) -> score -> route ->
+    persist, resolving the merchant again from the finished extraction and
+    writing it to ``receipts.merchant_id``. Dependencies
     are injected exactly the way :func:`run_receipt` and
     :func:`build_eval_pipeline` take theirs, which is what keeps the whole suite
     offline.
@@ -448,12 +451,10 @@ def process_receipt(
     ``preprocess`` rather than silently extracting only its first page.
 
     Not done here, on purpose: **semantic (merchant + date + total) dedupe**.
-    ``merchant_id`` is NULL on every row until the merchant registry lands (M5),
-    so :func:`~receipts.persist.repository.find_duplicate_by_content` would
-    degenerate to "same date and same total" across all merchants and merge two
-    genuinely different purchases. A missed duplicate is recoverable; a silent
-    merge of two receipts is not. Wire it in with M5. Self-consistency (M6) and
-    few-shot examples plug in at the marked points.
+    Nothing calls :func:`~receipts.persist.repository.find_duplicate_by_content`
+    yet. A missed duplicate is recoverable; a silent merge of two receipts is
+    not. Self-consistency (M6) and few-shot examples plug in at the marked
+    points.
     """
     settings = settings or Settings()
     # A fresh context per run: extract_with_repair assigns ctx.triage, and a
@@ -488,13 +489,17 @@ def process_receipt(
 
         with _stage("merchant"):
             hints: P.MerchantHints | None = None
+            merchant_currency: str | None = None
             with session_factory() as session:
                 merchant = registry.lookup(session, triage_result.merchant_name_guess)
-                if merchant is not None and merchant.hints:
-                    hints = P.MerchantHints(
-                        merchant_name=merchant.canonical_name,
-                        hints=list(merchant.hints),
-                    )
+                if merchant is not None:
+                    # Read inside the session: the object detaches on the way out.
+                    merchant_currency = merchant.default_currency
+                    if merchant.hints:
+                        hints = P.MerchantHints(
+                            merchant_name=merchant.canonical_name,
+                            hints=list(merchant.hints),
+                        )
             # Few-shot IMAGES are Cloud-tier only (spec D1): on the local model
             # each example multiplies inference cost by one whole image. The
             # selector exists (registry.few_shots_for) and is deliberately not
@@ -511,7 +516,7 @@ def process_receipt(
                 hints=hints,
                 few_shots=few_shots,
                 max_repairs=max(0, settings.max_repair_attempts),
-                normalize_fn=_normalizer(settings.default_currency),
+                normalize_fn=_normalizer(settings.default_currency, merchant_currency),
             )
 
         with _stage("score"):
@@ -548,24 +553,37 @@ def process_receipt(
                 cost=cost_guard.spent,
                 hints=hints,
                 few_shots=few_shots,
+                merchant_currency=merchant_currency,
             )
     except _StageFailure as failure:
         return _persist_failure(session_factory, job, failure, phash, cost_guard.spent)
 
 
-def _normalizer(default_currency: str | None) -> Callable[[ReceiptExtraction], ReceiptExtraction]:
+def _normalizer(
+    default_currency: str | None, merchant_currency: str | None = None
+) -> Callable[[ReceiptExtraction], ReceiptExtraction]:
     """The ``normalize_fn`` hook, tagged as its own stage.
 
     :func:`~receipts.extract.extractor.extract_with_repair` applies this before
     validating each attempt, which is how the report and the extraction end up
-    describing the same object. ``merchant_default_currency`` stays unset until
-    the merchant registry exists (M5); it outranks the system default and plugs
-    in right here.
+    describing the same object.
+
+    The two currencies are handed over **separately**, not collapsed with an
+    ``or``: :func:`~receipts.normalize.normalize` owns the §9 precedence (an ISO
+    code printed on the receipt -> the merchant's ``default_currency`` -> the
+    system ``DEFAULT_CURRENCY`` -> ``None``), and collapsing them here would
+    lose its last link. A merchant row holding an *unrecognised* code would
+    then resolve to ``None`` instead of falling through to the system default,
+    because ``normalize_currency`` only continues down a chain it can see.
     """
 
     def run(extraction: ReceiptExtraction) -> ReceiptExtraction:
         with _stage("normalize"):
-            return normalize(extraction, system_default_currency=default_currency)
+            return normalize(
+                extraction,
+                merchant_default_currency=merchant_currency,
+                system_default_currency=default_currency,
+            )
 
     return run
 
@@ -663,8 +681,21 @@ def _persist_outcome(
     cost: Decimal,
     hints: P.MerchantHints | None = None,
     few_shots: list[P.FewShot] | None = None,
+    merchant_currency: str | None = None,
 ) -> ProcessResult:
     """Write the receipt, its findings, its audit rows, and its review task.
+
+    **The merchant is resolved first, and deliberately so.**
+    :func:`_resolve_merchant` rolls its own session back on failure, and that
+    rollback is only free because nothing else has been staged yet. Moving it
+    after :func:`~receipts.persist.repository.save_extraction` would make the
+    rollback discard the receipt as well -- the extraction this run already paid
+    a model for.
+
+    ``merchant_currency`` is the ``default_currency`` of the merchant the
+    ``merchant`` stage found (the one the normalizer was built from), carried
+    here only to compare against the merchant the extraction actually resolved
+    to. They can differ; see the warning below.
 
     Three details are easy to get wrong and are therefore spelled out:
 
@@ -693,9 +724,12 @@ def _persist_outcome(
     """
     session = session_factory()
     try:
+        merchant_id, resolved_currency = _resolve_merchant(
+            session, job, outcome.extraction
+        )
         receipt = save_extraction(
             session, job, outcome.extraction, outcome.report, confidence, status,
-            image_phash=phash, confidence_reasons=reasons,
+            image_phash=phash, merchant_id=merchant_id, confidence_reasons=reasons,
         )
         save_findings(session, receipt.id, outcome.report)
 
@@ -733,12 +767,31 @@ def _persist_outcome(
             # backlog. A receipt with no task is the common case and a no-op.
             close_review_for_receipt(session, receipt.id)
 
+        # Read before the commit expires it: the warning below describes what
+        # was stored, not what a re-read would say.
+        stored_currency = receipt.currency
         session.commit()
     except Exception:
         session.rollback()
         raise
     finally:
         session.close()
+
+    if not _same_currency(resolved_currency, merchant_currency):
+        # The one seam the ordering leaves. The normalizer is built at the
+        # `merchant` stage, from the merchant *triage* named; the merchant
+        # stored below comes from the completed extraction's TIN, and those can
+        # be different rows -- so the currency chain may have consulted a
+        # merchant that is not this receipt's. Re-normalizing now is not the
+        # fix: the report, the score and the row describe one object by
+        # construction, and rewriting the currency after scoring would break
+        # that. Say so instead. Every clause here is a fact, not a verdict --
+        # the two may well agree on the currency that was printed.
+        log.warning(
+            "Receipt %s normalized against merchant default currency %r but "
+            "resolved to merchant %s, whose default is %r; stored currency is %r",
+            job.id, merchant_currency, merchant_id, resolved_currency, stored_currency,
+        )
 
     log.info(
         "Receipt %s -> %s (confidence %s, %s)", job.id, status.value, confidence, reason
@@ -751,6 +804,85 @@ def _persist_outcome(
         review_priority=priority,
         cost_usd=cost,
     )
+
+
+def _same_currency(left: str | None, right: str | None) -> bool:
+    """Whether two currency columns say the same thing. ``None`` == ``""``."""
+    return (left or "").strip().upper() == (right or "").strip().upper()
+
+
+def _resolve_merchant(
+    session: Session, job: ReceiptJob, extraction: ReceiptExtraction
+) -> tuple[uuid.UUID | None, str | None]:
+    """Which merchant issued this receipt, from the **completed** extraction.
+
+    Returns ``(merchant_id, default_currency)``, both ``None`` when no merchant
+    could be established. A NULL ``merchant_id`` is a correct answer, not a gap:
+    :func:`~receipts.merchants.registry.register` requires a ``tax_id``, so a
+    receipt whose TIN the model could not read gets no merchant rather than one
+    invented from ``merchant_name_guess``.
+
+    **The TIN is asked first, and the name only as a fallback.** That order is
+    not interchangeable with the reverse, for two separate reasons:
+
+      * ``lookup`` matches on the normalized *name*, and two businesses can
+        share one. Asking it first attributes a receipt to whichever of them was
+        registered earlier and -- because ``register`` is then never reached --
+        leaves the real issuer permanently unregisterable, which is exactly the
+        outcome :func:`~receipts.merchants.registry.register`'s own docstring
+        refuses to produce from the other side.
+      * ``confirm`` is the only path that widens matching, and it discards a
+        spelling the merchant already answers to. Reached only after a
+        successful ``lookup``, every call it ever got would be discarded by that
+        guard: the registry could never learn a second spelling for anybody.
+
+    **A receipt is counted once, not once per run.** ``process_receipt`` is
+    re-runnable by design (a retried job, a reprocess), and each pass arrives
+    here with the same receipt id; incrementing unconditionally would make
+    ``merchants.receipt_count`` a count of runs. A reprocess that resolves to a
+    *different* merchant credits the new one and does not debit the old, which
+    leaves the losing merchant one high -- a bounded imprecision in a
+    display-only counter, and cheaper than a decrement path that has to reason
+    about a merchant row that may since have been merged away.
+
+    **One bounded property, not a list of anticipated failures: no failure in
+    here may cost the receipt its extraction.** That extraction has already been
+    paid for at a provider, validated and scored; a merchants-table problem is
+    bookkeeping. Anything raised is logged with its traceback and the receipt is
+    stored with no merchant. The ``merchant`` stage still fails *loudly* for a
+    registry that is down (§18) -- it runs before the model call, where failing
+    costs nothing -- so this bound covers what that stage cannot see, such as a
+    constraint violation on the ``register`` flush.
+
+    The rollback is what makes the bound safe rather than merely quiet: a failed
+    flush leaves the session unusable, so continuing on it would take the
+    receipt down anyway. It is free only because this runs first in
+    :func:`_persist_outcome`'s transaction, with nothing else yet staged.
+    """
+    try:
+        merchant = registry.register(session, extraction)
+        if merchant is None:
+            merchant = registry.lookup(session, extraction.merchant.name)
+        else:
+            registry.confirm(
+                session, merchant, extraction.merchant.tax_id, extraction.merchant.name
+            )
+        if merchant is None:
+            return None, None
+
+        previous = get_receipt(session, job.id)
+        if previous is None or previous.merchant_id != merchant.id:
+            registry.increment(session, merchant)
+        return merchant.id, merchant.default_currency
+    except Exception:  # noqa: BLE001 -- the bound IS "everything"; see docstring
+        log.warning(
+            "Receipt %s: could not resolve a merchant; storing the extraction "
+            "without one",
+            job.id,
+            exc_info=True,
+        )
+        session.rollback()
+        return None, None
 
 
 def _persist_failure(

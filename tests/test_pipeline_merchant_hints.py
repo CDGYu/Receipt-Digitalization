@@ -1,19 +1,26 @@
-"""Hints reach the extraction prompt AND the prompt hash rebuilt for the audit.
+"""What the merchant registry does to a run: hints in, and the merchant out.
 
-The second half is the point. `_attempt_prompt_hash` reconstructs each attempt's
-prompt from its inputs; if it is not given the same hints the call used, the
-stored `prompt_hash` names a prompt that never existed.
+The first half is Task 4. Hints reach the extraction prompt AND the prompt hash
+rebuilt for the audit -- and the second half of that is the point.
+`_attempt_prompt_hash` reconstructs each attempt's prompt from its inputs; if it
+is not given the same hints the call used, the stored `prompt_hash` names a
+prompt that never existed.
 
 Nothing downstream would notice. The hash is written, the row is valid, every
 gate stays green -- and `receipts eval` goes on grouping its results by a prompt
 identity that no call ever had. So the test below does not compare the stored
 hash against a re-derivation of what the pipeline *should* have sent; it
 compares it against the prompt string the client was **actually handed**.
+
+The second half is Task 5, from the marked section down: the merchant resolved
+from the completed extraction reaches `receipts.merchant_id`, the count, and --
+by way of the normalizer built one stage earlier -- the receipt's currency.
 """
 
 from __future__ import annotations
 
 import io
+import logging
 import random
 import uuid
 from datetime import date
@@ -43,7 +50,14 @@ from receipts.extract.schema import LineItem as ExtractedLineItem  # noqa: E402
 from receipts.extract.schema import Merchant as ExtractedMerchant  # noqa: E402
 from receipts.ingest.ingest import ReceiptJob  # noqa: E402
 from receipts.ingest.storage import LocalStorage, make_image_key  # noqa: E402
-from receipts.persist.models import Base, ExtractionRun, Merchant, PassName  # noqa: E402
+from receipts.merchants import registry  # noqa: E402
+from receipts.persist.models import (  # noqa: E402
+    Base,
+    ExtractionRun,
+    Merchant,
+    PassName,
+    Receipt,
+)
 from receipts.persist.session import make_engine, make_session_factory  # noqa: E402
 from receipts.pipeline import process_receipt  # noqa: E402
 from receipts.validate.context import ValidationContext  # noqa: E402
@@ -52,6 +66,13 @@ CTX = ValidationContext(today=date(2026, 7, 26))
 
 MERCHANT_NAME = "METRO OIL SUBIC INC."
 MERCHANT_HINTS = ["fuel rows are pre-printed; trust the image"]
+
+#: The TIN of the merchant `_register_merchant` puts in the table.
+REGISTERED_TAX_ID = "123-456-789-000"
+
+#: A TIN no registered merchant holds, so an extraction carrying it registers a
+#: merchant of its own.
+FRESH_TAX_ID = "123-456-789"
 
 
 def _hints() -> P.MerchantHints:
@@ -218,18 +239,26 @@ def _good() -> ReceiptExtraction:
     )
 
 
-def _register_merchant(session_factory, hints: list[str]) -> None:
+def _register_merchant(
+    session_factory,
+    hints: list[str],
+    *,
+    canonical_name: str = MERCHANT_NAME,
+    tax_id: str = REGISTERED_TAX_ID,
+    default_currency: str | None = None,
+) -> uuid.UUID:
     with session_factory() as session:
-        session.add(
-            Merchant(
-                canonical_name=MERCHANT_NAME,
-                tax_id="123-456-789-000",
-                name_variants=[],
-                hints=hints,
-                receipt_count=0,
-            )
+        merchant = Merchant(
+            canonical_name=canonical_name,
+            tax_id=tax_id,
+            name_variants=[],
+            hints=hints,
+            default_currency=default_currency,
+            receipt_count=0,
         )
+        session.add(merchant)
         session.commit()
+        return merchant.id
 
 
 def _stored_extract_hash(session_factory, receipt_id: uuid.UUID) -> str:
@@ -345,3 +374,305 @@ def test_a_merchant_with_no_hints_is_the_same_as_no_merchant(
     assert _stored_extract_hash(session_factory, job.id) == P.prompt_hash(
         P.build_extraction_prompt(_triage(), None, []) + P.SYSTEM_EXTRACTION
     )
+
+
+# --------------------------------------------------------------------------- #
+# Task 5: the merchant sticks -- merchant_id, the count, and the currency
+# --------------------------------------------------------------------------- #
+
+
+def _run(job, client, session_factory, storage, settings):
+    return process_receipt(
+        job,
+        client=client,
+        storage=storage,
+        session_factory=session_factory,
+        ctx=CTX,
+        settings=settings,
+    )
+
+
+def _settings(default_currency: str | None = None) -> Settings:
+    return Settings(
+        _env_file=None, max_repair_attempts=1, default_currency=default_currency
+    )
+
+
+def _good_with_tax_id(tax_id: str = FRESH_TAX_ID) -> ReceiptExtraction:
+    extraction = _good()
+    extraction.merchant.tax_id = tax_id
+    return extraction
+
+
+def _merchants(session_factory) -> list[Merchant]:
+    with session_factory() as session:
+        return list(session.scalars(select(Merchant)).all())
+
+
+def test_a_confirmed_extraction_populates_merchant_id(
+    session_factory, storage, settings
+):
+    """Without this, semantic dedupe stays blind and receipt_count stays zero."""
+    job = _job(storage)
+    client = _RecordingClient([_triage(), _good_with_tax_id()])
+
+    result = _run(job, client, session_factory, storage, settings)
+    assert result.failed_stage is None
+
+    with session_factory() as session:
+        receipt = session.get(Receipt, job.id)
+        assert receipt.merchant_id is not None
+        merchant = session.get(Merchant, receipt.merchant_id)
+        assert merchant.tax_id == FRESH_TAX_ID
+        assert merchant.receipt_count == 1
+
+
+def test_an_extraction_with_no_tin_never_invents_a_merchant(
+    session_factory, storage, settings
+):
+    """A guess must not create a merchant, so ``merchant_id`` stays NULL.
+
+    ``register`` requires both a name and a ``tax_id``; ``_good()`` carries only
+    the name. NULL here is the correct answer, not a gap to be filled -- the
+    alternative is a merchants table seeded from ``merchant_name_guess``.
+    """
+    job = _job(storage)
+    client = _RecordingClient([_triage(), _good()])
+
+    result = _run(job, client, session_factory, storage, settings)
+    assert result.failed_stage is None
+
+    with session_factory() as session:
+        assert session.get(Receipt, job.id).merchant_id is None
+    assert _merchants(session_factory) == []
+
+
+def test_a_different_tin_under_the_same_name_is_a_different_merchant(
+    session_factory, storage, settings
+):
+    """The TIN decides, not the spelling.
+
+    Resolving by name first would attribute this receipt to the incumbent and,
+    worse, never register the business that actually issued it -- the
+    "permanently unregisterable" merchant ``register``'s docstring refuses to
+    create. ``lookup`` cannot tell them apart: both names normalize to one key.
+    Only the ``tax_id`` can, so it is asked first.
+    """
+    incumbent_id = _register_merchant(session_factory, MERCHANT_HINTS)
+    job = _job(storage)
+    client = _RecordingClient([_triage(), _good_with_tax_id()])
+
+    result = _run(job, client, session_factory, storage, settings)
+    assert result.failed_stage is None
+
+    with session_factory() as session:
+        receipt = session.get(Receipt, job.id)
+        assert receipt.merchant_id is not None
+        assert receipt.merchant_id != incumbent_id
+        assert session.get(Merchant, receipt.merchant_id).tax_id == FRESH_TAX_ID
+        # The incumbent was not credited with someone else's receipt.
+        assert session.get(Merchant, incumbent_id).receipt_count == 0
+
+
+def test_a_new_spelling_under_a_known_tin_is_learned(
+    session_factory, storage, settings
+):
+    """``confirm`` is the only path that widens matching -- so it must be reached.
+
+    Resolving by name first makes it unreachable: ``confirm`` would only ever be
+    called with a spelling ``lookup`` had *already* matched, which its own
+    ``key in _keys(merchant)`` guard discards. The registry would never learn a
+    second spelling for anybody.
+    """
+    _register_merchant(session_factory, MERCHANT_HINTS)
+    extraction = _good_with_tax_id(REGISTERED_TAX_ID)
+    extraction.merchant.name = "Metro Oil Subic Olongapo Branch"
+    job = _job(storage)
+
+    result = _run(
+        job,
+        _RecordingClient([_triage(), extraction]),
+        session_factory,
+        storage,
+        settings,
+    )
+    assert result.failed_stage is None
+
+    merchants = _merchants(session_factory)
+    assert len(merchants) == 1, "a known TIN must not spawn a second merchant"
+    assert "Metro Oil Subic Olongapo Branch" in merchants[0].name_variants
+
+
+def test_the_merchants_currency_outranks_the_system_default(session_factory, storage):
+    """§9: receipt code -> merchant default -> system default -> null.
+
+    The receipt printed no code, so the merchant's own currency is the answer.
+    """
+    _register_merchant(session_factory, MERCHANT_HINTS, default_currency="USD")
+    extraction = _good_with_tax_id(REGISTERED_TAX_ID)
+    extraction.receipt.currency = None
+    job = _job(storage)
+
+    result = _run(
+        job,
+        _RecordingClient([_triage(), extraction]),
+        session_factory,
+        storage,
+        _settings("PHP"),
+    )
+    assert result.failed_stage is None
+
+    with session_factory() as session:
+        assert session.get(Receipt, job.id).currency == "USD"
+
+
+def test_an_unrecognised_merchant_currency_falls_through_to_the_system_default(
+    session_factory, storage
+):
+    """The two defaults are handed to ``normalize`` separately, not ``or``-ed.
+
+    ``merchant.default_currency or settings.default_currency`` looks equivalent
+    and is not: ``normalize_currency`` walks the chain it is *given*, so a
+    merchant row holding a code it does not recognise would end that chain and
+    the receipt would store no currency at all -- when the system default was
+    sitting right there.
+    """
+    _register_merchant(session_factory, MERCHANT_HINTS, default_currency="ZZZ")
+    extraction = _good_with_tax_id(REGISTERED_TAX_ID)
+    extraction.receipt.currency = None
+    job = _job(storage)
+
+    result = _run(
+        job,
+        _RecordingClient([_triage(), extraction]),
+        session_factory,
+        storage,
+        _settings("PHP"),
+    )
+    assert result.failed_stage is None
+
+    with session_factory() as session:
+        assert session.get(Receipt, job.id).currency == "PHP"
+
+
+def test_a_printed_currency_still_outranks_the_merchants_default(
+    session_factory, storage
+):
+    """The merchant's default is a fallback, never an override.
+
+    Without this the currency step over-reaches: a merchant that usually bills
+    in USD would rewrite the PHP this receipt actually printed.
+    """
+    _register_merchant(session_factory, MERCHANT_HINTS, default_currency="USD")
+    job = _job(storage)
+    client = _RecordingClient([_triage(), _good_with_tax_id(REGISTERED_TAX_ID)])
+
+    result = _run(job, client, session_factory, storage, _settings("PHP"))
+    assert result.failed_stage is None
+
+    with session_factory() as session:
+        assert session.get(Receipt, job.id).currency == "PHP"
+
+
+def test_reprocessing_a_receipt_counts_it_once(session_factory, storage, settings):
+    """``receipt_count`` counts receipts, not runs.
+
+    Reprocessing is a first-class path here (a retried job, a re-run after a
+    provider outage), and each pass reaches ``_persist_outcome`` with the same
+    receipt id. Counting every pass would turn the column into a run counter
+    that is named ``receipt_count``.
+    """
+    job = _job(storage)
+    for _ in range(2):
+        result = _run(
+            job,
+            _RecordingClient([_triage(), _good_with_tax_id()]),
+            session_factory,
+            storage,
+            settings,
+        )
+        assert result.failed_stage is None
+
+    merchants = _merchants(session_factory)
+    assert len(merchants) == 1
+    assert merchants[0].receipt_count == 1
+
+
+def test_a_merchant_write_failure_never_loses_the_paid_for_extraction(
+    session_factory, storage, settings, monkeypatch
+):
+    """§18, from the expensive side: the extraction has already been paid for.
+
+    The ``merchant`` stage fails loudly for a registry that is down, because at
+    that point nothing has been spent. Here the model has already been called.
+    Letting a merchants-table failure propagate would send the run to
+    ``_persist_failure``, which writes a row of nulls -- the receipt's amounts,
+    bought and validated, thrown away over bookkeeping. The receipt is stored
+    with ``merchant_id`` NULL instead, and the failure is logged with its
+    traceback.
+    """
+
+    def boom(*args, **kwargs):
+        raise RuntimeError("merchants table gone")
+
+    monkeypatch.setattr(registry, "register", boom)
+    job = _job(storage)
+    client = _RecordingClient([_triage(), _good_with_tax_id()])
+
+    result = _run(job, client, session_factory, storage, settings)
+
+    assert result.failed_stage is None
+    with session_factory() as session:
+        receipt = session.get(Receipt, job.id)
+        assert receipt is not None
+        assert receipt.total == D("224.00")
+        assert receipt.merchant_id is None
+
+
+def test_a_late_resolved_merchant_that_disagrees_on_currency_is_reported(
+    session_factory, storage, caplog
+):
+    """The one hole the ordering leaves, and it is not left silent.
+
+    The normalizer is built at the ``merchant`` stage from the merchant triage
+    named; the merchant that is *persisted* comes from the completed
+    extraction's TIN, and the two can be different rows. Here triage names a
+    merchant nobody has registered, so the receipt normalizes against the system
+    default -- and the TIN then resolves to a merchant that bills in USD. The
+    stored currency is the one that was actually applied, and the disagreement
+    is logged rather than absorbed.
+    """
+    _register_merchant(
+        session_factory,
+        [],
+        canonical_name="AURORA FUEL DEPOT",
+        tax_id=FRESH_TAX_ID,
+        default_currency="USD",
+    )
+    extraction = _good_with_tax_id()
+    extraction.receipt.currency = None
+    job = _job(storage)
+
+    with caplog.at_level(logging.WARNING, logger="receipts.pipeline"):
+        result = _run(
+            job,
+            _RecordingClient([_triage(), extraction]),
+            session_factory,
+            storage,
+            _settings("PHP"),
+        )
+    assert result.failed_stage is None
+
+    with session_factory() as session:
+        receipt = session.get(Receipt, job.id)
+        assert receipt.currency == "PHP"
+        assert (
+            session.get(Merchant, receipt.merchant_id).canonical_name
+            == "AURORA FUEL DEPOT"
+        )
+
+    warnings = [r for r in caplog.records if r.levelno >= logging.WARNING]
+    assert warnings, "the disagreement was absorbed silently"
+    message = warnings[-1].getMessage()
+    assert str(job.id) in message
+    assert "USD" in message and "PHP" in message
