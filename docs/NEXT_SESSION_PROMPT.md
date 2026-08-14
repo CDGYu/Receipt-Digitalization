@@ -44,12 +44,18 @@ git log --oneline refs/remotes/origin/main..main  # what the pending push would 
 
 ## What last merged, and how to check what is pushed.
 
-**The dangling-citation repair merged by true fast-forward on 2026-08-13** —
-`e698aca` → `29a5a88`, eighteen commits, single parent each, zero merge
-commits. It went in after four task reviews with their scoped re-reviews, a
-whole-branch review returning **MERGE WITH FIXES**, one fix wave, one scoped
-re-review, and one controller deletion of a false claim that re-review found.
-**ADR-0042** is the decision, and it **corrects ADR-0032 decision 3**.
+**Browser-pass I6, I8 and I9 merged by true fast-forward on 2026-08-14** —
+`d5be9da` → `f92b497`, thirty-three commits, single parent each, zero merge
+commits. **No ADR was written**, though three existing ones gained dated
+corrections (**0024**, **0027**, **0038**), and **nothing under the top-level
+`src/` changed** — the code it touched is all under `frontend/src/`. §0g is the
+record.
+
+*(This paragraph named the 2026-08-13 dangling-citation repair as the last merge
+until 2026-08-14 — it did not move when the browser-pass branch landed, in the
+same refresh that carried §0g. Its content is now in §0f: `e698aca` →
+`29a5a88`, eighteen commits, **ADR-0042**, which **corrects ADR-0032
+decision 3**.)*
 
 **Every push is on a one-time authorization that the push consumes, and the
 next `main` push needs its own fresh ask.** **No count and no list of past
@@ -165,14 +171,25 @@ is the list of what a green `verify.py` cannot see; jsdom renders no colour and
 lays nothing out, so these need a browser and a person. **§0g is what that costs
 when nobody looks**: the milestone that closed A1–A3 shipped a layout regression
 past all five gates and ten reviews, and it was found only by measuring a
-browser. **The three screens it changed have still not been seen by a person.**
+browser. **The three screens it changed have since been seen** — at 1440 and 375
+in light, on 2026-08-14 — **and looking raised a question no measurement could**
+(§0g, and item 13 in "Blocked on me"). **Dark theme at any width, and 768, remain
+unseen at every surface.**
 
 ### B. Needs a ruling from the user — do not guess
 
-Seven live items, all in **"Blocked on me"** below with a recommendation each.
+All in **"Blocked on me"** below, with a recommendation each.
 **Numbers there are stable from 2026-08-11**; resolved items stay struck
 through rather than being removed, because renumbering aged citations three
-times in one day.
+times in one day. New items are appended, never inserted — item **14** was
+added 2026-08-14.
+
+**[Corrected 2026-08-14 — this said "Seven live items".** Re-derived by
+enumerating the list rather than counting from memory: the live set was **nine**
+(1, 4, 6, 7, 8, 9, 10, 12, 13), and had been since item 12 was added. **No count
+replaces it** — the list is one screen below, it moves whenever an item is ruled
+on, and a number here is a second copy that only ever disagrees with the first.
+Read the list.**]**
 
 ### C. Blocked on hardware, not on code
 
@@ -351,11 +368,16 @@ read route (**ADR-0031**) and the CLI `--limit` bound all shipped. §1.6's
 than renumbered to the front because renumbering ages every citation of §0a–§0c,
 and that has already happened twice in this file's history.)*
 
-## 0g. Browser-pass I6, I8 and I9 are CLOSED — DONE and MERGED (2026-08-14).
+## 0g. Browser-pass I6, I8 and I9 are CLOSED — DONE, MERGED and PUSHED (2026-08-14).
 
 **Nothing carries over.** True fast-forward `d5be9da` → `f92b497`, thirty-three
 commits, single parent each, zero merge commits. **No ADR was written and nothing
-under `src/` changed.** Design:
+under the top-level `src/` changed.** Both halves are narrower than they read, so
+they are spelled out here: **three existing ADRs gained dated corrections** —
+**0024** (decision 4's rationale quoted copy the app no longer renders), **0027**
+(its "Still open" list named four findings that were closed) and **0038** — and
+**six files under `frontend/src/` changed.** ADR-0024 is the one **I7** waits on,
+so whoever takes I7 needs its correction, not just the decision. Design:
 `docs/superpowers/specs/2026-08-13-browser-pass-i6-i8-i9-design.md` — **read its
 two dated notes; they correct its own body.** Plan:
 `docs/superpowers/plans/2026-08-13-browser-pass-i6-i8-i9.md` — **read its dated
@@ -388,6 +410,28 @@ of the finding's own evidence capture, which is why it survived.
 whole-branch review found it by measuring a browser. If you take one thing from
 this milestone, take that: **jsdom lays nothing out, so no gate here can see a
 layout regression at all.**
+
+### Then a person looked, on 2026-08-14 — and it was worth it
+
+**`cd42e4f`**, committed hours after this merge. The acceptance run —
+`npx playwright test visual`, 15/15 — was executed against the merged tree and
+**its captures were read.** I6 and I8 are correct by eye, and the `auto-fit`
+repair holds in a real browser rather than in a computed track list.
+
+**Looking produced something measuring had not: a question.** I9's frame is
+right and its finding closed, but the card is **mostly empty** — a
+`min-height: 60vh` box around three small elements. Whether that is the right
+box for a block that small is a judgement no measurement makes, so it went to
+you as **item 14** rather than being fixed. The pass also confirmed the parked
+finding that `.alert` and `.action` paint the card's own fill.
+
+**The source for what was seen, at which widths and in which theme, is the
+*SUPERSEDED IN PART* block of
+`docs/superpowers/specs/2026-08-05-review-ui-browser-pass.md`** — this section
+and the rows in that report point at it rather than restating it, and ADR-0027's
+correction deliberately carries none of it. **Dark theme at any width and 768
+remain unseen.** That session then ended without refreshing this pair, which is
+how the "not pushed" sentence under "Today's goal" survived into the next one.
 
 ### Four things to know before touching this area
 
@@ -546,8 +590,12 @@ by itself. Measured after: `regionTop=768, scrollY=460, inView=true`, and
 
 ### I5 is FIXED and MEASURED, not SEEN
 
-A Playwright `inView=true` is a machine measuring geometry. **Nobody has looked
-at this screen** since the styling milestone's browser pass.
+A Playwright `inView=true` is a machine measuring geometry. **What nobody has
+watched is I5's own behaviour** — the outcome appearing, taking focus, and being
+scrolled to. *(Narrowed 2026-08-14: this said nobody had looked at the screen
+since the styling milestone's browser pass. The 2026-08-14 pass did capture the
+review screen and a person read those captures — that is how I6 was confirmed —
+but a still capture cannot show a scroll, and that note makes no claim about I5.)*
 
 ### The lesson this milestone paid for
 
@@ -900,11 +948,16 @@ cannot tell accurate from stale.**
 ### 1.4 The browser pass's open findings
 
 In `docs/superpowers/specs/2026-08-05-review-ui-browser-pass.md` §3, each
-measured. **C1, C2, C3 and I4 are CLOSED and the status note says so.** Open:
+measured. **That report's status note carries a dated verdict per finding and is
+the source — this list is a copy, so where they disagree, believe the report.**
+Closed there: C1, C2, C3, I4, and I5, I6, I8, I9. **I7 and the Minors m10–m16 are
+what remain open.**
 
 - **I5 — FIXED AND MERGED 2026-08-12 (ADR-0041, §0e).** Closed as *fixed and
   measured*, **not as seen**: a Playwright `inView=true` is a machine measuring
-  geometry, and nobody has looked at this screen since the browser pass.
+  geometry, and what nobody has watched is the outcome appearing, taking focus
+  and being scrolled to — which a still capture cannot show, so the 2026-08-14
+  pass leaves it exactly where it was and claims nothing about it.
   Original finding, kept because the elements still render last and the fix is
   that the reviewer is taken to them: at 1440×900 the terminal states, the
   summary alert and Approve are below the fold, so **a 403 or a 404 — where the
@@ -912,11 +965,21 @@ measured. **C1, C2, C3 and I4 are CLOSED and the status note says so.** Open:
   Re-measured
   2026-08-12: below the fold at **900, 800 and 1080**, and it degrades 73px per
   line item. See **§0e** and ADR-0041 (on the branch).
-- **I6** the inline field error renders three grid columns from the field it
-  blames; **I7** a 401 swaps in the login form with no message and repaints
-  restored edits identically to stored data; **I8** the admin tiles tell a
-  reviewer "9 open" directly above "No open tasks"; **I9** the 503 says the same
-  sentence twice. Every Minor (m10–m16) untouched.
+- **I6, I8 and I9 — FIXED AND MERGED 2026-08-14 (§0g), and SEEN 2026-08-14**
+  at 1440 and 375 in light. Their original text: I6, the inline field error
+  renders three grid columns from the field it blames; I8, the admin tiles tell a
+  reviewer "9 open" directly above "No open tasks"; I9, the 503 says the same
+  sentence twice. **I9's closure opened a new question** about the failure card's
+  `min-height: 60vh` — item 14 in "Blocked on me". Scope of what was seen is in
+  the report's *SUPERSEDED IN PART* block and is not repeated here.
+- **I7 — the only Important finding still OPEN.** A 401 swaps in the login form
+  with no message and repaints restored edits identically to stored data. Every
+  Minor (m10–m16) untouched.
+
+  *(This bullet listed I6, I7, I8 and I9 together as open until 2026-08-14. It was
+  written before the §0g merge and did not move with it — the same shape as the
+  status note that "advertised four fixed defects as open" for a day, in the very
+  report this section points at.)*
 - **I7 touches ADR-0024's contract**, so it is not a drive-by fix. (This line
   named I5 too until 2026-08-12; I5 was taken as its own milestone, which is
   §0e, and it extended ADR-0024 rather than reopening it.)
@@ -1169,7 +1232,12 @@ so is a sentence *about* one.
   slashes**. Use the Read tool and rephrase patterns.
 - CLI: `python -m receipts.cli <command>` (**not** `receipts` — see §1.6).
   E2E: `python scripts/seed_review_e2e.py --reset` then
-  `cd frontend && npx playwright test`.
+  `cd frontend && npx playwright test`. **For the visual spec, run
+  `npx playwright test visual` instead** — the whole suite consumes its one
+  queued task in `review.spec.ts` by design, so a full run leaves
+  `visual.spec.ts` with an empty queue and a self-diagnosing failure. The
+  `visual` filter re-seeds. Measured 2026-08-14, at the cost of a run;
+  `frontend/e2e/visual.spec.ts` says so in its own docblock.
 
 ## Git
 
@@ -1411,23 +1479,45 @@ measured text disagree, the measurement wins.**
     > merged beside it needed no ruling and cost seven fix rounds; this one needs
     > a decision about ADR-0024 first, and the milestone that closed its
     > neighbours is the cheapest moment to make it, while the surface is fresh.
-13. **A browser pass on the three screens §0g changed.** Not a ruling so much as
-    a call on whether it happens: the field cell, the tiles caption and the
-    framed failure notice have been measured and never seen.
-    > **Recommended: yes, and sooner than the rest of this list.** That milestone
-    > shipped a layout regression past all five gates and ten reviews — tiles 35%
-    > narrower with a third of the row blank at 1440 — and it was found only
-    > because the final reviewer measured a browser. **jsdom lays nothing out.**
-    > Everything else on this list is bounded; this one is the known blind spot
-    > with a demonstrated cost.
+13. ~~**A browser pass on the three screens §0g changed.**~~ **DONE 2026-08-14
+    (`cd42e4f`), and it earned its cost.** The run was `npx playwright test
+    visual`, 15/15, and a person read the captures at 1440 and 375 in light. I6
+    and I8 are correct by eye and the `auto-fit` repair holds in a real browser.
+    **It also produced item 14, which is a live ruling and was not one before.**
+    **Not closed by it:** dark theme at any width, 768, and every untouched
+    surface. Whether *that* pass happens is still a call, and the argument for it
+    is unchanged — the milestone shipped a layout regression past all five gates
+    and ten reviews, tiles 35% narrower with a third of the row blank at 1440,
+    found only because the final reviewer measured a browser. **jsdom lays
+    nothing out.**
+14. **Is `min-height: 60vh` right for the failure notice?** New on 2026-08-14,
+    from looking rather than measuring. `.noticeFailed`
+    (`frontend/src/review/ReviewScreen.module.css`) pairs `min-height: 60vh` with
+    `justify-content: center`, so the card renders correctly and **mostly empty**:
+    three small elements with roughly 350px of blank above and 370px below at
+    1440, and the same proportions at 375. I9's finding is closed either way —
+    the frame is there, and this is not a regression.
+    > **Recommended: rule on it, and expect the answer to be a token decision
+    > rather than a number.** Whether a block that small should hold a 60vh box
+    > is a judgement no measurement makes, which is why it reached this list
+    > instead of being fixed. Worth pairing with the parked finding the same pass
+    > confirmed: `.alert` and `.action` paint the card's own fill, so the alert is
+    > distinguished only by its left border and `Try again` reads as a thin
+    > outline on white. Both are ADR-0027 token questions and they are cheapest
+    > answered together.
 **If you want the short version:** **1 is the one that matters** — it gates all
 calibration and Phase 6's only metric, and everything but the key is verified.
 Say no to **4** and **6**. Leave **8**, **9** and **10** until 1 lands. **7 is
 not a tidy-up** — its values are in 11 commits of a public repo's history, so it
 is a rewrite-history / go-private / accept-it decision, and it is yours.
+**12** and **14** are both cheap and both about a surface that is fresh right
+now: 14 is a token judgement someone has already looked at, and 12 has been
+**OPEN and unchanged since the 2026-08-06 browser pass**, waiting on a ruling
+rather than on anyone's time — the report's status row says exactly that.
 
 *(**2**, **3** and **5** closed on 2026-08-11, as did the CLI `--limit` bound
-that was item 11. Their entries are struck through above rather than removed.)*
+that was item 11. **13** closed on 2026-08-14 and produced **14**. Their entries
+are struck through above rather than removed.)*
 
 *(The CLI `--limit` bound was item 11 and is **DONE, 2026-08-11** — the last
 instance of the class ADR-0034 closed. `_positive_int` bounds above at
@@ -1438,16 +1528,39 @@ and was measured not to need it.)*
 ## Today's goal
 
 **Nothing is in flight and nothing is half-done.** Browser-pass I6, I8 and I9
-were closed and merged on 2026-08-14 (§0g). **Run `git branch --no-merged main`
-and `git log --oneline refs/remotes/origin/main..main` rather than reading an
-answer here** — the header above says what each can legitimately show.
+were closed and merged on 2026-08-14 (§0g), a person then looked at the three
+screens they changed, and the session after that verified this pair against the
+repo, repaired what had rotted, and wrote what you are reading. **Run
+`git branch --no-merged main` and
+`git log --oneline refs/remotes/origin/main..main` rather than reading an answer
+here** — the header above says what each can legitimately show.
 
-**One thing DOES carry over, and it is the first thing to decide.** `main` was
-merged but **not pushed** at the end of that session: the merge is thirty-three
-commits and `main` also carried one older pair commit, and every `main` push
-needs its own fresh authorization, which was not given before the session ended.
-So the pending-push list is long rather than empty, and that is expected rather
-than a defect. **Ask, then push.**
+**What that verification found is the case for doing it again. No count is given
+— the list is the evidence, and an earlier draft of this very sentence
+double-counted the push state as two findings.** Outright false: the push state
+(said unpushed, was pushed); the three screens said to be unseen, in every place
+that said it; "Seven live items" in section B, where the live set was nine; and a
+paragraph asserting the freshness check **omits `scripts/`**, which
+**ADR-0021's own correction had already falsified** and which
+`docs/MEMORY.md`'s stamp — cited as its authority — contradicts in as many
+words. Stale rather than false: "what last merged" still named 2026-08-13, and
+§1.4 still listed three closed findings as open. Too strong: I5's "nobody has
+looked at this screen".
+
+**None of it was visible to any gate.** All five were green, and both gates on
+this document's own honesty passed throughout — they check that a citation
+resolves and that the last refresh was *sound*, never that a sentence is *true*.
+A person running the commands is still the only thing that catches this.
+
+**Nothing carries over about the push, and the sentence that used to sit here is
+the reason to run the command.** It read *"`main` was merged but **not pushed**…
+the pending-push list is long… **Ask, then push**"* — true when written on
+2026-08-14, and false a few hours later when that push was authorized and made.
+It rotted in place, inside a file whose own header warns that this exact sentence
+has carried the wrong push state twice before, in both directions. **Every `main`
+push is still a one-time authorization the push consumes**, so the next one needs
+its own fresh ask; whether anything is waiting is
+`git log --oneline refs/remotes/origin/main..main` and nothing else.
 
 **Run the freshness command in `docs/MEMORY.md`'s stamp before trusting any of
 this.** If it lists anything, the tree moved after this was written — re-run
@@ -1456,8 +1569,15 @@ this.** If it lists anything, the tree moved after this was written — re-run
 **And the sharpest thing §0g leaves you is not a task, it is a warning.** That
 milestone's only behavioural defect passed all five gates, five task reviews and
 five scoped re-reviews, and was caught by measuring a browser. **jsdom lays
-nothing out**, so no gate in this repo can see a layout regression. Three screens
-changed and **nobody has looked at any of them.**
+nothing out**, so no gate in this repo can see a layout regression.
+
+**The three screens have since been seen** (2026-08-14, `cd42e4f`), and the
+warning survives it twice over. Looking confirmed I6 and I8 by eye and produced
+**a question no measurement had raised** — item 14. And it covered **1440 and 375
+in light only**: dark theme at any width, 768, and every surface those three
+fixes did not touch are still rendered by nobody. **Seen is a scope, not a
+state**, which is why the browser-pass report states that scope in one block and
+six other places now point at it rather than repeat it.
 
 **And there are now two gates on narrow slices of this document's own honesty.**
 `tests/test_sha_citations.py` fails if any backticked seven-character hex token
@@ -1494,13 +1614,21 @@ two days. The paragraph now says what is true — the workflow is tracked, runs 
 every push, and its `Run the gates` step runs this script — and says why the
 gate list is not duplicated in YAML.
 
-**Two things that closure is worth more than:** re-deriving the *rest* of the
+**One thing that closure is worth more than:** re-deriving the *rest* of the
 docstring found a second false claim that nobody had reported — the
 parenthetical asserting `oxlint` appears "in no prose", contradicted by
 ADR-0017, ADR-0029 and this file — so the reported defect was **not** the only
-one, and a fix scoped to the report would have shipped the other. And the
-freshness check in `docs/MEMORY.md`'s stamp **cannot see either edit**: its
-pathspec omits `scripts/`. That is recorded at the stamp, where the command is.
+one, and a fix scoped to the report would have shipped the other.
+
+**[Corrected 2026-08-14 — this paragraph carried a second item that was already
+false when written.** It said the freshness check *"cannot see either edit: its
+pathspec omits `scripts/`."* **ADR-0021's 2026-08-13 correction had already
+dropped the inclusion list**, so the command excludes exactly the two pair files
+and watches everything else. Measured against the real graph: `b4a9c23`, which
+touches `scripts/verify.py` and nothing else, **is listed** by the current
+command. The claim described the pathspec the correction replaced — and
+`docs/MEMORY.md`'s stamp, which this sentence pointed at as its authority, says
+so in as many words.**]**
 
 **One thing §0d left open on purpose:** the two `format_breakdown` tests are the
 only tests of the shared renderer, and they sit in a module that skips whole

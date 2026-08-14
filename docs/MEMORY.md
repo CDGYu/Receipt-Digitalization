@@ -6,23 +6,25 @@ continuity protocol itself — what lives where, and why this snapshot must be
 verified rather than trusted — is **ADR-0019**, extended by **ADR-0021** (whose
 2026-08-02 dated correction widened the freshness check after a docs-only task
 proved invisible to it).
-Last updated: **2026-08-14**, by the session that closed browser-pass findings
-**I6, I8 and I9** — the inline field error that rendered three grid columns from
-the field it blamed, the admin tiles that contradicted the table beneath them,
-and the 503 that said one sentence twice in two states where only one of them
-made it apt. Earlier the same day: the session that fixed `scripts/verify.py`'s
-docstring and gated both the freshness check and the anchor it measures from.
+Last updated: **2026-08-14**, by the session that verified this pair against the
+repo, found it stale in four places, and repaired the copies the browser pass
+left behind. Earlier the same day, in order: the session that closed
+browser-pass findings **I6, I8 and I9** and merged them; the session that opened
+a browser on the three screens they changed and wrote down what it saw
+(`cd42e4f`) — and then ended without refreshing this pair, which is why the
+paragraph above exists; and, before both, the session that fixed
+`scripts/verify.py`'s docstring and gated the freshness check and its anchor.
 **No count of refreshes is written here** — it is a number that moves without its
 sentence changing, which is review standard 5.
 
-**ONE position, because nothing is in flight: freshness anchor `f92b497`** —
+**ONE position, because nothing is in flight: freshness anchor `231d2f2`** —
 the last commit on `main` that is not this handoff pair.
 **`git rev-parse main` will be AHEAD of it**, by the pair commit and nothing
 else: a stamp cannot name the commit that writes it. The test is a command,
 not a commit and not a count:
 
 ```
-git log --oneline f92b497..main -- ":(top,exclude)docs/MEMORY.md" ":(top,exclude)docs/NEXT_SESSION_PROMPT.md"
+git log --oneline 231d2f2..main -- ":(top,exclude)docs/MEMORY.md" ":(top,exclude)docs/NEXT_SESSION_PROMPT.md"
 git log --oneline refs/remotes/origin/main..main   # what a push would send
 git ls-remote --heads origin main                  # authoritative on what is pushed
 git branch --no-merged main                        # must name NOTHING
@@ -76,7 +78,12 @@ bundling them with an ADR or an index row lists itself as stale. That happened
 three times in the session that wrote ADR-0033. Everything substantive was
 committed first.
 
-*(The previous stamp was 2026-08-13 at `main @ 4c870bf`.)*
+*(The previous stamp was 2026-08-14 at `main @ f92b497`. It went stale within
+five hours: a browser pass committed `cd42e4f` and that session ended without
+refreshing this pair — **the failure this stamp names as the one no gate can
+observe, occurring one refresh after the sentence saying so was written.** It was
+caught the next morning, by a session running the command instead of reading the
+answer.)*
 
 ## Snapshot
 
@@ -277,8 +284,10 @@ committed first.
 ## Browser-pass I6, I8 and I9 — COMPLETE AND MERGED (2026-08-14)
 
 **True fast-forward `d5be9da` → `f92b497`, thirty-three commits, single parent
-each, zero merge commits.** **No ADR.** **Nothing under `src/` changed** — no
-route, no schema, no coercer. Design:
+each, zero merge commits.** **No new ADR — but three existing ones gained dated
+corrections: 0024, 0027 and 0038.** ADR-0024 is the one **I7** waits on.
+**Nothing under the top-level `src/` changed** — no route, no schema, no coercer;
+the six files it did change are under `frontend/src/`. Design:
 `docs/superpowers/specs/2026-08-13-browser-pass-i6-i8-i9-design.md` — **read its
 two dated notes; they correct its own body.** Plan:
 `docs/superpowers/plans/2026-08-13-browser-pass-i6-i8-i9.md` — **read its dated
@@ -330,12 +339,38 @@ way, by a Chromium harness that was itself proven able to report failure first.
   own corrections, and one case where a correct finding was wrongly refuted
   because a `git grep` had been truncated with `| head`.
 
-### Nobody has looked at this
+### A person has now looked, and it changed one thing
 
-No browser, at any width, in either theme, has rendered the field cell, the
-caption or the framed notice. The browser-pass report closes all three as
-**MEASURED, NOT SEEN**, following ADR-0041's precedent for I5. The regression
-above is why that distinction is not a formality.
+*(This section read **"Nobody has looked at this"** until 2026-08-14. It was true
+when the milestone merged and false five hours later, and the pair was not
+refreshed in between.)*
+
+The Playwright acceptance run was executed against the merged tree — `npx
+playwright test visual`, 15/15 — and **the captures were read by a person.**
+`cd42e4f` is the record, and the browser-pass report's *SUPERSEDED IN PART* block
+is the source for **which widths and which theme**. **What follows is a summary
+and can age; where the two disagree, believe the report.**
+
+**I6 and I8 are correct by eye**, and the `auto-fit` repair holds in a real
+browser — which until then had only ever been checked by computing a track list.
+**I9's frame is correct and its finding closed, and looking earned its cost
+there**: the card is mostly empty, three small elements in a `min-height: 60vh`
+box, and **whether 60vh suits a block that small is a judgement no measurement
+makes.** That is a live user question now, not a hypothetical one, and it is in
+`docs/NEXT_SESSION_PROMPT.md` under "Blocked on me". The milestone's parked
+finding is confirmed too: `.alert` and `.action` paint the card's own fill, so
+the alert is distinguished only by its left border and `Try again` reads as a
+thin outline on white.
+
+**Still unseen: dark theme at any width, 768, and every surface these three fixes
+did not touch.** The regression this milestone shipped is why *seen* and
+*measured* stay separate words.
+
+**One invocation note, because it cost a run.** The whole suite consumes its
+single queued task in `review.spec.ts` by design, so plain `npx playwright test`
+leaves `visual.spec.ts` with an empty queue and a self-diagnosing failure. **Run
+`npx playwright test visual`, which re-seeds.** `frontend/e2e/visual.spec.ts`
+says so in its own docblock.
 
 ## Dangling citations — COMPLETE AND MERGED (2026-08-13)
 
@@ -461,9 +496,16 @@ would fail if an `outline` were added.
 
 ### I5 is closed as FIXED and MEASURED — not as SEEN
 
-A Playwright `inView=true` is a machine measuring geometry. **Nobody has looked
-at this screen** since the styling milestone's browser pass. The design says a
-person looking is what closes I5 as seen.
+A Playwright `inView=true` is a machine measuring geometry. The design says a
+person looking is what closes I5 as seen, and that has not happened.
+
+**[Narrowed 2026-08-14 — this said "Nobody has looked at this screen since the
+styling milestone's browser pass."** That is now too strong: the acceptance run
+of 2026-08-14 captured the review screen and a person read those captures, which
+is how I6 was confirmed. What nobody has watched is **I5's own behaviour** — the
+outcome appearing, taking focus, and being scrolled to — and a still capture
+cannot show it. **The 2026-08-14 note makes no claim about I5**, so its footing
+is unchanged rather than newly asserted either way.**]**
 
 ## Eval field accuracy — COMPLETE AND MERGED (2026-08-12)
 
@@ -1343,7 +1385,12 @@ added to `_PAN_RE` requires the two-instance check, every time.**
   since the install is `--user`.
 - E2E (deliberate, not part of the sweep): `python scripts/seed_review_e2e.py
   --reset`, then `cd frontend && npx playwright test`. Playwright's Chromium is
-  installed.
+  installed. **For the visual spec, run `npx playwright test visual` instead** —
+  the whole suite consumes its one queued task in `review.spec.ts` by design, so
+  a full run leaves `visual.spec.ts` with an empty queue and a self-diagnosing
+  failure; the `visual` filter re-seeds because `webServer.command` chains build,
+  seed and serve with `reuseExistingServer` false. Measured 2026-08-14, at the
+  cost of a run.
 - Baseline: `python -m eval.run_baseline` — needs a **real provider + a labeled
   golden set**, else it refuses the `fake` provider / scores an empty set.
 - **Terminal quirks:**
