@@ -320,12 +320,12 @@ def test_an_unknown_merchant_extracts_exactly_as_before(
 def test_a_merchant_with_no_hints_is_the_same_as_no_merchant(
     session_factory, storage, settings
 ):
-    """An empty ``hints`` list must not build an empty hints block.
+    """A merchant registered with no hints extracts as an unknown one does.
 
-    ``build_extraction_prompt`` already ignores a ``MerchantHints`` with no
-    hints, so the prompt would be identical either way -- but only because the
-    pipeline declines to build one. Pinned so a later "simplification" that
-    drops the ``and merchant.hints`` guard has to argue with a test.
+    ``build_extraction_prompt`` ignores a ``MerchantHints`` carrying an empty
+    hints list (``prompts.py``'s ``if hints and hints.hints``), so the string
+    the client is handed is byte-identical to the unhinted prompt and the
+    recorded hash is the unhinted hash.
     """
     _register_merchant(session_factory, [])
     job = _job(storage)
