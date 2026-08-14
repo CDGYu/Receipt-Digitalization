@@ -817,10 +817,14 @@ def _resolve_merchant(
     """Which merchant issued this receipt, from the **completed** extraction.
 
     Returns ``(merchant_id, default_currency)``, both ``None`` when no merchant
-    could be established. A NULL ``merchant_id`` is a correct answer, not a gap:
-    :func:`~receipts.merchants.registry.register` requires a ``tax_id``, so a
-    receipt whose TIN the model could not read gets no merchant rather than one
-    invented from ``merchant_name_guess``.
+    could be established. A NULL ``merchant_id`` is a correct answer, not a gap.
+
+    **A populated one means "resolved to a known merchant", not "the TIN was
+    read".** Nothing here creates a merchant without a ``tax_id`` -- that is
+    :func:`~receipts.merchants.registry.register`'s rule -- but the ``lookup``
+    fallback below matches on the name alone, so a TIN-less extraction whose
+    name is already registered is attributed to that merchant and counts toward
+    it.
 
     **The TIN is asked first, and the name only as a fallback.** That order is
     not interchangeable with the reverse, for two separate reasons:

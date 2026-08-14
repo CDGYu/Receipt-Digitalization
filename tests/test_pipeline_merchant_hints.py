@@ -427,14 +427,18 @@ def test_a_confirmed_extraction_populates_merchant_id(
         assert merchant.receipt_count == 1
 
 
-def test_an_extraction_with_no_tin_never_invents_a_merchant(
+def test_an_extraction_with_no_tin_and_no_name_match_gets_no_merchant(
     session_factory, storage, settings
 ):
     """A guess must not create a merchant, so ``merchant_id`` stays NULL.
 
     ``register`` requires both a name and a ``tax_id``; ``_good()`` carries only
     the name. NULL here is the correct answer, not a gap to be filled -- the
-    alternative is a merchants table seeded from ``merchant_name_guess``.
+    alternative is a merchants table seeded from a name.
+
+    **Both conditions are in the name because both are load-bearing.** Drop the
+    second and the answer changes: see the test below, where the same TIN-less
+    extraction is attributed to a merchant that is already registered.
     """
     job = _job(storage)
     client = _RecordingClient([_triage(), _good()])
@@ -445,6 +449,34 @@ def test_an_extraction_with_no_tin_never_invents_a_merchant(
     with session_factory() as session:
         assert session.get(Receipt, job.id).merchant_id is None
     assert _merchants(session_factory) == []
+
+
+def test_an_extraction_with_no_tin_is_still_matched_by_name_to_a_known_merchant(
+    session_factory, storage, settings
+):
+    """What a populated ``merchant_id`` does NOT promise: that a TIN was read.
+
+    ``register`` declines without a ``tax_id``, but the ``lookup`` fallback
+    matches on the name alone -- so a TIN-less extraction whose name is already
+    registered is attributed to that merchant and counts toward it. No merchant
+    is *created*; an existing one is matched.
+
+    Task 6 keys semantic dedupe on this column, so the distinction is the point:
+    ``merchant_id`` means "resolved to a known merchant", not "identified by
+    TIN".
+    """
+    merchant_id = _register_merchant(session_factory, MERCHANT_HINTS)
+    job = _job(storage)
+    client = _RecordingClient([_triage(), _good()])
+
+    result = _run(job, client, session_factory, storage, settings)
+    assert result.failed_stage is None
+
+    merchants = _merchants(session_factory)
+    assert len(merchants) == 1, "a name match must not create a second merchant"
+    with session_factory() as session:
+        assert session.get(Receipt, job.id).merchant_id == merchant_id
+        assert session.get(Merchant, merchant_id).receipt_count == 1
 
 
 def test_a_different_tin_under_the_same_name_is_a_different_merchant(
