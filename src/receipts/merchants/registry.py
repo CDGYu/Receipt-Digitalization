@@ -26,14 +26,12 @@ def lookup(session: Session, name_guess: str | None) -> Merchant | None:
     wrong match injects another merchant's hints into the prompt, which is worse
     than injecting none.
 
-    A key that MORE THAN ONE merchant answers to retrieves nothing. `register`
-    identifies merchants by `tax_id`, so two of them can hold names that
-    normalize alike, and then no answer is right: whichever row came back would
-    hand one merchant's hints to the other merchant's receipt -- the same harm
-    fuzzy matching is refused for. Returning the first row scanned is not even
-    stable, since nothing here orders the query. The ambiguous receipt loses
-    its hints and nothing else; it still gets its merchant afterwards, from the
-    `tax_id`.
+    A key that MORE THAN ONE merchant answers to retrieves nothing. No answer is
+    right in that case: whichever row came back would hand one merchant's hints
+    to the other merchant's receipt -- the same harm fuzzy matching is refused
+    for. Returning the first row scanned is not even stable, since nothing here
+    orders the query. The ambiguous receipt loses its hints and nothing else; it
+    still gets its merchant afterwards, from the `tax_id`.
 
     Scans every merchant, because the normalizer is Python and cannot run in
     SQL. That is fine at this corpus's scale (one business's suppliers); if the
@@ -101,14 +99,30 @@ def confirm(
     wrong row, and every later receipt with that spelling would inherit the
     wrong hints.
 
+    A spelling whose key ANOTHER merchant already answers to is refused. A TIN
+    authorises writes to its own merchant, not writes against everyone else's:
+    learning a key someone else holds makes that key ambiguous, and `lookup`
+    resolves an ambiguous key to nothing, so the write would silently
+    de-register a merchant that never presented a TIN of its own. Declining
+    costs one spelling, which is why the same collision is refused here and
+    accepted in `register` -- there, refusing would cost a whole merchant.
+
     The list is reassigned rather than mutated in place: `name_variants` is a
-    JSON column, and SQLAlchemy does not track in-place mutation of one.
+    plain JSON column with no `MutableList`, so SQLAlchemy notices the change
+    only on reassignment. An in-place `append` writes nothing at commit and
+    loses the spelling without raising.
     """
     if not tax_id or not observed_name or merchant.tax_id != tax_id:
         return
 
     key = normalize_merchant_name(observed_name)
     if not key or key in _keys(merchant):
+        return
+
+    if any(
+        other.id != merchant.id and key in _keys(other)
+        for other in session.scalars(select(Merchant)).all()
+    ):
         return
 
     merchant.name_variants = [*(merchant.name_variants or []), observed_name]

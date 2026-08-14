@@ -277,6 +277,56 @@ def test_confirm_does_not_duplicate_a_spelling_it_already_knows(engine) -> None:
         assert merchant.name_variants == []
 
 
+def test_confirm_refuses_a_spelling_another_merchant_already_answers_to(engine) -> None:
+    """A merchant's own TIN authorises writes to IT, not writes against others.
+
+    `METRO OIL` here is handed `ACME HARDWARE` under its own correct TIN, and
+    that key already belongs to a different merchant. Learning it would make
+    the key ambiguous, and `lookup` resolves an ambiguous key to nothing -- so
+    a write authorised for `METRO OIL` would silently de-register `ACME
+    HARDWARE INC.`, which never consented and whose TIN was never presented.
+    The refusal is what keeps a `tax_id` scoped to its own merchant.
+
+    Cheap in the other direction: a variant is discretionary widening, so
+    declining one costs a spelling. `register` faces the same collision and
+    accepts it, because refusing THERE would cost a whole merchant.
+    """
+    with Session(engine) as session:
+        acme = _merchant(session, "ACME HARDWARE INC.", tax_id="111")
+        metro = _merchant(session, "METRO OIL", tax_id="222")
+
+        confirm(session, metro, "222", "ACME HARDWARE")
+
+        assert metro.name_variants == []
+        found = lookup(session, "ACME HARDWARE INC.")
+        assert found is not None and found.id == acme.id
+
+
+def test_confirm_persists_a_learned_spelling_past_the_transaction(engine) -> None:
+    """The spelling has to outlive the session that learned it.
+
+    `name_variants` is a plain JSON column with no `MutableList`, so SQLAlchemy
+    notices a change only when the attribute is REASSIGNED. An in-place
+    `.append()` satisfies every other assertion in this file -- the list looks
+    right for the rest of the transaction -- and then writes nothing: the row
+    still reads `[]` afterwards and the spelling is gone, with no error raised
+    anywhere. Only a reload in a second session tells the two apart.
+    """
+    with Session(engine) as session:
+        merchant = _merchant(session, "METRO OIL SUBIC INC.", tax_id="123-456-789")
+        merchant_id = merchant.id
+
+        confirm(session, merchant, "123-456-789", "METRO OIL SUBIC BAY")
+        session.commit()
+
+    with Session(engine) as session:
+        reloaded = session.get(Merchant, merchant_id)
+
+        assert reloaded is not None
+        assert reloaded.name_variants == ["METRO OIL SUBIC BAY"]
+        assert lookup(session, "metro oil subic bay") is not None
+
+
 def test_increment_counts_receipts(engine) -> None:
     with Session(engine) as session:
         merchant = _merchant(session, "METRO OIL SUBIC INC.")
