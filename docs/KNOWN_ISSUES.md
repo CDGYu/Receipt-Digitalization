@@ -36,19 +36,48 @@ re-evaluated.
 >
 > A 2.5B model already costs 31.6 min per receipt here and reads nothing. High
 > accuracy needs a 7B-class document model, which on two CPU cores is roughly 3×
-> that. **Ollama-only + this machine + high accuracy is over-constrained**, and
-> one of three things must give:
+> that. **Ollama-only + this machine + high accuracy is over-constrained.**
 >
-> 1. **Ollama Cloud** — still Ollama, no code change (see "A third local option"
->    below). Unverified: whether a suitable vision model is offered and whether
->    it accepts a `tools` payload.
-> 2. **A machine with a real GPU** running Ollama — the user's own 2026-08-11
->    plan.
-> 3. **This box, a bigger model, hours per receipt** — a one-off baseline is
->    feasible; the re-run-on-every-change loop §16 wants is not.
+> ### The resolution, same day: two tiers, both Ollama
 >
-> **Not yet chosen.** Nothing downstream can produce a real accuracy number until
-> it is.
+> **`granite3.2-vision:2b` stays the local primary, and Ollama Cloud becomes a
+> confidence-triggered fallback.** The project also moves to a
+> better-specified machine. No new provider enters the system, so the ruling
+> holds.
+>
+> **One question was asked and answered, and it is the reason this is not simply
+> "buy better hardware":** *does stronger hardware give granite proper accuracy?*
+> **No.** Weights decide comprehension; hardware decides speed. A 2.5B model has
+> a 2.5B ceiling on any machine.
+>
+> **But one exception is real and applies here, and it means granite has never
+> actually been given a fair test.** The pipeline default is `max_edge=2048`
+> (`resize_for_model`, `preprocess/image_ops.py`). At 2048 on this box **triage
+> alone took 887 s and extraction hit the 900 s timeout — it never completed.**
+> Every completed local run was forced down to `max_edge=768`, where that same
+> function logged *"estimated text height 7.7px is below 12px; text may be
+> illegible."*
+>
+> **So the "reads nothing" verdict rests entirely on a run the code itself
+> flagged as unreadable.** On adequate hardware granite would finish at 2048 for
+> the first time, and that alone could move it off zero — not because the model
+> improved, but because it would finally be shown a legible image. Expect
+> *something*, not high accuracy: 2.5B is very small for document OCR, and
+> granite declares no tool support, so it cannot use the schema-constrained path
+> either.
+>
+> **That test is the empirical decider** for whether granite is a primary or
+> merely a cheap first pass that escalates nearly everything. It is cheap, it has
+> never been run, and it must run at 2048 on the new machine.
+>
+> **The escalation itself is a real design change, not a config switch.**
+> `make_client` returns exactly one client today; there is no second model, no
+> fallback, and no record of which model produced a kept extraction. That last
+> one matters most — without it no eval can attribute accuracy to a model, and a
+> good-looking number could be hiding the fact that everything escalated. The
+> escalation *rate* has to be reported beside the accuracy figure. Likely an ADR:
+> it changes what "the provider" means, which **ADR-0002** currently treats as a
+> single runtime choice.
 
 ### Goal
 
