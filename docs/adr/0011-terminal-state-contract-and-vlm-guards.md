@@ -115,7 +115,7 @@ never merged on a shared date and total alone. `find_duplicate_by_content` still
 permits NULL-to-NULL — that is the right contract for a lookup and it is
 unchanged; the restriction is the pipeline's, applied where the merge happens.
 
-Two things about the phash bullet below do **not** carry over to this path:
+Two things about the phash bullet above do **not** carry over to this path:
 
 - **It saves no model call.** All three keys come out of the extraction, so a
   semantic duplicate is only detectable once the extraction has been paid for in

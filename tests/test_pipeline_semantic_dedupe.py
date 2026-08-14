@@ -323,7 +323,12 @@ def test_the_duplicates_model_calls_stay_in_the_audit_trail(
 
 
 def test_a_semantic_duplicate_opens_no_review_task(session_factory, storage, settings):
-    """``rejected`` is terminal. A duplicate is not work for a human."""
+    """``rejected`` is terminal. A duplicate is not work for a human.
+
+    This exercises the auto-approve route, where ``route`` itself already
+    returns ``-1``. It therefore says nothing about the branch's own
+    ``priority = -1`` -- see the test below, which is the one that pins it.
+    """
     first = _job(storage)
     _run(first, _Client([_triage(), _good_with_tax_id()]), session_factory, storage, settings)
 
@@ -339,6 +344,67 @@ def test_a_semantic_duplicate_opens_no_review_task(session_factory, storage, set
             select(ReviewTask).where(ReviewTask.receipt_id == second.id)
         ).all()
     assert tasks == []
+
+
+def test_a_duplicate_routed_to_review_is_rejected_and_still_opens_no_task(
+    session_factory, storage
+):
+    """The duplicate branch, reached from a route **other than** auto-approve.
+
+    Every other test in this file scores 1.000 and auto-approves, and ``route``
+    already returns priority ``-1`` on that path -- so none of them can tell
+    whether the branch's own ``priority = -1`` and
+    ``status = ReceiptStatus.REJECTED`` do anything at all. Each of those lines
+    was redundant in every case exercised, which is not the same as being
+    pinned: deleting ``priority = -1`` left the whole file green while a
+    needs-review duplicate opened a review task on a ``rejected`` row.
+
+    Raising ``auto_approve_threshold`` above the score this extraction earns is
+    what makes the override real: ``route`` now hands back ``needs_review`` at a
+    genuinely non-negative priority, and the branch has to overrule both halves
+    of it. The two controls below (the first receipt's status, and the task the
+    *original* legitimately gets) are what stop this passing by auto-approving
+    after all.
+    """
+    settings = Settings(
+        _env_file=None, max_repair_attempts=1, auto_approve_threshold=D("1.01")
+    )
+    first = _job(storage)
+    first_result = _run(
+        first, _Client([_triage(), _good_with_tax_id()]), session_factory, storage, settings
+    )
+    assert first_result.failed_stage is None
+    # Control: the premise is that this route is not auto-approve.
+    assert first_result.status is ReceiptStatus.NEEDS_REVIEW
+    assert first_result.review_priority >= 0
+
+    second = _job(storage, data=_png_bytes(seed=7))
+    result = _run(
+        second, _Client([_triage(), _good_with_tax_id()]), session_factory, storage, settings
+    )
+
+    assert result.failed_stage is None
+    assert result.duplicate_of == first.id
+    assert result.status is ReceiptStatus.REJECTED, "the route said needs_review"
+    assert result.review_priority == -1, "the route said 2"
+
+    with session_factory() as session:
+        row = session.get(Receipt, second.id)
+        assert row.status is ReceiptStatus.REJECTED
+        assert row.duplicate_of == first.id
+        assert row.total == D("224.00"), "D4 holds on this route too"
+        assert len(row.line_items) == 2
+
+        tasks = session.scalars(
+            select(ReviewTask).where(ReviewTask.receipt_id == second.id)
+        ).all()
+        assert tasks == [], "a rejected duplicate is not work for a reviewer"
+        # Control, from the other side: the original *did* get a task, so the
+        # empty list above is a decision and not an empty queue.
+        original_task = session.scalars(
+            select(ReviewTask).where(ReviewTask.receipt_id == first.id)
+        ).one()
+        assert original_task.priority >= 0
 
 
 # --------------------------------------------------------------------------- #

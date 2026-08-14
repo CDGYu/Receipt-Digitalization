@@ -25,6 +25,12 @@ plan:
 | `find_duplicate_by_content` / `find_semantic_duplicate` | `persist/repository.py`, `ingest/dedupe.py` | **exported, zero callers** |
 | `receipts merchants list \| hints` | `cli.py` | **works today**, incl. the §18 guard |
 
+**The table is the state of the tree *before* this milestone and is not
+maintained as the tasks land.** Rows have since been wired —
+`find_duplicate_by_content` acquired its first caller in Task 6, and it is not
+the only one. Read it as the starting position it was written to establish, and
+read the tree for what is true now.
+
 `normalize_merchant_name`'s own docstring says it is "for FINGERPRINTING" and
 "NOT the display name". It already turns `METRO OIL SUBIC INC.` into
 `metro oil subic`.
@@ -182,7 +188,16 @@ Each currently carries an `(M5)` comment naming this milestone.
 
 **It cannot run where image dedupe runs.** That stage is pre-extraction;
 `merchant_id`, `txn_date` and `total` do not exist until after. So it runs
-**post-extraction, pre-persist**.
+post-extraction, inside the `persist` stage.
+
+**As built (2026-08-14) it runs after `save_extraction`, not before it.** The
+design said "pre-persist"; the implementation reads the dedupe key off the row
+`save_extraction` has just written instead of deriving `txn_date` a second time
+from the extraction, so the stored value and the key cannot disagree. The
+duplicate branch then only ever decorates a stored extraction — which is what
+makes "the duplicate keeps what it paid for" structural rather than a
+convention. See `pipeline._find_duplicate_content` and ADR-0011's 2026-08-14
+correction.
 
 **It therefore never saves a model call.** Image dedupe's "§18 cost control: a
 re-upload costs nothing beyond the hash" does **not** carry over — by the time a
