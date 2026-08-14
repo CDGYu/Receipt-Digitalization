@@ -5,6 +5,6 @@ table. Nothing here trusts a pre-extraction guess: a guess may retrieve a
 merchant, but only an extracted `tax_id` may create or rename one.
 """
 
-from .registry import lookup
+from .registry import confirm, increment, lookup, register
 
-__all__ = ["lookup"]
+__all__ = ["confirm", "increment", "lookup", "register"]

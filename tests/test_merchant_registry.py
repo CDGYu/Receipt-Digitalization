@@ -9,16 +9,22 @@ stored the one that comes back is named. Both directions are needed. A guess
 that only ever runs against a one-row table cannot tell "found the match" from
 "returned the only row", and a near miss that only differs by a substituted
 character cannot tell exact matching from prefix or substring matching.
+
+The write paths are gated on the extracted `tax_id` instead: `register` needs
+one to create a merchant and `confirm` needs a matching one to learn a
+spelling, so a name alone can retrieve a merchant but never make or rename one.
 """
 
 from __future__ import annotations
 
 import pytest
 import sqlalchemy as sa
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine, event, select
 from sqlalchemy.orm import Session
 
-from receipts.merchants.registry import lookup
+from receipts.extract.schema import Merchant as ExtractMerchant
+from receipts.extract.schema import ReceiptExtraction
+from receipts.merchants.registry import confirm, increment, lookup, register
 from receipts.persist import Merchant
 from receipts.persist.models import Base
 
@@ -160,3 +166,123 @@ def test_lookup_returns_none_for_an_empty_guess(engine: sa.Engine, guess) -> Non
         _merchant(session, "METRO OIL SUBIC INC.")
 
         assert lookup(session, guess) is None
+
+
+# --------------------------------------------------------------------------- #
+# The write paths: register, confirm, increment
+# --------------------------------------------------------------------------- #
+
+
+def _extraction(name: str | None, tax_id: str | None) -> ReceiptExtraction:
+    return ReceiptExtraction(merchant=ExtractMerchant(name=name, tax_id=tax_id))
+
+
+def test_register_creates_a_merchant_from_a_confirmed_extraction(engine) -> None:
+    with Session(engine) as session:
+        created = register(session, _extraction("METRO OIL SUBIC INC.", "123-456-789"))
+
+        assert created is not None
+        assert created.canonical_name == "METRO OIL SUBIC INC."
+        assert created.tax_id == "123-456-789"
+
+
+@pytest.mark.parametrize(
+    ("name", "tax_id"),
+    [("METRO OIL SUBIC INC.", None), (None, "123-456-789"), (None, None)],
+)
+def test_register_refuses_without_both_a_name_and_a_tax_id(engine, name, tax_id) -> None:
+    """A guess must never create a merchant (spec D2)."""
+    with Session(engine) as session:
+        assert register(session, _extraction(name, tax_id)) is None
+        assert session.scalars(select(Merchant)).all() == []
+
+
+def test_register_returns_the_existing_merchant_for_a_known_tax_id(engine) -> None:
+    with Session(engine) as session:
+        first = register(session, _extraction("METRO OIL SUBIC INC.", "123-456-789"))
+        again = register(session, _extraction("METRO OIL SUBIC BAY", "123-456-789"))
+
+        assert again is not None and first is not None
+        assert again.id == first.id
+        assert len(session.scalars(select(Merchant)).all()) == 1
+
+
+def test_register_creates_a_second_merchant_for_a_colliding_name(engine) -> None:
+    """Two TINs are two merchants, even when the names share a fingerprint.
+
+    `Metro Oil Subic Incorporated` normalizes to the same key as `METRO OIL
+    SUBIC INC.`, because `incorporated` and `inc` are both stripped as legal
+    suffixes. They are still two businesses: the TIN says so, and the TIN is
+    the identity here. Refusing the second would let a NAME veto a write that a
+    `tax_id` authorised -- the weakest field on the receipt overruling the
+    strongest -- and that merchant would then be unregisterable for every
+    receipt it ever files. So the collision is accepted, and
+    `test_lookup_returns_none_when_two_merchants_share_a_key` says what the
+    read path does with it.
+    """
+    with Session(engine) as session:
+        first = register(session, _extraction("METRO OIL SUBIC INC.", "123-456-789"))
+        second = register(session, _extraction("Metro Oil Subic Incorporated", "987-654-321"))
+
+        assert first is not None and second is not None
+        assert second.id != first.id
+        assert len(session.scalars(select(Merchant)).all()) == 2
+
+
+def test_lookup_returns_none_when_two_merchants_share_a_key(engine) -> None:
+    """An ambiguous key retrieves nothing rather than a coin-flip winner.
+
+    `register` can put two merchants behind one normalized key, so `lookup` has
+    to decide. Returning the first row scanned is not deterministic -- no query
+    here is ordered -- and ordering it would only make the wrong answer stable,
+    since either choice hands one merchant's hints to the other merchant's
+    receipt. That is the same harm `lookup` refuses fuzzy matching to avoid, so
+    an ambiguous key resolves to nothing. The receipt loses its hints and
+    nothing else: it still gets its merchant afterwards, from the `tax_id`.
+    """
+    with Session(engine) as session:
+        register(session, _extraction("METRO OIL SUBIC INC.", "123-456-789"))
+        register(session, _extraction("Metro Oil Subic Incorporated", "987-654-321"))
+
+        assert lookup(session, "metro oil subic") is None
+        assert lookup(session, "Metro Oil Subic, Inc.") is None
+
+
+def test_confirm_learns_a_new_spelling(engine) -> None:
+    with Session(engine) as session:
+        merchant = _merchant(session, "METRO OIL SUBIC INC.", tax_id="123-456-789")
+
+        confirm(session, merchant, "123-456-789", "METRO OIL SUBIC BAY")
+
+        assert merchant.name_variants == ["METRO OIL SUBIC BAY"]
+        assert lookup(session, "metro oil subic bay") is not None
+
+
+def test_confirm_ignores_a_mismatched_tax_id(engine) -> None:
+    """The TIN is what authorises the rename. Without it, nothing is learned."""
+    with Session(engine) as session:
+        merchant = _merchant(session, "METRO OIL SUBIC INC.", tax_id="123-456-789")
+
+        confirm(session, merchant, "999-999-999", "TOTALLY DIFFERENT SHOP")
+
+        assert merchant.name_variants == []
+
+
+def test_confirm_does_not_duplicate_a_spelling_it_already_knows(engine) -> None:
+    with Session(engine) as session:
+        merchant = _merchant(session, "METRO OIL SUBIC INC.", tax_id="123-456-789")
+
+        confirm(session, merchant, "123-456-789", "Metro Oil Subic Inc")
+
+        assert merchant.name_variants == []
+
+
+def test_increment_counts_receipts(engine) -> None:
+    with Session(engine) as session:
+        merchant = _merchant(session, "METRO OIL SUBIC INC.")
+        assert merchant.receipt_count == 0
+
+        increment(session, merchant)
+        increment(session, merchant)
+
+        assert merchant.receipt_count == 2
