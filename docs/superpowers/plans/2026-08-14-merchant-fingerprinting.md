@@ -1033,21 +1033,47 @@ Expected: FAIL — `assert None is not None`.
 
 Inside `_persist_outcome`'s session, before `save_extraction`:
 
+> **[CORRECTED 2026-08-14 during execution — the ordering below is WRONG. Resolve
+> by TIN FIRST.]** The original read `lookup` → then `register`/`confirm`. Two
+> defects, both proven by driving the real registry:
+>
+> * **`confirm` becomes dead code.** `lookup` matches on
+>   `normalize_merchant_name(name)`, and `confirm` recomputes that same key from
+>   that same string — so `key in _keys(merchant)` always holds and `confirm`'s own
+>   guard discards every call. Under this ordering `confirm` can never widen
+>   anything, for anybody.
+> * **A second business is never registered.** A merchant sharing a normalized name
+>   with an incumbent resolves to the incumbent forever, and its receipts are
+>   attributed to the wrong company. Measured: 1 merchant row where TIN-first
+>   gives 2.
+>
+> Use `register` (TIN-authoritative) first, falling back to `lookup` by name:
+
 ```python
         extracted = outcome.extraction
-        merchant_row = registry.lookup(session, extracted.merchant.name)
-        if merchant_row is None:
-            merchant_row = registry.register(session, extracted)
-        else:
+        # TIN first: it is the authoritative identifier, and it is the only
+        # thing that may create a merchant. Name lookup is the fallback for an
+        # extraction whose TIN the model could not read.
+        merchant_row = registry.register(session, extracted)
+        if merchant_row is not None:
             registry.confirm(
                 session,
                 merchant_row,
                 extracted.merchant.tax_id,
                 extracted.merchant.name,
             )
+        else:
+            merchant_row = registry.lookup(session, extracted.merchant.name)
         if merchant_row is not None:
             registry.increment(session, merchant_row)
 ```
+
+> **What a populated `merchant_id` does and does not guarantee.** The `lookup`
+> fallback means a TIN-less extraction whose *name* matches a registered merchant
+> still gets `merchant_id` set and still credits `receipt_count`. That is
+> deliberate — `lookup` refuses ambiguous keys, so a name match is a real match —
+> but it means **`merchant_id` is not proof that a TIN was read.** Task 6 keys
+> semantic dedupe on this column, so read that sentence before relying on it.
 
 Pass `merchant_id=merchant_row.id if merchant_row else None` to `save_extraction`
 — the keyword already exists on it.
@@ -1055,9 +1081,17 @@ Pass `merchant_id=merchant_row.id if merchant_row else None` to `save_extraction
 - [ ] **Step 4: Apply the merchant's default currency**
 
 `_normalizer(settings.default_currency)` is the global fallback. Where a merchant
-is known and carries `default_currency`, prefer it: build the normalizer with
-`merchant.default_currency or settings.default_currency`. **Locate the
-`_normalizer` call by symbol, not by line number** — `pipeline.py` has grown.
+is known and carries `default_currency`, prefer it. **Locate the `_normalizer`
+call by symbol, not by line number** — `pipeline.py` has grown.
+
+> **[CORRECTED 2026-08-14 during execution — do NOT write
+> `merchant.default_currency or settings.default_currency`.]** That collapses a
+> three-step chain into one value. `normalize_currency` walks
+> `(printed, merchant_default, system_default)` and `_as_iso_code` returns `None`
+> for an unrecognised code — so collapsing it means an unrecognised merchant
+> currency stores **no currency at all** instead of falling through to the system
+> default. Measured: collapsed → `None`, chained → `PHP`. Pass the two defaults
+> separately and let the chain do its job.
 
 Because the merchant is only known *after* triage, this applies from the
 `merchant` stage onward, which is where the normalizer is constructed.
