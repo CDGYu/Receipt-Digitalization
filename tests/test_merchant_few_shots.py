@@ -182,6 +182,74 @@ def test_a_missing_blob_is_skipped_not_raised(engine) -> None:
         assert shots[0].extraction.merchant.tax_id == "999-999-999"
 
 
+def test_a_negative_limit_returns_nothing(engine) -> None:
+    """`limit <= 0` is a real guard, not a shortcut past a query that agrees.
+
+    SQL does not agree. Measured on this engine, `LIMIT -1` returns **all** rows
+    (`LIMIT 0` returns none, which is why pinning with 0 would prove nothing),
+    and Postgres rejects a negative LIMIT at runtime instead. Without the guard
+    `limit=-1` hands back every verified receipt the merchant has.
+    """
+    with Session(engine) as session:
+        merchant = _merchant(session)
+        blobs = {}
+        for _ in range(3):
+            receipt = _candidate(session, merchant)
+            blobs[receipt.image_key] = IMAGE
+
+        assert few_shots_for(session, _Storage(blobs), merchant, limit=-1) == []
+
+
+class _ExplodingStorage:
+    """A backend that fails the way the old except-tuple could not catch.
+
+    `RuntimeError` is not a `KeyError`, `FileNotFoundError` or `OSError`, and it
+    is exactly what `S3Storage.get` raises when boto3 is missing -- and
+    `worker.py` wires `S3Storage` in production.
+    """
+
+    def get(self, key: str) -> bytes:
+        raise RuntimeError("boto3 not installed")
+
+
+def test_a_storage_failure_outside_the_old_tuple_is_still_skipped(engine) -> None:
+    with Session(engine) as session:
+        merchant = _merchant(session)
+        _candidate(session, merchant)
+
+        assert few_shots_for(session, _ExplodingStorage(), merchant) == []
+
+
+def test_an_unvalidatable_stored_extraction_is_skipped(engine) -> None:
+    """`redact_pan` masks whole-number scalars of 13+ digits before storage.
+
+    So `totals.total` can already read `"*********0123"` in `raw_response`, and
+    `model_validate` raises on it. That is a live path, not only a migration
+    risk -- the same bound has to cover it.
+    """
+    with Session(engine) as session:
+        merchant = _merchant(session)
+        good = _candidate(session, merchant, tax_id="999-999-999")
+        bad = _candidate(session, merchant)
+        run = session.scalars(
+            sa.select(ExtractionRun).where(ExtractionRun.receipt_id == bad.id)
+        ).one()
+        run.raw_response = {
+            "raw": None,
+            "parsed": {
+                "merchant": {"name": "METRO OIL", "tax_id": "123-456-789"},
+                "totals": {"total": "*********0123"},
+            },
+            "parse_error": None,
+        }
+        session.flush()
+        blobs = {good.image_key: IMAGE, bad.image_key: IMAGE}
+
+        shots = few_shots_for(session, _Storage(blobs), merchant)
+
+        assert [s.extraction.merchant.tax_id for s in shots] == ["999-999-999"]
+
+
 def test_the_newest_verified_receipts_are_the_ones_that_teach(engine) -> None:
     """Recency, not `Receipt.id`, decides which examples are used.
 

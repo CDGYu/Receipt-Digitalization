@@ -183,8 +183,24 @@ def few_shots_for(
     timestamp on Postgres and one-second resolution on SQLite, so receipts
     written together tie exactly.
 
-    A receipt whose blob is missing is skipped rather than raised on -- a
-    prompting aid must never be the reason a receipt fails to process.
+    **One bounded property, not a list of anticipated failures: no failure while
+    building an example may propagate out of this function.** A candidate that
+    cannot be turned into a `FewShot` is logged with its traceback and skipped.
+    A prompting aid must never be the reason a receipt fails to process, and
+    that has to hold for reasons nobody enumerated in advance -- this guard
+    replaced a `(KeyError, FileNotFoundError, OSError)` tuple that was already
+    wrong in production, since `S3Storage.get` raises botocore's `ClientError`
+    (not an `OSError`) and `RuntimeError` when boto3 is absent, and `worker.py`
+    wires `S3Storage` for the deployed pipeline. The next backend would have
+    broken it again.
+
+    `ReceiptExtraction.model_validate` is inside the bound for the same reason,
+    and not only as migration insurance: `redact_pan` runs before the response
+    is stored and masks whole-number scalars of 13+ digits, so a stored
+    `totals.total` can already read `"*********0123"` and fail validation.
+
+    `except Exception` is the bound, so `KeyboardInterrupt` and `SystemExit`
+    still propagate -- those are control flow, not a failed example.
     """
     if merchant is None or limit <= 0:
         return []
@@ -217,18 +233,20 @@ def few_shots_for(
 
     shots: list[P.FewShot] = []
     for receipt, run in rows:
-        parsed = (run.raw_response or {}).get("parsed")
-        if not parsed:
-            continue
         try:
-            data = storage.get(receipt.image_key)
-        except (KeyError, FileNotFoundError, OSError):
-            log.warning("Few-shot blob missing for receipt %s; skipping", receipt.id)
-            continue
-        shots.append(
-            P.FewShot(
-                image_b64=base64.b64encode(data).decode("ascii"),
-                extraction=ReceiptExtraction.model_validate(parsed),
+            parsed = (run.raw_response or {}).get("parsed")
+            if not parsed:
+                continue
+            shots.append(
+                P.FewShot(
+                    image_b64=base64.b64encode(
+                        storage.get(receipt.image_key)
+                    ).decode("ascii"),
+                    extraction=ReceiptExtraction.model_validate(parsed),
+                )
             )
-        )
+        except Exception:  # noqa: BLE001 -- the bound IS "everything"; see docstring
+            log.warning(
+                "Skipping few-shot example for receipt %s", receipt.id, exc_info=True
+            )
     return shots
