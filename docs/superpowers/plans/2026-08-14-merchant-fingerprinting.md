@@ -446,9 +446,13 @@ Re-run the file after reverting both and confirm green.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add src/receipts/merchants/registry.py tests/test_merchant_registry.py
+git add src/receipts/merchants/__init__.py src/receipts/merchants/registry.py tests/test_merchant_registry.py
 git commit -m "feat(merchants): create and rename merchants only on a confirmed tax id"
 ```
+
+> `__init__.py` is in that list because Step 3 widens its exports. The first draft
+> of this plan omitted it, which would have written the widening and not committed
+> it.
 
 ---
 
