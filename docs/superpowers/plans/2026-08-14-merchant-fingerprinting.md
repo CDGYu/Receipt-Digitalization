@@ -165,10 +165,14 @@ table. Nothing here trusts a pre-extraction guess: a guess may retrieve a
 merchant, but only an extracted `tax_id` may create or rename one.
 """
 
-from .registry import confirm, few_shots_for, increment, lookup, register
+from .registry import lookup
 
-__all__ = ["confirm", "few_shots_for", "increment", "lookup", "register"]
+__all__ = ["lookup"]
 ```
+
+> **Export only what exists.** Tasks 2 and 3 each add their own names to this
+> import and to `__all__` as they land. Listing all five here would make
+> `import receipts.merchants` raise `ImportError` for the whole of Tasks 1 and 2.
 
 Create `src/receipts/merchants/registry.py`:
 
@@ -411,6 +415,14 @@ Add to the imports at the top of `registry.py`:
 
 ```python
 from receipts.extract.schema import ReceiptExtraction
+```
+
+Widen `src/receipts/merchants/__init__.py` to export what now exists:
+
+```python
+from .registry import confirm, increment, lookup, register
+
+__all__ = ["confirm", "increment", "lookup", "register"]
 ```
 
 - [ ] **Step 4: Run the tests to verify they pass**
@@ -726,6 +738,14 @@ from receipts.score.confidence import ReceiptStatus
 log = logging.getLogger(__name__)
 ```
 
+Widen `src/receipts/merchants/__init__.py` a final time:
+
+```python
+from .registry import confirm, few_shots_for, increment, lookup, register
+
+__all__ = ["confirm", "few_shots_for", "increment", "lookup", "register"]
+```
+
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `python -m pytest tests/test_merchant_few_shots.py -v`
@@ -785,8 +805,6 @@ from __future__ import annotations
 
 from receipts.extract import prompts as P
 from receipts.extract.schema import TriageResult
-from receipts.pipeline import _attempt_prompt_hash
-from receipts.persist.models import Attempt  # noqa: F401  (see Step 3 note)
 
 
 def _hints() -> P.MerchantHints:
@@ -824,14 +842,23 @@ def test_the_rebuilt_hash_matches_the_prompt_that_was_sent() -> None:
     assert rebuilt != unhinted, "a hinted prompt must not hash like an unhinted one"
 ```
 
-- [ ] **Step 2: Run the tests to verify the second one is meaningful**
+- [ ] **Step 2: Run the tests**
 
 Run: `python -m pytest tests/test_pipeline_merchant_hints.py -v`
-Expected: both PASS. They pin `prompts.py`, which already works — this establishes
-the baseline the wiring must preserve. **Delete the unused `Attempt` import** if
-ruff flags it.
+Expected: both PASS immediately. **This is deliberate and is not the task's RED
+phase.** They pin `prompts.py`, which already works, and exist to prove the
+premise the wiring depends on: a hinted prompt does not hash like an unhinted
+one. If either fails, stop — the task's whole approach is unsound.
+
+**The real RED phase is Step 6**, which proves the coupling this task exists to
+create. Do not skip it, and do not treat Step 2's green as evidence of anything
+beyond `prompts.py` behaving.
 
 - [ ] **Step 3: Change `_attempt_prompt_hash` to take the hints**
+
+`Attempt` is already imported in `pipeline.py` from `receipts.extract.extractor`
+— it is **not** in `receipts.persist.models`. You are editing an existing
+signature, so no new import is needed for it.
 
 In `src/receipts/pipeline.py`, change the signature and the final return:
 
@@ -868,6 +895,12 @@ def _attempt_prompt_hash(
 - [ ] **Step 4: Thread hints through `process_receipt` and `_persist_outcome`**
 
 In the `extract` stage of `process_receipt`, replace the `(M5)` comment:
+
+Add the import at the top of `pipeline.py`:
+
+```python
+from receipts.merchants import registry
+```
 
 `registry.lookup` takes a `Session`, **not** a `session_factory`. Open a short
 one, copy the two values out as plain Python, and close it before the model call
