@@ -9,10 +9,46 @@ resume — so picking it up later does not mean re-deriving the diagnosis.
 ## ISSUE-001 — The first real baseline run has never completed
 
 **Status:** OPEN — deferred by the user until the system is built.
-**Owner action required:** yes (provider choice, see "Recommended fix").
+**Owner action required:** yes — but **not the provider choice this issue
+recommends.** See the ruling immediately below.
 **Discovered:** 2026-07-28. **Blocks:** the first real accuracy numbers (spec §16),
 threshold calibration (P3.T6 / P8), and any prompt/rule change that should be
 re-evaluated.
+
+> ## USER RULING, 2026-08-14 — Ollama only, and accuracy is the priority
+>
+> **This issue's "Recommended fix" is SUPERSEDED and must not be re-proposed.**
+> The user has ruled that this system uses **Ollama only — no Gemini, no OpenAI,
+> no Anthropic, no other hosted API.** Three sections below still argue for a
+> hosted provider and are marked where they stand: *Recommended fix*, *How to
+> resume* step 1, and the readiness check's hosted-wiring row. They are kept as
+> the record of what was tried, not as instructions.
+>
+> **Alongside it: high extraction accuracy is the stated goal.** No target number
+> is agreed, and none is defensible yet — this issue says so itself, because
+> three golden receipts cannot validate any accuracy claim.
+>
+> **The two rulings collide with measured hardware, and that collision is now the
+> open question.** Measured on this box 2026-08-14: **Intel i3-1115G4, 2 cores /
+> 4 threads**, 15.7 GB RAM (~7.0 free), **Intel UHD iGPU only** — Ollama reports
+> `library=cpu`, `size_vram=0`, and WSL2 cannot pass an Intel iGPU through.
+> **One model is pulled: `granite3.2-vision:2b`.**
+>
+> A 2.5B model already costs 31.6 min per receipt here and reads nothing. High
+> accuracy needs a 7B-class document model, which on two CPU cores is roughly 3×
+> that. **Ollama-only + this machine + high accuracy is over-constrained**, and
+> one of three things must give:
+>
+> 1. **Ollama Cloud** — still Ollama, no code change (see "A third local option"
+>    below). Unverified: whether a suitable vision model is offered and whether
+>    it accepts a `tools` payload.
+> 2. **A machine with a real GPU** running Ollama — the user's own 2026-08-11
+>    plan.
+> 3. **This box, a bigger model, hours per receipt** — a one-off baseline is
+>    feasible; the re-run-on-every-change loop §16 wants is not.
+>
+> **Not yet chosen.** Nothing downstream can produce a real accuracy number until
+> it is.
 
 ### Goal
 
@@ -77,7 +113,11 @@ tool-use (handled by `VLM_USE_TOOLS` / the provider default in
 structured-output path — see ADR-0002 and the steering rule "structured output via
 tool-use, not 'reply in JSON'").
 
-### Recommended fix
+### Recommended fix — SUPERSEDED 2026-08-14 by the ruling at the top
+
+*(Kept as the record of what was diagnosed and tried. **Do not act on it**: the
+user has ruled Ollama-only. The security note at the end of this section still
+stands — that key needs revoking whether or not it is ever used.)*
 
 **Point the baseline at a hosted, tool-capable model.** `.env` already has a
 commented-out Gemini block using the OpenAI-compatible endpoint:
@@ -107,6 +147,12 @@ the provider abstraction (ADR-0002) means switching is one env var.
   (Qwen-VL class), or run Ollama with GPU acceleration.
 
 ### Readiness check, 2026-08-11 — everything but the key
+
+*(**The hosted-wiring row below is superseded 2026-08-14 — Ollama only.** The
+measurement stands: the OpenAI-compatible client does build against a hosted
+`base_url`. It is simply no longer a path this project will take. Every other
+row still applies, and two of them matter more than ever under the ruling:
+`DEFAULT_CURRENCY=PHP` is correct, and the golden set is three labels.)*
 
 Re-run of the resume steps that do not need a provider. **Only step 1 is
 outstanding, and only a human can do it.**
@@ -185,10 +231,21 @@ offered and whether it accepts a `tools` payload are both unverified.
 
 ### How to resume (exact steps)
 
-1. Rotate the Gemini key; put the hosted config in `.env` (block above).
+1. ~~Rotate the Gemini key; put the hosted config in `.env` (block above).~~
+   **SUPERSEDED 2026-08-14 — Ollama only.** Replace this step with: settle the
+   runtime question in the ruling at the top, then pull a document-capable
+   vision model to replace `granite3.2-vision:2b`, which is the single largest
+   cause of zero accuracy. **Set `VLM_USE_TOOLS=true`** once the chosen model
+   declares tool support — `factory.py`'s `_TOOLS_OFF_BY_DEFAULT` contains
+   `ollama`, so the local path has never exercised schema-constrained tool-use
+   and runs in JSON mode, against ADR-0002 and the steering rule.
+   **Revoke the old Gemini key anyway** — it was echoed to a terminal and this
+   repo is public.
    Keep `DEFAULT_CURRENCY="PHP"` — BIR invoices never print a currency, and
    without it currency resolves to null on every receipt.
-2. `VLM_TIMEOUT_S` can drop back to ~120 for a hosted model.
+2. `VLM_TIMEOUT_S` stays high for a local model. It is `900` now; a bigger model
+   on two CPU cores may need more, and Attempt 1 of this issue died because a
+   timeout was too short rather than too long.
 3. Sanity-check the wiring before a full run:
    ```
    python -c "from config.settings import Settings; from receipts.extract.clients.factory import make_client; s=Settings(); c=make_client(s); print(s.vlm_provider, s.vlm_model_extract, float(c._client.timeout))"
