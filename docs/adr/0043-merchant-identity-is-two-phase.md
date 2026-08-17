@@ -201,3 +201,28 @@ rather than an ordinary outcome of a reprocess.
 direct back-links in SQL and does not walk the chain; `find_duplicate_by_content`
 walks it. Whether the phash side should be widened to match is **not decided
 here**.
+
+## Correction (2026-08-18) — the premise about the triage guess is narrower than stated
+
+The Context above says the guess "is produced by `granite3.2-vision:2b`, a model
+measured as reading nothing", and adds "**Everything below follows from not
+trusting it**". Decision 1 is presented as resting on that.
+
+**Measured 2026-08-18: that model's triage pass returns
+`merchant_name_guess='SUMMIT FUEL OPC'` — exactly `merchant.name` in
+`eval/golden/labels/r002.json` — at `max_edge` 2048 and 768 alike.** The "reads
+nothing" verdict was drawn from the **extraction** pass, which does return
+essentially nothing at either resolution; nobody had read the triage guess.
+`docs/KNOWN_ISSUES.md` ISSUE-001 carries the measurement, the 768 control and
+the method.
+
+**No decision changes, and none should.** "A guess may retrieve; only a TIN may
+create or rename" is the right rule whether the guess is reliable or not — it is
+safe under a bad guess and costs nothing under a good one. Decisions 2 and 4
+(exact matching, ambiguity yields `None`) likewise stand on "another merchant's
+hints are worse than none", which does not depend on the guess's quality.
+
+What changes is the expected **value** of the retrieval path: on this sample it
+would have fired correctly, where the premise implies it would mostly miss.
+**One receipt is not a rate**, and this is not a licence to trust the guess
+anywhere the ADR does not already.

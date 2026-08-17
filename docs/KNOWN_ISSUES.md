@@ -123,6 +123,74 @@ that settles it is one triage call with tools on — the ruling's stated fear is
 hard 400 on exactly that call, so the cheapest test produces the evidence either
 way.
 
+### Measurement (2026-08-18) — granite at 2048 vs 768, and what step 2 settles
+
+**Step 2 of the ordered plan above — "give granite one fair test at
+`max_edge=2048`" — has now run, with a 768 control. The answer is no: a legible
+image does not make this model extract more.**
+
+Method: `scripts/try_one_receipt.py r002 --max-edge {2048,768}`, `VLM_TIMEOUT_S`
+5400 for **both**, same commit, same scorer, `granite3.2-vision:2b` (2.5B,
+Q4_K_M). The two runs differ in `max_edge` and nothing else — the raised timeout
+was applied to both so it could not become a second variable.
+`try_one_receipt.py` writes no files, so ADR-0039's rule that liveness artefacts
+stay out of `eval/results/` holds by construction.
+
+| | 2048 | 768 (control) |
+|---|---|---|
+| triage | 553 s | 234 s |
+| extract | 1268 s | 2121 s |
+| total | 30.4 min | 39.3 min |
+| transcription accuracy | 16.67% (3/18) | 11.11% (2/18) |
+| **core** | **15.38% (2/13)** | **15.38% (2/13)** |
+| line items | 20.00% (1/5) | 0.00% (0/5) |
+| line-item F1 | 0.00 | 0.00 |
+| hallucinated fields | 2 | 0 |
+| triage `merchant_name_guess` | correct | correct |
+
+**The headline number misleads; the core number is the real one.** Core accuracy
+is *identical* — nothing about the merchant, tax id, invoice number, date or
+totals was read at either resolution. The whole 5.6-point difference sits in the
+line-items group, where the 2048 run emitted **two blank line-item rows** and the
+768 run emitted **none**. A blank row earns structural credit for existing at a
+position the truth also has, while **line-item F1 is 0.00 in both** — no line
+item was read either way. The 2048 run was also **worse** where it counts: two
+hallucinated fields against zero, including `receipt.date = '03-75-26'` against a
+truth of `2026-03-28`. At 768 the model correctly left the date null.
+
+`currency: PHP` in both runs is `DEFAULT_CURRENCY` filling an empty field, not a
+value read off the image. Do not count it as a read.
+
+**Verdict: `granite3.2-vision:2b` is not a primary, and 2048 is not worth its
+cost.** Weights decide comprehension, so no machine changes this.
+
+#### Two claims above are falsified by this run
+
+**1. "Granite reads nothing" is too strong.** Its *triage* pass returned
+`merchant_name_guess='SUMMIT FUEL OPC'` — exactly `merchant.name` in
+`eval/golden/labels/r002.json` — **at both resolutions**. The verdict was formed
+from the extraction alone; nobody had read the triage guess. **ADR-0043's
+founding premise, from which its decision 1 explicitly follows, is narrower than
+written**, and that ADR now carries its own dated correction.
+
+**2. The 2026-07-29 timing table below does not reproduce, in either direction.**
+Recorded triage @2048 887 s → measured **553 s**. Recorded extract @768 1057 s →
+measured **2121 s**. The 768 run came out *slower overall* than the 2048 run,
+which nothing here explains. **No timing argument from that table should be
+relied on**, including the claim that 2048 cannot complete on this box. What
+actually stopped it was `VLM_TIMEOUT_S` at 900 s sitting just under an 887 s
+triage — a config value, not a hardware limit.
+
+#### What this does NOT establish
+
+- **Any accuracy claim.** One receipt, one model, one machine, and ADR-0039
+  governs: this is a liveness and legibility check. Three golden receipts could
+  not carry an accuracy claim even if all three had run.
+- **That resolution never matters.** It did not matter *for this model on this
+  receipt*. A model that can actually read may behave differently.
+- **That the two-tier plan changes.** Ollama Cloud as the tier that does the
+  reading is untouched by this, and is better motivated by it rather than worse.
+
 ### Goal
 
 Run `python -m eval.run_baseline` over the three hand-verified golden receipts and
