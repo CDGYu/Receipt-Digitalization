@@ -630,7 +630,7 @@ def test_reprocessing_a_receipt_counts_it_once(session_factory, storage, setting
     assert merchants[0].receipt_count == 1
 
 
-def test_a_merchant_write_failure_never_loses_the_paid_for_extraction(
+def test_a_registry_error_before_any_write_never_loses_the_paid_for_extraction(
     session_factory, storage, settings, monkeypatch
 ):
     """§18, from the expensive side: the extraction has already been paid for.
@@ -642,6 +642,10 @@ def test_a_merchant_write_failure_never_loses_the_paid_for_extraction(
     bought and validated, thrown away over bookkeeping. The receipt is stored
     with ``merchant_id`` NULL instead, and the failure is logged with its
     traceback.
+
+    ``register`` raises here *before touching the database*, so the session is
+    never poisoned and ``_resolve_merchant``'s ``session.rollback()`` is a
+    no-op. The half that needs the rollback is the test below.
     """
 
     def boom(*args, **kwargs):
@@ -659,6 +663,54 @@ def test_a_merchant_write_failure_never_loses_the_paid_for_extraction(
         assert receipt is not None
         assert receipt.total == D("224.00")
         assert receipt.merchant_id is None
+
+
+def test_a_failed_merchant_flush_never_loses_the_paid_for_extraction(
+    session_factory, storage, settings, monkeypatch
+):
+    """The same bound, from the only failure that needs the rollback.
+
+    A registry that raises before it writes leaves the session usable, so the
+    receipt is stored whether or not ``_resolve_merchant`` rolls back. A
+    **flush** that fails does not: the session is left awaiting a rollback, and
+    every later statement in ``_persist_outcome`` -- ``save_extraction``
+    included -- raises on it. That escapes the persist stage and lands in
+    ``_persist_failure``, which writes exactly the row of nulls the bound
+    forbids.
+
+    So this poisons ``register`` the way a real constraint violation does: a
+    ``Merchant`` with a NULL ``canonical_name``, flushed. Without the rollback
+    the stored row comes back ``total=None`` with no line items and no
+    ``extraction_runs``; with it, the extraction that was paid for survives and
+    only the merchant is lost.
+    """
+
+    def poison(session, extraction):
+        session.add(Merchant(canonical_name=None, name_variants=[], hints=[]))
+        session.flush()  # IntegrityError: merchants.canonical_name is NOT NULL
+        raise AssertionError("unreachable: the flush above must fail")
+
+    monkeypatch.setattr(registry, "register", poison)
+    job = _job(storage)
+    client = _RecordingClient([_triage(), _good_with_tax_id()])
+
+    result = _run(job, client, session_factory, storage, settings)
+
+    assert result.failed_stage is None, "a merchants-table flush took the receipt down"
+    with session_factory() as session:
+        receipt = session.get(Receipt, job.id)
+        assert receipt is not None
+        assert receipt.total == D("224.00"), "the paid-for extraction was thrown away"
+        assert len(receipt.line_items) == 2
+        assert receipt.merchant_id is None
+
+        runs = session.scalars(
+            select(ExtractionRun).where(ExtractionRun.receipt_id == job.id)
+        ).all()
+        assert len(runs) == 2, "the audit trail for two paid calls went with it"
+
+    # Control: the failed flush was rolled back, not committed.
+    assert _merchants(session_factory) == []
 
 
 def test_a_late_resolved_merchant_that_disagrees_on_currency_is_reported(
