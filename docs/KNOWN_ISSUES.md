@@ -347,3 +347,109 @@ slightly pessimistic.
   the deferred-task list.
 - ADR-0002 (provider abstraction / runtime config), ADR-0003 (confidence).
 - `.superpowers/sdd/progress.md` — the full session-by-session trail.
+
+---
+
+## ISSUE-002 — A repair attempt's recorded `prompt_hash` names a prompt that was never sent
+
+**Status:** OPEN — deliberately not fixed. The one-line code change is not the
+hard part; see "Why it is not being fixed".
+**Owner action required:** yes — the migration decision, not the code.
+**Discovered:** 2026-08-15, by the Phase 6 merchant-fingerprinting milestone,
+which found it and left it alone. **Pre-existing:** present at `8f0b413`, before
+that branch existed. **Blocks:** nothing today, because nothing reads the column
+(below). It makes every historical repair row's `prompt_hash` unusable as an
+audit key the day something does.
+
+### What is wrong
+
+`receipts.extract.extractor.repair()` sends the repair text as `user` and the
+extraction system prompt as `system`:
+
+```python
+user = P.build_repair_prompt(previous, report.render_for_repair_prompt())
+return client.complete_json(system=P.SYSTEM_EXTRACTION, user=user, ...)
+```
+
+`receipts.pipeline._attempt_prompt_hash` rebuilds that prompt to fill
+`extraction_runs.prompt_hash`, and its repair branch hashes the `user` half
+alone while the extract branch four lines below appends the system half:
+
+```python
+if attempt.pass_name == "repair":
+    previous = attempts[attempt_number - 2]
+    return P.prompt_hash(
+        P.build_repair_prompt(
+            previous.extraction, previous.report.render_for_repair_prompt()
+        )
+    )
+return P.prompt_hash(
+    P.build_extraction_prompt(triage_result, hints, few_shots or [])
+    + P.SYSTEM_EXTRACTION
+)
+```
+
+So for every `pass_name='repair'` row in `extraction_runs`, the stored 16-char
+hash is the hash of a string no provider ever received.
+
+**`re_extract` is correct.** The branch tests the literal `"repair"`, and a
+re-extract attempt (`extractor.py`'s `pass_name = "re_extract"`) therefore takes
+the extract branch, which appends the system prompt.
+
+This is the same class as ADR-0043 decision 8 — *whatever conditions the prompt
+must also condition the recorded hash* — in the same function, but it is not that
+branch's doing.
+
+Re-derivable:
+
+```
+git grep -n "SYSTEM_EXTRACTION" -- src/receipts/extract/extractor.py
+    -> 3 hits: the extract cache key (~145), `system=` on the extract call
+       (~152), `system=` on the repair call (~181). Both calls send it.
+git grep -n "prompt_hash" -- src eval frontend scripts
+    -> no hits outside `src/`. Inside it the column is written by
+       `repository.save_extraction_run` and read back by nothing:
+       `ResponseCache.key` computes its own hash from the prompt in hand, and
+       `registry.few_shots_for` — the one place that queries `ExtractionRun` —
+       selects `raw_response`, not `prompt_hash`.
+```
+
+### Why it is not being fixed
+
+Appending `P.SYSTEM_EXTRACTION` to the repair branch is one line. Its consequence
+is not: every repair row already written carries the old hash, so the fix splits
+the audit trail into two hashes for one prompt with nothing recording which
+scheme a given row used. Leave them, backfill them, or version the scheme — that
+is a migration-shaped decision about the audit contract, and it belongs to
+whoever owns that contract rather than to a fix wave passing through.
+
+### How to resume (exact steps)
+
+1. Settle the question above: what happens to the repair rows already stored.
+2. Append `+ P.SYSTEM_EXTRACTION` in the repair branch of
+   `pipeline._attempt_prompt_hash`, exactly as the extract branch does.
+3. Pin it the way the extract side is already pinned.
+   `tests/test_pipeline_merchant_hints.py`'s
+   `test_the_recorded_hash_describes_the_prompt_that_was_actually_sent` asserts
+   the stored hash equals `P.prompt_hash(user_sent + system_sent)` for the
+   `(system, user)` pair a recording client was **actually handed**. A repair-pass
+   twin of that test is the proof; a test that rebuilds both sides the same way
+   proves nothing.
+
+### The related divergence: eval extracts unhinted
+
+`run_receipt` — the `build_eval_pipeline` path — calls `extract_with_repair`
+with no `hints` and no `few_shots`, so **eval measures a different prompt than
+production sends.** Nothing is persisted on that path (it takes no session) and
+`prompts.prompt_bundle_hash()` hashes only the static templates, so eval
+*grouping* is unaffected and no committed baseline is wrong today. It will matter
+the moment ISSUE-001's baseline runs: the accuracy figure will describe the
+unhinted prompt while `process_receipt` sends the hinted one, and nothing in the
+results file says so.
+
+### Related
+
+- ADR-0043 decision 8 (whatever conditions the prompt conditions the hash) and
+  decision 6 (tier-dependent conditioning).
+- ISSUE-001 — the baseline run that turns the eval divergence above from a note
+  into a wrong number.
