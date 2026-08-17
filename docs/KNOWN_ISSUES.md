@@ -191,6 +191,86 @@ triage — a config value, not a hardware limit.
 - **That the two-tier plan changes.** Ollama Cloud as the tier that does the
   reading is untouched by this, and is better motivated by it rather than worse.
 
+### Measurement (2026-08-18) — step 4 is answered, and the answer is DO NOT enable it
+
+**Step 4 of the ordered plan above — "Set `VLM_USE_TOOLS=true`" — has now run.
+The `/v1` shim accepts a `tools` payload, and enabling it is still the wrong
+action for the local path.**
+
+Method: `scripts/try_one_receipt.py r002 --max-edge 768`, `VLM_TIMEOUT_S=5400`,
+same commit, same scorer. **`VLM_USE_TOOLS` is the only variable** against the
+768 control recorded above. Three things were checked before the run so it could
+not pass or fail vacuously:
+
+- **The flag reaches the object that builds the request.** `make_client(Settings())`
+  under the env var yields `OpenAICompatClient` with `client.use_tools is True`,
+  read off the instance rather than inferred from the environment.
+- **No response cache is in play.** `scripts/try_one_receipt.py` passes none and
+  `triage`'s `cache` parameter defaults to `None`, so every call is a real one. A
+  cache hit would have returned the previous run's answer without ever sending a
+  `tools` payload.
+- **`temperature` is 0.0**, defaulted at `OpenAICompatClient.__init__` and sent
+  in the payload, so the differences below are not sampling variation.
+
+**1. No 400.** ISSUE-001's stated fear — a hard 400 on the first (triage) call —
+does not reproduce. Ollama's OpenAI-compatible endpoint honoured the payload for
+this vision model.
+
+**2. The extraction is IDENTICAL**, not merely equal-scoring: every field null,
+zero line items, `currency: PHP` from `DEFAULT_CURRENCY`, and **the same 24
+entries in the mismatch list**.
+
+| | tools OFF | tools ON |
+|---|---|---|
+| transcription accuracy | 11.11% (2/18) | 11.11% (2/18) |
+| core | 15.38% (2/13) | 15.38% (2/13) |
+| line items | 0.00% (0/5) | 0.00% (0/5) |
+| hallucinated / correctly empty / structural | 0 / 12 / 5 | 0 / 12 / 5 |
+| line-item F1 | 0.00 | 0.00 |
+
+**3. Triage DEGRADES, and in the field the rest of the system depends on.**
+
+| triage field | tools OFF | tools ON | golden |
+|---|---|---|---|
+| `is_receipt` | False ✗ | True ✓ | it is a receipt |
+| `legibility` | fair ✓ | good ✗ | `fair` |
+| `est_items` | 1 ✓ | 0 ✗ | 1 line item |
+| `merchant_name_guess` | `SUMMIT FUEL OPC` ✓ | **empty ✗** | `SUMMIT FUEL OPC` |
+| `document_type` | handwritten_receipt | pos_receipt | label: "pre-printed form, handwritten values" |
+
+One field improves; three regress. **The decisive one is `merchant_name_guess`**:
+`lookup(session, name_guess)` keys off it, so it is the entry point of Phase 6's
+whole hint-retrieval path (ADR-0043 decision 1). Enabling tool-use would
+silently disable the one thing this model does reliably well.
+
+**Verdict: leave `_TOOLS_OFF_BY_DEFAULT` containing `ollama`.** It is correct for
+a reason none of the three previously written beside it: not the capability
+claim (false — see the correction above), not the hard 400 (does not reproduce),
+but measured output.
+
+**4. It was much faster, and that is reported with its caveat.** Extract 386 s
+against 2121 s; whole run 11.0 min against 39.3 min. Constrained generation
+emitting fewer tokens is the obvious explanation and **is a hypothesis — token
+counts were not measured.** Timings on this box are also not reproducible (see
+the previous section), so one run is one run. It is largely moot: a model that
+reads nothing faster still reads nothing.
+
+#### A standing decision now conflicts with a measurement
+
+**ADR-0002 and the steering rules make tool-use structured output a
+non-negotiable**, and on the only model in play it costs the merchant guess and
+buys nothing. That conflict is **recorded, not resolved** — it needs a user
+ruling. It is written here so a future session reading the non-negotiable does
+not simply flip the flag.
+
+#### What this does NOT establish
+
+- **Anything about a Cloud-tier model.** The shim is the same; the model is not.
+  A model that can actually read may well do better with a schema than without,
+  which is the usual case and the reason the non-negotiable exists.
+- **Any accuracy claim.** One receipt, one model (ADR-0039).
+- **That tool-use causes the speedup.** Correlated in one run, mechanism unmeasured.
+
 ### Goal
 
 Run `python -m eval.run_baseline` over the three hand-verified golden receipts and
