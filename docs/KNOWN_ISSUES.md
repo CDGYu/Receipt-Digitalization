@@ -411,7 +411,7 @@ git grep -n "prompt_hash" -- src eval frontend scripts
        `repository.save_extraction_run` and read back by nothing:
        `ResponseCache.key` computes its own hash from the prompt in hand, and
        `registry.few_shots_for` — the one place that queries `ExtractionRun` —
-       selects `raw_response`, not `prompt_hash`.
+       reads `raw_response` off the row and never touches `prompt_hash`.
 ```
 
 ### Why it is not being fixed

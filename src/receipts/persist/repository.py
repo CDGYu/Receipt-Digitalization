@@ -1043,8 +1043,10 @@ def mark_duplicate(session: Session, new_id: uuid.UUID, existing_id: uuid.UUID) 
     row left to follow the chain to. Refusing the link keeps the original intact
     for the caller to report instead.
 
-    **:func:`find_duplicate_by_content` cannot lead here.** It excludes
-    candidates on this very :func:`resolves_back_to` predicate, so the semantic
+    **:func:`find_duplicate_by_content` cannot lead here when it is passed the
+    ``exclude_id`` this is then called with** -- which is what
+    :func:`~receipts.pipeline._find_duplicate_content`, its only caller, does.
+    It excludes candidates on this very :func:`resolves_back_to` predicate, so the semantic
     path never offers a target this then rejects -- which is what keeps the
     refusal an invariant on that path rather than an ordinary outcome of
     reprocessing. Said of that one caller only: :func:`find_duplicate_by_phash`

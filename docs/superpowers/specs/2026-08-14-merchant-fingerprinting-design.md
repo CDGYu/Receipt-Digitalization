@@ -1,7 +1,7 @@
 # Phase 6 — merchant fingerprinting, hints and few-shot (P6.T1)
 
-**Status:** design approved 2026-08-14, and implemented. What actually shipped,
-including where it departed from this document, is recorded in ADR-0043.
+**Status:** design approved 2026-08-14, and implemented. ADR-0043 records the
+decisions that shipped.
 **Milestone:** P6.T1. **Spec:** §8.3 (hints), §6.2 (indexes), §18 (trust the image).
 **Blocked for measurement, not for construction:** no accuracy claim in this
 document can be validated until ISSUE-001's baseline runs.

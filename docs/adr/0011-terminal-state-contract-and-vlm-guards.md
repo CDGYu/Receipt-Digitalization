@@ -109,7 +109,7 @@ and `"extract"` in `bb75fff`; the tuple quoted under Decision was accurate at
 `8f0b413` and now reads as the current nine. Recorded rather than left to the
 code because these strings are operator vocabulary — they reach
 `review_tasks.reason` and the logs — and `merchant` is a stage a run can fail at,
-so `reason = "merchant"` is now something a queue can contain.
+so a queue reason can now name it.
 
 The consequence above — **"Semantic (merchant + date + total) dedupe is
 deliberately not wired in"** — is closed. It is wired, inside `_persist_outcome`
