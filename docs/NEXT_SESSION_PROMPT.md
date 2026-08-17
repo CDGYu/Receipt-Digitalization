@@ -1752,9 +1752,14 @@ git log --oneline refs/remotes/origin/main..main  # what a push would send
 python scripts/verify.py                          # background it; exceeds a 2-min timeout
 ```
 
-**Last full controller-run of `python scripts/verify.py`: 2026-08-18 at the
-merge tip, all five gates PASS.** Commits after it are documentation plus one
-comment-only change under `src/`. **Re-run it rather than reasoning from that** —
+**Last full controller-run of `python scripts/verify.py`: 2026-08-18 at
+`75dc99e`, all five gates PASS**, and CI reports that same commit green on Linux
+across both Python versions plus the image build. Everything committed after it
+is this handoff pair — **`git log --oneline 75dc99e..main` is the check, not
+this sentence.** *(This line said "at the merge tip" until it was corrected the
+same day: a full run happened at `75dc99e` minutes after the sentence was
+written, so it understated. ADR-0032 §2 — a claim can rot immediately after the
+commit that carries it.)* **Re-run it rather than reasoning from any of that** —
 the number of things it does not check is the subject of half this document.
 **No pytest count is written here** — it moved twice during this milestone alone.
 Re-run rather than trusting it.
@@ -1764,8 +1769,11 @@ version of this paragraph that named one has rotted — twice in both directions
 and once within hours of being written. **Every `main` push is a one-time
 authorization the push consumes**, so the next one needs its own fresh ask; what
 is waiting is `git log --oneline refs/remotes/origin/main..main` and nothing
-else. Note that the pair commit carrying this sentence necessarily lands *after*
-any push it could describe, so that command is expected to name it.
+else. **Whether that command is empty depends on an ordering this sentence
+cannot know**: a session that pushes and *then* refreshes the pair leaves the
+pair commit waiting, while one that refreshes and then pushes leaves nothing.
+Both happen. *(This said the command "is expected to name it", which was wrong
+within the hour — the push came last that time.)*
 
 **Run the freshness command in `docs/MEMORY.md`'s stamp before trusting any of
 this.** If it lists anything, the tree moved after this was written — re-run
