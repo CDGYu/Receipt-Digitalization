@@ -776,9 +776,12 @@ def _persist_outcome(
     The merchant is still credited for a receipt that turns out to be a
     duplicate -- ``_resolve_merchant`` has already run and incremented by the
     time the duplicate is known. That leaves ``merchants.receipt_count`` one
-    high per re-upload: the same bounded imprecision in a display-only counter
-    that :func:`_resolve_merchant` documents from the other side, and cheaper
-    than the decrement path it declines for the same reason.
+    high per duplicate caught *here*: the same bounded imprecision in a
+    display-only counter that :func:`_resolve_merchant` documents from the other
+    side, and cheaper than the decrement path it declines for the same reason. A
+    re-uploaded **image** adds nothing to the count and never could:
+    :func:`_persist_duplicate` returns before this function is reached, so no
+    merchant is resolved for it at all.
 
     Three details are easy to get wrong and are therefore spelled out:
 

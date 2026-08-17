@@ -489,10 +489,12 @@ def _add_merchants(sub: argparse._SubParsersAction) -> None:
         help="list every merchant: id, canonical name, tax id, receipt count",
         description=(
             "List every merchant: id, canonical name, tax id, receipt count. "
-            "The receipt count is a running tally that can read high: a "
-            "re-uploaded duplicate is counted, and a receipt that moves to "
-            "another merchant on reprocessing is not taken off the first "
-            "merchant's total."
+            "The receipt count is a running tally that can read high: a second "
+            "photograph of a purchase already stored is credited before it is "
+            "found to be a duplicate, and a receipt that moves to another "
+            "merchant on reprocessing is not taken off the first merchant's "
+            "total. Re-uploading the same image is not counted -- that "
+            "duplicate is caught before any merchant is resolved."
         ),
     )
 
