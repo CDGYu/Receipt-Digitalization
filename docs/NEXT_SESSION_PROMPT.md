@@ -265,10 +265,15 @@ Read the list.**]**
 ### C. Blocked on hardware, not on code
 
 **ISSUE-001.** No code change is pending — ADR-0002 makes the provider switch
-environment variables, and `docs/KNOWN_ISSUES.md`'s readiness check has already
-verified the hosted wiring builds, the timeout reaches the client and tool-use
-is on. **The user's plan (2026-08-11) is to test on a better-specified
-machine.**
+environment variables. **The readiness check this paragraph used to cite is
+about HOSTED wiring, and hosted providers are ruled out** (2026-08-14,
+Ollama-only); it is kept in ISSUE-001 as the record of what was tried, not as an
+instruction. **The remaining path is Ollama Cloud**, ISSUE-001's step 3.
+
+**"Blocked on hardware" is now the wrong heading for the local half.** Measured
+2026-08-18: `granite3.2-vision:2b` reads no more at `max_edge` 2048 than at 768
+— core accuracy identical — so it is **not blocked on a better machine, it is
+blocked on weights**. A better-specified box makes it faster, not correct.
 
 **Do not re-run the local baseline to see how bad it is.** Measured twice, seven
 weeks apart, and it got slower — 1896s for one receipt on 2026-08-11 against
@@ -1307,8 +1312,11 @@ pre-printed template rows (sibling of R052).
 
 ## 8. LAST — ISSUE-001
 
-Read `docs/KNOWN_ISSUES.md`, do not re-derive; a hosted tool-capable model is
-needed (rotate the echoed Gemini key first); until it runs, no measured accuracy
+Read `docs/KNOWN_ISSUES.md`, do not re-derive. **A model that can read a receipt
+is needed, and under the 2026-08-14 Ollama-only ruling that means Ollama Cloud**
+— this line said "a hosted tool-capable model" until 2026-08-18, which the
+ruling forbids. Rotate the echoed Gemini key regardless: that is security, and
+revoking is not reissuing. Until such a runtime exists, no measured accuracy
 numbers and no real precision claim.
 
 ---
@@ -1563,16 +1571,25 @@ re-derive it from scratch — and they are exactly the kind of prose ADR-0030
 says to check before acting on. **Where a recommendation and the item's own
 measured text disagree, the measurement wins.**
 
-1. **A hosted tool-capable provider + freshly rotated key** (ISSUE-001 → all
-   calibration, and Phase 6's success metric).
-   > **Recommended: do this first, and it is not close.** Ten of the other
-   > items are cosmetic or bounded; this one is why the project cannot state a
-   > real accuracy number. **Everything but the key is verified** — see
-   > ISSUE-001's "Readiness check, 2026-08-11": the hosted wiring builds, the
-   > timeout reaches the client, tool-use is on, and the golden labels still
-   > validate zero-findings. **Only a human can do the remaining step**, and
-   > the old Gemini key must be rotated regardless — it was echoed to a
-   > terminal, and the repo is public.
+1. **An Ollama runtime that can actually read a receipt, + a freshly rotated
+   key** (ISSUE-001 → all calibration, and Phase 6's success metric).
+   **[Retitled 2026-08-18.** This item said *"a hosted tool-capable provider"*
+   from 2026-08-11 until then, and **your own 2026-08-14 ruling forbids that**.
+   The item never stopped being the blocking one; it was pointing at a provider
+   class you had ruled out, in four places in this file and two in
+   `docs/MEMORY.md`.**]**
+   > **Recommended: still do this first, and it is still not close** — but the
+   > thing to do has changed twice. **Ollama Cloud is now the whole path**
+   > (ISSUE-001 step 3): 2026-08-18 measured the local model reading no more at
+   > `max_edge` 2048 than at 768, core accuracy identical, so "local primary
+   > with Cloud as fallback" has lost its local half. Two things about Cloud are
+   > **unverified** and one command each settles them: whether it offers a
+   > vision model strong enough, and whether it accepts a `tools` payload.
+   > **The recommendation's old evidence does not transfer** — ISSUE-001's
+   > "Readiness check, 2026-08-11" is about *hosted* wiring, and that ruling
+   > superseded it. **Only a human can sign in**, and the old Gemini key must be
+   > rotated regardless: it was echoed to a terminal, the repo is public, and
+   > revoking it is not reissuing it.
 2. ~~**The theme control.**~~ **DONE, merged 2026-08-11 — ADR-0038.** Three
    states (`system` removes the attribute, so ADR-0027's precedence rule stays
    reachable both ways), a `<select>` in the header beside sign-out, one
@@ -1690,7 +1707,9 @@ measured text disagree, the measurement wins.**
     > outline on white. Both are ADR-0027 token questions and they are cheapest
     > answered together.
 **If you want the short version:** **1 is the one that matters** — it gates all
-calibration and Phase 6's only metric, and everything but the key is verified.
+calibration and Phase 6's only metric, and it now means **Ollama Cloud**, not a
+hosted provider. *("Everything but the key is verified" stood here until
+2026-08-18; it described hosted wiring the ruling superseded.)*
 Say no to **4** and **6**. Leave **8**, **9** and **10** until 1 lands. **7 is
 not a tidy-up** — its values are in 11 commits of a public repo's history, so it
 is a rewrite-history / go-private / accept-it decision, and it is yours.
@@ -1796,11 +1815,13 @@ which nothing can observe.
 **Then** pick from the START HERE index, or answer the questions above and let
 that pick for you.
 
-**Item 1 in "Blocked on me" is still the one that matters**, and neither §0d nor
-§0f changed that: a hosted tool-capable provider and a freshly rotated key is
-what gates every real accuracy number. What §0d *did* change is that the number
-waiting on the other side of it is now worth reading. Everything but the key is
-verified — only a human can do the remaining step.
+**Item 1 in "Blocked on me" is still the one that matters**, and no milestone
+since has changed that — but **what it asks for has changed, and this paragraph
+named the forbidden thing until 2026-08-18.** Under the Ollama-only ruling the
+answer is **Ollama Cloud**, and 2026-08-18 removed the local alternative by
+measurement rather than by opinion. "Everything but the key is verified" was
+about *hosted* wiring and **does not transfer** — two things about Cloud are
+unverified, and one command each settles them.
 
 **The one thing §0f left open on purpose is closed (2026-08-13).**
 `scripts/verify.py`'s module docstring no longer claims `.github/workflows/` is

@@ -1713,8 +1713,14 @@ written before 2026-08-10 points at a different item. **No count is given**: two
 entries have been answered since, and a count here would have to be maintained
 against a list that lives somewhere else (ADR-0032 §3).
 
-1. **A hosted tool-capable provider + a freshly rotated key** — for ISSUE-001,
-   and therefore for all calibration.
+1. **An Ollama runtime that can actually read a receipt, + a freshly rotated
+   key** — for ISSUE-001, and therefore for all calibration. **Not a hosted
+   provider:** the 2026-08-14 ruling is Ollama-only, and this entry named a
+   hosted one until 2026-08-18. What is left is **Ollama Cloud** (step 3 of
+   ISSUE-001's ordered plan), because 2026-08-18 measured that the local model
+   is not a primary at any resolution. The key half is unchanged and is
+   security, not accuracy: **rotate** the exposed Gemini key regardless —
+   revoking it survives the ruling, reissuing it does not.
 2. **R060/R061 OCR grounding (P2.T2)** — model returns the text it read / a
    cheap OCR pass / drop the rules. Also gates bbox highlighting.
 3. ~~**Whether GitHub Actions should run again.**~~ **ANSWERED 2026-08-11: yes.
@@ -1933,12 +1939,18 @@ machine-printed template with every value filled in by hand.** Labelled in
 
 **ISSUE-001: run the first real baseline.** Parked by the user on 2026-07-28.
 Full diagnosis and exact resume steps are in **`docs/KNOWN_ISSUES.md`** — read
-that, do not re-derive it. Blocker: `granite3.2-vision:2b` on CPU takes ~262 s
-per call. **Fix: point it at a hosted tool-capable model** (the commented-out
-Gemini block in `.env`; rotate that key first). Until this runs there are **no
-real accuracy numbers**, no threshold calibration (P3.T6 / P8.T1), and no way
-to judge a prompt or rule change. **Do not treat any precision claim as
-measured.**
+that, do not re-derive it. Blocker: `granite3.2-vision:2b` does not read a
+receipt — **measured 2026-08-18 at `max_edge` 2048 with a 768 control, core
+accuracy identical at both**, so it is not a primary and no machine changes
+that. **The old fix written here — "point it at a hosted tool-capable model" —
+is SUPERSEDED by the 2026-08-14 Ollama-only ruling** and must not be
+re-proposed. What remains is **Ollama Cloud** (ISSUE-001's step 3), still
+unverified in two respects: whether it offers a vision model strong enough, and
+whether it accepts a `tools` payload. **Rotate the exposed Gemini key
+regardless** — that is security, and revoking is not reissuing. Until a runtime
+that can read exists there are **no real accuracy numbers**, no threshold
+calibration (P3.T6 / P8.T1), and no way to judge a prompt or rule change. **Do
+not treat any precision claim as measured.**
 
 ## Deferred follow-ups / known minors (non-blocking)
 
