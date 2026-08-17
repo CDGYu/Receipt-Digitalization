@@ -658,11 +658,11 @@ def _find_duplicate_content(
     nothing about *which shop*. The repository's NULL-merchant rule is left
     alone; the restriction lives here, next to the consequence.
 
-    **There is no reprocess skip here, and none is needed.** Its twin needs one
-    because a reprocessed original matches its own copy's image;
-    :func:`~receipts.persist.repository.find_duplicate_by_content` refuses to
-    offer any candidate that already resolves back to ``job.id``, which is the
-    same failure closed once, on the side that hands out the target.
+    **There is no reprocess skip here.** The failure its twin's skip exists for
+    -- a reprocessed original marked a duplicate of its own copy -- is closed on
+    the other side instead:
+    :func:`~receipts.persist.repository.find_duplicate_by_content` will not offer
+    a candidate that already resolves back to ``job.id``.
 
     **The keys are read off the row that was just written**, not derived a
     second time from the extraction. A second derivation is how the stored

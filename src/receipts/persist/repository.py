@@ -946,8 +946,8 @@ def find_duplicate_by_content(
 
     **``exclude_id`` drops the receipt itself and everything that resolves back
     to it** (:func:`resolves_back_to`), not merely the direct back-links its
-    phash twin drops. A copy still carries the merchant, date and total it was
-    merged over, so it matches the original on every key: without this a
+    phash twin drops. A copy merged *here* still carries the merchant, date and
+    total it was merged over, so it matches the original on every key: without this a
     reprocessed original is offered its own copy, and :func:`mark_duplicate`
     then raises, taking the run down at ``persist``. The exclusion is applied per
     candidate and the search continues past it, so a genuine duplicate sitting
@@ -1043,11 +1043,12 @@ def mark_duplicate(session: Session, new_id: uuid.UUID, existing_id: uuid.UUID) 
     row left to follow the chain to. Refusing the link keeps the original intact
     for the caller to report instead.
 
-    **The cycle refusal is an invariant, not a route callers are expected to
-    take.** :func:`find_duplicate_by_content` excludes candidates on the same
-    :func:`resolves_back_to` predicate, so a link built from what a finder
-    offered never reaches the raise; anything that does reach it was constructed
-    some other way.
+    **:func:`find_duplicate_by_content` cannot lead here.** It excludes
+    candidates on this very :func:`resolves_back_to` predicate, so the semantic
+    path never offers a target this then rejects -- which is what keeps the
+    refusal an invariant on that path rather than an ordinary outcome of
+    reprocessing. Said of that one caller only: :func:`find_duplicate_by_phash`
+    filters direct back-links in SQL and does not walk the chain.
 
     Flushes; does not commit.
     """
