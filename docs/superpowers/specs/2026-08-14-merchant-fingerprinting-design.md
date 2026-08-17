@@ -1,6 +1,7 @@
 # Phase 6 — merchant fingerprinting, hints and few-shot (P6.T1)
 
-**Status:** design approved 2026-08-14. Not yet implemented.
+**Status:** design approved 2026-08-14, and implemented. What actually shipped,
+including where it departed from this document, is recorded in ADR-0043.
 **Milestone:** P6.T1. **Spec:** §8.3 (hints), §6.2 (indexes), §18 (trust the image).
 **Blocked for measurement, not for construction:** no accuracy claim in this
 document can be validated until ISSUE-001's baseline runs.
@@ -92,8 +93,9 @@ unverified example teaches the model your errors."
 
 ## 4. What gets built
 
-**`src/receipts/merchants/registry.py`** — the only module that touches the
-`merchants` table.
+**`src/receipts/merchants/registry.py`** — the only module that creates a
+merchant or changes the names one answers to. `cli.py` writes the table too, but
+only `merchants.hints`.
 
 - `lookup(session, name_guess) -> Merchant | None` — normalize via
   `normalize_merchant_name`, match against normalized `canonical_name` or any
