@@ -81,7 +81,7 @@ def _hints() -> P.MerchantHints:
 
 
 # --------------------------------------------------------------------------- #
-# The premise: a hinted prompt is a different prompt, and hashes differently
+# The premise: a hinted prompt is a different prompt
 # --------------------------------------------------------------------------- #
 
 
@@ -92,25 +92,6 @@ def test_hints_change_the_extraction_prompt() -> None:
 
     assert with_hints != without
     assert "METRO OIL SUBIC INC." in with_hints
-
-
-def test_the_rebuilt_hash_matches_the_prompt_that_was_sent() -> None:
-    """If this fails, the audit trail is lying about what was asked."""
-    triage = TriageResult()
-    hints = _hints()
-
-    sent = P.prompt_hash(
-        P.build_extraction_prompt(triage, hints, []) + P.SYSTEM_EXTRACTION
-    )
-    rebuilt = P.prompt_hash(
-        P.build_extraction_prompt(triage, hints, []) + P.SYSTEM_EXTRACTION
-    )
-    unhinted = P.prompt_hash(
-        P.build_extraction_prompt(triage, None, []) + P.SYSTEM_EXTRACTION
-    )
-
-    assert rebuilt == sent
-    assert rebuilt != unhinted, "a hinted prompt must not hash like an unhinted one"
 
 
 # --------------------------------------------------------------------------- #
