@@ -6,32 +6,20 @@ continuity protocol itself — what lives where, and why this snapshot must be
 verified rather than trusted — is **ADR-0019**, extended by **ADR-0021** (whose
 2026-08-02 dated correction widened the freshness check after a docs-only task
 proved invisible to it).
-Last updated: **2026-08-15**, by the session that built Phase 6 merchant
-fingerprinting and **left it on a branch rather than merging it**. That session
-also verified the previous pair against the repo and found it false in four
-places, ruled Ollama-only and high-accuracy as project constraints (recorded in
-`docs/KNOWN_ISSUES.md`'s ISSUE-001 ruling block), and wrote **ADR-0043**.
+Last updated: **2026-08-18**, by the session that **finished** Phase 6 merchant
+fingerprinting: it reviewed the branch's one unreviewed task, ran the
+whole-branch review, closed one fix wave and one scoped re-review, corrected
+**ADR-0043**, and merged by true fast-forward.
 **No count of refreshes is written here** — it is a number that moves without its
 sentence changing, which is review standard 5.
 
-**Freshness anchor `ce9782a`** — the last commit that is not this handoff pair.
+**Freshness anchor `9a3ffa2`** — the last commit that is not this handoff pair.
 
-**A BRANCH IS IN FLIGHT, and that changes how you run the command below.** This
-pair is committed on **`feat/merchant-fingerprinting`, not on `main`** —
-deliberately: §0e's lesson was that committing the pair to `main` mid-milestone
-diverges the two and forces a replay instead of a fast-forward. The branch carries
-the pair onto `main` when it lands.
-
-**So the command below is written for the merged state and is the wrong command
-today. While the branch is unmerged, run it with `HEAD` in place of `main`** —
-same anchor, same pathspec, only the far end changes.
-
-That substitution is not papering over a mistake. `tests/test_freshness_check.py`
-parses the anchor out of a `<seven-hex>..main` range and fails on any other shape,
-so a second literal command here would redden the very gate this stamp exists to
-satisfy — **which it did, and was caught by running it before committing rather
-than after.** The moment the branch fast-forwards onto `main`, the command below
-becomes exactly right and this paragraph should be deleted.
+**Nothing is in flight.** The paragraph that stood here between 2026-08-15 and
+this refresh — telling you to substitute `HEAD` for `main` while a branch was
+unmerged — is **deleted rather than kept with a caveat**, on that paragraph's own
+instruction, because the branch landed. The command below is now exactly right as
+written.
 **`git rev-parse main` will be AHEAD of it**, by the pair commit and nothing
 else: a stamp cannot name the commit that writes it. The test is a command,
 not a commit and not a count:
@@ -100,22 +88,38 @@ answer.)*
 
 ## Snapshot
 
-- **⚠ A BRANCH IS IN FLIGHT — the first to survive a session boundary here.**
-  `git branch --no-merged main` **will name `feat/merchant-fingerprinting`**, and
-  that is correct. Every earlier version of this bullet said it must name nothing;
-  that instruction is **suspended until the branch lands**, and restoring it is
-  part of the merge. Run the command rather than believing any sentence — this
-  bullet read "NO BRANCH IN FLIGHT" for three days while one existed, in 2026-08.
-- **Phase 6 merchant fingerprinting is BUILT and NOT MERGED** (2026-08-15,
-  `feat/merchant-fingerprinting`, cut from `main` at `8f0b413`). Seven tasks.
-  **Tasks 1–6 each had a task review, a fix round and a scoped re-review. Task 7
-  has no review at all** — its implementer was cut off mid-work; the controller
-  verified the diff was green and committed it saying so. **No whole-branch review
-  has run, so this is not merge-eligible.** Decision: **ADR-0043**, which
-  **corrects ADR-0011**. Ledger:
+- **`git branch --no-merged main` must name NOTHING.** The suspension of this
+  instruction, which stood while `feat/merchant-fingerprinting` was in flight, is
+  over. Run the command rather than believing any sentence — this bullet read
+  "NO BRANCH IN FLIGHT" for three days while one existed, in 2026-08, and then
+  announced one for three days after it landed would have been the same defect
+  in the other direction.
+- **Phase 6 merchant fingerprinting is COMPLETE AND MERGED** (2026-08-18, true
+  fast-forward `8f0b413` → `9a3ffa2`, **thirty commits, single parent each, zero
+  merge commits**). `feat/merchant-fingerprinting` is kept at its merge point and
+  pushed. Decision: **ADR-0043**, which **corrects ADR-0011** and now carries its
+  own `## Correction (2026-08-18)`. Ledger:
   `.superpowers/sdd/2026-08-14-merchant-fingerprinting/progress.md` (gitignored —
-  open by path). `docs/NEXT_SESSION_PROMPT.md` §0h is the ordered list of what
-  remains.
+  open by path).
+  **What the close cost, and it is the reason to keep running it:** the
+  whole-branch review found **a behavioural regression this branch introduced**
+  that every gate was green on — reprocessing an original that had a semantic
+  duplicate failed at `persist` **every time**, losing the extraction the run had
+  just paid for, because `find_duplicate_by_content` offered the original its own
+  copy and `mark_duplicate` refused the cycle by raising. `_find_duplicate_image`
+  carries two defences against exactly that and **its own docstring names the
+  failure**; the content path shipped with neither. Closed by one predicate at
+  both ends (`resolves_back_to`), not two rules that must agree.
+  **And the fix wave then wrote three new false claims while closing old ones** —
+  one of them restating a clause it had been explicitly forbidden to write, with
+  the number filed off. Two were caught by the wave's own self-audit, three more
+  by the scoped re-review. **Every one was closed by deletion.**
+- **`merchants.receipt_count` is credited for a duplicate caught after
+  extraction, and NOT for a re-uploaded image** — the image path returns before
+  any merchant is resolved. Three documents said the opposite in three different
+  wordings; all three are corrected. If you are about to write a sentence about
+  which duplicates inflate that count, derive it from `registry.increment`'s one
+  call site rather than from any prose.
 - **Browser-pass I6, I8 and I9 are CLOSED — COMPLETE AND MERGED** (2026-08-14,
   true fast-forward `d5be9da` → `f92b497`, thirty-three commits, single parent
   each, zero merge commits). `feat/browser-pass-i6-i8-i9` is kept at its merge
@@ -1812,7 +1816,9 @@ the "Write routes (P4.T5)" banner was wrong once a read route consumed it.
    that every gate was green on. See
    `docs/superpowers/specs/2026-08-05-review-ui-browser-pass.md`, ADR-0027's
    dated note, and ADR-0029.
-3. **Phase 6** — merchants & few-shot. **Phase 7** — self-consistency wired into
+3. ~~**Phase 6** — merchants & few-shot.~~ **BUILT AND MERGED 2026-08-18**
+   (ADR-0043); its accuracy metric is still blocked on ISSUE-001, so it is built
+   and not validated. **Phase 7** — self-consistency wired into
    the pipeline, gated on `triage.is_handwritten`. **Phase 8** — calibration and
    eval-harness honesty.
 4. Still open from earlier phases (see the prompt's §5).
@@ -2425,7 +2431,13 @@ with an entry point gets run from outside the repository.
   inventory, §15 milestones, §16 eval, §17 config, **§18 traps (PAN)**, §19 DoD.
 - `docs/NEXT_SESSION_PROMPT.md` — the ordered task list and reading order.
 - `IMPLEMENTATION_PLAN.md` · `README.md` (§5 design decisions) · `VLM_AND_DATA.md`
-- **`docs/KNOWN_ISSUES.md`** — ISSUE-001 with its diagnosis and resume steps.
+- **`docs/KNOWN_ISSUES.md`** — **two** issues now. ISSUE-001 with its diagnosis
+  and resume steps, and **ISSUE-002** (added 2026-08-18): a repair attempt's
+  `extraction_runs.prompt_hash` names a prompt that was never sent, because
+  `_attempt_prompt_hash`'s repair branch omits the system prompt that `repair()`
+  actually sends. **Pre-existing, deliberately not fixed** — fixing it changes
+  the recorded hash for every historical repair row. It lives here rather than in
+  the handoff precisely because the handoff is rewritten every session.
 - **`docs/adr/`** — **no range is written here; derive it.** Compare the two
   answers **to each other** rather than to any number in this file:
   `ls docs/adr/*.md | grep -v README | wc -l` (how many ADRs) and

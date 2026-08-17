@@ -36,7 +36,7 @@ sentence (ADR-0028 §1):
 ```
 git status --short                                # must be empty
 git log --oneline -6
-git branch --no-merged main                       # 2026-08-15: names feat/merchant-fingerprinting
+git branch --no-merged main                       # must name NOTHING
 git rev-parse main                                # merged tip
 git ls-remote --heads origin main                 # authoritative on what is pushed
 git log --oneline refs/remotes/origin/main..main  # what the pending push would send
@@ -44,18 +44,17 @@ git log --oneline refs/remotes/origin/main..main  # what the pending push would 
 
 ## What last merged, and how to check what is pushed.
 
-**Browser-pass I6, I8 and I9 merged by true fast-forward on 2026-08-14** —
-`d5be9da` → `f92b497`, thirty-three commits, single parent each, zero merge
-commits. **No ADR was written**, though three existing ones gained dated
-corrections (**0024**, **0027**, **0038**), and **nothing under the top-level
-`src/` changed** — the code it touched is all under `frontend/src/`. §0g is the
-record.
+**Phase 6 merchant fingerprinting merged by true fast-forward on 2026-08-18** —
+`8f0b413` → `9a3ffa2`, thirty commits, single parent each, zero merge commits.
+Decision: **ADR-0043**, which **corrects ADR-0011** and carries its own
+`## Correction (2026-08-18)`. **§0h is the record**, and it is worth reading even
+if you are not touching merchants: the close found a behavioural regression that
+all five gates were green on.
 
-*(This paragraph named the 2026-08-13 dangling-citation repair as the last merge
-until 2026-08-14 — it did not move when the browser-pass branch landed, in the
-same refresh that carried §0g. Its content is now in §0f: `e698aca` →
-`29a5a88`, eighteen commits, **ADR-0042**, which **corrects ADR-0032
-decision 3**.)*
+*(This paragraph has twice failed to move when a branch landed — it named the
+2026-08-13 repair until 2026-08-14, and the 2026-08-14 browser pass until this
+refresh. Those are §0f and §0g. **The failure mode is a paragraph nobody thinks
+to edit because it was true the last time they read it.**)*
 
 **Every push is on a one-time authorization that the push consumes, and the
 next `main` push needs its own fresh ask.** **No count and no list of past
@@ -86,13 +85,11 @@ git log --oneline <STAMP>..main -- ":(top,exclude)docs/MEMORY.md" ":(top,exclude
 it was written. **Read the stamp for the SHA** — it is not written here, because
 a SHA in two places is a SHA that can disagree with itself.
 
-**While `feat/merchant-fingerprinting` is unmerged, run that command with `HEAD`
-in place of `main`.** The pair is committed on the branch, not on `main`, so
-`main`'s copy is older rather than stale. The stamp explains why it cannot be
-written the other way round without reddening `tests/test_freshness_check.py`,
-which parses its anchor out of a `<seven-hex>..main` range.
+*(The `HEAD`-for-`main` substitution that stood here while a branch was in flight
+is **deleted**, not kept with a caveat. Nothing is unmerged; the stamp's command
+is right as written.)*
 
-**Gates on `main` after the merge, controller-run: `python scripts/verify.py` —
+**Gates on `main` at the merged tip, controller-run: `python scripts/verify.py` —
 all five PASS.** **No pytest count and no delta is given** — the number moves
 with every milestone and an earlier version of this line's did. Run it.
 
@@ -151,16 +148,18 @@ second source** — each row names where the detail lives, and where a row and i
 section disagree, **the section wins** (ADR-0030: a finding is a claim, and so
 is a summary of one).
 
-### There are TWO tracks now, and one of them is half-finished
+### One track is closed. The other has not moved in a week.
 
 | track | state | where |
 |---|---|---|
-| **T1 — finish Phase 6** | **A branch is in flight.** Built, 7 tasks, Task 7 unreviewed, no whole-branch review, not merged. | **§0h** (ordered list R1–R4), ADR-0043 |
-| **T2 — make accuracy measurable** | Blocked on hardware and one user action. Nothing in T1 can be validated until this moves. | §C below, `docs/KNOWN_ISSUES.md` ISSUE-001 |
+| ~~**T1 — finish Phase 6**~~ | **CLOSED 2026-08-18.** Merged by true fast-forward, nothing carries over. | **§0h** is the record, ADR-0043 |
+| **T2 — make accuracy measurable** | Blocked on hardware and one user action. **Phase 6 is now built and unvalidated because of it.** | §C below, `docs/KNOWN_ISSUES.md` ISSUE-001 |
 
-**T1 is the one with momentum and the one that rots.** An unmerged branch with an
-unreviewed task on it is the most perishable state this project has ever ended a
-session in. Do §0h first unless you have a reason not to.
+**T2 is the only track with anything in it, and it has been blocked on the same
+user action since 2026-08-11.** Phase 6 shipping did not change that — it added a
+second thing that cannot be measured. Read §0h for what the close cost, then pick
+from section A, or answer the questions under "Blocked on me" and let that pick
+for you.
 
 **T2's ordered steps, all recorded in ISSUE-001's 2026-08-14 ruling block:**
 
@@ -204,7 +203,10 @@ Run the commands in the block above. Then read, in this order:
 carries the cross-session lessons; **`docs/KNOWN_ISSUES.md` is ISSUE-001's home
 and is not to be re-derived** (ADR-0039 **§1** for the accuracy figures, §3 for
 the timing — this pointer said §3 for both until 2026-08-12, and §3 is scoped to
-the timing alone).
+the timing alone). **It holds a second issue as of 2026-08-18: ISSUE-002**, a
+repair attempt's `extraction_runs.prompt_hash` naming a prompt that was never
+sent. Pre-existing, deliberately not fixed, and put there rather than here
+**because this file is rewritten every session and that one is not.**
 
 ### A. Needs no ruling — start here if you want to build something
 
@@ -419,10 +421,15 @@ read route (**ADR-0031**) and the CLI `--limit` bound all shipped. §1.6's
 than renumbered to the front because renumbering ages every citation of §0a–§0c,
 and that has already happened twice in this file's history.)*
 
-## 0h. Phase 6 merchant fingerprinting — BUILT, IN FLIGHT, NOT MERGED (2026-08-15).
+## 0h. Phase 6 merchant fingerprinting — DONE, MERGED, PUSHED as a branch (2026-08-18).
 
-**Branch `feat/merchant-fingerprinting`, cut from `main` at `8f0b413`.** Seven
-tasks, all committed. **This is the work to finish.**
+**Nothing carries over.** True fast-forward `8f0b413` → `9a3ffa2`, **thirty
+commits, single parent each, zero merge commits**. `feat/merchant-fingerprinting`
+is kept at its merge point and pushed. Decision: **ADR-0043**, which **corrects
+ADR-0011** and now carries its own `## Correction (2026-08-18)`.
+
+**`main` is NOT pushed as of this refresh — run the command, do not believe this
+sentence.** `git log --oneline refs/remotes/origin/main..main` is the answer.
 
 **Read in this order:**
 
@@ -441,39 +448,53 @@ tasks, all committed. **This is the work to finish.**
    **Gitignored — open it by path.** Every ruling, every deferred minor, and what
    each costs if wrong. Nothing in it is findable by searching the tracked tree.
 
-### What remains, in order
+### The behavioural defect, and it beat every gate
 
-**R1. Review Task 7.** It is the only task on this branch with no review. Commit
-`c36b68f`, files `src/receipts/cli.py` and `tests/test_cli_reports.py`. It made
-`receipts merchants list` print the real `receipt_count`, deleted four claims
-saying nothing increments it, and **replaced** rather than inverted the test whose
-*name* asserted the opposite. Its replacement description discloses that the count
-can read high. Verify that disclosure is accurate, and that
-`git grep -n "_RECEIPT_COUNT_NOT_TRACKED"` returns only plan-document hits.
+**Reprocessing an original that had a semantic duplicate failed EVERY time**, and
+threw away the extraction the run had just paid for. Measured:
+`status=needs_review`, `failed_stage='persist'`, `extraction_runs` did not grow,
+repeatable, recoverable only by deleting the copy's row — for which there is no
+command. Reachable with **no `--force`**: `cmd_reprocess` always permits
+`pending`, `needs_review` and `rejected`.
 
-**R2. Whole-branch review, on the strongest model.** None has run. Point it at the
-ledger's deferred-minor and parked lines so it can triage which must be fixed
-before merge. **Carry these to it explicitly:**
+The mechanism is the part worth carrying. `_find_duplicate_image` has **two**
+defences against exactly this — a reprocess skip on `_ALREADY_EXTRACTED`, and a
+back-link filter in `find_duplicate_by_phash` — **and its own docstring names the
+failure and says "neither defence is load-bearing alone."** The content path
+shipped with **neither**. The design and the plan both cited `mark_duplicate`'s
+`ValueError` as a *safety property*; it is one, and it takes the persist stage
+down instead of corrupting the chain. Neither document treated the raise as a
+control-flow path.
 
-- **The pre-existing defect this branch found but did not fix.**
-  `_attempt_prompt_hash`'s **repair** branch hashes `build_repair_prompt(...)`
-  alone, while `repair()` actually sends `system=P.SYSTEM_EXTRACTION` — and the
-  extract branch *does* append it. Same "recorded hash names a prompt that was
-  never sent" class as ADR-0043 decision 8, in the same function, **present on
-  `main` before this branch existed.** `re_extract` is correct.
-- `run_receipt` — the `build_eval_pipeline` path — still extracts **unhinted**, so
-  eval measures a different prompt than production sends.
-- `session.rollback()` in the merchant stage is entirely unpinned; removing it
-  passes the full suite.
-- The design doc's own `**Status:** … Not yet implemented` line is now stale.
+**Closed by one predicate at both ends**, not two rules that must agree:
+`resolves_back_to` is the chain walk lifted out of `_reject_cycle`;
+`find_duplicate_by_content` refuses to *offer* what `mark_duplicate` would refuse
+to *link*. The walk is transitive on purpose — a one-hop filter matching the
+phash twin **fails the chain test**, which is pinned. **`find_duplicate_by_content`'s
+`exclude_id` contract changed** and ADR-0043's correction is where that is
+recorded; whether the phash side should be widened to match is **not decided**.
 
-**R3. Fix wave, then ONE scoped re-review.** Then merge by true fast-forward, and
-**ask before pushing `main`** — every `main` push is a one-time authorization.
+### What the close cost, and it is the argument for running it
 
-**R4. Refresh this pair last and alone** (ADR-0033), and restore the "must name
-nothing" instruction to `git branch --no-merged main` once the branch has landed.
+**No gate saw any of it.** All five were green throughout, including while the
+regression was live.
 
-### What the branch does NOT do, so nobody looks for it
+**The fix wave wrote three new false claims while closing old ones.** One
+restated a clause it had been **explicitly forbidden** to write, with the number
+filed off: told not to write about re-photographs or Hamming distance, it
+produced *"a second photograph of a purchase already stored is credited"* — true
+only if that photograph lands more than five bits away on the perceptual hash.
+The wave's self-audit caught two of its own; the scoped re-review caught three
+more. **Every one was closed by deletion**, which is now five milestones running.
+
+**Two of the six new tests are sole witnesses** across the whole suite — the
+dedupe fall-through and the `_resolve_merchant` rollback. Before this milestone
+that rollback was load-bearing and pinned by **nothing**: deleting it left 1157
+green while producing the row of nulls its docstring promises cannot happen, and
+the test whose *name* claimed the guarantee patched `register` to raise **before
+any database work**, so it never reached the handler.
+
+### What this milestone does NOT do, so nobody looks for it
 
 - **No accuracy is validated.** Nothing here is measurable until ISSUE-001 runs.
   "Hints improve extraction" is a hypothesis, and ADR-0043 says so.
@@ -483,7 +504,7 @@ nothing" instruction to `git branch --no-merged main` once the branch has landed
 - **No `fingerprint.py`.** `normalize_merchant_name` already existed.
 - **`image_phash`-based merchant matching** is explicitly out of scope.
 
-### Three things that will bite you
+### Five things that will bite you
 
 - **A populated `merchant_id` does NOT mean the TIN was read.** The name-lookup
   fallback populates it too. Semantic dedupe keys off that column.
@@ -492,6 +513,15 @@ nothing" instruction to `git branch --no-merged main` once the branch has landed
   the *image* path; citing it here cites the wrong path.
 - **Same-merchant, same-date, same-total repeat purchases WILL merge.** Inherent
   to the key. Survivable only because the duplicate keeps its extraction.
+- **`merchants.receipt_count` is credited for a duplicate caught AFTER
+  extraction, and never for a re-uploaded image** — the image path returns before
+  any merchant is resolved. Three documents claimed otherwise in three different
+  wordings. **Derive this from `registry.increment`'s one call site**, not from
+  prose, including this bullet.
+- **The two duplicate finders now refuse different sets.**
+  `find_duplicate_by_phash` filters direct back-links in SQL;
+  `find_duplicate_by_content` walks the chain transitively. That asymmetry is
+  deliberate and recorded, not an oversight to tidy.
 
 ## 0g. Browser-pass I6, I8 and I9 are CLOSED — DONE, MERGED and PUSHED (2026-08-14).
 
@@ -1196,10 +1226,10 @@ branch.
    wrapper exists, in the user scripts directory, which is not on `PATH`. Never
    a packaging defect.** See §1.6 itself and ADR-0035's closing note.
 
-## 3. Phase 6 — merchants & few-shot (P6.T1) — **BUILT, IN FLIGHT, NOT MERGED**
+## 3. Phase 6 — merchants & few-shot (P6.T1) — **BUILT AND MERGED 2026-08-18**
 
-**This section described work to do. It is now work that exists on a branch.**
-See **§0h**, which is the live record; **ADR-0043** is the decision; the design is
+**This section described work to do, then work on a branch. It is now shipped.**
+See **§0h**, which is the record; **ADR-0043** is the decision; the design is
 `docs/superpowers/specs/2026-08-14-merchant-fingerprinting-design.md` and the plan
 is `docs/superpowers/plans/2026-08-14-merchant-fingerprinting.md` — **read the
 plan's dated correction blocks, because two of its own code listings were wrong.**
@@ -1662,63 +1692,52 @@ and was measured not to need it.)*
 
 ## Today's goal
 
-# ⚠ A BRANCH IS IN FLIGHT. This is the first time that has been true across a session boundary.
+# NOTHING IS IN FLIGHT. Phase 6 merged on 2026-08-18.
 
-**`feat/merchant-fingerprinting` is cut, built, and NOT merged.** Every previous
-version of this document told you `git branch --no-merged main` **must name
-nothing**. That instruction is suspended: it will name this branch, and that is
-correct rather than a defect. **Read §0h before anything else.**
+**`git branch --no-merged main` must name nothing again.** That instruction was
+suspended from 2026-08-15 while `feat/merchant-fingerprinting` was open; it is
+restored. Run it rather than believing this sentence — it has been wrong in
+**both** directions, announcing no branch while one existed for three days.
 
-**You are not starting a milestone. You are finishing one.** Tasks 1–6 are
-complete and each had a task review, a fix round and a scoped re-review. **Task 7
-is committed but was never reviewed** — its implementer was cut off by a
-connection drop after editing and before committing; the controller verified the
-diff, ran the suite, and committed it saying so in the commit body. **No
-whole-branch review has run.** The milestone is not merge-eligible.
+**You are starting, not finishing.** The close ran in full: Task 7 reviewed, a
+whole-branch review on opus, one fix wave, one scoped re-review, one targeted
+correction of the defects that re-review found in the fix wave's own prose, then
+a true fast-forward.
 
 **Run these first, and believe them over this document:**
 
 ```
-git branch --show-current                         # expect feat/merchant-fingerprinting
+git branch --show-current                         # expect main
 git status --short                                # must be empty
-git branch --no-merged main                       # WILL name feat/merchant-fingerprinting
-git log --oneline main..feat/merchant-fingerprinting
+git branch --no-merged main                       # must name NOTHING
+git log --oneline refs/remotes/origin/main..main  # what a push would send
 python scripts/verify.py                          # background it; exceeds a 2-min timeout
 ```
 
-**Last known good, controller-run 2026-08-15 at `c36b68f`: `python -m pytest` →
-1157 passed, `python -m ruff check .` clean.** Re-run rather than trusting it.
+**Last known good, controller-run 2026-08-18 at `9a3ffa2`: all five gates PASS.**
+**No pytest count is written here** — it moved twice during this milestone alone.
+Re-run rather than trusting it.
 
-**What that verification found is the case for doing it again. No count is given
-— the list is the evidence, and an earlier draft of this very sentence
-double-counted the push state as two findings.** Outright false: the push state
-(said unpushed, was pushed); the three screens said to be unseen, in every place
-that said it; "Seven live items" in section B, where the live set was nine; and a
-paragraph asserting the freshness check **omits `scripts/`**, which
-**ADR-0021's own correction had already falsified** and which
-`docs/MEMORY.md`'s stamp — cited as its authority — contradicts in as many
-words. Stale rather than false: "what last merged" still named 2026-08-13, and
-§1.4 still listed three closed findings as open. Too strong: I5's "nobody has
-looked at this screen".
-
-**None of it was visible to any gate.** All five were green, and both gates on
-this document's own honesty passed throughout — they check that a citation
-resolves and that the last refresh was *sound*, never that a sentence is *true*.
-A person running the commands is still the only thing that catches this.
-
-**Nothing carries over about the push, and the sentence that used to sit here is
-the reason to run the command.** It read *"`main` was merged but **not pushed**…
-the pending-push list is long… **Ask, then push**"* — true when written on
-2026-08-14, and false a few hours later when that push was authorized and made.
-It rotted in place, inside a file whose own header warns that this exact sentence
-has carried the wrong push state twice before, in both directions. **Every `main`
-push is still a one-time authorization the push consumes**, so the next one needs
-its own fresh ask; whether anything is waiting is
-`git log --oneline refs/remotes/origin/main..main` and nothing else.
+**`main` was NOT pushed by the session that wrote this.** A push would send this
+milestone's commits **and** five that were already pending before the branch was
+cut. **Every `main` push is a one-time authorization the push consumes**, so it
+needs its own fresh ask — and the command above, not this paragraph, is what says
+whether anything is waiting. The sentence that used to sit here got the push
+state wrong twice, in both directions, inside a file whose own header warns about
+exactly that.
 
 **Run the freshness command in `docs/MEMORY.md`'s stamp before trusting any of
 this.** If it lists anything, the tree moved after this was written — re-run
-`python scripts/verify.py` and re-read §0g before acting.
+`python scripts/verify.py` and re-read §0h before acting.
+
+**What this milestone proves about that instruction, more sharply than any
+previous one:** the close found **a behavioural regression the branch itself
+introduced** — reprocessing an original that had a semantic duplicate failed
+every time and destroyed the extraction it had just paid for — and **all five
+gates were green while it was live**. Then the fix wave closing it wrote three
+new false claims, one of them restating a clause it had been explicitly forbidden
+to write. §0h is the record. **No gate in this repository reads a sentence for
+truth.**
 
 **And the sharpest thing §0g leaves you is not a task, it is a warning.** That
 milestone's only behavioural defect passed all five gates, five task reviews and
