@@ -25,7 +25,7 @@ else: a stamp cannot name the commit that writes it. The test is a command,
 not a commit and not a count:
 
 ```
-git log --oneline ce9782a..main -- ":(top,exclude)docs/MEMORY.md" ":(top,exclude)docs/NEXT_SESSION_PROMPT.md"
+git log --oneline 9a3ffa2..main -- ":(top,exclude)docs/MEMORY.md" ":(top,exclude)docs/NEXT_SESSION_PROMPT.md"
 git log --oneline refs/remotes/origin/main..main   # what a push would send
 git ls-remote --heads origin main                  # authoritative on what is pushed
 git branch --no-merged main                        # must name NOTHING
