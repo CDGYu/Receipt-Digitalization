@@ -79,6 +79,50 @@ re-evaluated.
 > it changes what "the provider" means, which **ADR-0002** currently treats as a
 > single runtime choice.
 
+### Correction (2026-08-18) — granite DOES declare tool support
+
+**The ruling block above says granite "declares no tool support, so it cannot use
+the schema-constrained path either." That is false as measured today.** The same
+claim has a second copy in the source: the comment above `_TOOLS_OFF_BY_DEFAULT`
+in `src/receipts/extract/clients/factory.py` names `granite3.2-vision` among the
+models that do "not declare the capability". **That copy is still there** — this
+correction records it rather than reaching into `src/` to change it.
+
+Measured against the running server, which is the anchor for the claim:
+
+    curl -s http://localhost:11435/api/tags
+    -> granite3.2-vision:2b   capabilities: ['completion', 'tools', 'vision']
+       (2.5B, Q4_K_M, context 16384)
+
+**What this establishes:** the model advertises `tools` in Ollama's own model
+metadata, beside `vision` and `completion`.
+
+**What it does NOT establish**, none of which may be assumed downstream:
+
+- **That `/v1/chat/completions` accepts and honours a `tools` payload for this
+  model.** The capability list and the OpenAI-compat shim are different surfaces;
+  only sending such a request settles it.
+- **That tool-use would improve the extraction.** A 2.5B model shown an
+  illegible image is not rescued by a schema. Tool-use constrains the *shape* of
+  an answer, not whether the model can read.
+- **That `_TOOLS_OFF_BY_DEFAULT` should change.** Its *behaviour* is a safe
+  default whatever reason is written beside it. The defect established here is
+  the stated reason, not necessarily the choice.
+
+**Whether the claim was ever true is not determinable from here**, and it is
+deliberately not asserted either way. Ollama reports capabilities per model, and
+both the server and the model tag have moved since the sentence was written (the
+pulled blob reports `modified_at` 2026-07-28). It may have been accurate then and
+rotted, or been wrong from the start. Recorded as **false now, with the command**
+— calling a stale claim "never true" is a mistake this project has already made
+in the other direction.
+
+**Consequence for step 4 of the ordered plan above** (*"Set `VLM_USE_TOOLS=true`"*):
+it is more plausible than the ruling implies, and still untested. The experiment
+that settles it is one triage call with tools on — the ruling's stated fear is a
+hard 400 on exactly that call, so the cheapest test produces the evidence either
+way.
+
 ### Goal
 
 Run `python -m eval.run_baseline` over the three hand-verified golden receipts and
