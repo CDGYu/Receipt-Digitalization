@@ -25,7 +25,8 @@ repair round arguing with a decision the normalizer already made correctly.
 
 **Every stage is wrapped, and the stage name travels on the exception.** The
 stages are a declared tuple, `STAGES = ("load", "preprocess", "dedupe", "triage",
-"extract", "normalize", "score", "persist")`. An internal `_StageFailure` carries
+"merchant", "extract", "normalize", "score", "persist")` — nine as of the
+correction below, eight when this was decided. An internal `_StageFailure` carries
 the failing stage; an inner one passes through the wrapper untouched so the
 *innermost* stage wins. This matters because normalization runs inside the repair
 loop rather than after it — without the tag, a normalizer failure would be
@@ -102,6 +103,13 @@ call sites to keep in step.
   would silently never fire — the same shape of bug ADR-0007 records.
 
 ## Correction (2026-08-14)
+
+**`STAGES` gained a ninth entry.** `"merchant"` was inserted between `"triage"`
+and `"extract"` in `bb75fff`; the tuple quoted under Decision was accurate at
+`8f0b413` and now reads as the current nine. Recorded rather than left to the
+code because these strings are operator vocabulary — they reach
+`review_tasks.reason` and the logs — and `merchant` is a stage a run can fail at,
+so `reason = "merchant"` is now something a queue can contain.
 
 The consequence above — **"Semantic (merchant + date + total) dedupe is
 deliberately not wired in"** — is closed. It is wired, inside `_persist_outcome`
