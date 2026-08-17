@@ -165,9 +165,39 @@ unchanged.
   not build it.
 - `image_phash`-based merchant matching, and Phase 7 self-consistency.
 
-## Note (2026-08-15) — the milestone is not merged
+## Note (2026-08-15) — the milestone was not yet merged
+
+*(Closed by the correction below. Kept as written.)*
 
 `feat/merchant-fingerprinting` is **in flight**, not merged. Tasks 1–6 each had a
 task review and a scoped re-review; **Task 7 has neither** — its implementer was
 cut off by a connection drop. No whole-branch review has run. Read
 `docs/NEXT_SESSION_PROMPT.md` for what remains before this is merge-eligible.
+
+## Correction (2026-08-18) — the close ran, and it changed a repository contract
+
+The note above is closed: Task 7 was reviewed, a whole-branch review ran, and one
+fix wave and one scoped re-review followed it.
+
+**Decision 10's closing sentence — "The repository's contract is unchanged" — is
+scoped to the NULL-merchant rule, and that rule still holds.**
+`find_duplicate_by_content` still permits a NULL `merchant_id` to match other
+unresolved rows, and the pipeline is still the stricter side.
+
+**But this branch did change that function's `exclude_id` contract**, in
+`31a1491`. `exclude_id` now drops the receipt itself *and every candidate that
+resolves back to it*, transitively, through a `resolves_back_to` predicate lifted
+out of `_reject_cycle`. Without it, reprocessing an original that had a semantic
+duplicate was offered its own copy; `mark_duplicate` refused the cycle by
+raising; and the `ValueError` took the run down at the `persist` stage, losing
+the extraction that run had just paid for. No command could recover it — only
+deleting the copy's row.
+
+One predicate now decides both ends: the finder refuses to offer what the writer
+would refuse to link. That is what makes `mark_duplicate`'s raise an invariant
+rather than an ordinary outcome of a reprocess.
+
+**The two finders now refuse different sets.** `find_duplicate_by_phash` filters
+direct back-links in SQL and does not walk the chain; `find_duplicate_by_content`
+walks it. Whether the phash side should be widened to match is **not decided
+here**.
