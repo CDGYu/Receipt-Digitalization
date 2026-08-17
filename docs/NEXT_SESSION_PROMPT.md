@@ -421,15 +421,16 @@ read route (**ADR-0031**) and the CLI `--limit` bound all shipped. §1.6's
 than renumbered to the front because renumbering ages every citation of §0a–§0c,
 and that has already happened twice in this file's history.)*
 
-## 0h. Phase 6 merchant fingerprinting — DONE, MERGED, PUSHED as a branch (2026-08-18).
+## 0h. Phase 6 merchant fingerprinting — DONE, MERGED and PUSHED (2026-08-18).
 
 **Nothing carries over.** True fast-forward `8f0b413` → `9a3ffa2`, **thirty
 commits, single parent each, zero merge commits**. `feat/merchant-fingerprinting`
 is kept at its merge point and pushed. Decision: **ADR-0043**, which **corrects
 ADR-0011** and now carries its own `## Correction (2026-08-18)`.
 
-**`main` is NOT pushed as of this refresh — run the command, do not believe this
-sentence.** `git log --oneline refs/remotes/origin/main..main` is the answer.
+**No `main` push state is recorded here** — see "Today's goal" for why the claim
+was removed rather than updated. `git log --oneline refs/remotes/origin/main..main`
+is the answer.
 
 **Read in this order:**
 
@@ -1718,13 +1719,13 @@ python scripts/verify.py                          # background it; exceeds a 2-m
 **No pytest count is written here** — it moved twice during this milestone alone.
 Re-run rather than trusting it.
 
-**`main` was NOT pushed by the session that wrote this.** A push would send this
-milestone's commits **and** five that were already pending before the branch was
-cut. **Every `main` push is a one-time authorization the push consumes**, so it
-needs its own fresh ask — and the command above, not this paragraph, is what says
-whether anything is waiting. The sentence that used to sit here got the push
-state wrong twice, in both directions, inside a file whose own header warns about
-exactly that.
+**No push state is written here at all any more, and that is the fix.** Every
+version of this paragraph that named one has rotted — twice in both directions,
+and once within hours of being written. **Every `main` push is a one-time
+authorization the push consumes**, so the next one needs its own fresh ask; what
+is waiting is `git log --oneline refs/remotes/origin/main..main` and nothing
+else. Note that the pair commit carrying this sentence necessarily lands *after*
+any push it could describe, so that command is expected to name it.
 
 **Run the freshness command in `docs/MEMORY.md`'s stamp before trusting any of
 this.** If it lists anything, the tree moved after this was written — re-run
