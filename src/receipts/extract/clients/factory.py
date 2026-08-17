@@ -36,12 +36,18 @@ _OPENAI_BASE_URLS: dict[str, str] = {
 }
 
 # Providers whose servers cannot be assumed to accept a tool-use request, so
-# they default to JSON mode. Ollama rejects `tools` with a hard 400 for any
-# model that does not declare the capability -- most vision models, including
-# moondream and granite3.2-vision -- and that 400 kills the very first (triage)
-# call. vLLM, by contrast, supports tool-calling across its served models, so
-# only Ollama is listed. VLM_USE_TOOLS overrides this either way, which is what
-# a VLM_PROVIDER=openai id pointed at a local Ollama needs.
+# they default to JSON mode. Ollama returns a hard 400 for a `tools` payload
+# sent to a model that does not declare the capability, and that 400 kills the
+# very first (triage) call. vLLM, by contrast, supports tool-calling across its
+# served models, so only Ollama is listed. VLM_USE_TOOLS overrides this either
+# way, which is what a VLM_PROVIDER=openai id pointed at a local Ollama needs.
+#
+# This named granite3.2-vision as an example of a model lacking the capability
+# until 2026-08-18, when `/api/tags` reported it declaring `tools`. The example
+# is deleted rather than replaced: whether the `/v1` shim honours a tools
+# payload has not been measured here for any model, and that -- not any single
+# model's metadata -- is what this default is being cautious about.
+# docs/KNOWN_ISSUES.md ISSUE-001 carries the measurement.
 _TOOLS_OFF_BY_DEFAULT: frozenset[str] = frozenset({"ollama"})
 
 
