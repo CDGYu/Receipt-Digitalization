@@ -655,8 +655,14 @@ def _find_duplicate_content(
     exact-match-only, so early receipts routinely have no merchant at all, and
     without this guard two genuinely different shops that happened to share a
     date and a total would be merged on the strength of the two keys that say
-    nothing about *which shop*. The repository's contract is left alone; the
-    restriction lives here, next to the consequence.
+    nothing about *which shop*. The repository's NULL-merchant rule is left
+    alone; the restriction lives here, next to the consequence.
+
+    **There is no reprocess skip here, and none is needed.** Its twin needs one
+    because a reprocessed original matches its own copy's image;
+    :func:`~receipts.persist.repository.find_duplicate_by_content` refuses to
+    offer any candidate that already resolves back to ``job.id``, which is the
+    same failure closed once, on the side that hands out the target.
 
     **The keys are read off the row that was just written**, not derived a
     second time from the extraction. A second derivation is how the stored

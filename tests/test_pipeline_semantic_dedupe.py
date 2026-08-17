@@ -408,6 +408,106 @@ def test_a_duplicate_routed_to_review_is_rejected_and_still_opens_no_task(
 
 
 # --------------------------------------------------------------------------- #
+# The original, reprocessed
+# --------------------------------------------------------------------------- #
+
+
+def test_reprocessing_an_original_that_has_a_duplicate_is_not_a_failure(
+    session_factory, storage, settings
+):
+    """A prior run's duplicate must not make the original un-reprocessable.
+
+    Once a copy points at this receipt, the copy is itself a candidate for the
+    content keys the original still holds -- so a reprocess of the original is
+    offered its own copy as the receipt it duplicates. Following that offer
+    closes an ``A -> B -> A`` cycle, which
+    :func:`~receipts.persist.repository.mark_duplicate` refuses by raising. The
+    raise escapes the ``persist`` stage, so the original is demoted to
+    ``needs_review`` and loses the run it just paid for -- every time, with no
+    command that can undo it short of deleting the copy's row.
+
+    :func:`~receipts.pipeline._find_duplicate_image` names this exact failure in
+    its own docstring and carries two defences against it. This is the same
+    failure on the content path, so the same property has to hold: a receipt
+    that already resolves back to this one is never offered as its target.
+    """
+    first = _job(storage)
+    first_result = _run(
+        first, _Client([_triage(), _good_with_tax_id()]), session_factory, storage, settings
+    )
+    assert first_result.failed_stage is None
+    assert first_result.duplicate_of is None
+
+    second = _job(storage, data=_png_bytes(seed=7))
+    second_result = _run(
+        second, _Client([_triage(), _good_with_tax_id()]), session_factory, storage, settings
+    )
+    assert second_result.duplicate_of == first.id, "the premise: a copy points at it"
+
+    again = _run(
+        first, _Client([_triage(), _good_with_tax_id()]), session_factory, storage, settings
+    )
+
+    assert again.failed_stage is None, "the reprocess failed on its own copy"
+    assert again.duplicate_of is None
+    assert again.status is not ReceiptStatus.REJECTED
+
+    with session_factory() as session:
+        row = session.get(Receipt, first.id)
+        assert row.duplicate_of is None, "the original was pointed at its own copy"
+        assert row.status is not ReceiptStatus.REJECTED
+        assert row.total == D("224.00"), "the reprocess kept the amounts"
+        assert len(row.line_items) == 2
+
+        runs = session.scalars(
+            select(ExtractionRun).where(ExtractionRun.receipt_id == first.id)
+        ).all()
+        assert len(runs) == 4, "the reprocess paid for two calls and recorded neither"
+
+        # Control: the copy is untouched, so the reprocess did not simply
+        # succeed by the duplicate link having gone away.
+        copy = session.get(Receipt, second.id)
+        assert copy.duplicate_of == first.id
+        assert copy.status is ReceiptStatus.REJECTED
+
+
+def test_a_reprocessed_original_is_still_offered_a_genuine_duplicate(
+    session_factory, storage, settings
+):
+    """The refusal above is narrow: it drops the copies, not every candidate.
+
+    Two purchases share the keys and neither resolves back to the other, so the
+    older one is still the target -- otherwise "never offered its own copy"
+    could be satisfied by never offering anything, and the branch this milestone
+    exists for would be dead on every reprocess.
+    """
+    first = _job(storage)
+    assert (
+        _run(
+            first, _Client([_triage(), _good_with_tax_id()]), session_factory, storage, settings
+        ).failed_stage
+        is None
+    )
+
+    # A second receipt with a *different* total, so nothing links the two yet.
+    second = _job(storage, data=_png_bytes(seed=7))
+    second_result = _run(
+        second, _Client([_triage(), _a_cheaper_purchase()]), session_factory, storage, settings
+    )
+    assert second_result.duplicate_of is None, "the premise: no link either way"
+
+    # Re-extract the second at the first's total: now it really is a duplicate.
+    again = _run(
+        second, _Client([_triage(), _good_with_tax_id()]), session_factory, storage, settings
+    )
+
+    assert again.failed_stage is None
+    assert again.duplicate_of == first.id
+    with session_factory() as session:
+        assert session.get(Receipt, second.id).duplicate_of == first.id
+
+
+# --------------------------------------------------------------------------- #
 # The refusals
 # --------------------------------------------------------------------------- #
 

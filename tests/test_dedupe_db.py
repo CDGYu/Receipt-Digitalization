@@ -21,7 +21,7 @@ Money comparison stays in ``Decimal`` (ADR-0001): a candidate stored as
 from __future__ import annotations
 
 import uuid
-from datetime import date
+from datetime import UTC, date, datetime
 from decimal import Decimal
 
 import pytest
@@ -311,6 +311,94 @@ def test_find_duplicate_by_content_excludes_the_receipt_itself(engine: sa.Engine
             )
             is None
         )
+
+
+def test_find_duplicate_by_content_excludes_rows_already_marked_a_duplicate_of_it(
+    engine: sa.Engine,
+) -> None:
+    """The content twin of the phash exclusion, and for the same reason.
+
+    A row that duplicates ``exclude_id`` still carries the merchant, date and
+    total it was merged over, so it matches the original on every key. Offering
+    it back is how a reprocessed original is marked a duplicate of its own copy
+    -- an ``A -> B -> A`` cycle that ``mark_duplicate`` then refuses by raising,
+    taking the reprocess down with it.
+    """
+    with Session(engine) as session:
+        merchant = _merchant(session)
+        keys = dict(
+            merchant_id=merchant.id, txn_date=date(2026, 7, 27), total=Decimal("761.60")
+        )
+        original = _receipt(session, **keys)
+        copy = _receipt(session, **keys)
+        mark_duplicate(session, copy.id, original.id)
+        session.flush()
+
+        # The copy is still a perfectly good match for anyone else.
+        assert find_duplicate_by_content(session, **keys) is not None
+        assert find_duplicate_by_content(session, **keys, exclude_id=original.id) is None
+        # ...and excluding an unrelated id does not drop it.
+        assert find_duplicate_by_content(session, **keys, exclude_id=uuid.uuid4()) is not None
+
+
+def test_find_duplicate_by_content_excludes_a_row_that_resolves_back_down_a_chain(
+    engine: sa.Engine,
+) -> None:
+    """"Resolves back to it" is the whole chain, not one hop.
+
+    ``mark_duplicate`` refuses any link that closes a cycle *anywhere* along
+    ``duplicate_of``, so a finder that only drops direct back-links still hands
+    out targets the writer will reject -- which turns that ``ValueError`` from a
+    last-resort invariant into a routine outcome. The two sides have to refuse
+    the same set.
+    """
+    with Session(engine) as session:
+        merchant = _merchant(session)
+        keys = dict(
+            merchant_id=merchant.id, txn_date=date(2026, 7, 27), total=Decimal("761.60")
+        )
+        first = _receipt(session, **keys)
+        second = _receipt(session, **keys)
+        third = _receipt(session, **keys)
+        # third -> second -> first, so only `third` is a *direct* back-link of
+        # `second`, while both resolve back to `first`.
+        mark_duplicate(session, third.id, second.id)
+        mark_duplicate(session, second.id, first.id)
+        session.flush()
+
+        assert find_duplicate_by_content(session, **keys, exclude_id=first.id) is None
+
+
+def test_find_duplicate_by_content_still_offers_a_candidate_that_does_not_resolve_back(
+    engine: sa.Engine,
+) -> None:
+    """The exclusion drops the copies, not the queue behind them.
+
+    Refusing every candidate as soon as one of them resolves back would satisfy
+    "never offered its own copy" by never offering anything, and would quietly
+    turn semantic dedupe off for every receipt that has ever been copied. The
+    copy sorts first here, so the answer has to come from behind it.
+    """
+    with Session(engine) as session:
+        merchant = _merchant(session)
+        keys = dict(
+            merchant_id=merchant.id, txn_date=date(2026, 7, 27), total=Decimal("761.60")
+        )
+        mine = _receipt(session, **keys)
+        copy = _receipt(session, **keys)
+        other = _receipt(session, **keys)
+        mark_duplicate(session, copy.id, mine.id)
+        # `created_at` is a second-resolution server default here, so the order
+        # the query promises is stated rather than assumed: the copy is older
+        # than the unrelated receipt and would otherwise win.
+        copy.created_at = datetime(2026, 7, 27, 9, 0, tzinfo=UTC)
+        other.created_at = datetime(2026, 7, 27, 10, 0, tzinfo=UTC)
+        session.flush()
+
+        found = find_duplicate_by_content(session, **keys, exclude_id=mine.id)
+
+        assert found is not None, "the only cycle-free candidate was dropped too"
+        assert found.id == other.id
 
 
 def test_find_duplicate_by_content_matches_two_receipts_with_no_merchant(

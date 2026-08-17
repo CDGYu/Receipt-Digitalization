@@ -944,6 +944,15 @@ def find_duplicate_by_content(
     NULL ``merchant_id`` *is* allowed: an unresolved merchant then only matches
     other receipts whose merchant is equally unresolved.
 
+    **``exclude_id`` drops the receipt itself and everything that resolves back
+    to it** (:func:`resolves_back_to`), not merely the direct back-links its
+    phash twin drops. A copy still carries the merchant, date and total it was
+    merged over, so it matches the original on every key: without this a
+    reprocessed original is offered its own copy, and :func:`mark_duplicate`
+    then raises, taking the run down at ``persist``. The exclusion is applied per
+    candidate and the search continues past it, so a genuine duplicate sitting
+    behind a copy is still found.
+
     The ``merchant_id`` and ``txn_date`` equality is pushed into SQL (they are
     indexed together, per §6.2). The ``total`` comparison deliberately is not: it
     stays in Python so the match is one exact ``Decimal`` equality on every
@@ -972,32 +981,50 @@ def find_duplicate_by_content(
     query = query.order_by(Receipt.created_at, Receipt.id)
 
     candidates = [dict(row) for row in session.execute(query).mappings()]
+    if exclude_id is not None:
+        candidates = [
+            row for row in candidates if not resolves_back_to(session, row["id"], exclude_id)
+        ]
     match_id = find_semantic_duplicate(merchant_id, txn_date, total, candidates)
     return session.get(Receipt, match_id) if match_id is not None else None
 
 
-def _reject_cycle(session: Session, new_id: uuid.UUID, existing_id: uuid.UUID) -> None:
-    """Raise ``ValueError`` if pointing ``new_id`` at ``existing_id`` closes a cycle.
+def resolves_back_to(session: Session, start_id: uuid.UUID, target_id: uuid.UUID) -> bool:
+    """Whether following ``duplicate_of`` from ``start_id`` ever reaches ``target_id``.
 
-    Walks the existing ``duplicate_of`` chain forwards from ``existing_id``. The
-    walk is bounded by ``seen`` rather than by trusting the data, so a cycle that
+    The one predicate behind both halves of the duplicate-link rule, and it is
+    deliberately one rather than two: :func:`mark_duplicate` refuses a link this
+    returns ``True`` for, and :func:`find_duplicate_by_content` refuses to
+    *offer* a candidate it returns ``True`` for. Two rules that were only meant
+    to agree would drift, and every gap between them is a caller handed a target
+    the writer will then reject -- which turns that ``ValueError`` from an
+    invariant nobody reaches into an ordinary outcome of reprocessing.
+
+    The walk is bounded by ``seen`` rather than by trusting the data, so a cycle
     a pre-fix row already contains ends the loop instead of hanging the worker.
     """
-    seen: set[uuid.UUID] = {existing_id}
-    cursor: uuid.UUID | None = existing_id
+    seen: set[uuid.UUID] = {start_id}
+    cursor: uuid.UUID | None = start_id
     while cursor is not None:
         row = session.get(Receipt, cursor)
         cursor = None if row is None else row.duplicate_of
-        if cursor == new_id:
-            raise ValueError(
-                f"receipt {new_id} cannot be a duplicate of {existing_id}: "
-                f"{existing_id} already resolves back to {new_id}, and a cycle "
-                "would leave both rows rejected with nothing left to follow"
-            )
+        if cursor == target_id:
+            return True
         if cursor in seen:
-            return
+            return False
         if cursor is not None:
             seen.add(cursor)
+    return False
+
+
+def _reject_cycle(session: Session, new_id: uuid.UUID, existing_id: uuid.UUID) -> None:
+    """Raise ``ValueError`` if pointing ``new_id`` at ``existing_id`` closes a cycle."""
+    if resolves_back_to(session, existing_id, new_id):
+        raise ValueError(
+            f"receipt {new_id} cannot be a duplicate of {existing_id}: "
+            f"{existing_id} already resolves back to {new_id}, and a cycle "
+            "would leave both rows rejected with nothing left to follow"
+        )
 
 
 def mark_duplicate(session: Session, new_id: uuid.UUID, existing_id: uuid.UUID) -> Receipt:
@@ -1015,6 +1042,12 @@ def mark_duplicate(session: Session, new_id: uuid.UUID, existing_id: uuid.UUID) 
     the default export and the transaction leaves the ledger with no un-rejected
     row left to follow the chain to. Refusing the link keeps the original intact
     for the caller to report instead.
+
+    **The cycle refusal is an invariant, not a route callers are expected to
+    take.** :func:`find_duplicate_by_content` excludes candidates on the same
+    :func:`resolves_back_to` predicate, so a link built from what a finder
+    offered never reaches the raise; anything that does reach it was constructed
+    some other way.
 
     Flushes; does not commit.
     """
