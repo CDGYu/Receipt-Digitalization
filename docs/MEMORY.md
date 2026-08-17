@@ -9,13 +9,16 @@ proved invisible to it).
 Last updated: **2026-08-18**, by the session that **finished** Phase 6 merchant
 fingerprinting — reviewed the branch's one unreviewed task, ran the whole-branch
 review, closed one fix wave and one scoped re-review, corrected **ADR-0043**,
-merged by true fast-forward and pushed — and then **answered T2 step 2**: granite
-at `max_edge=2048`, with a 768 control. Three claims in `docs/KNOWN_ISSUES.md`
-were falsified by measurement along the way.
+merged by true fast-forward and pushed — and then **answered T2 steps 2 and 4**
+by running them: granite at `max_edge=2048` with a 768 control, and
+`VLM_USE_TOOLS=true` with the flag as the only variable. **Both answers are
+"no".** Several claims in `docs/KNOWN_ISSUES.md` and in this pair were falsified
+by measurement along the way, including seven places that asked for a provider
+class the user had already ruled out.
 **No count of refreshes is written here** — it is a number that moves without its
 sentence changing, which is review standard 5.
 
-**Freshness anchor `b62d363`** — the last commit that is not this handoff pair.
+**Freshness anchor `a0b610f`** — the last commit that is not this handoff pair.
 **It is written twice below — here and inside the command.** Moving one and not
 the other is what happened on this file's previous refresh, and the gate caught
 it because it parses the anchor out of the *command*.
@@ -30,7 +33,7 @@ else: a stamp cannot name the commit that writes it. The test is a command,
 not a commit and not a count:
 
 ```
-git log --oneline b62d363..main -- ":(top,exclude)docs/MEMORY.md" ":(top,exclude)docs/NEXT_SESSION_PROMPT.md"
+git log --oneline a0b610f..main -- ":(top,exclude)docs/MEMORY.md" ":(top,exclude)docs/NEXT_SESSION_PROMPT.md"
 git log --oneline refs/remotes/origin/main..main   # what a push would send
 git ls-remote --heads origin main                  # authoritative on what is pushed
 git branch --no-merged main                        # must name NOTHING
@@ -144,8 +147,18 @@ answer.)*
 - **`granite3.2-vision:2b` declares `tools`** — `/api/tags` reports
   `['completion','tools','vision']`, contradicting ISSUE-001 and a comment in
   `factory.py` that named it as an example of a model without the capability.
-  The comment's example is deleted; the default is unchanged, because whether
-  the `/v1` shim honours a tools payload is still unmeasured.
+  The comment's example is deleted.
+- **Tool-use on the local path is MEASURED and the answer is DON'T** (2026-08-18,
+  T2 step 4). The `/v1` shim **accepts** a `tools` payload — no 400, so the
+  stated fear does not reproduce — and the extraction comes back **identical**,
+  same nulls and the same 24-entry mismatch list. **Triage degrades though:
+  `merchant_name_guess` goes from exactly right to empty**, and that field is
+  what `lookup` keys off, so enabling it would silently disable Phase 6's
+  hint-retrieval path. `_TOOLS_OFF_BY_DEFAULT` keeping `ollama` is right for a
+  **fourth** reason — not the capability claim, not the 400, but measured
+  output. **ADR-0002's tool-use non-negotiable now conflicts with a
+  measurement; that is recorded in ISSUE-001 and needs a user ruling.** Scoped
+  to this model only.
 - **`merchants.receipt_count` is credited for a duplicate caught after
   extraction, and NOT for a re-uploaded image** — the image path returns before
   any merchant is resolved. Three documents said the opposite in three different

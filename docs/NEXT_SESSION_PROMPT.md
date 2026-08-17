@@ -188,15 +188,24 @@ for you.
    and whether it accepts a `tools` payload. **Step 2 makes this the load-bearing
    step, not a fallback** — if no Cloud model can read, the accuracy goal has no
    path on Ollama-only.
-4. **Set `VLM_USE_TOOLS=true`.** `factory.py`'s `_TOOLS_OFF_BY_DEFAULT` contains
-   `ollama`, so the local path has **never** used schema-constrained tool-use —
-   it runs in JSON mode, against ADR-0002 and the steering rule. **More plausible
-   than ISSUE-001 implied:** `/api/tags` reports `granite3.2-vision:2b` declaring
-   `['completion','tools','vision']`, so the "it declares no tool support"
-   reasoning is gone (a `factory.py` comment said so too, and that example is
-   deleted). **Still untested** is whether the `/v1` shim honours a `tools`
-   payload; one triage call settles it, since the stated fear is a hard 400 on
-   exactly that call.
+4. ~~**Set `VLM_USE_TOOLS=true`.**~~ **ANSWERED 2026-08-18: do NOT, on the local
+   path.** Ran r002 at 768 with the flag on against the same-day control, flag
+   as the only variable. **The `/v1` shim accepts a `tools` payload — no 400**,
+   so this issue's stated fear does not reproduce. **The extraction is
+   identical**, not merely equal-scoring: same nulls, same 24-entry mismatch
+   list. **But triage degrades, and in the field everything else depends on** —
+   `merchant_name_guess` goes from exactly right to **empty**, and
+   `lookup(session, name_guess)` keys off it, so enabling tool-use silently
+   disables Phase 6's hint-retrieval path (ADR-0043 decision 1). `legibility`
+   and `est_items` also regress; only `is_receipt` improves.
+   **`_TOOLS_OFF_BY_DEFAULT` keeping `ollama` is correct** — for a reason none
+   of the three previously written beside it. ISSUE-001 has the tables, the
+   three anti-vacuity checks, and the 5.5× speedup with its caveats.
+   **One conflict is recorded and NOT resolved, because it needs your ruling:**
+   ADR-0002 and the steering rules make tool-use structured output a
+   non-negotiable, and on the only model in play it costs accuracy. **Scoped to
+   this model** — it says nothing about a Cloud-tier model, where a schema would
+   usually help, which is why the non-negotiable exists.
 5. **Build the local→Cloud escalation.** Real design work: `make_client` returns
    one client, and nothing records which model produced a kept extraction — without
    that no eval can attribute accuracy to a model, and a good number could be
@@ -1328,6 +1337,14 @@ confident-wrong; **a full PAN never persisted**; nothing silently dropped; a
 machine run never overwrites a `reviewed` row; optional-import discipline;
 tool-use structured output; few-shot images first; consistency never cached;
 `python -m pytest` offline and Node-free.
+
+**One of those is in unresolved conflict with a measurement.** *Tool-use
+structured output* is the standing rule (ADR-0002), and on the only model
+currently in play it **costs** accuracy — measured 2026-08-18, T2 step 4: the
+shim accepts the payload, the extraction is unchanged, and triage loses the
+merchant guess Phase 6 depends on. **Do not flip `VLM_USE_TOOLS` on the strength
+of this list.** ISSUE-001 has the evidence; the conflict needs a user ruling and
+is scoped to this model.
 
 **PAN:** ADR-0018 + 0020 + corrections; any `_PAN_RE` change replays the
 committed battery both ways, two-instance-tests, keeps the structural guards
