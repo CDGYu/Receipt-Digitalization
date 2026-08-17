@@ -168,17 +168,35 @@ for you.
    (2-core i3, no usable GPU, one 2.5B model) are **over-constrained**. Decided
    2026-08-14: keep `granite3.2-vision:2b` local as primary, add **Ollama Cloud**
    as a confidence-triggered fallback, and move to a better-specced machine.
-2. **Give granite one fair test at `max_edge=2048`.** It has never completed a run
-   at the pipeline's own default — every completed run was forced to 768 where
-   `resize_for_model` logged *"estimated text height 7.7px is below 12px"*. The
-   "reads nothing" verdict rests entirely on input the code flagged as unreadable.
-   This is the empirical decider for whether it is a primary at all.
+   **Step 2 below now argues against the "local primary" half of that** — read it
+   before acting on this one.
+2. ~~**Give granite one fair test at `max_edge=2048`.**~~ **ANSWERED 2026-08-18,
+   and the answer is no.** Ran on r002 at 2048 with a **768 control**, same
+   commit, same scorer, timeout raised on both so it could not be a second
+   variable. **Core transcription accuracy is identical (2/13) at both
+   resolutions**; line-item F1 is 0.00 at both; and **2048 hallucinated two
+   fields to 768's zero**, including a date of `03-75-26` against a truth of
+   `2026-03-28`. Its higher headline number is entirely blank line-item rows
+   earning structural credit. **`granite3.2-vision:2b` is not a primary**, and
+   no machine changes that. ISSUE-001 has the table and the method — **do not
+   re-run it** (ADR-0039). Two claims died with it: *"granite reads nothing"*
+   (its **triage** pass reads the merchant name exactly, at both resolutions —
+   see ADR-0043's dated correction) and the whole 2026-07-29 **timing table**,
+   which reproduces in neither direction.
 3. **Stand up Ollama Cloud** (`ollama signin`; still Ollama, no code change) and
    check two unverified things: whether a strong enough vision model is offered,
-   and whether it accepts a `tools` payload.
+   and whether it accepts a `tools` payload. **Step 2 makes this the load-bearing
+   step, not a fallback** — if no Cloud model can read, the accuracy goal has no
+   path on Ollama-only.
 4. **Set `VLM_USE_TOOLS=true`.** `factory.py`'s `_TOOLS_OFF_BY_DEFAULT` contains
    `ollama`, so the local path has **never** used schema-constrained tool-use —
-   it runs in JSON mode, against ADR-0002 and the steering rule.
+   it runs in JSON mode, against ADR-0002 and the steering rule. **More plausible
+   than ISSUE-001 implied:** `/api/tags` reports `granite3.2-vision:2b` declaring
+   `['completion','tools','vision']`, so the "it declares no tool support"
+   reasoning is gone (a `factory.py` comment said so too, and that example is
+   deleted). **Still untested** is whether the `/v1` shim honours a `tools`
+   payload; one triage call settles it, since the stated fear is a hard 400 on
+   exactly that call.
 5. **Build the local→Cloud escalation.** Real design work: `make_client` returns
    one client, and nothing records which model produced a kept extraction — without
    that no eval can attribute accuracy to a model, and a good number could be
@@ -1715,7 +1733,10 @@ git log --oneline refs/remotes/origin/main..main  # what a push would send
 python scripts/verify.py                          # background it; exceeds a 2-min timeout
 ```
 
-**Last known good, controller-run 2026-08-18 at `9a3ffa2`: all five gates PASS.**
+**Last full controller-run of `python scripts/verify.py`: 2026-08-18 at the
+merge tip, all five gates PASS.** Commits after it are documentation plus one
+comment-only change under `src/`. **Re-run it rather than reasoning from that** —
+the number of things it does not check is the subject of half this document.
 **No pytest count is written here** — it moved twice during this milestone alone.
 Re-run rather than trusting it.
 

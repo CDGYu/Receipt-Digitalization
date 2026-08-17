@@ -7,13 +7,18 @@ verified rather than trusted — is **ADR-0019**, extended by **ADR-0021** (whos
 2026-08-02 dated correction widened the freshness check after a docs-only task
 proved invisible to it).
 Last updated: **2026-08-18**, by the session that **finished** Phase 6 merchant
-fingerprinting: it reviewed the branch's one unreviewed task, ran the
-whole-branch review, closed one fix wave and one scoped re-review, corrected
-**ADR-0043**, and merged by true fast-forward.
+fingerprinting — reviewed the branch's one unreviewed task, ran the whole-branch
+review, closed one fix wave and one scoped re-review, corrected **ADR-0043**,
+merged by true fast-forward and pushed — and then **answered T2 step 2**: granite
+at `max_edge=2048`, with a 768 control. Three claims in `docs/KNOWN_ISSUES.md`
+were falsified by measurement along the way.
 **No count of refreshes is written here** — it is a number that moves without its
 sentence changing, which is review standard 5.
 
-**Freshness anchor `9a3ffa2`** — the last commit that is not this handoff pair.
+**Freshness anchor `b62d363`** — the last commit that is not this handoff pair.
+**It is written twice below — here and inside the command.** Moving one and not
+the other is what happened on this file's previous refresh, and the gate caught
+it because it parses the anchor out of the *command*.
 
 **Nothing is in flight.** The paragraph that stood here between 2026-08-15 and
 this refresh — telling you to substitute `HEAD` for `main` while a branch was
@@ -25,7 +30,7 @@ else: a stamp cannot name the commit that writes it. The test is a command,
 not a commit and not a count:
 
 ```
-git log --oneline 9a3ffa2..main -- ":(top,exclude)docs/MEMORY.md" ":(top,exclude)docs/NEXT_SESSION_PROMPT.md"
+git log --oneline b62d363..main -- ":(top,exclude)docs/MEMORY.md" ":(top,exclude)docs/NEXT_SESSION_PROMPT.md"
 git log --oneline refs/remotes/origin/main..main   # what a push would send
 git ls-remote --heads origin main                  # authoritative on what is pushed
 git branch --no-merged main                        # must name NOTHING
@@ -114,6 +119,33 @@ answer.)*
   one of them restating a clause it had been explicitly forbidden to write, with
   the number filed off. Two were caught by the wave's own self-audit, three more
   by the scoped re-review. **Every one was closed by deletion.**
+- **T2 step 2 is ANSWERED (2026-08-18): `max_edge=2048` does NOT make granite
+  extract more, and it is not worth its cost.** Measured on r002 with a 768
+  control, same commit, same scorer, timeout raised on both so it could not be a
+  second variable: **core transcription accuracy is identical (2/13) at both
+  resolutions**, line-item F1 is 0.00 at both, and 2048 *hallucinated two fields
+  to 768's zero*. Its higher headline number (16.67% vs 11.11%) is entirely
+  blank line-item rows earning structural credit. **`granite3.2-vision:2b` is
+  not a primary**, and no machine changes that — weights decide comprehension.
+  `docs/KNOWN_ISSUES.md` ISSUE-001 has the table and the method; **do not
+  re-run it.**
+- **"Granite reads nothing" is FALSE, and this matters for Phase 6.** Its
+  *triage* pass returns `merchant_name_guess='SUMMIT FUEL OPC'` — exactly the
+  golden `merchant.name` — at 2048 **and** 768. The old verdict was formed from
+  the extraction alone; nobody read the guess. **ADR-0043's founding premise
+  rests on that verdict** and now carries a dated correction narrowing it. No
+  decision changed: a guess may retrieve, only a TIN may create or rename, which
+  is right whether the guess is good or bad.
+- **ISSUE-001's 2026-07-29 timing table does not reproduce, in both
+  directions** — 887 s triage measured at 553 s, 1057 s extract measured at
+  2121 s, and the 768 run came out *slower overall* than the 2048 one. **No
+  timing argument from it stands**, including that 2048 cannot finish on this
+  box: a 900 s timeout stopped it, which is a setting.
+- **`granite3.2-vision:2b` declares `tools`** — `/api/tags` reports
+  `['completion','tools','vision']`, contradicting ISSUE-001 and a comment in
+  `factory.py` that named it as an example of a model without the capability.
+  The comment's example is deleted; the default is unchanged, because whether
+  the `/v1` shim honours a tools payload is still unmeasured.
 - **`merchants.receipt_count` is credited for a duplicate caught after
   extraction, and NOT for a re-uploaded image** — the image path returns before
   any merchant is resolved. Three documents said the opposite in three different
