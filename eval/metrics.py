@@ -56,18 +56,44 @@ def _norm_text(value: str) -> str:
 #: Path prefixes that decide a leaf's family. Structural on purpose: a prefix
 #: test classifies a schema field added next year without anybody deciding it
 #: should be, where a list of field names would silently let it through
-#: (review standard 19 — an enumerated defence never converges).
+#: (review standard 19 — an enumerated defence never converges). A leaf that no
+#: prefix can reach is declared just below, together with the rule that admits
+#: one.
 _META_PREFIX = "meta."
 _LINE_ITEMS = "line_items"
 
+#: The self-report leaves that do **not** live under ``meta.``. One declaration,
+#: read by :func:`_group` and by nothing else.
+#:
+#: The admission rule, and the whole of it: a leaf belongs here when it records
+#: the model's **claim about the paper** — the state of the document, or of the
+#: model's own reading of it — rather than a transcription of content printed
+#: on it. ``is_template_row`` says "this pre-printed row was left blank"; the
+#: paper nowhere reads "false", and a model that looks at nothing is right on
+#: every row that is not blank, which is a free point per line item inside a
+#: group that averages.
+#:
+#: ``receipt.decimal_convention`` is the near miss on the other side of that
+#: line and is deliberately **not** here: it also rests at a usually-correct
+#: default, but it names a convention the document prints, so it is something
+#: the model had to read.
+_SELF_REPORT_LEAVES = frozenset({"is_template_row"})
+
 
 def _group(path: str) -> str:
-    """Which family a dotted path belongs to: ``meta``, ``line_items`` or ``core``.
+    """Which family a dotted path belongs to: ``self_report``, ``line_items`` or ``core``.
 
     Read from the path string alone — never from either side's value.
+
+    ``self_report`` is reached two ways, and there are exactly these two:
+    everything under the ``meta.`` prefix, and the leaves declared in
+    :data:`_SELF_REPORT_LEAVES`. The set is checked **first**, because the
+    leaves in it live under prefixes that would otherwise claim them.
     """
+    if path.rsplit(".", 1)[-1] in _SELF_REPORT_LEAVES:
+        return "self_report"
     if path.startswith(_META_PREFIX):
-        return "meta"
+        return "self_report"
     if path == _LINE_ITEMS or path.startswith(f"{_LINE_ITEMS}["):
         return "line_items"
     return "core"
@@ -171,8 +197,10 @@ class FieldBreakdown:
 
       * ``transcription`` — truth filled, group ``core`` or ``line_items``.
         The points a model has to earn by reading.
-      * ``self_report`` — truth filled, group ``meta``. Self-description, and
-        in ``meta.notes`` human annotator prose. Reported, never averaged in.
+      * ``self_report`` — truth filled, group ``self_report``. Self-description,
+        and in ``meta.notes`` human annotator prose. Reported, never averaged
+        in. Everything under ``meta.`` lands here, and so does every leaf
+        declared in :data:`_SELF_REPORT_LEAVES` wherever it lives.
       * absent — truth not filled. Split three ways: ``hallucinated`` (the
         model produced a value anyway), ``correctly_empty``, and
         ``structural_mismatch``.
@@ -252,7 +280,7 @@ def field_breakdown(
                 struct += 1
             continue
         group = _group(path)
-        if group == "meta":
+        if group == "self_report":
             sr_t += 1
             sr_c += int(ok)
         elif group == "line_items":

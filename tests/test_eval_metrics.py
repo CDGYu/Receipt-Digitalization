@@ -125,10 +125,51 @@ def test_breakdown_classifies_by_prefix_not_by_a_list_of_names():
     rule, not an enumeration that a new schema field silently escapes."""
     from eval.metrics import _group
 
-    assert _group("meta.some_field_added_next_year") == "meta"
+    assert _group("meta.some_field_added_next_year") == "self_report"
     assert _group("line_items[7].qty") == "line_items"
     assert _group("line_items") == "line_items"
     assert _group("totals.total") == "core"
+
+
+def test_the_grouping_reads_the_declared_leaf_set_rather_than_names_of_its_own():
+    """The self-report leaves outside ``meta.`` are declared once and looked up.
+
+    Driven by the set itself, not by a name spelled here: an implementation
+    that hard-codes ``path.endswith(".is_template_row")`` passes today and
+    fails the moment the set gains a second member, which is the difference
+    between one declaration and an enumeration growing in two places.
+    """
+    from eval.metrics import _SELF_REPORT_LEAVES, _group
+
+    # Without this the loop below passes vacuously on an empty set.
+    assert _SELF_REPORT_LEAVES
+
+    for leaf in _SELF_REPORT_LEAVES:
+        assert _group(f"line_items[3].{leaf}") == "self_report"
+        assert _group(f"totals.{leaf}") == "self_report"
+
+
+def test_is_template_row_is_scored_as_a_self_report_not_a_transcription() -> None:
+    """A False-defaulting bool in an averaged group is a free point per row.
+
+    Measured before this routing existed: a prediction that got r001's row
+    count right and read nothing scored 2/17, and adding this one field alone
+    took it to 3/18.
+    """
+    one = _extraction(items=[LineItem(position=0, description_raw="CLEAN DIESEL")])
+    two = _extraction(items=[LineItem(position=0, description_raw="CLEAN DIESEL"),
+                             LineItem(position=1, description_raw="PREMIUM 97")])
+
+    # The defect scales at one free point per row, so the per-row delta is
+    # what this pins -- not a whole-receipt total that shifts for other reasons.
+    per_row = (field_breakdown(two, two).line_items_total
+               - field_breakdown(one, one).line_items_total)
+
+    # Measured on 2026-08-18, both numbers read off the failing assertion.
+    # Before the routing: per_row 3 (position, description_raw, is_template_row)
+    # and self_report_total 4 (the four meta.* bools/enums at their defaults).
+    assert per_row == 2
+    assert field_breakdown(one, one).self_report_total == 5
 
 
 def test_breakdown_counts_an_invented_value_as_hallucination():
