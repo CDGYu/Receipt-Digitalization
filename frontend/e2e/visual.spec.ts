@@ -186,6 +186,12 @@ function fullReceipt(overrides: Record<string, unknown> = {}) {
       { reason: 'date looks implausible', penalty: '-0.080' },
     ],
     merchant_name_raw: 'TOTAL WINE',
+    // These fixtures are untyped object literals, so `tsc -b` cannot say when
+    // one falls behind the reply it stands for -- and `fieldsFromReceipt` reads
+    // `receipt.buyer.name` without a guard, the same way it reads
+    // `receipt.totals.*`. Omitting this key does not render a blank buyer, it
+    // throws in the browser and the review screen never paints.
+    buyer: { name: 'IDEAL SOURCE', tax_id: '009-123-456-000' },
     receipt_number: 'OR-2026-0042',
     txn_date: '2026-07-02',
     date_raw: '02/07/2026',
@@ -253,6 +259,10 @@ function nullReceipt() {
     confidence: null,
     confidence_reasons: null,
     merchant_name_raw: 'BLUE RIDGE HARDWARE',
+    // A receipt with no Sold To block, which is a real BIR form and not an
+    // exotic one. Both halves null, so the screenshot shows what a reviewer
+    // actually sees for an unread buyer -- the one thing jsdom cannot answer.
+    buyer: { name: null, tax_id: null },
     receipt_number: null,
     txn_date: null,
     date_raw: '1L/O7/2O26',
