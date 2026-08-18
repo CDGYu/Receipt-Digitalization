@@ -540,6 +540,18 @@ def save_extraction(
         # this dict -- see the comment on that block for why an enumerated
         # per-field wrapper here is no longer the guard.
         merchant_name_raw=extraction.merchant.name,
+        # Who the receipt was issued TO -- the "Sold To" block, a different
+        # party from the merchant above and carrying a different TIN. Model
+        # text like every value around it, so it belongs *inside* this dict:
+        # the blanket pass below is what redacts these two, and a buyer added
+        # after that pass (beside the system-minted values) would be stored in
+        # the clear -- which is how ``receipt_number`` and ``date_raw`` leaked
+        # while the redaction list was still enumerated by hand. A receipt that
+        # names no buyer stores ``None`` in both, never ``""``: the columns are
+        # nullable because most receipts leave them blank, and an empty string
+        # would claim a reading nothing made.
+        buyer_name_raw=extraction.buyer.name,
+        buyer_tax_id=extraction.buyer.tax_id,
         receipt_number=receipt_meta.number,
         txn_date=txn_date,
         txn_time=_parse_iso_time(receipt_meta.time),
@@ -714,6 +726,11 @@ def _build_line_items(extraction: ReceiptExtraction) -> list[LineItem]:
                 [modifier.model_dump(mode="json") for modifier in item.modifiers]
             ),
             bbox=list(item.bbox) if item.bbox is not None else None,
+            # A blank pre-printed product row: transcribed so nothing on the
+            # paper is lost, but not a purchase. Copied rather than recomputed
+            # -- the extractor decides what is blank ON THE PAPER, and this
+            # layer has no image to second-guess it with.
+            is_template_row=item.is_template_row,
         )
         for index, item in enumerate(extraction.line_items)
     ]
@@ -1211,6 +1228,8 @@ def _coerce_legibility(value: Any) -> Legibility:
 #: no-op, because a reviewer's edit that vanishes is a data-integrity bug.
 _RECEIPT_FIELDS: dict[str, tuple[str, Callable[[Any], Any]]] = {
     "merchant.name": ("merchant_name_raw", _coerce_optional_text),
+    "buyer.name": ("buyer_name_raw", _coerce_optional_text),
+    "buyer.tax_id": ("buyer_tax_id", _coerce_optional_text),
     "receipt.number": ("receipt_number", _coerce_optional_text),
     "receipt.date": ("txn_date", _coerce_date),
     "receipt.date_raw": ("date_raw", _coerce_optional_text),
@@ -1240,6 +1259,11 @@ _LINE_ITEM_FIELDS: dict[str, tuple[str, Callable[[Any], Any]]] = {
     "unit": ("unit", _coerce_optional_text),
     "unit_price": ("unit_price", _coerce_money),
     "line_total": ("line_total", _coerce_money),
+    # ``_coerce_bool`` is the same coercion the two boolean paths in
+    # ``_RECEIPT_FIELDS`` use, shared rather than re-derived: a screen that
+    # sends ``"false"`` as a JSON string must not read as true here while
+    # ``meta.is_handwritten`` reads it correctly one dict away.
+    "is_template_row": ("is_template_row", _coerce_bool),
 }
 
 _LINE_ITEM_PATH = re.compile(r"^line_items\[(\d+)\]\.([A-Za-z_][A-Za-z0-9_]*)$")

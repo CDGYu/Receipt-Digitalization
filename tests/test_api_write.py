@@ -326,6 +326,49 @@ def test_patch_writes_a_correction_attributed_to_the_session_user(
     assert correction.value_after == "1234.56"
 
 
+def test_a_buyer_correction_survives_the_route_and_comes_back_redacted(
+    reviewer_client, session_factory, receipt_id
+):
+    """The buyer is correctable *through the API*, not only in the repository.
+
+    ``CorrectionPatch`` names ``merchant``/``receipt``/``totals``/``payment``/
+    ``meta``/``line_items`` and does **not** name ``buyer``; it reaches
+    ``apply_corrections`` only because every level of that model is
+    ``extra="allow"`` and the route dumps with ``exclude_unset=True``. That is
+    a deliberate design (one error currency for "unknown field"), but it is
+    also exactly the kind of pass-through that a later tightening of the patch
+    model would silently break -- with the repository tests still green,
+    because they never cross this layer. This is that binding.
+
+    The PAN is here for the same reason the ``payment_method`` test above
+    carries one: ``buyer_name_raw`` is a new free-text column served over the
+    API, and a reviewer retyping a "Sold To" block off a slip can put a card
+    number in it. Redaction is bound one layer down in
+    ``tests/test_repository.py``; this checks the route agrees.
+    """
+    response = reviewer_client.patch(
+        f"/receipts/{receipt_id}",
+        json={"buyer": {"name": "IDEAL SOURCE 4111111111111111", "tax_id": "123-456-789-000"}},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["buyer"]["tax_id"] == "123-456-789-000"
+    assert "4111111111111111" not in body["buyer"]["name"]
+    assert body["buyer"]["name"].startswith("IDEAL SOURCE ")
+
+    with session_factory() as session:
+        stored = session.get(Receipt, receipt_id)
+        assert stored.buyer_tax_id == "123-456-789-000"
+        assert "4111111111111111" not in stored.buyer_name_raw
+        # The audit copy is the one nothing later scrubs.
+        rows = session.scalars(
+            select(Correction).where(Correction.field_path == "buyer.name")
+        ).all()
+        assert len(rows) == 1
+        assert "4111111111111111" not in rows[0].value_after
+
+
 def test_the_time_the_detail_returns_patches_back_unchanged(
     reviewer_client, session_factory, receipt_id
 ):
@@ -985,6 +1028,67 @@ def test_build_export_rows_without_a_secret_leaves_the_image_column_empty(
     assert rows, "fixture should produce at least one exportable receipt"
     # An unverifiable link is worse than no link.
     assert all(row.image_url is None for row in rows)
+
+
+def test_the_rebuilt_extraction_carries_the_buyer_and_the_template_flag(session_factory):
+    """``_export_extraction`` is lossless for every column the export writes.
+
+    The export consumes ``ReceiptExtraction``, not the ORM row (ADR-0010), so a
+    column this rebuild drops is a column the spreadsheet can never show no
+    matter what ``export/xlsx.py`` does. Both are asserted here rather than in
+    the export's own tests because this is where the loss would happen: the
+    buyer would export blank, and a template row -- a blank pre-printed line
+    nobody bought -- would be indistinguishable from a purchase, which is an
+    accounting ledger listing a sale that never occurred.
+    """
+    from receipts.persist.models import LineItem
+    from receipts.review.serializers import build_export_rows, query_export_receipts
+
+    receipt_uuid = uuid.uuid4()
+    with session_factory() as session:
+        session.add(
+            Receipt(
+                id=receipt_uuid,
+                status=ReceiptStatus.AUTO_APPROVED,
+                confidence=Decimal("0.910"),
+                merchant_name_raw="TOTAL WINE",
+                buyer_name_raw="IDEAL SOURCE",
+                buyer_tax_id="123-456-789-000",
+                txn_date=date(2026, 7, 4),
+                currency="USD",
+                total=Decimal("2000.00"),
+                image_key=make_image_key(receipt_uuid, "original"),
+                image_phash="",
+                line_items=[
+                    LineItem(position=0, description_raw="MaxiPower", is_template_row=True),
+                    LineItem(
+                        position=1,
+                        description_raw="DieselPlus",
+                        line_total=Decimal("2000.00"),
+                    ),
+                ],
+            )
+        )
+        session.commit()
+
+    with session_factory() as session:
+        receipts = query_export_receipts(
+            session, status=None, merchant_id=None, date_from=None,
+            date_to=None, min_confidence=None, limit=100,
+        )
+        extractions, _rows = build_export_rows(
+            session, receipts, secret="s", image_url_ttl_s=86400
+        )
+
+    # The query returns every exportable receipt in the shared database, so the
+    # row this test seeded is picked out by its own merchant rather than by an
+    # index another fixture could shift.
+    matched = [e for e in extractions if e.merchant.name == "TOTAL WINE"]
+    assert len(matched) == 1, f"expected exactly one seeded row, got {len(matched)}"
+    extraction = matched[0]
+    assert extraction.buyer.name == "IDEAL SOURCE"
+    assert extraction.buyer.tax_id == "123-456-789-000"
+    assert [item.is_template_row for item in extraction.line_items] == [True, False]
 
 
 # --------------------------------------------------------------------------- #

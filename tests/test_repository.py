@@ -39,6 +39,7 @@ from sqlalchemy.orm import Session
 
 from receipts.extract.clients.base import VLMResponse
 from receipts.extract.schema import (
+    Buyer,
     ExtractionMeta,
     Legibility,
     Modifier,
@@ -341,6 +342,74 @@ def test_save_extraction_falls_back_to_list_order_on_duplicate_positions(
         got = get_receipt(session, job.id)
         assert got is not None
         assert [item.position for item in got.line_items] == [0, 1]
+
+
+def test_save_extraction_persists_the_buyer(engine: sa.Engine) -> None:
+    """The "Sold To" block reaches its own columns, and is not the merchant.
+
+    A BIR sales invoice names both parties and carries both TINs, and they are
+    different numbers -- so the assertion below reads all four columns off one
+    row rather than the buyer's two alone. A buyer that lands in
+    ``merchant_name_raw``, or a merchant TIN mistaken for the buyer's, is the
+    failure this is shaped to catch.
+    """
+    extraction = _extraction()
+    extraction.buyer = Buyer(name="IDEAL SOURCE", tax_id="123-456-789-000")
+
+    job = _job()
+    with Session(engine) as session:
+        _save(session, job=job, extraction=extraction)
+        session.commit()
+
+    with Session(engine) as session:
+        got = get_receipt(session, job.id)
+        assert got is not None
+        assert got.buyer_name_raw == "IDEAL SOURCE"
+        assert got.buyer_tax_id == "123-456-789-000"
+        assert got.merchant_name_raw == "TOTAL WINE"
+
+
+def test_save_extraction_leaves_an_unnamed_buyer_null(engine: sa.Engine) -> None:
+    """``null`` over confident-wrong: no buyer printed means no buyer stored.
+
+    Both columns are nullable precisely because most receipts name no buyer and
+    the golden set leaves every buyer TIN blank. ``""`` would claim the model
+    read something where it read nothing, and would sort and export as a value.
+    """
+    job = _job()
+    with Session(engine) as session:
+        # ``_extraction()`` names no buyer -- ``Buyer()`` is both-None.
+        _save(session, job=job)
+        session.commit()
+
+    with Session(engine) as session:
+        got = get_receipt(session, job.id)
+        assert got is not None
+        assert got.buyer_name_raw is None
+        assert got.buyer_tax_id is None
+
+
+def test_save_extraction_persists_a_template_row_as_one(engine: sa.Engine) -> None:
+    """A blank pre-printed product row is transcribed AND flagged.
+
+    Both rows are asserted, not only the flagged one: a write that hardcoded
+    ``True`` (or dropped the field and let the column default win for every row)
+    would pass a single-row check and mislabel every real purchase.
+    """
+    extraction = _extraction()
+    extraction.line_items[0].is_template_row = True
+
+    job = _job()
+    with Session(engine) as session:
+        _save(session, job=job, extraction=extraction)
+        session.commit()
+
+    with Session(engine) as session:
+        got = get_receipt(session, job.id)
+        assert got is not None
+        assert [item.is_template_row for item in got.line_items] == [True, False]
+        # Nothing is silently dropped: the blank row is still on the receipt.
+        assert [item.description_raw for item in got.line_items] == ["MERLOT", "CABERNET"]
 
 
 def test_get_receipt_returns_none_for_an_unknown_id(engine: sa.Engine) -> None:
@@ -772,19 +841,28 @@ def test_every_text_column_save_extraction_writes_is_redacted(engine: sa.Engine)
     item_text = text_columns(LineItem.__table__)
     item_json = [c.name for c in LineItem.__table__.columns if isinstance(c.type, sa.JSON)]
     # The walk is the guarantee, so a filter that quietly matched nothing would
-    # make this test pass forever. Measured contents on 2026-08-02, after
-    # ``currency`` joined ``card_last4`` as a named exclusion:
-    # receipts -> merchant_name_raw, receipt_number, date_raw, payment_method,
-    # image_key, processed_image_key, image_phash;
+    # make this test pass forever. Measured contents on 2026-08-18, after
+    # ``buyer_name_raw``/``buyer_tax_id`` were added (``currency`` joined
+    # ``card_last4`` as a named exclusion on 2026-08-02):
+    # receipts -> merchant_name_raw, buyer_name_raw, buyer_tax_id,
+    # receipt_number, date_raw, payment_method, image_key,
+    # processed_image_key, image_phash;
     # line_items -> description_raw, sku, unit; JSON -> modifiers, bbox.
-    assert {"receipt_number", "date_raw", "merchant_name_raw"} <= set(receipt_text)
+    assert {
+        "receipt_number",
+        "date_raw",
+        "merchant_name_raw",
+        "buyer_name_raw",
+        "buyer_tax_id",
+    } <= set(receipt_text)
     assert {"description_raw", "sku", "unit"} <= set(item_text)
     assert "modifiers" in item_json
 
-    # Every str-typed field on Merchant, ReceiptMeta, Payment, ExtractionMeta,
-    # LineItem and Modifier that could plausibly feed a future column -- not
-    # only the fields already wired to one. Surrounding text differs per field
-    # so a failure names its own source instead of a bare, anonymous PAN.
+    # Every str-typed field on Merchant, Buyer, ReceiptMeta, Payment,
+    # ExtractionMeta, LineItem and Modifier that could plausibly feed a future
+    # column -- not only the fields already wired to one. Surrounding text
+    # differs per field so a failure names its own source instead of a bare,
+    # anonymous PAN.
     job = _job()
     extraction = ReceiptExtraction(
         merchant=ExtractedMerchant(
@@ -794,6 +872,7 @@ def test_every_text_column_save_extraction_writes_is_redacted(engine: sa.Engine)
             tax_id=f"TAX ID {pan}",
             phone=f"PHONE {pan}",
         ),
+        buyer=Buyer(name=f"BUYER {pan}", tax_id=f"BUYER TIN {pan}"),
         receipt=ReceiptMeta(
             number=f"NUMBER {pan}",
             date=f"DATE {pan}",
@@ -1932,6 +2011,128 @@ def test_apply_corrections_accepts_nested_and_text_patches(engine: sa.Engine) ->
         assert isinstance(got.total, Decimal)
         assert got.total == Decimal("800.00")
         assert session.scalar(select(sa.func.count()).select_from(Correction)) == 3
+
+
+def test_a_reviewer_can_correct_the_buyer(engine: sa.Engine) -> None:
+    """The buyer is correctable, so both paths are in the closed mapping.
+
+    ``_RECEIPT_FIELDS`` is explicit and closed: an unlisted path raises rather
+    than no-oping, so a column the reviewer's screen shows but the mapping does
+    not name is a field they can retype and watch vanish. The ``corrections``
+    rows are asserted too -- the audit trail is what makes the edit reviewable,
+    and a column written without one is a change nobody can trace.
+    """
+    job = _job()
+    with Session(engine) as session:
+        _save(session, job=job)
+        session.commit()
+
+    with Session(engine) as session:
+        apply_corrections(
+            session,
+            job.id,
+            {"buyer": {"name": "IDEAL SOURCE", "tax_id": "123-456-789-000"}},
+            "reviewer",
+        )
+
+    with Session(engine) as session:
+        got = get_receipt(session, job.id)
+        assert got is not None
+        assert got.buyer_name_raw == "IDEAL SOURCE"
+        assert got.buyer_tax_id == "123-456-789-000"
+        # The merchant is a different party and is untouched by a buyer edit.
+        assert got.merchant_name_raw == "TOTAL WINE"
+
+        rows = list(
+            session.scalars(
+                select(Correction)
+                .where(Correction.receipt_id == job.id)
+                .order_by(Correction.field_path)
+            )
+        )
+        assert [row.field_path for row in rows] == ["buyer.name", "buyer.tax_id"]
+        assert [row.value_before for row in rows] == [None, None]
+        assert [row.value_after for row in rows] == ["IDEAL SOURCE", "123-456-789-000"]
+
+
+def test_a_reviewer_can_clear_a_buyer_the_model_invented(engine: sa.Engine) -> None:
+    """Clearing the buyer stores ``None``, never ``""`` (ADR-0027 section 5).
+
+    A model that read the printer's footer as the buyer is exactly what a
+    reviewer clears, and an empty string would leave the receipt claiming a
+    buyer whose name happens to be blank.
+    """
+    extraction = _extraction()
+    extraction.buyer = Buyer(name="NOT THE BUYER", tax_id=None)
+
+    job = _job()
+    with Session(engine) as session:
+        _save(session, job=job, extraction=extraction)
+        session.commit()
+
+    with Session(engine) as session:
+        apply_corrections(session, job.id, {"buyer.name": None}, "reviewer")
+
+    with Session(engine) as session:
+        got = get_receipt(session, job.id)
+        assert got is not None
+        assert got.buyer_name_raw is None
+
+
+def test_a_reviewer_can_correct_the_template_row_flag(engine: sa.Engine) -> None:
+    """A row the model called a purchase, and the reviewer can see is blank.
+
+    Both directions are exercised in one patch: a real purchase marked as a
+    template, and a blank pre-printed row the model failed to flag.
+
+    **The clearing edit is sent as the string ``"false"``, not as ``False``**,
+    and that is the whole point of reusing ``_coerce_bool`` rather than
+    ``bool``. ``bool("false")`` is ``True`` -- a form that serialises a
+    checkbox as text would silently invert every un-flagging a reviewer makes,
+    and the flagged row would stay flagged while the audit row recorded the
+    edit as applied. Measured: substituting ``bool`` for ``_coerce_bool`` in
+    ``_LINE_ITEM_FIELDS`` fails this test and nothing else in the module. The
+    other half of the patch is a real JSON ``True``, so both wire shapes the
+    review UI can send are covered.
+    """
+    extraction = _extraction()
+    extraction.line_items[0].is_template_row = True
+
+    job = _job()
+    with Session(engine) as session:
+        _save(session, job=job, extraction=extraction)
+        session.commit()
+
+    with Session(engine) as session:
+        apply_corrections(
+            session,
+            job.id,
+            {
+                "line_items[0].is_template_row": "false",
+                "line_items[1].is_template_row": True,
+            },
+            "reviewer",
+        )
+
+    with Session(engine) as session:
+        got = get_receipt(session, job.id)
+        assert got is not None
+        assert [item.is_template_row for item in got.line_items] == [False, True]
+
+        rows = list(
+            session.scalars(
+                select(Correction)
+                .where(Correction.receipt_id == job.id)
+                .order_by(Correction.field_path)
+            )
+        )
+        assert [row.field_path for row in rows] == [
+            "line_items[0].is_template_row",
+            "line_items[1].is_template_row",
+        ]
+        # ``_as_text`` renders the *coerced* boolean, not the ``"false"`` that
+        # was sent -- the audit trail records what landed in the column.
+        assert [row.value_after for row in rows] == ["False", "True"]
 
 
 def test_apply_corrections_noop_patch_writes_no_rows(engine: sa.Engine) -> None:

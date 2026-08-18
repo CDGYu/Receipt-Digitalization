@@ -38,6 +38,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from ..export.xlsx import ReceiptExportRow
+from ..extract.schema import Buyer as ExtractBuyer
 from ..extract.schema import ExtractionMeta, ReceiptExtraction, ReceiptMeta, Totals
 from ..extract.schema import LineItem as ExtractLineItem
 from ..extract.schema import Merchant as ExtractMerchant
@@ -82,8 +83,8 @@ def _iso_date(value: date_cls | None) -> str | None:
 def _iso_time(value: time_cls | None) -> str | None:
     """A ``time`` column as ISO text -- ``isoformat()``, not ``"%H:%M"``.
 
-    ``receipt.time`` is one of the seventeen paths ``apply_corrections``
-    accepts (``_RECEIPT_FIELDS`` in
+    ``receipt.time`` is one of the paths ``apply_corrections`` accepts
+    (``_RECEIPT_FIELDS`` in
     :mod:`receipts.persist.repository`), so whatever this renders is what a
     reviewer's screen sends back through ``PATCH``. ``_coerce_time`` parses it
     with :meth:`datetime.time.fromisoformat`, which reads ``isoformat()``'s
@@ -182,25 +183,31 @@ def receipt_detail(receipt: Receipt, findings: list[ValidationFinding]) -> dict[
     does not have to learn a second one.
 
     **Every column a reviewer may correct is returned here** (P5.T3b).
-    ``_RECEIPT_FIELDS`` in :mod:`receipts.persist.repository` accepts
-    corrections for seventeen paths; this function returned seventeen
-    top-level keys, and they were different seventeen -- ``receipt_number``,
-    ``txn_time`` and ``payment_method`` were correctable but had no key at
-    all, so a reviewer could overwrite what the machine read without ever
-    being shown it. The three are additive: no existing key moved or changed
-    shape. ``tests/test_api_read.py::
+    ``_RECEIPT_FIELDS`` in :mod:`receipts.persist.repository` and this
+    function are two independently written lists of the same columns, and at
+    P5.T3b they had drifted: ``receipt_number``, ``txn_time`` and
+    ``payment_method`` were correctable but had no key here at all, so a
+    reviewer could overwrite what the machine read without ever being shown
+    it. No count is quoted, deliberately -- the pair grows (``buyer.name`` and
+    ``buyer.tax_id`` are the most recent additions) and a number here rots
+    silently. ``tests/test_api_read.py::
     test_every_correctable_receipt_column_is_readable_in_the_detail`` is what
-    now binds the two lists together.
+    binds the two lists together, and it fails on the next unpaired addition.
 
-    ``payment_method`` is redacted on the way *in*. It is one of the two
-    columns ``save_extraction`` passes through ``redact_pan`` -- the other is
-    ``merchant_name_raw``, which this function already returned -- and
-    ``_plan_change`` redacts every coerced text value a reviewer submits, so
-    the correction path is covered too. Those are the only two writers of the
-    column under ``src/`` (``create_pending_receipt``, the sole other
-    ``Receipt(...)`` construction, leaves it NULL), so what leaves here is
-    what §18 already permits to be stored: a PAN read off the card line
-    reaches this key as ``"VISA ************1111"``.
+    ``payment_method`` is redacted on the way *in*. ``save_extraction`` puts
+    **every** ``str`` value it writes through ``redact_pan`` in one blanket
+    pass rather than an enumerated column list (see its own comment on why the
+    enumerated list was abandoned), and ``_plan_change`` redacts every coerced
+    text value a reviewer submits, so the correction path is covered too.
+    Those are the only two writers of the column under ``src/``
+    (``create_pending_receipt``, the sole other ``Receipt(...)`` construction,
+    leaves it NULL), so what leaves here is what §18 already permits to be
+    stored: a PAN read off the card line reaches this key as
+    ``"VISA ************1111"``. Measured 2026-08-18 through
+    ``save_extraction``, one PAN seeded per field: ``merchant_name_raw``,
+    ``buyer_name_raw``, ``buyer_tax_id``, ``receipt_number``, ``date_raw`` and
+    ``payment_method`` all came back masked and none in the clear -- six
+    columns, which is why this paragraph no longer names two.
 
     **That sentence is a claim about every way a card line is written, so the
     measurement behind it is a table rather than an example.** An earlier
@@ -241,6 +248,13 @@ def receipt_detail(receipt: Receipt, findings: list[ValidationFinding]) -> dict[
         "confidence": money(receipt.confidence),
         "confidence_reasons": receipt.confidence_reasons,  # verbatim: None stays None
         "merchant_name_raw": receipt.merchant_name_raw,
+        # Nested for the same reason ``totals`` is: the buyer is a schema object
+        # (:class:`receipts.extract.schema.Buyer`) and the paths a reviewer's
+        # edit comes back on are ``buyer.name``/``buyer.tax_id``, so the key
+        # path a client reads is the key path it writes. Always an object, even
+        # when both columns are NULL -- the form still has two fields to draw,
+        # and a missing key is a client-side crash where ``null`` is a blank.
+        "buyer": {"name": receipt.buyer_name_raw, "tax_id": receipt.buyer_tax_id},
         "receipt_number": receipt.receipt_number,
         "txn_date": _iso_date(receipt.txn_date),
         "date_raw": receipt.date_raw,
@@ -340,6 +354,17 @@ def _export_extraction(receipt: Receipt) -> ReceiptExtraction:
     left at their schema defaults (``[]``/``None``/``False``), never
     invented.
 
+    **The buyer is the counter-example, and is rebuilt whole.** Reading the
+    paragraph above, a merchant whose ``tax_id`` cannot be rebuilt invites the
+    assumption that the buyer's cannot either; it can.
+    :class:`~receipts.extract.schema.Buyer` has exactly two fields, ``name``
+    and ``tax_id``, and both are columns on ``receipts`` -- it deliberately
+    carries no ``address``, so there is no third field to lose. Same for
+    ``LineItem.is_template_row``, which is a ``line_items`` column and is
+    copied straight across: the export needs it to keep a blank pre-printed
+    row out of the ledger, and a rebuild that dropped it would leave that
+    filter nothing to filter on.
+
     **Lossless for every column §13 (and this codebase's
     ``export/xlsx.py``) actually writes to a cell**, because the database is
     the source of truth and Excel is output only (ADR-0010): every one of
@@ -351,6 +376,10 @@ def _export_extraction(receipt: Receipt) -> ReceiptExtraction:
     """
     return ReceiptExtraction(
         merchant=ExtractMerchant(name=receipt.merchant_name_raw),
+        # Rebuilt in full, unlike the merchant: ``Buyer`` has exactly the two
+        # fields ``receipts`` stores (it deliberately has no ``address``), so
+        # nothing about the buyer is lost here.
+        buyer=ExtractBuyer(name=receipt.buyer_name_raw, tax_id=receipt.buyer_tax_id),
         receipt=ReceiptMeta(
             number=receipt.receipt_number,
             date=receipt.txn_date.isoformat() if receipt.txn_date is not None else None,
@@ -368,6 +397,10 @@ def _export_extraction(receipt: Receipt) -> ReceiptExtraction:
                 unit_price=item.unit_price,
                 line_total=item.line_total,
                 modifiers=[ExtractModifier(**modifier) for modifier in item.modifiers],
+                # Without this the export cannot tell a blank pre-printed row
+                # from a purchase, and a ledger that lists something nobody
+                # bought is a defect no downstream filter can undo.
+                is_template_row=item.is_template_row,
             )
             for item in receipt.line_items
         ],

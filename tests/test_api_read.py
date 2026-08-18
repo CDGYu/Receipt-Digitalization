@@ -90,6 +90,12 @@ def _seed(session_factory) -> None:
                 # value (or both being NULL) would let a wrong declared path
                 # pass. See that test.
                 merchant_name_raw="TOTAL WINE",
+                # A different party from the merchant, with a different TIN --
+                # both distinct from every other value on this row, so a
+                # declared detail path that pointed at the wrong column could
+                # not pass the comparison above.
+                buyer_name_raw="IDEAL SOURCE",
+                buyer_tax_id="123-456-789-000",
                 receipt_number="OR-2026-0042",
                 txn_date=date(2026, 7, 2),
                 date_raw="02/07/2026",
@@ -306,6 +312,12 @@ def test_reasons_never_recorded_is_null_not_empty(reviewer_client, pending_recei
 #: ``change_amount``), so no rule turns one into the other.
 _COLUMN_TO_DETAIL_PATH = {
     "merchant_name_raw": ("merchant_name_raw",),
+    # Nested, like ``totals``: the buyer is a schema object
+    # (:class:`receipts.extract.schema.Buyer`), and the two correction paths
+    # are ``buyer.name``/``buyer.tax_id``, so what a reviewer reads is
+    # addressed exactly the way what they send back is.
+    "buyer_name_raw": ("buyer", "name"),
+    "buyer_tax_id": ("buyer", "tax_id"),
     "receipt_number": ("receipt_number",),
     "txn_date": ("txn_date",),
     "date_raw": ("date_raw",),
@@ -415,6 +427,37 @@ def test_detail_returns_the_number_the_time_and_the_payment_method(reviewer_clie
     assert body["receipt_number"] == "OR-2026-0042"
     assert body["txn_time"] == "14:30:45"
     assert body["payment_method"] == "VISA"
+
+
+def test_detail_returns_the_buyer_under_its_own_key(reviewer_client, receipt_id):
+    """The "Sold To" block a reviewer has to check against the paper.
+
+    Nested under ``buyer`` so the key path is the correction path
+    (``buyer.name`` / ``buyer.tax_id``) rather than a second vocabulary, and
+    asserted alongside ``merchant_name_raw`` because the two names are the
+    thing most easily swapped: a sales invoice prints both, and a payload that
+    returned the merchant under ``buyer`` would look entirely plausible.
+    """
+    body = reviewer_client.get(f"/receipts/{receipt_id}").json()
+
+    assert body["buyer"] == {"name": "IDEAL SOURCE", "tax_id": "123-456-789-000"}
+    assert body["merchant_name_raw"] == "TOTAL WINE"
+
+
+def test_a_receipt_with_no_buyer_returns_nulls_not_an_absent_key(
+    reviewer_client, pending_receipt_id
+):
+    """``null`` over confident-wrong, and the key is always there to render.
+
+    ``RECEIPT_C`` is the ``pending`` row: nothing has been extracted onto it,
+    so both buyer columns are NULL. The reviewer's form still has to draw the
+    two fields, so ``buyer`` is an object with null members rather than a
+    missing key -- an absent key is a client-side crash, and ``""`` would read
+    as a buyer whose name is blank.
+    """
+    body = reviewer_client.get(f"/receipts/{pending_receipt_id}").json()
+
+    assert body["buyer"] == {"name": None, "tax_id": None}
 
 
 def test_the_three_added_fields_are_null_when_the_column_is(reviewer_client, pending_receipt_id):
