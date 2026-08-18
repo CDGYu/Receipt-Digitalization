@@ -76,6 +76,16 @@ class LineItem(BaseModel):
     bbox: list[float] | None = Field(
         default=None, description="[x0,y0,x1,y1] normalised 0-1 if model supports grounding"
     )
+    is_template_row: bool = Field(
+        default=False,
+        description=(
+            "A pre-printed product row left blank on the form -- transcribed so "
+            "nothing on the receipt is lost, but NOT a purchase. Every "
+            "arithmetic and line-item-quality rule skips these. Set it for a row "
+            "that is blank ON THE PAPER, never for a filled row the model could "
+            "not read: that is meta.ambiguous_fields."
+        ),
+    )
 
     def net_total(self) -> Decimal | None:
         """line_total plus signed modifier amounts. None if line_total is None."""
@@ -93,6 +103,25 @@ class Merchant(BaseModel):
     address: str | None = None
     tax_id: str | None = None
     phone: str | None = None
+
+
+class Buyer(BaseModel):
+    """Who the receipt was issued TO -- the 'Sold To' / 'Registered Name' block.
+
+    Distinct from :class:`Merchant`, which is who issued it, and from the
+    printer's details in the footer. All three carry a TIN on a BIR sales
+    invoice and they are three different numbers.
+
+    No ``address``: the forms print a Business Address line for the buyer and
+    it is blank on every receipt in the golden set, so the column would be
+    empty and the match surface wider for no gain. Add it when a receipt
+    carries one.
+    """
+
+    model_config = _MODEL_CONFIG
+
+    name: str | None = None
+    tax_id: str | None = None
 
 
 class ReceiptMeta(BaseModel):
@@ -183,6 +212,7 @@ class ReceiptExtraction(BaseModel):
     model_config = _MODEL_CONFIG
 
     merchant: Merchant = Field(default_factory=Merchant)
+    buyer: Buyer = Field(default_factory=Buyer)
     receipt: ReceiptMeta = Field(default_factory=ReceiptMeta)
     line_items: list[LineItem] = Field(default_factory=list)
     totals: Totals = Field(default_factory=Totals)
