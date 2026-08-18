@@ -223,6 +223,16 @@ def _seed_every_table(url: str) -> None:
         engine.dispose()
 
 
+def _ordering(table: sa.Table) -> list[sa.Column[Any]]:
+    """A deterministic sort key for ``table`` -- its primary key.
+
+    Every table in this schema has a single-column primary key; the fallback to
+    all columns is there so a future keyless table still sorts deterministically
+    rather than silently reintroducing positional comparison of unordered rows.
+    """
+    return list(table.primary_key.columns) or list(table.columns)
+
+
 def _table_contents(url: str) -> dict[str, list[dict[str, Any]]]:
     """Every row of every table, as plain dicts.
 
@@ -238,7 +248,18 @@ def _table_contents(url: str) -> dict[str, list[dict[str, Any]]]:
         with engine.connect() as connection:
             return {
                 table.name: [
-                    dict(row) for row in connection.execute(sa.select(table)).mappings().all()
+                    dict(row)
+                    for row in connection.execute(
+                        # ORDER BY the primary key. The rows are paired
+                        # positionally below, and a batch rebuild recreates the
+                        # table and copies rows across without any promise of
+                        # preserving rowid order -- so unordered reads would let
+                        # a correct migration fail the comparison as soon as a
+                        # table holds more than one row.
+                        sa.select(table).order_by(*_ordering(table))
+                    )
+                    .mappings()
+                    .all()
                 ]
                 for table in metadata.sorted_tables
                 if table.name != ALEMBIC_BOOKKEEPING
@@ -253,6 +274,15 @@ def _not_null_columns_holding_null(url: str) -> list[str]:
     Deliberately written over *all* tables and *all* columns rather than the ones
     a given revision touches: this is the half of the property that keeps working
     as the schema grows.
+
+    Counted as ``count(*) - count(column)`` and **not** as ``WHERE column IS
+    NULL``, which is the obvious spelling and is inert here. SQLite folds
+    ``column IS NULL`` to false whenever the schema text declares that column
+    ``NOT NULL``, so the obvious spelling returns 0 no matter what the table
+    actually holds -- an assertion that cannot fail. ``count(column)`` counts
+    non-NULL values, so the difference is the number of NULLs, and no optimiser
+    can shortcut it from the declaration. It is also plain standard SQL, so it
+    means the same thing on Postgres.
     """
     engine = create_engine(url)
     offenders: list[str] = []
@@ -267,9 +297,7 @@ def _not_null_columns_holding_null(url: str) -> list[str]:
                     if column.nullable:
                         continue
                     nulls = connection.execute(
-                        sa.select(sa.func.count())
-                        .select_from(table)
-                        .where(column.is_(None))
+                        sa.select(sa.func.count() - sa.func.count(column)).select_from(table)
                     ).scalar_one()
                     if nulls:
                         offenders.append(f"{table.name}.{column.name} ({nulls} row(s))")
