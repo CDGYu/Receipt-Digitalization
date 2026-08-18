@@ -25,6 +25,17 @@ the caller's to compute -- typically
 ``any(f.severity is Severity.ERROR and not f.resolved_by_repair for f in report.findings)``
 -- because a report is not otherwise needed here.
 
+**Not every line item is a ledger row.** The ``LineItems`` sheet carries a
+receipt's purchases. A row flagged ``is_template_row`` -- a product line the
+form pre-prints and this receipt left blank -- was transcribed upstream so
+nothing on the paper is lost, but nobody bought it, and an accounting ledger
+that lists it is wrong about what was bought. Those rows are dropped here, and
+the ``items`` count on ``Receipts`` counts what is left, so the two sheets
+cannot disagree about the same receipt. A receipt whose rows are *all* blank
+still gets its ``Receipts`` row, and still reaches ``Needs Review`` if that is
+where it was routed: the receipt exists and somebody has to look at it. Only the
+purchases are absent.
+
 DEFERRED FOLLOW-UP: §13's docstring mentions streaming with openpyxl's
 ``write_only`` mode above 5000 receipts to keep memory flat. That mode forbids
 random cell access, which is exactly what the §13.5 formatting pass (row fills,
@@ -49,7 +60,7 @@ from receipts.score.confidence import ReceiptStatus
 from receipts.score.thresholds import REVIEW_THRESHOLD
 
 if TYPE_CHECKING:
-    from receipts.extract.schema import ReceiptExtraction
+    from receipts.extract.schema import LineItem, ReceiptExtraction
 
 # Display formats. Presentation only; they never change a stored value.
 _NUMBER_FORMAT = "#,##0.00"  # money and quantity (§13.5)
@@ -77,6 +88,8 @@ _CONFIDENCE_QUANTUM = Decimal("0.001")
 _RECEIPT_HEADERS = [
     "receipt_id",
     "merchant",
+    "Buyer",
+    "Buyer TIN",
     "date",
     "currency",
     "subtotal",
@@ -108,6 +121,7 @@ _REVIEW_HEADERS = [
     "priority",
     "receipt_id",
     "merchant",
+    "Buyer",
     "date",
     "total",
     "confidence",
@@ -116,6 +130,17 @@ _REVIEW_HEADERS = [
 ]
 
 _SUMMARY_HEADERS = ["metric", "value"]
+
+#: 1-based column index by header name, derived from the header lists above so
+#: the two can never disagree. Every cell below addresses its column through one
+#: of these rather than through a literal, because inserting a column moves every
+#: column to its right -- as ``Buyer``/``Buyer TIN`` just did on ``Receipts`` and
+#: ``Buyer`` on ``Needs Review``. With literals each value would have gone on
+#: being written to its old column, under someone else's header, and silently: a
+#: spreadsheet cell accepts anything.
+_RECEIPT_COL = {name: i for i, name in enumerate(_RECEIPT_HEADERS, start=1)}
+_LINEITEM_COL = {name: i for i, name in enumerate(_LINEITEM_HEADERS, start=1)}
+_REVIEW_COL = {name: i for i, name in enumerate(_REVIEW_HEADERS, start=1)}
 
 
 @dataclass(frozen=True)
@@ -247,6 +272,19 @@ def _finalize(ws, headers: list[str], *, last_row: int, confidence_col: int | No
     _autosize(ws, width)
 
 
+def _purchases(receipt: ReceiptExtraction) -> list[LineItem]:
+    """The line items that are purchases -- blank pre-printed rows excluded.
+
+    ``LineItem.is_template_row`` marks a product row the form prints and this
+    receipt left blank. It is transcribed so nothing on the paper is lost, but
+    it is not a purchase, and an accounting ledger that lists one says somebody
+    bought something nobody bought. ``validate.rules`` already keeps these rows
+    out of the totals it reconciles (see ``_purchased`` there); this is that same
+    exclusion, at the display boundary.
+    """
+    return [item for item in receipt.line_items if not item.is_template_row]
+
+
 def _merchant_of(receipt: ReceiptExtraction, row: ReceiptExportRow | None) -> str | None:
     if row is not None and row.merchant_name is not None:
         return row.merchant_name
@@ -286,23 +324,19 @@ def _write_review_sheet(
     row_no = 1
     for receipt_id, receipt, row in pending:
         row_no += 1
-        ws.cell(row=row_no, column=1, value=row.review_priority)
-        ws.cell(row=row_no, column=2, value=receipt_id)
-        ws.cell(row=row_no, column=3, value=_merchant_of(receipt, row))
-        ws.cell(row=row_no, column=4, value=_date_of(receipt, row))
-        _num_cell(ws, row_no, 5, receipt.totals.total)
-        _ratio_cell(ws, row_no, 6, row.confidence)
-        ws.cell(row=row_no, column=7, value=row.review_reason)
-        _link_cell(ws, row_no, 8, row.image_url)
+        ws.cell(row=row_no, column=_REVIEW_COL["priority"], value=row.review_priority)
+        ws.cell(row=row_no, column=_REVIEW_COL["receipt_id"], value=receipt_id)
+        ws.cell(row=row_no, column=_REVIEW_COL["merchant"], value=_merchant_of(receipt, row))
+        _text_cell(ws, row_no, _REVIEW_COL["Buyer"], receipt.buyer.name)
+        ws.cell(row=row_no, column=_REVIEW_COL["date"], value=_date_of(receipt, row))
+        _num_cell(ws, row_no, _REVIEW_COL["total"], receipt.totals.total)
+        _ratio_cell(ws, row_no, _REVIEW_COL["confidence"], row.confidence)
+        ws.cell(row=row_no, column=_REVIEW_COL["reason"], value=row.review_reason)
+        _link_cell(ws, row_no, _REVIEW_COL["image"], row.image_url)
         if row.has_unresolved_error:
             _fill_row(ws, row_no, len(_REVIEW_HEADERS), _ERROR_FILL)
 
-    _finalize(
-        ws,
-        _REVIEW_HEADERS,
-        last_row=row_no,
-        confidence_col=_REVIEW_HEADERS.index("confidence") + 1,
-    )
+    _finalize(ws, _REVIEW_HEADERS, last_row=row_no, confidence_col=_REVIEW_COL["confidence"])
 
 
 def _write_summary_sheet(
@@ -457,45 +491,73 @@ def export_workbook(
             receipt_id = i + 1
         entries.append((receipt_id, receipt, row))
 
+        # What the receipt says was bought. The blank pre-printed rows of a BIR
+        # form come out here once, so the count below and the LineItems sheet
+        # cannot end up disagreeing about the same receipt.
+        purchases = _purchases(receipt)
+
         receipt_row += 1
-        receipts_ws.cell(row=receipt_row, column=1, value=receipt_id)
-        receipts_ws.cell(row=receipt_row, column=2, value=_merchant_of(receipt, row))
-        receipts_ws.cell(row=receipt_row, column=3, value=_date_of(receipt, row))
-        receipts_ws.cell(row=receipt_row, column=4, value=receipt.receipt.currency)
-        _num_cell(receipts_ws, receipt_row, 5, receipt.totals.subtotal)
-        _num_cell(receipts_ws, receipt_row, 6, receipt.totals.tax)
-        _num_cell(receipts_ws, receipt_row, 7, receipt.totals.discount)
-        _num_cell(receipts_ws, receipt_row, 8, receipt.totals.total)
-        receipts_ws.cell(row=receipt_row, column=9, value=receipt.payment.method)
+        receipts_ws.cell(row=receipt_row, column=_RECEIPT_COL["receipt_id"], value=receipt_id)
+        receipts_ws.cell(
+            row=receipt_row, column=_RECEIPT_COL["merchant"], value=_merchant_of(receipt, row)
+        )
+        # Who bought, as against the merchant who sold: the "Sold To" block of a
+        # BIR sales invoice. A TIN is digits and separators, never a number, so
+        # it goes in as text for the same reason card_last4 does.
+        _text_cell(receipts_ws, receipt_row, _RECEIPT_COL["Buyer"], receipt.buyer.name)
+        _text_cell(receipts_ws, receipt_row, _RECEIPT_COL["Buyer TIN"], receipt.buyer.tax_id)
+        receipts_ws.cell(
+            row=receipt_row, column=_RECEIPT_COL["date"], value=_date_of(receipt, row)
+        )
+        receipts_ws.cell(
+            row=receipt_row, column=_RECEIPT_COL["currency"], value=receipt.receipt.currency
+        )
+        _num_cell(receipts_ws, receipt_row, _RECEIPT_COL["subtotal"], receipt.totals.subtotal)
+        _num_cell(receipts_ws, receipt_row, _RECEIPT_COL["tax"], receipt.totals.tax)
+        _num_cell(receipts_ws, receipt_row, _RECEIPT_COL["discount"], receipt.totals.discount)
+        _num_cell(receipts_ws, receipt_row, _RECEIPT_COL["total"], receipt.totals.total)
+        receipts_ws.cell(
+            row=receipt_row, column=_RECEIPT_COL["payment_method"], value=receipt.payment.method
+        )
         # Text format, or Excel eats the leading zeros (§13.5).
-        _text_cell(receipts_ws, receipt_row, 10, receipt.receipt.number)
-        _text_cell(receipts_ws, receipt_row, 11, receipt.payment.card_last4)
-        receipts_ws.cell(row=receipt_row, column=12, value=len(receipt.line_items))
+        _text_cell(receipts_ws, receipt_row, _RECEIPT_COL["receipt_no"], receipt.receipt.number)
+        _text_cell(receipts_ws, receipt_row, _RECEIPT_COL["card_last4"], receipt.payment.card_last4)
+        receipts_ws.cell(row=receipt_row, column=_RECEIPT_COL["items"], value=len(purchases))
         receipts_ws.cell(
-            row=receipt_row, column=13, value="Yes" if receipt.meta.is_handwritten else "No"
+            row=receipt_row,
+            column=_RECEIPT_COL["handwritten"],
+            value="Yes" if receipt.meta.is_handwritten else "No",
         )
-        _ratio_cell(receipts_ws, receipt_row, 14, row.confidence)
+        _ratio_cell(receipts_ws, receipt_row, _RECEIPT_COL["confidence"], row.confidence)
         receipts_ws.cell(
-            row=receipt_row, column=15, value=row.status.value if row.status is not None else None
+            row=receipt_row,
+            column=_RECEIPT_COL["status"],
+            value=row.status.value if row.status is not None else None,
         )
-        _link_cell(receipts_ws, receipt_row, 16, row.image_url)
+        _link_cell(receipts_ws, receipt_row, _RECEIPT_COL["image"], row.image_url)
         if row.has_unresolved_error:
             _fill_row(receipts_ws, receipt_row, len(_RECEIPT_HEADERS), _ERROR_FILL)
 
-        for item in receipt.line_items:
+        for item in purchases:
             lineitem_row += 1
-            lineitems_ws.cell(row=lineitem_row, column=1, value=receipt_id)
-            lineitems_ws.cell(row=lineitem_row, column=2, value=item.position)
-            lineitems_ws.cell(row=lineitem_row, column=3, value=item.description_raw)
-            _num_cell(lineitems_ws, lineitem_row, 4, item.qty)
-            _num_cell(lineitems_ws, lineitem_row, 5, item.unit_price)
-            _num_cell(lineitems_ws, lineitem_row, 6, item.line_total)
+            lineitems_ws.cell(
+                row=lineitem_row, column=_LINEITEM_COL["receipt_id"], value=receipt_id
+            )
+            lineitems_ws.cell(
+                row=lineitem_row, column=_LINEITEM_COL["position"], value=item.position
+            )
+            lineitems_ws.cell(
+                row=lineitem_row, column=_LINEITEM_COL["description"], value=item.description_raw
+            )
+            _num_cell(lineitems_ws, lineitem_row, _LINEITEM_COL["qty"], item.qty)
+            _num_cell(lineitems_ws, lineitem_row, _LINEITEM_COL["unit_price"], item.unit_price)
+            _num_cell(lineitems_ws, lineitem_row, _LINEITEM_COL["line_total"], item.line_total)
 
     _finalize(
         receipts_ws,
         _RECEIPT_HEADERS,
         last_row=receipt_row,
-        confidence_col=_RECEIPT_HEADERS.index("confidence") + 1,
+        confidence_col=_RECEIPT_COL["confidence"],
     )
     _finalize(lineitems_ws, _LINEITEM_HEADERS, last_row=lineitem_row)
 

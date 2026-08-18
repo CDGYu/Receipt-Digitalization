@@ -17,6 +17,7 @@ openpyxl = pytest.importorskip("openpyxl")
 
 from receipts.export import export_workbook  # noqa: E402
 from receipts.extract.schema import (  # noqa: E402
+    Buyer,
     LineItem,
     Merchant,
     Payment,
@@ -109,15 +110,17 @@ def test_receipts_sheet_rows_and_values(tmp_path):
     assert ws["A2"].value == "r1"
     assert ws["A3"].value == "r2"
 
-    # total column (H) for r1 equals the expected number.
-    assert ws["H2"].value == pytest.approx(21.76)
+    # These are column letters, so they move when a column is inserted: Buyer
+    # and Buyer TIN went in at C and D, pushing everything from date rightwards
+    # by two. total is J, payment_method K, discount I.
+    assert ws["J2"].value == pytest.approx(21.76)
 
     # merchant and payment_method spot checks.
     assert ws["B2"].value == "Total Wine Co"
-    assert ws["I3"].value == "cash"
+    assert ws["K3"].value == "cash"
 
-    # a null money field (discount, column G) is an empty cell, not "None".
-    assert ws["G3"].value is None
+    # a null money field (discount, column I) is an empty cell, not "None".
+    assert ws["I3"].value is None
 
 
 def test_lineitems_sheet_row_count_and_spot_check(tmp_path):
@@ -451,3 +454,164 @@ def test_ids_take_precedence_over_row_metadata_ids(tmp_path):
     id_col = _header_col(review, "receipt_id")
     # r3's explicit id wins over the metadata's own receipt_id.
     assert review.cell(row=2, column=id_col).value == "c"
+
+
+# --------------------------------------------------------------------------- #
+# The buyer, and the rows nobody bought.
+#
+# A BIR sales invoice names who it was sold TO -- distinct from the merchant who
+# sold it -- and prints product rows that stay blank when nothing on that line
+# was bought. Both reach the workbook, but not in the same way: the buyer gets
+# its own columns, while a blank pre-printed row is deliberately kept OUT of the
+# LineItems sheet. It was transcribed so nothing on the paper is lost; it is not
+# a purchase, and a ledger that lists one is wrong about what was bought.
+# --------------------------------------------------------------------------- #
+
+
+def _purchase(description: str, amount: Decimal, *, position: int = 1) -> LineItem:
+    return LineItem(
+        position=position,
+        description_raw=description,
+        qty=Decimal("1"),
+        unit_price=amount,
+        line_total=amount,
+    )
+
+
+def _template(description: str, *, position: int = 1) -> LineItem:
+    """A pre-printed product row left blank on the form: transcribed, not bought."""
+    return LineItem(position=position, description_raw=description, is_template_row=True)
+
+
+def _bir_receipt(
+    *,
+    buyer_name: str | None = None,
+    buyer_tax_id: str | None = None,
+    line_items: list[LineItem] | None = None,
+    total: Decimal = Decimal("2000.00"),
+) -> ReceiptExtraction:
+    return ReceiptExtraction(
+        merchant=Merchant(name="METRO OIL SUBIC, INC."),
+        buyer=Buyer(name=buyer_name, tax_id=buyer_tax_id),
+        receipt=ReceiptMeta(date="2026-03-23", currency="PHP"),
+        line_items=(
+            [_purchase("DieselPlus", Decimal("2000.00"))] if line_items is None else line_items
+        ),
+        totals=Totals(total=total),
+        payment=Payment(method="cash"),
+    )
+
+
+def _book(tmp_path, receipts, rows=None):
+    out = tmp_path / "bir.xlsx"
+    export_workbook(receipts, out_path=out, rows=rows)
+    return openpyxl.load_workbook(out)
+
+
+def _column_values(ws, name: str) -> list:
+    """Every data cell under the named header, top to bottom."""
+    col = _header_col(ws, name)
+    return [ws.cell(row=row, column=col).value for row in range(2, ws.max_row + 1)]
+
+
+def test_the_review_sheet_carries_the_buyer(tmp_path):
+    wb = _book(
+        tmp_path,
+        [_bir_receipt(buyer_name="IDEAL SOURCE")],
+        rows=[
+            ReceiptExportRow(
+                receipt_id="r1",
+                status=ReceiptStatus.NEEDS_REVIEW,
+                review_reason="verify the buyer",
+                review_priority=1,
+            )
+        ],
+    )
+    assert _column_values(wb["Needs Review"], "Buyer") == ["IDEAL SOURCE"]
+
+
+def test_the_receipts_sheet_carries_the_buyer_name_and_tin(tmp_path):
+    ws = _book(
+        tmp_path,
+        [_bir_receipt(buyer_name="IDEAL SOURCE", buyer_tax_id="008-123-456-000")],
+    )["Receipts"]
+
+    assert _column_values(ws, "Buyer") == ["IDEAL SOURCE"]
+    assert _column_values(ws, "Buyer TIN") == ["008-123-456-000"]
+    # A TIN is digits and separators, never a quantity: text format, or Excel
+    # coerces it and eats any leading zero (§13.5, same as card_last4).
+    assert ws.cell(row=2, column=_header_col(ws, "Buyer TIN")).number_format == "@"
+
+
+def test_a_receipt_that_names_no_buyer_leaves_the_buyer_cells_empty(tmp_path):
+    """A receipt that names no buyer gets blank cells, never the text "None".
+
+    Blankness is all this can pin, and all any test of a saved workbook can:
+    openpyxl drops an empty-string cell on write, so "" and None reload
+    identically. Null-versus-empty-string is a real distinction on the internal
+    path -- ``receipts.buyer_name_raw`` stores NULL, never "" -- but it is
+    invisible at this boundary by construction, so no assertion here can hold
+    the exporter to it.
+    """
+    ws = _book(tmp_path, [_bir_receipt()])["Receipts"]
+
+    assert _column_values(ws, "Buyer") == [None]
+    assert _column_values(ws, "Buyer TIN") == [None]
+
+
+def test_a_template_row_is_not_exported_as_a_purchase(tmp_path):
+    """An accounting ledger listing something nobody bought is a defect."""
+    wb = _book(
+        tmp_path,
+        [
+            _bir_receipt(
+                line_items=[
+                    _template("MaxiPower", position=1),
+                    _purchase("DieselPlus", Decimal("2000.00"), position=2),
+                ]
+            )
+        ],
+    )
+    assert _column_values(wb["LineItems"], "description") == ["DieselPlus"]
+
+
+def test_the_items_count_counts_purchases_not_pre_printed_rows(tmp_path):
+    """`items` must agree with the LineItems sheet, or the workbook contradicts itself."""
+    wb = _book(
+        tmp_path,
+        [
+            _bir_receipt(
+                line_items=[
+                    _template("MaxiPower", position=1),
+                    _purchase("DieselPlus", Decimal("2000.00"), position=2),
+                ]
+            )
+        ],
+    )
+    assert _column_values(wb["Receipts"], "items") == [1]
+    assert wb["LineItems"].max_row == 2  # header + the one purchase
+
+
+def test_a_receipt_of_nothing_but_template_rows_still_exports_the_receipt(tmp_path):
+    """A BIR form with nothing filled in is a real scan.
+
+    The receipt is a row on Receipts -- it was scanned, it exists, and dropping
+    it would hide a receipt somebody has to look at. Its pre-printed rows are
+    not purchases, so the ledger gets none of them and the count says zero.
+    """
+    wb = _book(
+        tmp_path,
+        [
+            _bir_receipt(
+                total=Decimal("0.00"),
+                line_items=[
+                    _template("MaxiPower", position=1),
+                    _template("DieselPlus", position=2),
+                ],
+            )
+        ],
+    )
+    assert _column_values(wb["Receipts"], "merchant") == ["METRO OIL SUBIC, INC."]
+    assert _column_values(wb["Receipts"], "items") == [0]
+    assert wb["LineItems"].max_row == 1  # header only: no purchases to list
+    assert _column_values(wb["LineItems"], "description") == []
