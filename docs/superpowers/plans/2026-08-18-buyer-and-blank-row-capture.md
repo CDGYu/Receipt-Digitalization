@@ -117,7 +117,16 @@ On `ReceiptExtraction`, after `merchant`:
 - [ ] **Step 4: Run the tests and the suite**
 
 Run: `python -m pytest tests/test_extract_schema.py -v` → PASS
-Run: `python -m pytest` → **expect failures in eval scoring tests.** New schema paths change `flatten` output. Record which tests fail and their names; Task 7 fixes them by labelling. If anything *outside* eval/golden scoring fails, STOP and report.
+Run: `python -m pytest` → **expect a clean suite, up by exactly the new tests.**
+
+> **CORRECTED 2026-08-18, during Task 1.** This step originally predicted eval
+> scoring failures that Task 7's labels would clear. **That was a plan defect of
+> the reasoning class** — it cannot happen. `eval/golden_set.py` loads the golden
+> labels through `ReceiptExtraction.model_validate_json`, so a **defaulted** field
+> materialises identically on the truth side and the prediction side, and
+> `field_accuracy` sees no asymmetry to score. Verified by measurement, not
+> argument. If you see eval failures here, something else is wrong — stop and
+> report rather than assuming this note is stale.
 
 - [ ] **Step 5: Commit**
 
@@ -635,15 +644,56 @@ git commit -m "feat(prompt): ask for the buyer, and for the rows left blank"
 
 ---
 
-### Task 7: The golden labels
+### Task 7: The golden labels, AND the metric routing they expose
 
 **Files:**
 - Modify: `eval/golden/labels/r001.json`, `r002.json`, `r003.json`
-- Test: whatever eval tests Task 1 turned red.
+- Modify: `eval/metrics.py`
+- Test: `tests/test_eval_metrics.py`, `tests/test_eval_floor.py`, `tests/test_golden_set.py`
 
 **Interfaces:**
 - Consumes: Task 1's schema.
-- Produces: labelled truth for the new paths.
+- Produces: labelled truth for the new paths; `is_template_row` routed out of the averaged transcription metric.
+
+> **SCOPE GREW 2026-08-18, during Task 1, on a measured finding.**
+> `is_template_row` is a `bool` defaulting to `False`, and `eval/metrics.py`'s
+> `_is_filled` counts `False` as **filled** — so `line_items[i].is_template_row`
+> lands in the `line_items` group and is **averaged into headline transcription
+> accuracy**, where `False` is correct for free on every row that is not blank.
+> **Measured on r001** with a prediction that got the row count right and read
+> nothing: **2/17 (11.8%) → 3/18 (16.7%)**, derived by stashing `schema.py` and
+> re-measuring. It scales at one free point per line item.
+>
+> This re-opens the inflation `FieldBreakdown` exists to prevent, on the one
+> number this project exists to state honestly. **It is fixed here, not parked.**
+
+**Step 0 (do this BEFORE the labels): route `is_template_row` to `self_report`.**
+
+It is the model's *claim about the row* — whether the paper was blank — not a
+transcription of printed content. ADR-0040's own grouping rationale puts claims
+of that kind in `self_report`, which is reported separately and never averaged
+into transcription accuracy. The existing `False`-defaulting bools (`meta.is_handwritten`,
+`meta.is_refund`, `meta.receipt_is_inconsistent`) are already routed there;
+`is_template_row` is the first one to land under a path prefix that averages.
+
+Write the failing test first:
+
+```python
+def test_is_template_row_is_scored_as_a_self_report_not_a_transcription() -> None:
+    """A False-defaulting bool in an averaged group is a free point per row.
+
+    Measured before this routing existed: a prediction that read NOTHING off
+    r001 scored 11.8%, and adding the field alone took it to 16.7%.
+    """
+    truth = {"line_items": [{"description_raw": "CLEAN DIESEL", "is_template_row": False}]}
+    pred = {"line_items": [{"description_raw": "", "is_template_row": False}]}
+    breakdown = field_accuracy(truth, pred)
+    assert breakdown.transcription.total == 1  # description_raw only
+```
+
+Adapt the assertion to `field_accuracy`'s real return shape — read
+`eval/metrics.py` first. **The property to pin is that the flag does not appear
+in the transcription denominator**, however that module expresses it.
 
 **Values read from the images on 2026-08-18 — transcribe exactly, do not normalise:**
 
@@ -671,13 +721,18 @@ Each label's `meta.notes` says the blank rows "must NOT be emitted as line items
 
 - [ ] **Step 4: Run the eval tests**
 
-Run: `python -m pytest` → the Task 1 failures clear. If field accuracy moves, that is expected: the new paths are now labelled truth.
+Run: `python -m pytest tests/test_eval_metrics.py tests/test_eval_floor.py tests/test_golden_set.py -v` → PASS
+Run: `python -m pytest` → clean.
+
+**There are no "Task 1 failures" to clear** — see the corrected note in Task 1
+Step 4. Field accuracy *will* move, and that is the point: the buyer paths become
+labelled truth, and `is_template_row` leaves the transcription denominator.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add eval/golden/labels/
-git commit -m "test(golden): label the buyer, and the rows the forms leave blank"
+git add eval/metrics.py eval/golden/labels/ tests/
+git commit -m "test(golden): label the buyer, and stop scoring a flag as transcription"
 ```
 
 ---
