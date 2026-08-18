@@ -829,7 +829,7 @@ def test_a_template_row_is_not_exported_as_a_purchase() -> None:
 
 - [ ] **Step 2: Run and confirm failure**
 
-Run: `python -m pytest tests/test_export_xlsx.py -k "buyer or template" -v` → FAIL
+Run: `python -m pytest tests/test_xlsx.py -k "buyer or template" -v` → FAIL
 
 - [ ] **Step 3: Implement**
 
@@ -837,10 +837,10 @@ Add `Buyer` and `Buyer TIN` headers and their cells via the existing `_text_cell
 
 - [ ] **Step 4: Run and commit**
 
-Run: `python -m pytest tests/test_export_xlsx.py -v` → PASS
+Run: `python -m pytest tests/test_xlsx.py -v` → PASS
 
 ```bash
-git add src/receipts/export/xlsx.py tests/test_export_xlsx.py
+git add src/receipts/export/xlsx.py tests/test_xlsx.py
 git commit -m "feat(export): buyer columns, and no phantom ledger rows"
 ```
 
