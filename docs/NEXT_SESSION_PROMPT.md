@@ -44,10 +44,23 @@ git log --oneline refs/remotes/origin/main..main  # what the pending push would 
 
 ## What last merged, and how to check what is pushed.
 
-**Phase 6 merchant fingerprinting merged by true fast-forward on 2026-08-18** —
-`8f0b413` → `9a3ffa2`, thirty commits, single parent each, zero merge commits.
+**Buyer / Sold-To capture and blank-row transcription merged by true
+fast-forward on 2026-08-19** — `a26d6c1` -> `27f765e`, **45 commits**,
+single parent each, zero merge commits. Decision **ADR-0044**, which
+**corrects ADR-0040**. The eval harness stopped punishing correct behaviour:
+all three golden receipts reach **100% field accuracy with zero
+hallucinations**, from r001's 12/17 with 20 hallucinations at the branch point.
+That is the ruler being corrected, not the model improving. It left
+**ISSUE-003 through ISSUE-009**; **ISSUE-006 is the one to read first** — a
+reviewer who mis-flags the *sole* purchase on a receipt gets zero findings at
+any severity and the row silently leaves the export, and all three golden
+receipts have exactly that shape. `docs/MEMORY.md`'s section is the record.
+
+*(The previous last-merge was **Phase 6 merchant fingerprinting**, 2026-08-18
+— `8f0b413` → `9a3ffa2`, thirty commits, single parent each, zero merge
+commits.
 Decision: **ADR-0043**, which **corrects ADR-0011** and carries its own
-`## Correction (2026-08-18)`. **§0h is the record**, and it is worth reading even
+`## Correction (2026-08-18)`.)* **§0h is the record**, and it is worth reading even
 if you are not touching merchants: the close found a behavioural regression that
 all five gates were green on.
 
@@ -153,6 +166,7 @@ is a summary of one).
 | track | state | where |
 |---|---|---|
 | ~~**T1 — finish Phase 6**~~ | **CLOSED 2026-08-18.** Merged by true fast-forward, nothing carries over. | **§0h** is the record, ADR-0043 |
+| ~~**T3 — buyer and blank rows**~~ | **CLOSED 2026-08-19.** Merged by true fast-forward, 45 commits. Left ISSUE-003..009. | `docs/MEMORY.md` section, ADR-0044 |
 | **T2 — make accuracy measurable** | Blocked on hardware and one user action. **Phase 6 is now built and unvalidated because of it.** | §C below, `docs/KNOWN_ISSUES.md` ISSUE-001 |
 
 **T2 is the only track with anything in it, and it has been blocked on the same

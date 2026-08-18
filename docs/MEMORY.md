@@ -19,7 +19,7 @@ and **one of my own** — the Gemini key was never in git history.
 **No count of refreshes is written here** — it is a number that moves without its
 sentence changing, which is review standard 5.
 
-**Freshness anchor `12ae743`** — the last commit that is not this handoff pair.
+**Freshness anchor `27f765e`** — the last commit that is not this handoff pair.
 **It is written twice below — here and inside the command.** Moving one and not
 the other is what happened on this file's previous refresh, and the gate caught
 it because it parses the anchor out of the *command*.
@@ -34,7 +34,7 @@ else: a stamp cannot name the commit that writes it. The test is a command,
 not a commit and not a count:
 
 ```
-git log --oneline 12ae743..main -- ":(top,exclude)docs/MEMORY.md" ":(top,exclude)docs/NEXT_SESSION_PROMPT.md"
+git log --oneline 27f765e..main -- ":(top,exclude)docs/MEMORY.md" ":(top,exclude)docs/NEXT_SESSION_PROMPT.md"
 git log --oneline refs/remotes/origin/main..main   # what a push would send
 git ls-remote --heads origin main                  # authoritative on what is pushed
 git branch --no-merged main                        # must name NOTHING
@@ -103,6 +103,24 @@ answer.)*
   "NO BRANCH IN FLIGHT" for three days while one existed, in 2026-08, and then
   announced one for three days after it landed would have been the same defect
   in the other direction.
+- **Buyer / Sold-To capture and blank-row transcription is COMPLETE AND MERGED**
+  (2026-08-19, true fast-forward `a26d6c1` -> `27f765e`, **45 commits, single
+  parent each, zero merge commits**). `feat/buyer-and-blank-rows` is kept at its
+  merge point. Decision: **ADR-0044**. It **corrects ADR-0040**, whose decisions
+  1 and 2 were amended in place by `0669678`. Ledger:
+  `.superpowers/sdd/2026-08-18-buyer-and-blank-row-capture/progress.md`
+  (gitignored -- open by path). New: **ISSUE-003 through ISSUE-009**.
+  **What it delivered: the eval harness stopped punishing correct behaviour.**
+  All three golden receipts reach **100% field accuracy with zero
+  hallucinations** (r001 28/28, r002 24/24, r003 18/18), from r001's **12/17
+  with 20 hallucinations** at the branch point. That is the ruler being
+  corrected, not the model improving -- `MAX_FLOOR` did not move and every floor
+  gained headroom. `eval/results/` is untracked, so **100% is proven REACHABLE,
+  not achieved by a model**; nothing in the tree can check the latter.
+  **What the close cost:** no Critical, and 9 of 9 deletion probes on the
+  headline deliverables were caught. But **the branch's entire defect surface
+  was prose** -- claims about how well something had been checked, written
+  without running the thing described. Two were in ADRs written the same day.
 - **Phase 6 merchant fingerprinting is COMPLETE AND MERGED** (2026-08-18, true
   fast-forward `8f0b413` → `9a3ffa2`, **thirty commits, single parent each, zero
   merge commits**). `feat/merchant-fingerprinting` is kept at its merge point and
@@ -394,6 +412,68 @@ answer.)*
   searching the tracked tree — open ledgers by path.**
 - **The repo is PUBLIC.** Verified 2026-07-31 via the GitHub API. See
   "Environment / provider" for what that exposes.
+
+## Buyer and blank rows -- COMPLETE AND MERGED (2026-08-19)
+
+**True fast-forward `a26d6c1` -> `27f765e`, 45 commits, single parent each, zero
+merge commits.** Spec
+`docs/superpowers/specs/2026-08-18-buyer-sold-to-capture-design.md`, plan
+`docs/superpowers/plans/2026-08-18-buyer-and-blank-row-capture.md`, nine tasks,
+all reviewed. **ADR-0044** is the decision.
+
+**Two things, captured end to end.** `buyer` is the *Sold To* party on a BIR
+invoice, distinct from the merchant who sold: schema, migration, persistence,
+validation rules R014/R015, prompt, golden labels, Excel export, review UI.
+`is_template_row` flags a pre-printed product row the form left blank --
+captured so nothing on the receipt is lost, **excluded from every total and
+arithmetic check**, and filtered out of the accounting export, because a ledger
+listing something nobody bought is a defect.
+
+**The plan carried five defects that pre-flight caught and one that review did.**
+A test file that does not exist; a Files block naming one frontend file where
+three are load-bearing; a wrong test filename repeated three times; wrong
+component props, including an approve button the component does not have; and an
+"all N" cardinal primed to rot. The sixth is the one that matters: **step 2
+ordered the blank rows appended after the filled one**, while `prompts.py` rule
+5 and the spec both require **printed order** and `field_accuracy` joins
+`line_items[i]` by **array index**. Measured against a perfect prompt-follower:
+append order 20/28 with 4 phantom hallucinations, paper order 28/28 with 0.
+Every one was corrected at source, so the plan on disk is the corrected one.
+
+**r002's ordering was wrong too and nobody had measured it** -- nothing tracked
+recorded where `DieselPlus` sat relative to `MaxiPower`/`MaxiGreen`. Both orders
+were re-derived **from the images**, correctly, because the notes were the
+artefact under suspicion.
+
+**What the reviews bought, and what they did not.** Nine task reviews plus a
+whole-branch review. No Critical at any stage. The defects were almost entirely
+**prose**: seven corrections across five rounds on a single test file, every one
+a claim about what a test guaranteed, written without mutating anything to
+check. The pattern held to the last commit -- a fix round closed three false
+claims while one of its own drafts asserted a test name that does not exist.
+
+**Two lessons are ADR-0044's decisions.** The model-facing surface is
+`prompts.py` **plus every `Field(description=)` in `schema.py`**; that was
+established by measurement in Task 6 and then violated twice more by people who
+had read the measurement. And a prose guarantee held by lexical pins is weaker
+than it reads, so what the pins miss is now written beside them.
+
+**What it leaves behind, all in `docs/KNOWN_ISSUES.md`:** ISSUE-003 (a blank row
+drops the pre-printed unit; the contract scopes a template row to its printed
+name), ISSUE-004 (nothing checks a label against its photograph -- per-label
+content rot is open by design, and re-reading the image is the only instrument),
+ISSUE-005 (`R051`'s message promises printed order while its check accepts any
+permutation), ISSUE-006 (**the sharpest one** -- a reviewer who mis-flags the
+*sole* purchase on a receipt gets **zero findings at any severity** and the row
+silently leaves the export; all three golden receipts have exactly that
+one-purchase shape), ISSUE-007 (`PROMPT_VERSION` is unpinned, and the honest fix
+is a production caller for `prompt_bundle_hash()`, not a checked-in hash table
+whose easiest green is the defect), ISSUE-008, ISSUE-009.
+
+**Not fixed, deliberately:** `is_template_row` is now readable in the detail
+payload and pinned by a property -- *correctable implies readable* -- but it is
+**not rendered in the review UI**, so a reviewer still cannot see which rows will
+vanish from the export. Surfacing it is a design decision, not a bug fix.
 
 ## Browser-pass I6, I8 and I9 — COMPLETE AND MERGED (2026-08-14)
 
