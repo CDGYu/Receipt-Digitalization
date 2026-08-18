@@ -266,12 +266,7 @@ def test_R015_passes_on_a_matching_tax_id_even_when_the_name_differs():
 
 
 def test_R015_matches_names_through_the_normalizer():
-    """r002's buyer is written `Ideal source` — lowercase 's', as on the paper.
-
-    The label records what the receipt says, not what the operator is called, so
-    the raw strings genuinely differ and only `normalize_merchant_name` closes
-    the gap.
-    """
+    """r002's buyer is written `Ideal source` — lowercase 's', as on the paper."""
     extraction = ReceiptExtraction(buyer=Buyer(name="Ideal source", tax_id=None))
     assert buyer_findings(extraction, "R015", expected_name="IDEAL SOURCE") == []
 
