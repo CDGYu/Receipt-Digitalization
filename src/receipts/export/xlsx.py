@@ -35,7 +35,20 @@ cannot disagree about the same receipt. §13.1 calls that column "count of line
 items"; here it counts purchases, deliberately -- that clause was written before
 ``is_template_row`` existed and has no notion of a row that is not a purchase,
 and a workbook contradicting itself is worse than a workbook diverging from a
-spec clause that predates the field. A receipt whose rows are *all* blank
+spec clause that predates the field. A purchase also keeps the ``position`` it
+had on the paper, so exported positions have gaps -- 2, 5, 7 where the rows
+between them were blank. Renumbering to 1, 2, 3 would falsify where the row sits
+on the receipt, which is the one thing ``position`` is for, so the gaps are
+correct; an accountant reading the sheet will still notice them.
+
+``_purchases`` below and ``validate.rules._purchased`` are the same predicate
+written twice, with nothing pinning them together: if one ever learns about a
+new kind of non-purchase row, the other will not. The single source would be an
+``is_purchase`` on :class:`~receipts.extract.schema.LineItem`, where the flag
+itself lives. Recorded rather than done, because ``extract/schema.py`` is closed
+to this change.
+
+A receipt whose rows are *all* blank
 still gets its ``Receipts`` row, and still reaches ``Needs Review`` if that is
 where it was routed: the receipt exists and somebody has to look at it. Only the
 purchases are absent.
@@ -136,12 +149,20 @@ _REVIEW_HEADERS = [
 _SUMMARY_HEADERS = ["metric", "value"]
 
 #: 1-based column index by header name, derived from the header lists above so
-#: the two can never disagree. Every cell below addresses its column through one
-#: of these rather than through a literal, because inserting a column moves every
-#: column to its right -- as ``buyer``/``buyer_tax_id`` just did on ``Receipts``
-#: and ``buyer`` on ``Needs Review``. With literals each value would have gone on
-#: being written to its old column, under someone else's header, and silently: a
-#: spreadsheet cell accepts anything.
+#: the two can never disagree. Every cell on the three columnar sheets --
+#: ``Receipts``, ``LineItems``, ``Needs Review`` -- addresses its column through
+#: one of these rather than through a literal, because inserting a column moves
+#: every column to its right, as ``buyer``/``buyer_tax_id`` just did on
+#: ``Receipts`` and ``buyer`` on ``Needs Review``. With literals each value would
+#: have gone on being written to its old column, under someone else's header, and
+#: silently: a spreadsheet cell accepts anything.
+#:
+#: ``Summary`` is deliberately not in that list and has no map: it is a
+#: two-column label/value dashboard, not a columnar sheet. Its rows are appended
+#: in sections, nothing is ever inserted between a label and its value, and a
+#: third column there would be a redesign rather than an insertion -- so its
+#: ``column=1``/``column=2`` writes are literals and should stay that way. Do not
+#: add a fourth map to make the file look uniform.
 _RECEIPT_COL = {name: i for i, name in enumerate(_RECEIPT_HEADERS, start=1)}
 _LINEITEM_COL = {name: i for i, name in enumerate(_LINEITEM_HEADERS, start=1)}
 _REVIEW_COL = {name: i for i, name in enumerate(_REVIEW_HEADERS, start=1)}
@@ -331,7 +352,7 @@ def _write_review_sheet(
         ws.cell(row=row_no, column=_REVIEW_COL["priority"], value=row.review_priority)
         ws.cell(row=row_no, column=_REVIEW_COL["receipt_id"], value=receipt_id)
         ws.cell(row=row_no, column=_REVIEW_COL["merchant"], value=_merchant_of(receipt, row))
-        _text_cell(ws, row_no, _REVIEW_COL["buyer"], receipt.buyer.name)
+        ws.cell(row=row_no, column=_REVIEW_COL["buyer"], value=receipt.buyer.name)
         ws.cell(row=row_no, column=_REVIEW_COL["date"], value=_date_of(receipt, row))
         _num_cell(ws, row_no, _REVIEW_COL["total"], receipt.totals.total)
         _ratio_cell(ws, row_no, _REVIEW_COL["confidence"], row.confidence)
@@ -506,9 +527,12 @@ def export_workbook(
             row=receipt_row, column=_RECEIPT_COL["merchant"], value=_merchant_of(receipt, row)
         )
         # Who bought, as against the merchant who sold: the "Sold To" block of a
-        # BIR sales invoice. A TIN is digits and separators, never a number, so
-        # it goes in as text for the same reason card_last4 does.
-        _text_cell(receipts_ws, receipt_row, _RECEIPT_COL["buyer"], receipt.buyer.name)
+        # BIR sales invoice. The name is a plain cell, like ``merchant`` beside
+        # it -- Excel does not mangle a name. The TIN is digits and separators,
+        # never a quantity, and goes in as text for the reason card_last4 does.
+        receipts_ws.cell(
+            row=receipt_row, column=_RECEIPT_COL["buyer"], value=receipt.buyer.name
+        )
         _text_cell(receipts_ws, receipt_row, _RECEIPT_COL["buyer_tax_id"], receipt.buyer.tax_id)
         receipts_ws.cell(
             row=receipt_row, column=_RECEIPT_COL["date"], value=_date_of(receipt, row)
