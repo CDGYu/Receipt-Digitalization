@@ -63,6 +63,22 @@ class Settings(BaseSettings):
     # processes needs a Redis lease and is deliberately not attempted here).
     vlm_max_concurrency: int = 4
 
+    # --- Who our receipts should be addressed to (§17) -------------------- #
+    # Maps EXPECTED_BUYER_NAME / EXPECTED_BUYER_TAX_ID. The operator's own
+    # registered identity, compared against the receipt's Sold To block by
+    # R014/R015. A per-deployment constant like DEFAULT_CURRENCY, not a tuning
+    # knob, which is why it lives here and not in rules.yaml.
+    #
+    # BOTH UNSET MEANS BOTH RULES ARE INERT. A deployment that has not declared
+    # who it is gets no findings, rather than a finding on every receipt. A
+    # blank value counts as unset: ``EXPECTED_BUYER_NAME=`` in an env file is a
+    # placeholder nobody filled in, not a declaration.
+    #
+    # ``receipts.pipeline`` is what reads these and puts them on the
+    # ``ValidationContext``; the rules never import ``Settings`` themselves.
+    expected_buyer_name: str | None = None
+    expected_buyer_tax_id: str | None = None
+
     # --- Pipeline (§17: Pipeline) ---------------------------------------- #
     max_repair_attempts: int = 1
     consistency_runs: int = 3

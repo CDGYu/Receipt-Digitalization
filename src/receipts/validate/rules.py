@@ -1,4 +1,4 @@
-"""The 28 validation rules.
+"""The 30 validation rules.
 
 Design contract for every rule in this module:
 
@@ -23,6 +23,7 @@ from decimal import Decimal, InvalidOperation
 from typing import ClassVar, Iterable, NamedTuple
 
 from ..extract.schema import ReceiptExtraction
+from ..normalize.text import normalize_merchant_name
 from .context import ValidationContext
 from .report import Finding, Severity
 
@@ -239,6 +240,21 @@ def digits_only(value: str) -> str:
     return re.sub(r"\D", "", value)
 
 
+def expects_a_buyer(ctx: ValidationContext) -> bool:
+    """True when this deployment has declared who its receipts are issued to.
+
+    The shared `applies()` gate for R014 and R015. Keyed on a NON-BLANK value
+    rather than on `is not None`: `EXPECTED_BUYER_NAME=` in an env file is a
+    placeholder nobody filled in, and reading it as a declaration would put a
+    WARN on every receipt whose buyer was not read — the one outcome the setting
+    exists to avoid.
+    """
+    return bool(
+        (ctx.expected_buyer_name or "").strip()
+        or (ctx.expected_buyer_tax_id or "").strip()
+    )
+
+
 def median(values: list[Decimal]) -> Decimal:
     ordered = sorted(values)
     n = len(ordered)
@@ -365,6 +381,92 @@ class LineItemsPresent(Rule):
                 "receipt between the header and the subtotal.",
                 field_paths=["line_items"],
                 context={"estimated": expected},
+            )
+        ]
+
+
+@register
+class BuyerPresent(Rule):
+    id = "R014"
+    severity = Severity.WARN
+    description = "buyer.name is not empty when an expected buyer is configured."
+
+    def applies(self, r, ctx) -> bool:
+        return expects_a_buyer(ctx)
+
+    def check(self, r, ctx) -> list[Finding]:
+        # Keyed on `name`, never on `tax_id`. The buyer TIN line is printed on
+        # every receipt in the golden set and filled on none of them, so a null
+        # buyer.tax_id is a CORRECT extraction of an empty field; flagging it
+        # would fire on the whole corpus and be right about none of it.
+        if (r.buyer.name or "").strip():
+            return []
+        return [
+            self.finding(
+                "buyer.name is empty. The 'Sold To' / 'Registered Name' block "
+                "names who the receipt was issued to. It is not the merchant in "
+                "the header and not the printer in the footer. If the line is "
+                "blank on the paper, leave it null.",
+                field_paths=["buyer.name"],
+            )
+        ]
+
+
+@register
+class BuyerIsUs(Rule):
+    id = "R015"
+    severity = Severity.WARN
+    description = "The buyer matches the configured operator."
+
+    def applies(self, r, ctx) -> bool:
+        return expects_a_buyer(ctx)
+
+    def check(self, r, ctx) -> list[Finding]:
+        # TIN first: a printed identifier settles identity, and a name cannot
+        # override it. UNEXERCISED ON THE CURRENT CORPUS — every golden buyer
+        # TIN is blank, so no corpus test reaches this branch and no accuracy
+        # number depends on it. It is written because it is right the moment a
+        # receipt carries a buyer TIN. Do not "simplify" it away for being
+        # uncovered by the golden set.
+        #
+        # Compared as DIGITS on both the gate and the equality, so a placeholder
+        # a model transcribed off a blank TIN line ("-", "N/A") is treated as no
+        # identifier at all and falls through to the name. Gating on the raw
+        # string would turn that placeholder into an ERROR asserting a different
+        # registered entity, on a receipt whose TIN line is simply empty.
+        read_tin = (r.buyer.tax_id or "").strip()
+        read_digits = digits_only(read_tin)
+        want_digits = digits_only(ctx.expected_buyer_tax_id or "")
+        if read_digits and want_digits:
+            if read_digits == want_digits:
+                return []
+            return [
+                self.finding(
+                    f"The receipt's buyer TIN {read_tin!r} is not this "
+                    "operator's TIN. A differing TIN is a different registered "
+                    "entity, so this receipt may not be ours.",
+                    field_paths=["buyer.tax_id"],
+                    severity=Severity.ERROR,
+                )
+            ]
+
+        # Name second, and only ever a WARN. The buyer name is HANDWRITTEN on
+        # these forms — the least legible field on the page — so an ERROR here
+        # would block auto-approval for the whole corpus on the strength of OCR
+        # noise. Matched, differs, and not-read are three states: this branch
+        # reports only `differs`.
+        read_name = (r.buyer.name or "").strip()
+        want_name = (ctx.expected_buyer_name or "").strip()
+        if not read_name or not want_name:
+            return []  # 'not read' is R014's finding, not a mismatch.
+        if normalize_merchant_name(read_name) == normalize_merchant_name(want_name):
+            return []
+        return [
+            self.finding(
+                f"The receipt's buyer {read_name!r} does not match this "
+                "operator. The name is handwritten on these forms, so check the "
+                "image before treating it as someone else's receipt.",
+                field_paths=["buyer.name"],
             )
         ]
 

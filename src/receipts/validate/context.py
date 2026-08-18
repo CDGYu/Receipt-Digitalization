@@ -125,6 +125,19 @@ class ValidationContext:
     merchant: Any | None = None
     consistency: ConsistencyResult | None = None
     parse_error: str | None = None
+    #: The operator's own registered identity — who this deployment's receipts
+    #: are supposed to be addressed to — compared against the receipt's "Sold
+    #: To" block by R014/R015. It arrives HERE rather than being read from
+    #: ``Settings`` inside the rules: validation is pure, so the caller reads the
+    #: environment and hands the answer in (``receipts.pipeline`` does this from
+    #: ``EXPECTED_BUYER_NAME`` / ``EXPECTED_BUYER_TAX_ID``). A rule that imported
+    #: ``Settings`` would make the rule set depend on the process environment and
+    #: stop being reproducible from its inputs.
+    #:
+    #: BOTH BLANK MEANS BOTH RULES ARE INERT. A deployment that has not declared
+    #: who it is gets no findings, rather than a finding on every receipt.
+    expected_buyer_name: str | None = None
+    expected_buyer_tax_id: str | None = None
     config: RuleConfig = field(default_factory=RuleConfig)
     today: date = field(default_factory=date.today)
 

@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import logging
 from collections import Counter
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from decimal import Decimal
 
 from ..validate.context import ValidationContext
@@ -267,11 +267,14 @@ def _evaluate(response: VLMResponse, ctx: ValidationContext,
               normalize_fn=None, pass_name: str = "extract") -> Attempt:
     """Validate one model response, handling the no-parse case."""
     normalize_fn = normalize_fn or (lambda x: x)
-    local_ctx = ValidationContext(
-        triage=ctx.triage, ocr_text=ctx.ocr_text, merchant=ctx.merchant,
-        consistency=ctx.consistency, parse_error=response.parse_error,
-        config=ctx.config, today=ctx.today,
-    )
+    # A per-attempt copy, so `parse_error` describes THIS response and is not
+    # written into a context shared across a thread pool. It must be a COPY, not
+    # a field-by-field rebuild: an enumeration carries over only the fields that
+    # existed when it was written, so every field added to ValidationContext
+    # afterwards is silently dropped on the one path the pipeline actually runs.
+    # That is not hypothetical -- it is how `expected_buyer_name` arrived, and
+    # R014/R015 were inert on every real run until this became `replace`.
+    local_ctx = replace(ctx, parse_error=response.parse_error)
     extraction = response.parsed or ReceiptExtraction()
     if response.ok:
         extraction = normalize_fn(extraction)

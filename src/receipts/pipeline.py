@@ -471,6 +471,18 @@ def process_receipt(
     # context shared across a thread pool would otherwise be written from
     # several receipts at once.
     ctx = replace(ctx) if ctx is not None else ValidationContext()
+    # Who this deployment's receipts should be addressed to. Read from the
+    # environment HERE and handed to the rules on the context, because
+    # validation is pure: R014/R015 never import Settings, so a report stays
+    # reproducible from the extraction plus the context alone. A context that
+    # already carries an expected buyer keeps it — that was declared by the
+    # caller, and this is not the place to overrule it.
+    if ctx.expected_buyer_name is None and ctx.expected_buyer_tax_id is None:
+        ctx = replace(
+            ctx,
+            expected_buyer_name=settings.expected_buyer_name,
+            expected_buyer_tax_id=settings.expected_buyer_tax_id,
+        )
     gate = gate if gate is not None else get_vlm_gate(settings)
     cost_guard = cost_guard if cost_guard is not None else CostGuard.from_settings(settings)
     guarded = GuardedVLMClient(client, gate=gate, guard=cost_guard)

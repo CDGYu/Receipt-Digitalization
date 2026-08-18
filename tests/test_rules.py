@@ -17,6 +17,7 @@ import pytest
 
 from eval.golden_set import DEFAULT_LABELS_DIR, load_labels
 from receipts.extract.schema import (
+    Buyer,
     ConsistencyResult,
     DocumentType,
     Legibility,
@@ -31,7 +32,7 @@ from receipts.extract.schema import (
     TriageResult,
 )
 from receipts.validate.context import RuleConfig, ValidationContext
-from receipts.validate.report import Severity
+from receipts.validate.report import Finding, Severity
 from receipts.validate.rules import RULES, normalize_desc, within_tolerance
 from receipts.validate.validator import validate
 
@@ -165,6 +166,197 @@ def test_R013_skips_when_triage_expects_zero_items(ctx):
     r.line_items = []
     r.totals.subtotal = None
     assert not fired(r, ctx, "R013")
+
+
+# --------------------------------------------------------------------------- #
+# The buyer — R014 (was it read at all) and R015 (is it us)
+#
+# `buyer_findings` is this file's stand-in for the plan's `run_rule` sketch. It
+# runs the REAL validator over a context carrying an expected buyer and then
+# keeps one rule's findings: the fixtures below are deliberately bare, so most
+# of the presence family fires alongside, and filtering by rule id is what keeps
+# the assertions about the rule under test. `by_rule` is the same lookup
+# test_R011_downgrades_when_date_raw_kept already uses.
+#
+# The expected buyer is read off the CONTEXT, never off Settings — validation
+# stays pure, and the pipeline is what reads the environment (pipeline.py).
+# --------------------------------------------------------------------------- #
+
+
+def buyer_findings(
+    extraction: ReceiptExtraction,
+    rule_id: str,
+    *,
+    expected_name: str | None = None,
+    expected_tax_id: str | None = None,
+) -> list[Finding]:
+    ctx = ValidationContext(
+        today=TODAY,
+        config=RuleConfig(),
+        expected_buyer_name=expected_name,
+        expected_buyer_tax_id=expected_tax_id,
+    )
+    return validate(extraction, ctx).by_rule(rule_id)
+
+
+def test_R014_fires_when_the_buyer_name_was_not_read():
+    findings = buyer_findings(ReceiptExtraction(), "R014", expected_name="IDEAL SOURCE")
+    assert [f.severity for f in findings] == [Severity.WARN]
+
+
+def test_R014_does_not_fire_on_a_blank_tax_id_when_the_name_was_read():
+    """The buyer TIN line is printed on every golden receipt and filled on none.
+
+    A rule that flagged it would fire on the whole corpus and be right about
+    none of it, which is why R014 keys on `name` and never on `tax_id`.
+    """
+    extraction = ReceiptExtraction(buyer=Buyer(name="IDEAL SOURCE", tax_id=None))
+    assert buyer_findings(extraction, "R014", expected_name="IDEAL SOURCE") == []
+
+
+def test_R015_is_an_error_when_the_tax_ids_differ():
+    """SYNTHETIC FIXTURE — the golden set cannot reach this branch.
+
+    All three buyer TINs on the corpus are blank, so no corpus test covers the
+    TIN comparison. The branch is written because it is right the moment a
+    receipt carries a buyer TIN, not because anything today exercises it.
+    """
+    extraction = ReceiptExtraction(
+        buyer=Buyer(name="IDEAL SOURCE", tax_id="111-111-111-000")
+    )
+    findings = buyer_findings(
+        extraction,
+        "R015",
+        expected_name="IDEAL SOURCE",
+        expected_tax_id="222-222-222-000",
+    )
+    assert [f.severity for f in findings] == [Severity.ERROR]
+
+
+def test_R015_is_only_a_warning_when_the_names_differ_and_there_is_no_tax_id():
+    """The buyer name is handwritten on every golden receipt.
+
+    An ERROR here would block auto-approval for the whole corpus on the strength
+    of the least legible field on the page.
+    """
+    extraction = ReceiptExtraction(buyer=Buyer(name="SOMEONE ELSE", tax_id=None))
+    findings = buyer_findings(extraction, "R015", expected_name="IDEAL SOURCE")
+    assert [f.severity for f in findings] == [Severity.WARN]
+
+
+def test_R015_passes_on_a_matching_tax_id_even_when_the_name_differs():
+    """TIN-first: a matching TIN settles identity and a name cannot override it.
+
+    SYNTHETIC, for the same reason as the ERROR case above. `ldeal Sonrce` is a
+    plausible misreading of the handwritten name, and it must not raise anything
+    once the printed identifier agrees.
+    """
+    extraction = ReceiptExtraction(
+        buyer=Buyer(name="ldeal Sonrce", tax_id="222-222-222-000")
+    )
+    assert (
+        buyer_findings(
+            extraction,
+            "R015",
+            expected_name="IDEAL SOURCE",
+            expected_tax_id="222-222-222-000",
+        )
+        == []
+    )
+
+
+def test_R015_matches_names_through_the_normalizer():
+    """r002's buyer is written `Ideal source` — lowercase 's', as on the paper.
+
+    The label records what the receipt says, not what the operator is called, so
+    the raw strings genuinely differ and only `normalize_merchant_name` closes
+    the gap.
+    """
+    extraction = ReceiptExtraction(buyer=Buyer(name="Ideal source", tax_id=None))
+    assert buyer_findings(extraction, "R015", expected_name="IDEAL SOURCE") == []
+
+
+def test_R014_is_inert_when_no_expected_buyer_is_configured():
+    """A deployment that has not declared who it is gets no findings.
+
+    Both shapes: a buyer that was read and is nobody in particular, and a buyer
+    that was not read at all. The second is the one that would otherwise put a
+    WARN on every receipt an undeclared deployment ever processes.
+    """
+    read = ReceiptExtraction(buyer=Buyer(name="ANYONE AT ALL", tax_id=None))
+    assert buyer_findings(read, "R014") == []
+    assert buyer_findings(ReceiptExtraction(), "R014") == []
+
+
+def test_R015_is_inert_when_no_expected_buyer_is_configured():
+    extraction = ReceiptExtraction(buyer=Buyer(name="ANYONE AT ALL", tax_id=None))
+    assert buyer_findings(extraction, "R015") == []
+
+
+def test_both_buyer_rules_treat_a_blank_configured_name_as_unset():
+    """`EXPECTED_BUYER_NAME=` in an env file declares nothing.
+
+    Keyed on `is not None` this would be a declaration, and R014 would warn on
+    every receipt whose buyer was not read — the exact outcome the setting rules
+    out. Keyed on a non-blank value it is what it looks like: unset.
+    """
+    assert buyer_findings(ReceiptExtraction(), "R014", expected_name="   ") == []
+    extraction = ReceiptExtraction(buyer=Buyer(name="ANYONE AT ALL", tax_id=None))
+    assert buyer_findings(extraction, "R015", expected_name="   ") == []
+
+
+def test_R015_is_silent_when_only_a_tax_id_is_configured_and_none_was_read():
+    """Nothing to compare is not a mismatch.
+
+    The rule APPLIES — a TIN is configured — but the receipt carries no buyer
+    TIN and no expected name, so both comparisons are unavailable. Not-read must
+    not collapse into differs.
+    """
+    extraction = ReceiptExtraction(buyer=Buyer(name="ANYONE AT ALL", tax_id=None))
+    assert buyer_findings(extraction, "R015", expected_tax_id="222-222-222-000") == []
+
+
+def test_R015_does_not_error_on_a_buyer_tax_id_carrying_no_digits():
+    """A dash transcribed off a blank printed TIN line is not an identifier.
+
+    Compared as a raw string it differs from the configured TIN and would raise
+    an ERROR claiming a different registered entity — on a receipt whose TIN
+    line is simply empty, which is all three of them. It must fall through to
+    the name instead.
+    """
+    extraction = ReceiptExtraction(buyer=Buyer(name="IDEAL SOURCE", tax_id="-"))
+    assert (
+        buyer_findings(
+            extraction,
+            "R015",
+            expected_name="IDEAL SOURCE",
+            expected_tax_id="222-222-222-000",
+        )
+        == []
+    )
+
+
+def test_the_buyer_rules_survive_the_repair_loops_context_rebuild():
+    """A rule the pipeline's context never reaches is not a rule.
+
+    `extract_with_repair` does not validate against the context it was handed:
+    `_evaluate` builds a fresh one per attempt, so `parse_error` is per-attempt
+    rather than shared across a thread pool. That rebuild used to ENUMERATE the
+    fields it carried over, which silently drops every field added after it was
+    written — and it did: R014/R015 were inert on every real run until it copied
+    the context instead of listing it.
+
+    Imported locally to keep this module's import surface about rules.
+    """
+    from receipts.extract.clients.base import VLMResponse
+    from receipts.extract.extractor import _evaluate
+
+    ctx = ValidationContext(today=TODAY, expected_buyer_name="IDEAL SOURCE")
+    bare = ReceiptExtraction()  # buyer.name is null -> R014 must fire
+    assert validate(bare, ctx).fired("R014"), "the rule itself is broken"
+
+    attempt = _evaluate(VLMResponse(parsed=bare, raw=None, model_id="test"), ctx)
+    assert attempt.report.fired("R014"), "the context did not survive _evaluate"
 
 
 # --------------------------------------------------------------------------- #
@@ -649,10 +841,10 @@ def test_R070_silent_without_consistency_data(ctx):
 # --------------------------------------------------------------------------- #
 
 
-def test_all_28_rules_registered():
+def test_all_30_rules_registered():
     ids = [r.id for r in RULES]
-    assert len(ids) == 28
-    assert len(set(ids)) == 28
+    assert len(ids) == 30
+    assert len(set(ids)) == 30
 
 
 def test_validate_never_mutates_input(ctx):
