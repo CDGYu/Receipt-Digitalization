@@ -867,19 +867,57 @@ git commit -m "feat(export): buyer columns, and no phantom ledger rows"
 
 - [ ] **Step 1: Write the failing test**
 
+**The props below are the real ones, verified 2026-08-19.** `ReceiptFormProps`
+is `{ fields: FieldMap; onChange: (path, value) => void; errors?: Record<string,
+string> }` -- there is NO `receipt` prop and no `receiptWith` helper. The form
+renders from a flat `fields` map keyed by dotted correction path, built in
+`patch.ts`. Follow the existing tests in `frontend/tests/receipt-form.test.tsx`,
+which render `<ReceiptForm fields={FIELDS} onChange={...} errors={...} />`.
+
+Adding the two fields is two entries in `TEXT_FIELDS` (`ReceiptForm.tsx:96`),
+which is a `ReadonlyArray<readonly [path, label]>` -- the labels are what a
+reviewer reads, so use the receipt's own vocabulary (`Sold to`), not the
+schema's.
+
+**One prose claim WILL rot when you do this.** `ReceiptForm.tsx:145` says
+*"`placeholder="—"` covers all eight `TEXT_FIELDS` from one place"*. There are
+exactly eight today and you are adding two. Re-derive that sentence rather than
+leaving it -- prefer deleting the cardinal to writing "ten", because the next
+person to add a field will hit this again. Check for the same shape in
+`patch.ts` and `types.ts` before you finish.
+
 ```tsx
 it('shows the buyer and sends a correction for it', async () => {
-  render(<ReceiptForm receipt={receiptWith({ buyer: { name: 'IDEAL SOURCE', tax_id: null } })} />)
-  const field = screen.getByLabelText(/sold to|buyer/i)
+  render(<ReceiptForm fields={{ ...FIELDS, 'buyer.name': 'IDEAL SOURCE' }}
+                      onChange={onChange} errors={{}} />)
+  const field = screen.getByLabelText(/sold to/i)
   expect(field).toHaveValue('IDEAL SOURCE')
   await userEvent.clear(field)
-  await userEvent.type(field, 'IDEAL SOURCE INC')
-  await userEvent.click(screen.getByRole('button', { name: /approve/i }))
-  expect(patchBody().corrections).toContainEqual(
-    expect.objectContaining({ field_path: 'buyer.name' }),
-  )
+  await userEvent.type(field, 'X')
+  expect(onChange).toHaveBeenCalledWith('buyer.name', expect.any(String))
 })
 ```
+
+**This needs THREE tests in three files, not one, because the behaviour spans
+three units and `ReceiptForm` owns only the first.** Verified 2026-08-19:
+`ReceiptForm` is presentational -- it has no approve button and no patch body,
+so the original single test asserted a flow it cannot reach. The approve button
+lives in `ReviewScreen.tsx`.
+
+1. `frontend/tests/receipt-form.test.tsx` -- the field renders and calls
+   `onChange` with `buyer.name`, as above.
+2. `frontend/tests/patch.test.ts` -- the `FieldMap` built from a
+   `ReceiptDetail` carries `buyer.name` and `buyer.tax_id`. **This is the one
+   that matters**: without it the form can render perfectly and no correction
+   is ever sent. The file already exists and pins both halves of the
+   omit-untouched-values rule; follow its shape.
+3. `frontend/tests/review-screen.test.tsx` -- a buyer edit reaches the patch
+   body. Only add this if the file's existing harness makes it cheap; if it
+   would mean building a new fixture, say so and stop at two rather than
+   inventing one.
+
+Prove each red before writing the code, and read each failure's reason -- a
+test that fails because a fixture is missing has not proven what you think.
 
 - [ ] **Step 2: Run and confirm failure**
 
