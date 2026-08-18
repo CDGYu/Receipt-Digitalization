@@ -96,10 +96,15 @@ and thrown away.
 Every path is classified on two axes, and neither is ever read from the
 prediction's value.
 
-**Group** comes from the path string alone: `meta.` prefix, `line_items` or a
-`line_items[` prefix, else core. A prefix test, not a list of field names — a
-`meta` field added to the schema next year is classified without anybody
-deciding it should be (review standard 19).
+**Group** comes from the path string alone: `self_report` for anything under
+the `meta.` prefix and for the leaves declared in
+`eval.metrics._SELF_REPORT_LEAVES`, `line_items` for `line_items` or a
+`line_items[` prefix, else `core`. The prefix half classifies a `meta` field
+added to the schema next year without anybody deciding it should be. The
+declared set is for self-reports no prefix can reach — `is_template_row`
+records whether the paper was blank, not what it said — and the rule that
+admits a leaf to it is stated beside the declaration, in the one place the
+grouping reads (review standard 19).
 
 **Filled** is read from the **truth** side: a value is filled when it is not
 `None` and not an empty container.
@@ -113,7 +118,7 @@ rule is stated as a side rather than as a comparison.
 ### 2. A ratio where its denominator describes the receipt, a count where it describes the schema
 
 `transcription_accuracy` (truth filled, group core or line items) and
-`self_report_agreement` (truth filled, group meta) are ratios — `None`, never
+`self_report_agreement` (truth filled, group `self_report`) are ratios — `None`, never
 `0.0`, on an empty denominator. `hallucinated_fields`,
 `correctly_empty_fields` and `structural_mismatch_fields` are **counts**.
 
