@@ -4,7 +4,7 @@
 
 **Goal:** Capture the receipt's buyer (Sold To), validate that a receipt was issued to the configured operator, and transcribe blank pre-printed rows without letting them into the arithmetic.
 
-**Architecture:** A `Buyer` model parallel to `Merchant` on `ReceiptExtraction`, persisted as two `receipts` columns; two validation rules (`R014` presence, `R015` mismatch) whose severity splits on evidence strength; and an `is_template_row` flag on `LineItem` that every arithmetic and line-item-quality rule skips.
+**Architecture:** A `Buyer` model parallel to `Merchant` on `ReceiptExtraction`, persisted as two `receipts` columns; two validation rules (`R014` presence, `R015` mismatch) whose severity splits on evidence strength; and an `is_template_row` flag on `LineItem` whose AMOUNTS are excluded from every total and arithmetic check, while the row itself stays checked.
 
 **Tech Stack:** Python 3.11/3.13, Pydantic v2, SQLAlchemy 2.0 + Alembic, pytest, React 19 + TypeScript (frontend), openpyxl (export).
 
@@ -100,10 +100,11 @@ On `LineItem`, after `bbox`:
         default=False,
         description=(
             "A pre-printed product row left blank on the form -- transcribed so "
-            "nothing on the receipt is lost, but NOT a purchase. Every "
-            "arithmetic and line-item-quality rule skips these. Set it for a row "
-            "that is blank ON THE PAPER, never for a filled row the model could "
-            "not read: that is meta.ambiguous_fields."
+            "nothing on the receipt is lost, but NOT a purchase. Its amounts are "
+            "excluded from every total and every arithmetic check; the row itself "
+            "is still checked, so transcribe the printed product name. Set it for "
+            "a row that is blank ON THE PAPER, never for a filled row the model "
+            "could not read: that is meta.ambiguous_fields."
         ),
     )
 ```
@@ -488,8 +489,10 @@ git commit -m "feat(validate): R014 and R015, the receipt-is-ours check"
 def test_a_template_row_does_not_break_the_line_item_arithmetic() -> None:
     """MaxiPower and MaxiGreen are printed and blank on r002.
 
-    Counted as purchases they would drag the line-item sum away from the
-    total and raise a reconciliation ERROR on a receipt that reconciles.
+    CORRECTED 2026-08-18, during Task 5: the harm is INERTNESS, not a false
+    ERROR. A blank row has a null ``line_total``, so ``sum_line_nets`` returns
+    ``None`` and R020/R024 SKIP -- reconciliation was silent on every
+    pre-printed form. Measured against a pre-change snapshot.
     """
     extraction = ReceiptExtraction(
         line_items=[

@@ -189,8 +189,16 @@ the totals.
 
 **The resolution keeps both properties.** `LineItem` gains
 `is_template_row: bool = False`. A blank pre-printed row is emitted **with the
-flag set**, so the transcription is complete; every arithmetic and
-line-item-quality rule **skips flagged rows**, so the totals still reconcile.
+flag set**, so the transcription is complete; its **amounts are excluded from
+every total and every arithmetic check**, so the totals still reconcile, while
+the row itself stays checked so the transcription promise is enforced.
+
+*(Corrected 2026-08-18 during Task 5. This said "every arithmetic and
+line-item-quality rule skips flagged rows" — unachievable as written, and the
+brief that carried it contradicted itself on R051. `R052` and `R053` deliberately
+keep reading every row: after flagged amounts leave `sum_line_nets`, R052 is the
+**only** remaining signal that a printed amount landed in `line_items` instead of
+`totals`, and R053 is the only check that the transcription happened at all.)*
 
 This is not a compromise between the two positions — it is the observation that
 they were never in conflict. "What is printed on the form" and "what was bought"
