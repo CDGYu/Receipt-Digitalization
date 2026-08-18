@@ -101,7 +101,8 @@
     "discount": null,
     "total": "1000.00",
     "tender": null,
-    "change": null
+    "change": null,
+    "prices_include_tax": null
   },
   "payment": {
     "method": null,

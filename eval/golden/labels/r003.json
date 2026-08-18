@@ -41,7 +41,8 @@
     "discount": null,
     "total": "2000.00",
     "tender": null,
-    "change": null
+    "change": null,
+    "prices_include_tax": null
   },
   "payment": {
     "method": "CASH",
