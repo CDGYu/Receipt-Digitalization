@@ -333,6 +333,89 @@ where the decision lives is the escalation ADR's business.
   off this machine, which the local-only setup did not. That is a decision, not
   a detail.
 
+### Measurement (2026-08-18) — `gemma4:cloud` READS THE RECEIPT
+
+**User ruling first: receipt images may go to Ollama Cloud for the GOLDEN SET
+only, for now.** Production upload routing is a separate decision and has not
+been made. The golden labels are already committed to a public repo, so the
+incremental exposure is the image rather than new data.
+
+`scripts/try_one_receipt.py r002 --max-edge 2048`, `VLM_MODEL_EXTRACT` and
+`VLM_MODEL_TRIAGE` both `gemma4:cloud`, `VLM_USE_TOOLS=true` (ADR-0002's rule,
+applied to a model that can read).
+
+```
+[triage]  12s   is_receipt=True  type=handwritten_receipt  est_items=3
+                merchant_guess='SUMMIT FUEL OPC'
+[extract] 13s
+  merchant   : SUMMIT FUEL OPC          tax_id : 774-423-646-00011
+  invoice no : 18241                    date   : null  raw=03-28-26
+  line items : DieselPlus  qty=17.39  price=115.0  total=2000
+  totals     : subtotal=1785.71  tax=214.29  total=2000
+  payment    : CASH                     handwritten=True
+VALIDATION errors=0 warns=0        CONFIDENCE 0.700 -> needs_review
+```
+
+**Merchant name, TIN, invoice number, the real line item, both totals and the
+payment method are all exactly right.** `1785.71 + 214.29 = 2000.00` — internally
+consistent. Against granite on the same receipt: **25 seconds against 30–39
+minutes**, transcription **61.11% against 11.11%**, core **76.92% against
+15.38%**, validation **0 errors against 2**, confidence **0.700 against 0.000**.
+
+**ADR-0043's TIN-first design is now live rather than hypothetical.** The
+strongest fingerprint on this corpus was read exactly, which is the premise
+decision 1 was built on and could not previously be exercised.
+
+#### THE FINDING THAT MATTERS MOST: cloud inference is NOT deterministic at temperature 0
+
+The run was executed twice, identically, by accident. **The two disagree:**
+
+| | run 1 | run 2 |
+|---|---|---|
+| transcription accuracy | 55.56% (10/18) | 61.11% (11/18) |
+| core | 69.23% (9/13) | 76.92% (10/13) |
+| hallucinated | 10 | 9 |
+| structural mismatches | 15 | 12 |
+| `totals.subtotal` | *not extracted* | `1785.71` |
+
+Same model, same image, same prompt, `temperature: 0.0` in the payload. The
+local path was stable across repeats; this is not. Distributed inference —
+batching, routing, mixed hardware — is the obvious explanation and **is not
+measured here**. Three consequences, none of them optional:
+
+- **A single-run baseline is not a number, it is a sample.** Any accuracy figure
+  from the cloud tier needs repeats and a spread, or it will move on its own and
+  be read as a regression. This would have silently corrupted the first real
+  baseline (step 6).
+- **`ResponseCache` assumes determinism.** Its docstring says "Only cache
+  temperature==0 calls", whose justification is that such calls are reproducible.
+  That premise does not hold for this tier.
+- **Phase 7 self-consistency gets stronger, not weaker.** Sampling the same
+  prompt and reconciling is exactly the remedy for this, and it was designed for
+  handwriting rather than for provider nondeterminism.
+
+#### Two things that look like defects and are not
+
+- **`date` is null and that is CORRECT.** The printed date is `03-28-26`, which
+  is genuinely ambiguous between MM-DD-YY and DD-MM-YY. The system's rule is null
+  over confident-wrong; `date_raw` keeps the string and R011 fires as *info*.
+  **But "critical fields (merchant+date+total) all correct" counts it as a
+  miss**, so the headline gate penalises the pipeline for behaving correctly.
+  That is a metric question in the same family as ADR-0040, not a model failure.
+- **`MaxiPower` and `MaxiGreen` are the known pre-printed template rows.** The
+  golden label's own notes say they "are blank template rows and must NOT be
+  emitted as line items". The model emitted them, which is why line-item
+  precision is 0.33 while **recall is 1.00** — it found every real item and
+  added two phantoms. This is the open item in the prompt's §6 (sibling of
+  R052), now **reachable and reproducible** for the first time.
+
+#### What this does NOT establish
+
+- **Accuracy.** One receipt of three, and now demonstrably variable between runs.
+- **That the free tier survives a real workload.** Rate limits, quotas and
+  concurrency are unmeasured; two calls is not a baseline.
+- **That production uploads may use it.** The ruling above is golden-set only.
+
 ### Goal
 
 Run `python -m eval.run_baseline` over the three hand-verified golden receipts and
