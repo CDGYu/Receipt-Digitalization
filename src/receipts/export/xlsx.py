@@ -31,7 +31,11 @@ form pre-prints and this receipt left blank -- was transcribed upstream so
 nothing on the paper is lost, but nobody bought it, and an accounting ledger
 that lists it is wrong about what was bought. Those rows are dropped here, and
 the ``items`` count on ``Receipts`` counts what is left, so the two sheets
-cannot disagree about the same receipt. A receipt whose rows are *all* blank
+cannot disagree about the same receipt. §13.1 calls that column "count of line
+items"; here it counts purchases, deliberately -- that clause was written before
+``is_template_row`` existed and has no notion of a row that is not a purchase,
+and a workbook contradicting itself is worse than a workbook diverging from a
+spec clause that predates the field. A receipt whose rows are *all* blank
 still gets its ``Receipts`` row, and still reaches ``Needs Review`` if that is
 where it was routed: the receipt exists and somebody has to look at it. Only the
 purchases are absent.
@@ -88,8 +92,8 @@ _CONFIDENCE_QUANTUM = Decimal("0.001")
 _RECEIPT_HEADERS = [
     "receipt_id",
     "merchant",
-    "Buyer",
-    "Buyer TIN",
+    "buyer",
+    "buyer_tax_id",
     "date",
     "currency",
     "subtotal",
@@ -121,7 +125,7 @@ _REVIEW_HEADERS = [
     "priority",
     "receipt_id",
     "merchant",
-    "Buyer",
+    "buyer",
     "date",
     "total",
     "confidence",
@@ -134,8 +138,8 @@ _SUMMARY_HEADERS = ["metric", "value"]
 #: 1-based column index by header name, derived from the header lists above so
 #: the two can never disagree. Every cell below addresses its column through one
 #: of these rather than through a literal, because inserting a column moves every
-#: column to its right -- as ``Buyer``/``Buyer TIN`` just did on ``Receipts`` and
-#: ``Buyer`` on ``Needs Review``. With literals each value would have gone on
+#: column to its right -- as ``buyer``/``buyer_tax_id`` just did on ``Receipts``
+#: and ``buyer`` on ``Needs Review``. With literals each value would have gone on
 #: being written to its old column, under someone else's header, and silently: a
 #: spreadsheet cell accepts anything.
 _RECEIPT_COL = {name: i for i, name in enumerate(_RECEIPT_HEADERS, start=1)}
@@ -327,7 +331,7 @@ def _write_review_sheet(
         ws.cell(row=row_no, column=_REVIEW_COL["priority"], value=row.review_priority)
         ws.cell(row=row_no, column=_REVIEW_COL["receipt_id"], value=receipt_id)
         ws.cell(row=row_no, column=_REVIEW_COL["merchant"], value=_merchant_of(receipt, row))
-        _text_cell(ws, row_no, _REVIEW_COL["Buyer"], receipt.buyer.name)
+        _text_cell(ws, row_no, _REVIEW_COL["buyer"], receipt.buyer.name)
         ws.cell(row=row_no, column=_REVIEW_COL["date"], value=_date_of(receipt, row))
         _num_cell(ws, row_no, _REVIEW_COL["total"], receipt.totals.total)
         _ratio_cell(ws, row_no, _REVIEW_COL["confidence"], row.confidence)
@@ -504,8 +508,8 @@ def export_workbook(
         # Who bought, as against the merchant who sold: the "Sold To" block of a
         # BIR sales invoice. A TIN is digits and separators, never a number, so
         # it goes in as text for the same reason card_last4 does.
-        _text_cell(receipts_ws, receipt_row, _RECEIPT_COL["Buyer"], receipt.buyer.name)
-        _text_cell(receipts_ws, receipt_row, _RECEIPT_COL["Buyer TIN"], receipt.buyer.tax_id)
+        _text_cell(receipts_ws, receipt_row, _RECEIPT_COL["buyer"], receipt.buyer.name)
+        _text_cell(receipts_ws, receipt_row, _RECEIPT_COL["buyer_tax_id"], receipt.buyer.tax_id)
         receipts_ws.cell(
             row=receipt_row, column=_RECEIPT_COL["date"], value=_date_of(receipt, row)
         )

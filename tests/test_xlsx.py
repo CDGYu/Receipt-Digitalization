@@ -110,9 +110,9 @@ def test_receipts_sheet_rows_and_values(tmp_path):
     assert ws["A2"].value == "r1"
     assert ws["A3"].value == "r2"
 
-    # These are column letters, so they move when a column is inserted: Buyer
-    # and Buyer TIN went in at C and D, pushing everything from date rightwards
-    # by two. total is J, payment_method K, discount I.
+    # These are column letters, so they move when a column is inserted: buyer
+    # and buyer_tax_id went in at C and D, pushing everything from date
+    # rightwards by two. total is J, payment_method K, discount I.
     assert ws["J2"].value == pytest.approx(21.76)
 
     # merchant and payment_method spot checks.
@@ -527,7 +527,7 @@ def test_the_review_sheet_carries_the_buyer(tmp_path):
             )
         ],
     )
-    assert _column_values(wb["Needs Review"], "Buyer") == ["IDEAL SOURCE"]
+    assert _column_values(wb["Needs Review"], "buyer") == ["IDEAL SOURCE"]
 
 
 def test_the_receipts_sheet_carries_the_buyer_name_and_tin(tmp_path):
@@ -536,11 +536,11 @@ def test_the_receipts_sheet_carries_the_buyer_name_and_tin(tmp_path):
         [_bir_receipt(buyer_name="IDEAL SOURCE", buyer_tax_id="008-123-456-000")],
     )["Receipts"]
 
-    assert _column_values(ws, "Buyer") == ["IDEAL SOURCE"]
-    assert _column_values(ws, "Buyer TIN") == ["008-123-456-000"]
+    assert _column_values(ws, "buyer") == ["IDEAL SOURCE"]
+    assert _column_values(ws, "buyer_tax_id") == ["008-123-456-000"]
     # A TIN is digits and separators, never a quantity: text format, or Excel
     # coerces it and eats any leading zero (§13.5, same as card_last4).
-    assert ws.cell(row=2, column=_header_col(ws, "Buyer TIN")).number_format == "@"
+    assert ws.cell(row=2, column=_header_col(ws, "buyer_tax_id")).number_format == "@"
 
 
 def test_a_receipt_that_names_no_buyer_leaves_the_buyer_cells_empty(tmp_path):
@@ -555,8 +555,8 @@ def test_a_receipt_that_names_no_buyer_leaves_the_buyer_cells_empty(tmp_path):
     """
     ws = _book(tmp_path, [_bir_receipt()])["Receipts"]
 
-    assert _column_values(ws, "Buyer") == [None]
-    assert _column_values(ws, "Buyer TIN") == [None]
+    assert _column_values(ws, "buyer") == [None]
+    assert _column_values(ws, "buyer_tax_id") == [None]
 
 
 def test_a_template_row_is_not_exported_as_a_purchase(tmp_path):
