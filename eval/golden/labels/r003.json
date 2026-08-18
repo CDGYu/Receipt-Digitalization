@@ -6,6 +6,10 @@
     "tax_id": "205-741-640-162",
     "phone": null
   },
+  "buyer": {
+    "name": "IDEAL SOURCE",
+    "tax_id": null
+  },
   "receipt": {
     "number": "31217",
     "date": "2026-03-25",
@@ -26,7 +30,8 @@
       "unit_price": "117.33",
       "line_total": "2000.00",
       "modifiers": [],
-      "bbox": null
+      "bbox": null,
+      "is_template_row": false
     }
   ],
   "totals": {

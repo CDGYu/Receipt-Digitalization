@@ -6,6 +6,10 @@
     "tax_id": "774-423-646-00011",
     "phone": null
   },
+  "buyer": {
+    "name": "Ideal source",
+    "tax_id": null
+  },
   "receipt": {
     "number": "18241",
     "date": "2026-03-28",
@@ -26,7 +30,32 @@
       "unit_price": "115.00",
       "line_total": "2000.00",
       "modifiers": [],
-      "bbox": null
+      "bbox": null,
+      "is_template_row": false
+    },
+    {
+      "position": 1,
+      "description_raw": "MaxiPower",
+      "sku": null,
+      "qty": null,
+      "unit": null,
+      "unit_price": null,
+      "line_total": null,
+      "modifiers": [],
+      "bbox": null,
+      "is_template_row": true
+    },
+    {
+      "position": 2,
+      "description_raw": "MaxiGreen",
+      "sku": null,
+      "qty": null,
+      "unit": null,
+      "unit_price": null,
+      "line_total": null,
+      "modifiers": [],
+      "bbox": null,
+      "is_template_row": true
     }
   ],
   "totals": {
@@ -49,6 +78,6 @@
     "ambiguous_fields": [],
     "unreadable_regions": [],
     "receipt_is_inconsistent": false,
-    "notes": "BIR sales invoice: pre-printed form, handwritten values. 'CASH' checkbox ticked. Pre-printed product rows MaxiPower and MaxiGreen are blank template rows and must NOT be emitted as line items. qty x unit_price = 1999.85 vs the written 2,000.00 amount (within tolerance). 'Ideal source' is the BUYER (Sold To), not the merchant. The footer TIN 103-969-951-00000 belongs to the PRINTER (RJ Printing Press), not the merchant."
+    "notes": "BIR sales invoice: pre-printed form, handwritten values. 'CASH' checkbox ticked. Pre-printed product rows MaxiPower and MaxiGreen are blank template rows. qty x unit_price = 1999.85 vs the written 2,000.00 amount (within tolerance). 'Ideal source' is the BUYER (Sold To), not the merchant. The footer TIN 103-969-951-00000 belongs to the PRINTER (RJ Printing Press), not the merchant."
   }
 }
