@@ -86,11 +86,16 @@ def test_an_extraction_that_read_nothing_hallucinates_nothing(label_path: Path):
 # --------------------------------------------------------------------------- #
 # What the labels themselves must say
 #
-# The three pins below exist because the label CONTENT was reachable by nothing:
+# The FOUR pins below exist because the label CONTENT was reachable by nothing:
 # blanking every buyer block and deleting every flagged row left the whole suite
 # green. They are deliberately properties rather than transcriptions of the
 # labels -- a test that restated r001's rows would fire on a legitimate re-read
 # of the image and become an obstacle to truth instead of a guard on it.
+#
+# Said "three" until 2026-08-19: this comment arrived with the first three in
+# ca44f81 and 6169893 added the array-order pin below it without touching it.
+# The count is here because it is the thing a reader checks the section against;
+# if you add a fifth, this line is part of the change.
 # --------------------------------------------------------------------------- #
 
 

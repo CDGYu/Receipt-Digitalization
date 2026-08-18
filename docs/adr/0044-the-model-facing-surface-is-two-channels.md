@@ -102,12 +102,27 @@ Two mechanisms are worth keeping because neither is guessable:
   matching. This is not a reason to add vocabulary.
 - **In the tool-schema channel the over-fire trigger is JSON structure, not
   prose.** The clause splitter barely splits JSON. Re-derived 2026-08-19: the
-  extraction tool schema serialises to ~9,100 characters and splits into **14**
-  clauses, the largest 3,360; the full bundle splits into **141**, largest
-  1,706. A field description saying nothing whatsoever about legibility fails
+  **shipped** extraction tool schema — `json.dumps(build_tool_schema(
+  ReceiptExtraction), sort_keys=True)`, which is the string `_bundle_text()`
+  concatenates — serialises to **5,758** characters and splits into **14**
+  clauses, the largest **1,706**; the full bundle is 14,924 characters and
+  splits into **141**, largest 1,706 (the schema clause is the bundle's
+  largest). A field description saying nothing whatsoever about legibility fails
   anyway, matched against a `legibility` enum value more than 1,500 characters
   away inside the same clause. That token is permanent; no rewording of the
   description removes it.
+
+  **Correction, 2026-08-19.** This bullet first said "~9,100 characters ...
+  the largest 3,360". Both numbers are real and neither is the shipped object:
+  they are `str(ReceiptExtraction.model_json_schema())` — the *raw* schema, in
+  Python's repr rather than JSON, before `build_tool_schema` strips titles —
+  measured at 9,069 characters, largest clause 3,360. The clause **count** is
+  14 either way, which is why the mismatch left no trace. So this ADR, whose
+  own decision 1 is that the shipped surface and the approximate one are
+  different objects, measured the approximate one. **The error is the ADR's
+  subject committed inside the ADR**, and it is recorded rather than quietly
+  overwritten: the correct move is to name what was measured, not only what
+  should have been.
 
   Those two clause counts are also a worked example of ADR-0028. A review
   reported 14, the controller relayed 14, the implementer measured 141 and wrote
@@ -145,8 +160,19 @@ by difference, not by enumeration.
 A per-receipt pin on label content is either tautological (`label == label`
 scores perfectly under every mutation, confirmed by building it) or a
 transcription of the label into a test, which fires when someone legitimately
-re-reads the image. Three pins were added that are neither, and each was proven
-red by mutation.
+re-reads the image. **Four** pins were added that are neither, and each was
+proven red by mutation:
+
+- `test_a_label_declares_every_field_the_schema_declares`
+- `test_every_flagged_row_carries_a_printed_name_and_no_amounts`
+- `test_at_least_one_label_records_a_buyer_name`
+- `test_array_order_agrees_with_the_position_values`
+
+*(Corrected 2026-08-19 from "three". The first three landed in `ca44f81`,
+whose message says "three pins"; the fourth landed in `6169893` and this ADR
+was written after it, at `5abdb5a`. The same off-by-one stood in
+`tests/test_eval_floor.py`'s section comment, written by `ca44f81` and not
+updated by `6169893`.)*
 
 They are corpus-level and existential by necessity: "every label records a
 buyer" breaks the first time a receipt arrives without a *Sold To* block;
