@@ -268,3 +268,75 @@ describe('submitReview: what the server actually stored', () => {
     expect(await submitReview('r1', 't1', {})).toEqual({ kind: 'clean' })
   })
 })
+
+/** A 200 whose body is a receipt with one part missing.
+ *
+ * Not a hypothetical: `ReceiptDetail` is what `request<T>` *casts* to, never
+ * what it checks, so the only thing standing between a mis-shaped 200 and
+ * `fieldsFromReceipt` is `storedFields`. The realistic producer is version
+ * skew -- a backend rolled back below the field a cached tab was built
+ * against -- which is why each case here deletes exactly one key from a body
+ * that is otherwise complete.
+ *
+ * The consequence of getting this wrong is specific and worth naming: the read
+ * happens *after* `patchReceipt` resolved and *outside* its `try`, so a throw
+ * is not a `SubmitError`, `completeTask` never runs, the queue task is orphaned
+ * `IN_PROGRESS`, and the reviewer is told the save failed when it landed.
+ * Retrying takes the identical path.
+ */
+function withoutKey(key: keyof ReceiptDetail): Record<string, unknown> {
+  const body: Record<string, unknown> = { ...detail() }
+  delete body[key]
+  return body
+}
+
+describe('submitReview: a reply that is receipt-shaped but not a receipt', () => {
+  it('is unverified when the reply has no buyer, and still closes the task', async () => {
+    stubFetch(() => ok(withoutKey('buyer')))
+    const outcome = await submitReview('r1', 't1', { 'buyer.name': 'IDEAL SOURCE' })
+    expect(outcome.kind).toBe('unverified')
+    expect(CALLS).toEqual(['PATCH /receipts/r1', 'POST /review/t1/complete'])
+  })
+
+  it('is unverified when the reply has no totals, and still closes the task', async () => {
+    // The behaviour that was already here, restated as a test rather than left
+    // implicit in `storedFields`' shape checks -- the bound above must not
+    // change it.
+    stubFetch(() => ok(withoutKey('totals')))
+    const outcome = await submitReview('r1', 't1', { 'totals.total': '1000.00' })
+    expect(outcome.kind).toBe('unverified')
+    expect(CALLS).toEqual(['PATCH /receipts/r1', 'POST /review/t1/complete'])
+  })
+
+  it('is unverified when the reply has no line_items, and still closes the task', async () => {
+    stubFetch(() => ok(withoutKey('line_items')))
+    const outcome = await submitReview('r1', 't1', { 'totals.total': '1000.00' })
+    expect(outcome.kind).toBe('unverified')
+    expect(CALLS).toEqual(['PATCH /receipts/r1', 'POST /review/t1/complete'])
+  })
+
+  // The two below are the reason `storedFields` still shape-checks by name
+  // after gaining its `try`. A *missing* key throws, so the `try` alone covers
+  // it -- measured: deleting either shape check leaves the three tests above
+  // green. A key present at the wrong TYPE throws nothing: `'x'.subtotal` is
+  // `undefined`, and `for (const item of 'ab')` iterates two characters whose
+  // `.position` is `undefined`. Both would be compared against the patch as if
+  // they were a receipt and reported as a rewrite the server never made. `try`
+  // cannot see a reply that is merely wrong, which is what these pin.
+
+  it('is unverified when totals is present at the wrong type', async () => {
+    stubFetch(() => ok({ ...detail(), totals: 'nope' }))
+    const outcome = await submitReview('r1', 't1', { 'totals.total': '1000.00' })
+    expect(outcome.kind).toBe('unverified')
+    expect(CALLS).toEqual(['PATCH /receipts/r1', 'POST /review/t1/complete'])
+  })
+
+  it('is unverified when line_items is present at the wrong type', async () => {
+    stubFetch(() => ok({ ...detail(), line_items: 'ab' }))
+    const outcome = await submitReview('r1', 't1', {
+      'line_items[0].description_raw': 'CABERNET',
+    })
+    expect(outcome.kind).toBe('unverified')
+    expect(CALLS).toEqual(['PATCH /receipts/r1', 'POST /review/t1/complete'])
+  })
+})

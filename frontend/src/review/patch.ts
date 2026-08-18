@@ -107,8 +107,13 @@ export function fieldsFromReceipt(receipt: ReceiptDetail): FieldMap {
   const fields: FieldMap = {
     'merchant.name': receipt.merchant_name_raw,
     // Read out of a nested object, written under a flat dotted key -- the same
-    // shape `totals` has. `receipt.buyer` is never absent (see `ReceiptDetail`),
-    // so there is nothing to guard here.
+    // shape `totals` has, and dereferenced with no guard for the same reason:
+    // a reply this function cannot read is a reply nothing here should try to
+    // paper over. `ReceiptDetail` is a cast rather than a check, so "the API
+    // always sends `buyer`" is a fact about the route, not about this argument;
+    // the reply from `PATCH` is bounded at the boundary that receives it
+    // (`storedFields` in api/review.ts), which reports a throw as unverifiable
+    // rather than turning a mis-shaped reply into a silently empty form.
     'buyer.name': receipt.buyer.name,
     'buyer.tax_id': receipt.buyer.tax_id,
     'receipt.number': receipt.receipt_number,

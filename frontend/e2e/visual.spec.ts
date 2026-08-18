@@ -196,10 +196,10 @@ function fullReceipt(overrides: Partial<ReceiptDetail> = {}): ReceiptDetail {
     ] satisfies ConfidenceReason[],
     merchant_name_raw: 'TOTAL WINE',
     // These fixtures are untyped object literals, so `tsc -b` cannot say when
-    // one falls behind the reply it stands for -- and `fieldsFromReceipt` reads
-    // `receipt.buyer.name` without a guard, the same way it reads
-    // `receipt.totals.*`. Omitting this key does not render a blank buyer, it
-    // throws in the browser and the review screen never paints.
+    // one falls behind the reply it stands for -- and `fieldsFromReceipt`
+    // dereferences `receipt.buyer.name` with no guard of its own. Omitting this
+    // key does not render a blank buyer, it throws in the browser and the
+    // review screen never paints.
     buyer: { name: 'IDEAL SOURCE', tax_id: '009-123-456-000' },
     receipt_number: 'OR-2026-0042',
     txn_date: '2026-07-02',

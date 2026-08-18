@@ -163,9 +163,35 @@ export type SubmitOutcome =
  *
  * `request` resolves an empty body to `undefined`, and this route always returns
  * a document, so `undefined` here means something other than the API answered.
- * The shape is checked rather than trusted because `request<T>` is an unchecked
- * cast: `fieldsFromReceipt` reads `.totals` and `.line_items`, and a reply
- * missing either would throw a `TypeError` *after* the write had already landed.
+ * Everything past that is here because `request<T>` is an **unchecked cast**:
+ * `ReceiptDetail` is what the reply is claimed to be, never what it was checked
+ * to be, so this function is the whole of what stands between a mis-shaped 200
+ * and `fieldsFromReceipt`.
+ *
+ * **The `try` is the guarantee, and it is deliberately not a list of fields.**
+ * `fieldsFromReceipt` dereferences nested objects -- `.totals.*`, `.buyer.*`,
+ * and whatever the next column adds -- and any one of them *missing* throws a
+ * `TypeError`. That throw lands **here**, after `patchReceipt` resolved and
+ * outside its `try`, so it is not a `SubmitError`: `completeTask` would never
+ * run, the queue task would be orphaned `IN_PROGRESS`, and the reviewer would be
+ * told the save failed on a write that had already landed. Retrying takes the
+ * identical path.
+ *
+ * That is not hypothetical. `.totals` and `.line_items` were guarded by name,
+ * `.buyer` was added later, and no third guard came with it. A third `if` would
+ * have closed the shape that was found and re-opened on the fourth field;
+ * catching the throw closes the class. **A caught throw is reported as
+ * unverifiable, never as clean** -- the reply could not be compared, and "we
+ * could not check" must not be collapsed into "nothing was rewritten".
+ *
+ * **The two shape checks survive the `try`, and are not redundant with it.**
+ * They answer a different failure: a key present at the wrong *type* throws
+ * nothing at all. Measured -- `'nope'.subtotal` is `undefined`, and
+ * `for (const item of 'ab')` iterates two characters whose `.position` is
+ * `undefined` -- so either would be compared against the patch as if it were a
+ * receipt and reported as a rewrite the server never made. `try` cannot see a
+ * reply that is merely wrong. Each of the three is pinned by exactly one test in
+ * tests/submit-chain.test.ts, and each was proven by deleting it alone.
  */
 function storedFields(reply: ReceiptDetail | undefined): FieldMap | null {
   if (reply === undefined || reply === null) {
@@ -177,7 +203,11 @@ function storedFields(reply: ReceiptDetail | undefined): FieldMap | null {
   if (!Array.isArray(reply.line_items)) {
     return null
   }
-  return fieldsFromReceipt(reply)
+  try {
+    return fieldsFromReceipt(reply)
+  } catch {
+    return null
+  }
 }
 
 /** Strictly sequential. Nothing advances past a step that failed.
