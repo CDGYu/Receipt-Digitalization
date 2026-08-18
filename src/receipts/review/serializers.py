@@ -194,20 +194,31 @@ def receipt_detail(receipt: Receipt, findings: list[ValidationFinding]) -> dict[
     test_every_correctable_receipt_column_is_readable_in_the_detail`` is what
     binds the two lists together, and it fails on the next unpaired addition.
 
-    ``payment_method`` is redacted on the way *in*. ``save_extraction`` puts
-    **every** ``str`` value it writes through ``redact_pan`` in one blanket
-    pass rather than an enumerated column list (see its own comment on why the
-    enumerated list was abandoned), and ``_plan_change`` redacts every coerced
-    text value a reviewer submits, so the correction path is covered too.
-    Those are the only two writers of the column under ``src/``
-    (``create_pending_receipt``, the sole other ``Receipt(...)`` construction,
-    leaves it NULL), so what leaves here is what §18 already permits to be
-    stored: a PAN read off the card line reaches this key as
-    ``"VISA ************1111"``. Measured 2026-08-18 through
+    ``payment_method`` is redacted on the way *in*, by a guarantee that is
+    **structural rather than a list**. ``save_extraction`` builds the
+    model-sourced columns in one ``dict(...)`` and runs a single blanket pass
+    over it: every ``str`` *in that dict* goes through ``redact_pan``,
+    including a column added to it later. Values applied **after** the pass are
+    exempt by construction, and deliberately -- that is where the system-minted
+    ones are written (``image_phash`` above all: a uniform image's dHash is
+    sixteen zero digits, and masking it would destroy the row's dedupe
+    identity, which
+    ``test_save_extraction_never_corrupts_an_all_digit_image_phash`` holds),
+    and where ``card_last4`` takes its own stronger ``_last4`` guard instead.
+    So *placement* is the rule, not membership of any list: extraction-sourced
+    above the pass is redacted by default, anything written below it is not.
+    ``save_extraction``'s own comment on that split is the authority; do not
+    reconstruct the set of covered columns from this docstring.
+    ``_plan_change`` redacts every coerced text value a reviewer submits, so
+    the correction path is covered too. Those are the only two writers of the
+    column under ``src/`` (``create_pending_receipt``, the sole other
+    ``Receipt(...)`` construction, leaves it NULL), so what leaves here is what
+    §18 already permits to be stored: a PAN read off the card line reaches this
+    key as ``"VISA ************1111"``. Measured 2026-08-18 through
     ``save_extraction``, one PAN seeded per field: ``merchant_name_raw``,
     ``buyer_name_raw``, ``buyer_tax_id``, ``receipt_number``, ``date_raw`` and
     ``payment_method`` all came back masked and none in the clear -- six
-    columns, which is why this paragraph no longer names two.
+    ``receipts`` columns, which is why this paragraph no longer names two.
 
     **That sentence is a claim about every way a card line is written, so the
     measurement behind it is a table rather than an example.** An earlier
