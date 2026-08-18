@@ -5,9 +5,13 @@ which is synthetic-only by its own docstring. The whole question here is what
 the metric does on this corpus, so a synthetic fixture cannot answer it. Labels
 only — tracked JSON, no images (gitignored), no network.
 
-Measured before the fix, with the old every-path denominator:
-r001 42.50%, r002 37.50%, r003 36.59%. A model that read nothing scored above
-40%; the one real local run on file beat that floor by a single path.
+Measured 2026-08-12, before the fix and against the labels as they then stood,
+with the old every-path denominator: r001 42.50%, r002 37.50%, r003 36.59%. A
+model that read nothing scored above 40%; the one real local run on file beat
+that floor by a single path. Those three are a dated record and are NOT what
+the old definition gives today -- the labels have since grown, and re-running
+ADR-0040's probe at HEAD gives 19.35% / 23.81% / 36.36%. The live figures for
+the shipped definition are the ones beside ``MAX_FLOOR`` below.
 
 That run is not guesswork and is not read from ``eval/results/``. It is recorded
 in ``docs/KNOWN_ISSUES.md`` under ISSUE-001 ("The local path, re-measured

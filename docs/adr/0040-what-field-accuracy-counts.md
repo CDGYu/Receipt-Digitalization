@@ -14,6 +14,11 @@ some of its figures did not reproduce. *What was corrected on the way in* lists
 the ones that were checked — it is that measurement, not a complete audit of the
 document. Nothing here is inherited from it.
 
+**That instruction has since been taken, and it changed every number.** See
+*Correction, 2026-08-19* immediately after the probe: the golden labels grew on
+`feat/buyer-and-blank-rows`, so the figures in *Context* and *Consequences* are
+2026-08-12 measurements of a corpus that no longer exists in that form.
+
 The probe. It prints both definitions side by side, so every floor in this ADR
 comes out of one command:
 
@@ -38,6 +43,78 @@ for p in sorted(pathlib.Path("eval/golden/labels").glob("*.json")):
 PY
 ```
 
+## Correction, 2026-08-19 — every cardinal below is a 2026-08-12 measurement, and the corpus has moved
+
+**Nothing in the decisions changed. Every number did.** Run the probe above at
+`feat/buyer-and-blank-rows` and none of the figures in *Context* or
+*Consequences* reproduces. They were measured on the golden labels **as they
+stood on 2026-08-12** and are correct for that corpus; they are not correct for
+this one, and they are left in place as the dated record they are rather than
+overwritten. This section is what the probe prints now.
+
+**Why they moved.** The labels gained content on this branch, in four tracked
+commits: `6d849ca` (a `buyer` block and the blank pre-printed rows, five on
+r001 and two on r002), `417c206` (line items in printed order), `12b54c4`
+(`totals.prices_include_tax`), `3592b2f` (r001's paper-order note). More
+labelled paths means a larger denominator, so every ratio over the whole path
+set fell. **This is the corpus changing, not the metric.**
+
+Re-derived 2026-08-19 at `4297547`:
+
+| label | old scalar (2026-08-12) | old scalar (now) | transcription floor (now) |
+|---|---|---|---|
+| r001 | 42.50% (17/40) | **19.35%** (18/93) | **3.57%** (1/28) |
+| r002 | 37.50% (15/40) | **23.81%** (15/63) | **4.17%** (1/24) |
+| r003 | 36.59% (15/41) | **36.36%** (16/44) | **5.56%** (1/18) |
+
+So the *Consequences* bullet reading "the floor an empty extraction reaches is
+now around 5.9% ... 5.88%, 5.56%, 5.88%" is the one sentence here that was
+written in the present tense about a quantity that moves. It is now **3.6% /
+4.2% / 5.6%**, which is what `tests/test_eval_floor.py` records beside
+`MAX_FLOOR` — that comment is the live figure and this document is not. The
+argument the bullet supports is unaffected: the floor is far below the old
+scalar's, and `MAX_FLOOR = 0.10` still has headroom on all three.
+
+The rest of the *Consequences*, re-derived:
+
+- **The residual is still one path, and still `receipt.decimal_convention`** —
+  verified: it is the only transcription path an empty extraction gets right on
+  any of the three.
+- **Still zero free line-item points**: `0/16`, `0/9`, `0/5` (was `0/6`, `0/5`,
+  `0/5`). Core-only is `8.33%`, `6.67%`, `7.69%` (was 9.09%, 7.69%, 8.33%), so
+  dropping line items still *raises* the floor.
+- **The six-row warning came true.** The bullet predicted that "a six-row
+  receipt would push [the line-item share] past half and the headline would
+  quietly become a line-item metric". r001 is now a six-row receipt: line-item
+  paths are `16/28` of its transcription denominator, **57.14%** — past half,
+  from 35%. r002 is 37.50% and r003 27.78%. The split-out reporting the bullet
+  argues for is what keeps this readable, and it is now load-bearing rather
+  than precautionary.
+- **`correctly_empty` / `structural_mismatch`** are `15/12/13` and `39/19/6`
+  (were 14/12/12 and 4/5/6). Inventing three line-item rows on r001 moves
+  `correctly_empty` 15 → 36 with `hallucinated` still 0, so the bound in
+  decision 2 holds and the count still rises — exactly as that paragraph says
+  it does and does not claim otherwise.
+- **ISSUE-001's remedy is still refuted, by the same two directions.**
+  Excluding `meta.*` lowers the old scalar (19.35% → 16.28% on r001,
+  36.36% → 36.11% on r003); excluding only `meta.notes` *raises* every floor
+  (19.57% / 24.19% / 37.21%). The magnitudes are new; the diagnosis-right,
+  remedy-wrong conclusion is not.
+
+In *Context*, the seventeen-free-points table is now an eighteen-free-points
+table and splits **13 / 4 / 1** rather than 12 / 4 / 1, on the same three rows
+and the same `_is_filled` rule; the neither-side-filled count *without* the
+non-`meta` qualifier is **15**, not 14, so the paragraph's warning about
+dropping that qualifier stands and its number does not. **Both are re-derived
+above by the probe rather than restated in the table**, which stays as written
+because it is what was measured on 2026-08-12.
+
+Two figures in this document are deliberately **not** re-derived and are not
+stale: ADR-0039's 45.00% local run, which that ADR owns and this one only
+reads; and the *What was corrected on the way in* section, which records what a
+design document said against what was measured on 2026-08-12 — dating that
+comparison to a later corpus would make it about nothing.
+
 ## Context
 
 `eval.metrics.field_accuracy` returns `{dotted_path: bool}` over the union of
@@ -52,6 +129,9 @@ nothing at all.
 
 **Measured, not argued.** Score `ReceiptExtraction()` — every field at its
 default, nothing read — against each golden label under the old definition:
+
+*(Measured 2026-08-12. Re-derived at HEAD in the correction above —
+the corpus has since grown and none of these three reproduces.)*
 
 | label | floor a model that read nothing reached |
 |---|---|
@@ -295,9 +375,12 @@ claim.
 
 ## Consequences
 
-- **The floor an empty extraction reaches is now around 5.9%**, measured with
-  the probe above: `1 / 17`, `1 / 18`, `1 / 17` on r001/r002/r003 — 5.88%,
-  5.56%, 5.88%. Down from 42.50% / 37.50% / 36.59%.
+- **The floor an empty extraction reached on 2026-08-12 was around 5.9%**,
+  measured with the probe above: `1 / 17`, `1 / 18`, `1 / 17` on r001/r002/r003
+  — 5.88%, 5.56%, 5.88%. Down from 42.50% / 37.50% / 36.59%. **"now" was true
+  when this was written and is not the word to read it by:** the corpus has
+  grown and the floors are 3.6% / 4.2% / 5.6%, re-derived in the correction
+  above. `tests/test_eval_floor.py` carries the live figure.
 - **The residual is one path, and it is a real field.** On all three labels the
   only transcription path an empty extraction gets right is
   `receipt.decimal_convention`, whose schema default `'point'` happens to be
