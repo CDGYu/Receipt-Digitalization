@@ -849,11 +849,21 @@ git commit -m "feat(export): buyer columns, and no phantom ledger rows"
 ### Task 9: The reviewer can see and fix the buyer
 
 **Files:**
+- Modify: `frontend/src/api/types.ts` -- `ReceiptDetail` has no `buyer` today
+  (verified 2026-08-19: zero grep hits), so the form cannot read it until the
+  type gains `buyer: { name: string | null; tax_id: string | null }`.
+- Modify: `frontend/src/review/patch.ts` -- the editable state is built here,
+  keyed by the server's correction paths; unless the buyer fields enter this
+  map, no `buyer.*` correction is ever sent regardless of what the form shows.
 - Modify: `frontend/src/review/ReceiptForm.tsx` and its `.module.css`
 - Test: `frontend/tests/receipt-form.test.tsx`
 
 **Interfaces:**
-- Consumes: Task 3's `buyer.name` / `buyer.tax_id` correction paths.
+- Consumes: Task 3's `buyer.name` / `buyer.tax_id` correction paths, which
+  `_RECEIPT_FIELDS` (persist/repository.py) already accepts server-side.
+- Note: `patch.ts` documents that `line_items[i]` addresses POSITION, not array
+  index (`apply_corrections` resolves through `items_by_position`). `buyer.*`
+  is flat and unaffected, but do not copy a line-item pattern blindly.
 
 - [ ] **Step 1: Write the failing test**
 
