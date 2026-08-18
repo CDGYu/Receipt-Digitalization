@@ -211,14 +211,20 @@ function TextField({
  * was here, and it was already wrong by the time anyone read it again: it said
  * seventeen, and `_RECEIPT_FIELDS` had since grown.
  *
- * **What holds the correspondence, and what does not.** tests/patch.test.ts
- * pins the whole `FieldMap` key set and tests/receipt-form.test.tsx counts the
- * rendered controls, so the form and the patch builder cannot drift apart
- * without going red. Neither reads `_RECEIPT_FIELDS`, though -- measured, no
- * test under frontend/tests opens repository.py -- so a path added on the server
- * and not added here is silent in every frontend gate. That is how the number
- * above went stale: the server was accepting `buyer.name` and `buyer.tax_id`
- * for some time before this form grew a control for either.
+ * **What holds the correspondence.** tests/patch.test.ts pins the whole
+ * `FieldMap` key set and tests/receipt-form.test.tsx counts the rendered
+ * controls, so the form and the patch builder cannot drift apart without going
+ * red. Neither of those reads `_RECEIPT_FIELDS`; what binds this side to that
+ * one is `test_every_correctable_receipt_path_is_offered_by_the_review_client`
+ * (tests/test_repository.py), which parses `fieldsFromReceipt`'s object literal
+ * and compares it against the imported map. It lives in pytest deliberately:
+ * the change that breaks it is a path added on the server, and that is the
+ * suite whoever makes that change is already running.
+ *
+ * Until that pin existed the gap was open, and the number above is what fell
+ * through it -- the server accepted `buyer.name` and `buyer.tax_id` across
+ * `71405d0..de979e9`, 34 commits and all eight preceding tasks of this plan,
+ * before this form grew a control for either, with every gate green throughout.
  *
  * `receipt.date_raw` is among them. It is still the evidence a reviewer checks
  * `receipt.date` against -- which is why the two sit next to each other in

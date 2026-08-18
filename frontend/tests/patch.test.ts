@@ -155,9 +155,19 @@ describe('fieldsFromReceipt', () => {
 
   it('emits exactly the receipt paths _RECEIPT_FIELDS accepts, and six per line item', () => {
     // Pins the closed set in both directions: an invented path is a 400 naming
-    // it, and a missing one is an edit the reviewer cannot make. The list is
-    // written out rather than counted, so adding a path here is the same edit as
-    // adding it to `_RECEIPT_FIELDS` and no cardinal in the title can rot.
+    // it, and a missing one is an edit the reviewer cannot make.
+    //
+    // **This list is a transcription, and it is not what binds the two maps.**
+    // It is checked against `fieldsFromReceipt`, never against
+    // `_RECEIPT_FIELDS`, so on its own it can be internally consistent and
+    // wrong -- which is exactly what happened: it read as complete for 34
+    // commits while the server accepted two paths nothing here mentioned. The
+    // binding is
+    // `test_every_correctable_receipt_path_is_offered_by_the_review_client`
+    // (tests/test_repository.py), which parses this file's object literal
+    // instead of copying it. What this test still adds is the half that pin
+    // deliberately leaves out: the `line_items[i]` paths, and the exact shape
+    // of the map rather than only its receipt-level keys.
     expect(Object.keys(fieldsFromReceipt(RECEIPT)).sort()).toEqual(
       [
         'merchant.name',

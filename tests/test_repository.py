@@ -31,6 +31,7 @@ import re
 import uuid
 from datetime import date, time
 from decimal import Decimal
+from pathlib import Path
 
 import pytest
 import sqlalchemy as sa
@@ -71,7 +72,12 @@ from receipts.persist import (
     save_findings,
 )
 from receipts.persist.models import Base
-from receipts.persist.repository import _PAN_MAX_DIGITS, _PAN_MIN_DIGITS, _PAN_RE
+from receipts.persist.repository import (
+    _PAN_MAX_DIGITS,
+    _PAN_MIN_DIGITS,
+    _PAN_RE,
+    _RECEIPT_FIELDS,
+)
 from receipts.persist.session import make_engine, make_session_factory
 from receipts.score.confidence import ReceiptStatus
 from receipts.validate.report import Finding, Severity, ValidationReport
@@ -2053,6 +2059,75 @@ def test_a_reviewer_can_correct_the_buyer(engine: sa.Engine) -> None:
         assert [row.field_path for row in rows] == ["buyer.name", "buyer.tax_id"]
         assert [row.value_before for row in rows] == [None, None]
         assert [row.value_after for row in rows] == ["IDEAL SOURCE", "123-456-789-000"]
+
+
+#: ``fieldsFromReceipt``'s object literal in the review client, which is the
+#: browser's copy of the same closed map. Matched from the function head to the
+#: literal's closing brace so the ``line_items[i]`` paths -- built in a separate
+#: helper, and answering to ``_LINE_ITEM_FIELDS`` rather than to this map -- are
+#: outside the span by construction rather than by being filtered out.
+_FIELDS_FROM_RECEIPT = re.compile(
+    r"export function fieldsFromReceipt\([^)]*\): FieldMap \{"
+    r"\s*const fields: FieldMap = \{(.*?)\}\s*lineItemFields",
+    re.S,
+)
+
+#: A ``'quoted.path':`` at the start of a line. Applied after line comments are
+#: stripped, so a path named in prose cannot be counted as an entry.
+_TS_KEY = re.compile(r"^\s*'([^']+)'\s*:", re.M)
+
+
+def test_every_correctable_receipt_path_is_offered_by_the_review_client() -> None:
+    """A path the server accepts and the browser never sends is a dead column.
+
+    **This binding did not exist, and its absence was measured rather than
+    supposed.** ``buyer.name`` and ``buyer.tax_id`` were added to
+    ``_RECEIPT_FIELDS`` and were unreachable from the review screen for 34
+    commits and eight task reviews -- through every one of the five gates, green
+    each time -- because nothing under ``frontend/tests`` opens this file and
+    nothing here opened that one. ``ReceiptForm.tsx``'s own docblock went on
+    claiming "seventeen controls for the seventeen paths in ``_RECEIPT_FIELDS``"
+    while the map held nineteen.
+
+    The direction of that failure is what decides where this test lives. The
+    change that breaks it is "a path added on the server", so it belongs in the
+    suite the person making that change is already running, beside the map they
+    just edited -- not in ``vitest``, which they have no reason to run.
+
+    **Nothing here is transcribed.** The left side is the imported dict, so it
+    cannot drift from itself; the right side is parsed out of the client's
+    object literal. A hand-written list of nineteen strings in this file would
+    be a third copy to keep in step, which is the defect, not the fix.
+
+    Line-item paths are deliberately out of scope: ``_LINE_ITEM_FIELDS``
+    carries ``position`` and ``is_template_row``, which the UI declines to offer
+    on purpose, so binding those two lists needs a decision about the
+    asymmetry rather than an allow-list that would quietly absorb the next one.
+    """
+    patch_ts = Path(__file__).resolve().parents[1] / "frontend" / "src" / "review" / "patch.ts"
+    assert patch_ts.is_file(), f"the review client moved; this test reads {patch_ts}"
+
+    match = _FIELDS_FROM_RECEIPT.search(patch_ts.read_text(encoding="utf-8"))
+    # Anti-vacuity: a regex that stopped matching would compare an empty set and
+    # pass while guarding nothing at all.
+    assert match is not None, (
+        f"could not find fieldsFromReceipt's object literal in {patch_ts.name}. "
+        "If it was renamed or reshaped, fix _FIELDS_FROM_RECEIPT -- do not "
+        "delete this test, it is the only thing binding the two maps."
+    )
+    body = "\n".join(line.split("//")[0] for line in match.group(1).splitlines())
+    offered = set(_TS_KEY.findall(body))
+    assert offered, f"parsed no paths out of {patch_ts.name}; _TS_KEY no longer matches"
+
+    accepted = set(_RECEIPT_FIELDS)
+    assert offered == accepted, (
+        "the correction paths the server accepts and the paths the review client "
+        "sends have drifted.\n"
+        f"  accepted here but never sent : {sorted(accepted - offered)}\n"
+        f"  sent but not accepted (400s) : {sorted(offered - accepted)}\n"
+        "Edit frontend/src/review/patch.ts (fieldsFromReceipt) and add a control "
+        "for it in frontend/src/review/ReceiptForm.tsx."
+    )
 
 
 def test_a_reviewer_can_clear_a_buyer_the_model_invented(engine: sa.Engine) -> None:
