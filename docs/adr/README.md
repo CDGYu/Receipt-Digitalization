@@ -49,6 +49,8 @@ Accepted; supersede it with a new ADR rather than editing history.
 | [0041](0041-the-review-outcome-takes-focus.md) | The review outcome takes focus, so a 403 is not invisible | Accepted |
 | [0042](0042-a-cited-commit-must-stay-reachable.md) | A cited commit must stay reachable, and a rewrite carries its citations | Accepted |
 | [0043](0043-merchant-identity-is-two-phase.md) | Merchant identity is two-phase: a guess retrieves, a TIN commits | Accepted |
+| [0044](0044-the-model-facing-surface-is-two-channels.md) | The model-facing surface is two channels, and a prose guarantee is held lexically | Accepted |
+| [0045](0045-a-brief-is-a-claim-about-the-tree.md) | A brief is a claim about the tree, and relaying one makes it yours | Accepted |
 
 Read **0001** first: it is the invariant everything else defers to. **0007** is
 the one to read before touching anything that writes card data or money, and
