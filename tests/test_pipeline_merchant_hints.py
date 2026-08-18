@@ -769,6 +769,13 @@ def _blocks(text: str) -> list[str]:
     return [b for b in re.split(r"\n\s*\n", text) if b.strip()]
 
 
+#: The two settings of the flag, matched loosely so that respacing the prompt
+#: does not false-alarm. A block asserting both is a block drawing the
+#: distinction, whatever prose it uses to draw it.
+_FLAG_TRUE = re.compile(r"is_template_row\s*=\s*true", re.IGNORECASE)
+_FLAG_FALSE = re.compile(r"is_template_row\s*=\s*false", re.IGNORECASE)
+
+
 def _descriptions(node: object) -> list[str]:
     """Every `description` string anywhere in a JSON Schema."""
     found: list[str] = []
@@ -831,12 +838,32 @@ def test_the_prompt_ties_the_flag_to_the_paper_not_to_the_models_eyesight() -> N
     Nothing downstream can tell a row that was blank on the paper from a filled
     row the model could not read, so the distinction has to be drawn here, and
     the unreadable case has to be given somewhere else to go.
+
+    The block is located by the two SETTINGS of the flag rather than by the
+    prose contrasting them, so a rewording does not false-alarm: a block saying
+    both when the flag is true and when it is false is the block drawing the
+    distinction, whatever words it uses.
+
+    Locating it by `meta.ambiguous_fields` instead does NOT work, and the first
+    version of this test made exactly that mistake. The user turn's verify block
+    names that path for an unrelated reason -- every field you were unsure about
+    goes there -- and it also names the flag, in step (a). An `any()` over every
+    block mentioning the flag was therefore satisfied by the coincidence of two
+    unrelated instructions sharing a block. Measured 2026-08-18: with BOTH
+    statements of the contrast deleted from `prompts.py`, the old assertion
+    passed, and so did all 1216 tests.
     """
-    flag_blocks = [b for b in _blocks(_shipped()) if "is_template_row" in b]
-    assert flag_blocks
-    assert any("meta.ambiguous_fields" in b for b in flag_blocks), (
-        "the flag is never contrasted with the unreadable-handwriting case"
+    contrast = [
+        b for b in _blocks(_shipped()) if _FLAG_TRUE.search(b) and _FLAG_FALSE.search(b)
+    ]
+    assert contrast, (
+        "no block says both when is_template_row is true and when it is false"
     )
+    for block in contrast:
+        assert "meta.ambiguous_fields" in block, (
+            "the flag's two settings are contrasted without telling the model "
+            "where an unreadable filled row goes instead:\n" + block
+        )
 
 
 def test_the_blank_row_flag_is_steered_off_the_rows_R052_calls_an_error() -> None:
@@ -850,8 +877,26 @@ def test_the_blank_row_flag_is_steered_off_the_rows_R052_calls_an_error() -> Non
     receipt, once per line of its summary block.
 
     Each label below is checked against `TOTAL_ROW_STRONG` as well as against
-    the prompt, so the two cannot drift apart: the prompt must warn about the
-    rows the validator actually errors on.
+    the prompt. Be exact about what that buys, because the first version of this
+    docstring was not: it claimed the two "cannot drift apart", and they can.
+
+    It is a guard against REMOVAL, in both directions. Drop a label from the
+    prompt and this fails. Drop one from `TOTAL_ROW_STRONG` and this fails too,
+    which is the signal that the prompt is now warning about a row R052 no
+    longer polices.
+
+    It is NOT a guard against GROWTH, and growth is the direction that re-opens
+    the finding, because a new BIR summary label R052 errors on is one the
+    prompt never warns about. Measured 2026-08-18: adding `LESS VAT` and
+    `TOTAL DUE VAT INCLUSIVE` to `TOTAL_ROW_STRONG` leaves this test passing
+    while the prompt names neither.
+
+    No converse assertion is written, because the right one does not exist at
+    this size. The blank-row rule names 5 of the set's 42 members and hedges
+    with "and the like"; requiring all 42 would demand a system prompt several
+    times the ~1200 tokens `prompts.py`'s own docstring caps it at, and it is
+    already over. Marking a BIR-summary subset in the rule set would close it
+    properly -- that is `rules.py`, reported rather than reached.
     """
     shipped = _shipped()
     for label in (

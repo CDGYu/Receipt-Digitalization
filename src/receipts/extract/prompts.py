@@ -5,9 +5,10 @@ concatenates prompt fragments inline becomes impossible to version, diff, or
 attribute accuracy changes to.
 
 One thing the model is told is nonetheless not written here: the `description=`
-text on `extract.schema` fields, which reaches it inside the tool schema. That
-text is covered by `prompt_bundle_hash()` rather than by hand -- see
-`_bundle_text`.
+text on `extract.schema` fields, which reaches it inside the tool schema.
+`prompt_bundle_hash()` covers that text automatically -- see `_bundle_text` --
+but PROMPT_VERSION does not, and PROMPT_VERSION is still what eval files its
+results under. See rule 5.
 
 Rules for editing this file:
   1. Bump PROMPT_VERSION on ANY change to the text below.
@@ -18,9 +19,14 @@ Rules for editing this file:
      injected in the user turn where they are close to the image.
   4. No examples in the system prompt. Few-shot examples are merchant-specific
      and belong in the user turn.
-  5. Rewording a schema `description=` is a prompt change as well. It needs no
-     PROMPT_VERSION bump -- `_bundle_text` hashes the tool schema, so the eval
-     grouping key moves by itself -- but rule 2 applies to it just the same.
+  5. Rewording a schema `description=` is a prompt change as well: that text
+     ships to the model inside the tool schema. Bump PROMPT_VERSION for it too,
+     and apply rule 2 to it. `_bundle_text` does hash the tool schema, so
+     `prompt_bundle_hash()` moves on its own -- but that hash is not yet what
+     groups eval results. `eval/harness.py` names its output file from
+     PROMPT_VERSION, so skipping the bump files a post-change run under the
+     same key as the runs before it, which is the exact defect this rule
+     exists to prevent.
 """
 
 from __future__ import annotations
@@ -363,8 +369,13 @@ def _bundle_text() -> str:
     what `build_tool_schema` preserves descriptions for -- so a reworded field
     description changes the instructions without touching a single template
     here. Hashing the tool schema puts that text under the same version signal,
-    so `receipts eval` cannot group a run from before such a change together
-    with a run from after it.
+    so a run from before such a change and a run from after it cannot share a
+    bundle hash.
+
+    Not yet wired end to end: `eval/harness.py` files results under
+    PROMPT_VERSION, not under this hash, so until it reads
+    `prompt_bundle_hash()` the protection above depends on the manual bump in
+    rule 5 of the module docstring.
     """
     return "\x00".join(
         [
@@ -383,6 +394,6 @@ def _bundle_text() -> str:
 
 def prompt_bundle_hash() -> str:
     """Hash of every prompt constant and of the schema text the model is shown.
-    Changes whenever any of them changes, which is what you group eval results
-    by."""
+    Changes whenever any of them changes. Intended as the eval grouping key;
+    `eval/harness.py` does not read it yet."""
     return prompt_hash(_bundle_text())
