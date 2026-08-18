@@ -1173,7 +1173,7 @@ class NoTotalRowAsLineItem(Rule):
                         f"Line item {item.position} {item.description_raw!r} is a "
                         "summary row, not a purchasable item. Remove it from "
                         "line_items and put its amount in the correct totals "
-                        "field. This also breaks the arithmetic checks.",
+                        "field.",
                         field_paths=[f"line_items[{item.position}]"],
                         context={"position": item.position, "normalized": norm},
                     )

@@ -80,10 +80,11 @@ class LineItem(BaseModel):
         default=False,
         description=(
             "A pre-printed product row left blank on the form -- transcribed so "
-            "nothing on the receipt is lost, but NOT a purchase. Every "
-            "arithmetic and line-item-quality rule skips these. Set it for a row "
-            "that is blank ON THE PAPER, never for a filled row the model could "
-            "not read: that is meta.ambiguous_fields."
+            "nothing on the receipt is lost, but NOT a purchase. Its amounts are "
+            "excluded from every total and every arithmetic check; the row itself "
+            "is still checked, so transcribe the printed product name. Set it for "
+            "a row that is blank ON THE PAPER, never for a filled row the model "
+            "could not read: that is meta.ambiguous_fields."
         ),
     )
 

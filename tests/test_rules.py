@@ -812,11 +812,7 @@ def r002_shaped(totals: Totals) -> ReceiptExtraction:
 
 
 def test_a_template_row_does_not_break_the_line_item_arithmetic(ctx):
-    """MaxiPower and MaxiGreen are printed and blank on r002.
-
-    Counted as purchases they would drag the line-item sum away from the
-    total and raise a reconciliation ERROR on a receipt that reconciles.
-    """
+    """MaxiPower and MaxiGreen are printed and blank on r002."""
     r = r002_shaped(Totals(subtotal=D("1785.71"), tax=D("214.29"), total=D("2000.00")))
     ids = {f.rule_id for f in validate(r, ctx).findings}
     assert "R020" not in ids and "R021" not in ids
