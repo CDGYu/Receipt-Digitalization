@@ -6,6 +6,10 @@
     "tax_id": "123-456-789-000",
     "phone": "+63 2 8123 4567"
   },
+  "buyer": {
+    "name": "ACME TRADING CORP.",
+    "tax_id": "987-654-321-000"
+  },
   "receipt": {
     "number": "OR-000148215",
     "date": "2026-03-14",
@@ -25,7 +29,9 @@
       "unit": "pc",
       "unit_price": "285.00",
       "line_total": "285.00",
-      "modifiers": []
+      "modifiers": [],
+      "bbox": null,
+      "is_template_row": false
     },
     {
       "position": 1,
@@ -35,7 +41,9 @@
       "unit": "pc",
       "unit_price": "92.50",
       "line_total": "185.00",
-      "modifiers": []
+      "modifiers": [],
+      "bbox": null,
+      "is_template_row": false
     },
     {
       "position": 2,
@@ -45,7 +53,9 @@
       "unit": "tray",
       "unit_price": "210.00",
       "line_total": "210.00",
-      "modifiers": []
+      "modifiers": [],
+      "bbox": null,
+      "is_template_row": false
     }
   ],
   "totals": {
@@ -62,7 +72,8 @@
     "discount": "0.00",
     "total": "761.60",
     "tender": "1000.00",
-    "change": "238.40"
+    "change": "238.40",
+    "prices_include_tax": false
   },
   "payment": {
     "method": "CASH",
@@ -75,6 +86,6 @@
     "ambiguous_fields": [],
     "unreadable_regions": [],
     "receipt_is_inconsistent": false,
-    "notes": "Worked example. Copy this file to labels/{id}.json and replace every value with what the receipt image actually shows. Money stays as JSON strings so the Decimal scale (e.g. \"761.60\") is preserved."
+    "notes": "Worked example. Copy this file to labels/{id}.json and replace every value with what the receipt image actually shows. Money stays as JSON strings so the Decimal scale (e.g. \"761.60\") is preserved. Every field the schema declares appears here, including the ones a receipt often leaves empty -- write null rather than dropping the key, because a dropped key is filled by a schema default that then reads as truth."
   }
 }
