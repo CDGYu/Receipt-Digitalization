@@ -221,11 +221,19 @@ otherwise the pane silently blanks mid-review.
 
 ### 4.2 The editable set is exactly the closed map
 
-17 receipt paths — `merchant.name`, `receipt.{number,date,date_raw,time,
-currency}`, `totals.{subtotal,tax,discount,total,tender,change}`,
-`payment.{method,card_last4}`, `meta.{is_handwritten,legibility,
-receipt_is_inconsistent}` — plus 7 per line item. Nothing invented; an unlisted
-path is a `ValueError` by design, never a silent no-op.
+The correctable receipt paths are exactly the keys of `_RECEIPT_FIELDS`
+(`src/receipts/persist/repository.py`), and the line-item ones exactly the keys
+of `_LINE_ITEM_FIELDS` beside it. Nothing invented; an unlisted path is a
+`ValueError` by design, never a silent no-op.
+
+**No count here, and no second copy of either list.** This paragraph carried
+both, and both went false on the branch that grew the maps: it said "17 receipt
+paths" and enumerated them without `buyer.*` after `_RECEIPT_FIELDS` had grown,
+and "7 per line item" after `_LINE_ITEM_FIELDS` gained `is_template_row`. A
+design document that copies a closed map is a third place to keep in step, and
+it is the place nobody re-derives. The maps are the authority;
+`test_every_correctable_receipt_path_is_offered_by_the_review_client`
+(`tests/test_repository.py`) is what binds the review client to them.
 
 - `date_raw` renders as **read-only evidence** beside the date field: it is what
   was actually printed.

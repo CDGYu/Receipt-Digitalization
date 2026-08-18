@@ -365,7 +365,7 @@ Non-negotiable, and every item is testable:
 - **Never colour alone** (High severity): severity, confidence band, and task
   state each carry an icon **and** a word.
 - **Every input has a visible `<label>`** with `for` — placeholder-only is
-  banned. All 17 correctable paths already have labels; keep them visible.
+  banned. Every correctable path already has a label; keep them visible.
 - **Focus is always visible**: 2px `--color-ring` outline with 2px offset.
   Never `outline: none`.
 - **Targets ≥ 44×44px** with ≥8px separation. Today's controls are browser
