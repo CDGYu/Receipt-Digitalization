@@ -58,11 +58,18 @@ function lineItemFields(fields: FieldMap, receipt: ReceiptDetail): void {
 
 /** The editable state of one receipt, keyed by the path the server writes to.
  *
- * **The read name and the write name differ for six of the seventeen**, which is
- * the one mapping in this task that cannot be guessed. Left of the arrow is
- * `_RECEIPT_FIELDS` (persist/repository.py:905-923, the closed set of paths
- * `apply_corrections` will accept); right is the key `receipt_detail`
- * (review/serializers.py:190-218) returns:
+ * **The read name and the write name differ, and by no rule you can apply** --
+ * which is the one mapping in this task that cannot be guessed.
+ *
+ * No count is quoted and the sample below is **not closed**: `receipt.number`
+ * reads out as `receipt_number` and is not in it. `receipt_detail`'s own
+ * docstring refuses a count for the same reason, that the pair of lists grows
+ * and a number rots silently. What binds the two sides is
+ * `it('emits exactly the receipt paths _RECEIPT_FIELDS accepts, ...')` in
+ * tests/patch.test.ts, which asserts the whole key set rather than a sample of
+ * it. Left of the arrow is `_RECEIPT_FIELDS` (persist/repository.py, the closed
+ * set of paths `apply_corrections` will accept); right is the key
+ * `receipt_detail` (review/serializers.py) returns:
  *
  *     merchant.name                -> merchant_name_raw
  *     receipt.date                 -> txn_date
@@ -72,6 +79,11 @@ function lineItemFields(fields: FieldMap, receipt: ReceiptDetail): void {
  *     meta.is_handwritten          -> is_handwritten          (no `meta.`)
  *     meta.legibility              -> legibility              (no `meta.`)
  *     meta.receipt_is_inconsistent -> receipt_is_inconsistent (no `meta.`)
+ *
+ * `totals.*` and `buyer.*` are absent from that list on purpose and not by
+ * oversight: both arrive nested under a key spelled exactly like the path's
+ * first segment, so `buyer.name` reads out of `receipt.buyer.name` and the two
+ * names agree.
  *
  * Values are copied verbatim -- no reformatting, no normalising, no padding.
  * `txn_time` is the sharp case, and it was measured end to end against a stored
@@ -94,6 +106,11 @@ function lineItemFields(fields: FieldMap, receipt: ReceiptDetail): void {
 export function fieldsFromReceipt(receipt: ReceiptDetail): FieldMap {
   const fields: FieldMap = {
     'merchant.name': receipt.merchant_name_raw,
+    // Read out of a nested object, written under a flat dotted key -- the same
+    // shape `totals` has. `receipt.buyer` is never absent (see `ReceiptDetail`),
+    // so there is nothing to guard here.
+    'buyer.name': receipt.buyer.name,
+    'buyer.tax_id': receipt.buyer.tax_id,
     'receipt.number': receipt.receipt_number,
     'receipt.date': receipt.txn_date,
     'receipt.date_raw': receipt.date_raw,

@@ -1,12 +1,13 @@
-/* The receipt's own seventeen controls -- design §5.1, §6. Tokens only; no raw
- * hex.
+/* The receipt's own controls, one per path in `_RECEIPT_FIELDS` -- design §5.1,
+ * §6. Tokens only; no raw hex.
  *
  * ## One `.fieldCell` per text and money field, and one element selector left
  *
- * The grid lives on the `<section>`. Its children are the heading, then
- * fourteen `.fieldCell` wrappers -- eight text fields, then six money fields --
- * then the select and the two checkboxes, which stay bare `<label>`s because
- * none of the three has an error slot to hold (`ReceiptForm.tsx` records why).
+ * The grid lives on the `<section>`. Its children are the heading, then one
+ * `.fieldCell` wrapper per text field and per money field, then the select and
+ * the two checkboxes, which stay bare `<label>`s because none of the three has
+ * an error slot to hold (`ReceiptForm.tsx` records why). No count is given: the
+ * field lists grow, and a number in this comment cannot fail when they do.
  * Each `.fieldCell` is one grid item holding a `<label>` and, when the server
  * refused that field, a sibling `<p role="alert">`.
  *

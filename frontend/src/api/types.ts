@@ -70,6 +70,31 @@ export interface ReceiptDetail {
   /** `null` = never recorded. `[]` = nothing lowered the score. Different facts. */
   confidence_reasons: ConfidenceReason[] | null
   merchant_name_raw: string | null
+  /** The *Sold To* party: who the receipt was issued TO, as against the merchant
+   *  who issued it. Distinct from both the header's merchant and the footer's
+   *  printer, all three of which carry a TIN on a BIR sales invoice.
+   *
+   *  **Always an object, even when both halves are `null`**, and so not
+   *  optional: `receipt_detail` (review/serializers.py) writes the key
+   *  unconditionally and records why -- the form has two fields to draw either
+   *  way, and a missing key is a client-side crash where `null` is a blank.
+   *  Nothing reading this needs to guard the property access.
+   *
+   *  Nested for the same reason `totals` is: the correction paths are
+   *  `buyer.name` and `buyer.tax_id`, so the key path a client reads is the key
+   *  path it writes.
+   *
+   *  `null` means the block was not read, and that is **one** fact here, not
+   *  two: a form with no Sold To block and a form whose Sold To block the
+   *  extractor could not make out arrive identically. The API has no third
+   *  value to send and this type invents none. */
+  buyer: {
+    name: string | null
+    /** The **buyer's** TIN -- not the merchant's and not the printer's. The line
+     *  is printed on every receipt in the golden set and filled on none, so
+     *  `null` is the ordinary reading rather than the exceptional one. */
+    tax_id: string | null
+  }
   receipt_number: string | null
   txn_date: string | null
   date_raw: string | null

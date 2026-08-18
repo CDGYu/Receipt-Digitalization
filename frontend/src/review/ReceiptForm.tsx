@@ -95,6 +95,23 @@ import styles from './ReceiptForm.module.css'
  */
 const TEXT_FIELDS: ReadonlyArray<readonly [string, string]> = [
   ['merchant.name', 'Merchant'],
+  // Who the receipt was issued TO, next to who issued it, because that is the
+  // pair a reviewer is reconciling and the pair the paper makes easy to
+  // confuse. On the slip it is the block under the merchant's header, which is
+  // where it sits here.
+  //
+  // **Labelled off the paper, not off the schema.** The column is `buyer` and
+  // the path is `buyer.name`, but the form says `SOLD TO`, `Sold to:` or
+  // `Registered Name` (extract/prompts.py names all three), and the reviewer is
+  // matching a screen against a photograph -- so the screen uses the words that
+  // are printed on it.
+  //
+  // `Sold to TIN` rather than `TIN`: a BIR sales invoice carries **three** TINs
+  // -- the merchant's in the header, the buyer's in this block, the printer's
+  // in the footer -- and they are three different numbers. A field labelled
+  // `TIN` is an invitation to key the wrong one.
+  ['buyer.name', 'Sold to'],
+  ['buyer.tax_id', 'Sold to TIN'],
   ['receipt.number', 'Receipt number'],
   // Adjacent on purpose: `date_raw` is the evidence `receipt.date` is checked
   // against, so a reviewer reconciling the two reads them side by side. It used
@@ -142,9 +159,11 @@ export interface ReceiptFormProps {
  *  The error paragraph is a *sibling* of the label, for the reason `MoneyInput`
  *  records: text nested inside a `<label>` becomes part of the field's name.
  *
- *  **`placeholder="—"` covers all eight `TEXT_FIELDS` from one place** -- design
- *  §4's input half, the same mark and the same `--color-null` that `ui/Value`
- *  paints for a displayed value. Before it, a merchant name the extractor never
+ *  **`placeholder="—"` covers every `TEXT_FIELDS` entry from one place** --
+ *  design §4's input half, the same mark and the same `--color-null` that
+ *  `ui/Value` paints for a displayed value. Every entry rather than a count of
+ *  them: the list grows, and a number here is one more thing for whoever grows
+ *  it to find. Before it, a merchant name the extractor never
  *  read rendered as an empty box, indistinguishable from a box a reviewer has
  *  not reached yet; `placeholder` appeared **zero** times in `frontend/src`
  *  (measured, `git grep placeholder -- frontend/src`). It cannot become the
@@ -185,8 +204,21 @@ function TextField({
   )
 }
 
-/** The receipt's own correctable fields: **seventeen controls for the seventeen
- *  paths in `_RECEIPT_FIELDS`**, one each.
+/** The receipt's own correctable fields: **one control per path in
+ *  `_RECEIPT_FIELDS`, and no others**.
+ *
+ * Stated as a correspondence rather than as a number, deliberately. A number
+ * was here, and it was already wrong by the time anyone read it again: it said
+ * seventeen, and `_RECEIPT_FIELDS` had since grown.
+ *
+ * **What holds the correspondence, and what does not.** tests/patch.test.ts
+ * pins the whole `FieldMap` key set and tests/receipt-form.test.tsx counts the
+ * rendered controls, so the form and the patch builder cannot drift apart
+ * without going red. Neither reads `_RECEIPT_FIELDS`, though -- measured, no
+ * test under frontend/tests opens repository.py -- so a path added on the server
+ * and not added here is silent in every frontend gate. That is how the number
+ * above went stale: the server was accepting `buyer.name` and `buyer.tax_id`
+ * for some time before this form grew a control for either.
  *
  * `receipt.date_raw` is among them. It is still the evidence a reviewer checks
  * `receipt.date` against -- which is why the two sit next to each other in
@@ -242,9 +274,13 @@ export function ReceiptForm({ fields, onChange, errors }: ReceiptFormProps) {
           A placeholder is the empty state of a free-text box; a closed option
           list has no empty state to show one in, and a checkbox has no third
           state at all. Design §4's mark would be a claim neither control can
-          carry. That leaves the null treatment reaching 14 of the 17 correctable
-          paths -- 8 text, 6 money -- which is the honest count, and not the 17
-          ADR-0027's Consequences implies by calling every path an `<input>`. */}
+          carry. That leaves the null treatment reaching every correctable path
+          except these three -- which is the honest statement, and not the
+          every-path one ADR-0027's Consequences implies by calling every path an
+          `<input>`. The arithmetic is in tests/review-null-rule.test.tsx, which
+          reads both counts off the render and asserts the gap is exactly these
+          three; repeating the numbers here would only give them somewhere to
+          rot. */}
       <label className={styles.field}>
         Legibility
         <select

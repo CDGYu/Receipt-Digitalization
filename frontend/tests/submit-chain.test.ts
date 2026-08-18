@@ -161,7 +161,16 @@ describe('the two calls the chain is made of', () => {
   })
 })
 
-/** A `ReceiptDetail` good enough for `fieldsFromReceipt`, with overrides. */
+/** A `ReceiptDetail` good enough for `fieldsFromReceipt`, with overrides.
+ *
+ * Typed `Record<string, unknown>` rather than `ReceiptDetail`, so `tsc` will not
+ * say when it falls behind the reply it stands for -- and it did: `buyer` was
+ * added to the API and this stub went on omitting it until `fieldsFromReceipt`
+ * threw `Cannot read properties of undefined`. `receipt.totals.*` has been
+ * dereferenced without a guard since the file was written, so this is the same
+ * exposure the client already carries and not a new one; what it costs is
+ * recorded in the task report rather than papered over with an `?.` here, which
+ * would turn a loud mis-shaped reply into a silently empty form. */
 function detail(over: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     id: 'r1',
@@ -169,6 +178,7 @@ function detail(over: Record<string, unknown> = {}): Record<string, unknown> {
     confidence: '0.620',
     confidence_reasons: [],
     merchant_name_raw: 'METRO OIL',
+    buyer: { name: 'IDEAL SOURCE', tax_id: null },
     receipt_number: 'INV-1',
     txn_date: '2026-07-30',
     date_raw: '30/07/2026',

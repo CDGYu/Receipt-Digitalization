@@ -41,6 +41,11 @@ const RECEIPT: ReceiptDetail = {
   confidence: '0.620' as Money,
   confidence_reasons: [],
   merchant_name_raw: 'METRO OIL',
+  // Who the receipt was issued TO. `IDEAL SOURCE` is the operator whose name is
+  // in the Sold To block of every receipt in the golden set; the TIN line is
+  // printed on all three and filled on none, so `null` here is the ordinary
+  // case rather than the exotic one.
+  buyer: { name: 'IDEAL SOURCE', tax_id: null },
   receipt_number: 'INV-88213',
   txn_date: '2026-07-14',
   // Garbled on purpose: an OCR misread of the printed date is the case this
@@ -98,6 +103,11 @@ describe('ReceiptForm', () => {
     renderForm()
     const shown = (label: string) => (screen.getByLabelText(label) as HTMLInputElement).value
     expect(shown('Merchant')).toBe('METRO OIL')
+    expect(shown('Sold to')).toBe('IDEAL SOURCE')
+    // An unread TIN line is an empty box, not the string "null". What tells a
+    // reviewer the difference between that and a box nobody has reached yet is
+    // the placeholder, which `tests/review-null-rule.test.tsx` quantifies over.
+    expect(shown('Sold to TIN')).toBe('')
     expect(shown('Receipt number')).toBe('INV-88213')
     expect(shown('Date (ISO)')).toBe('2026-07-14')
     expect(shown('Printed date')).toBe("  1L/O7/2O26 '~ ")
@@ -131,6 +141,22 @@ describe('ReceiptForm', () => {
     const onChange = renderForm()
     await userEvent.type(screen.getByLabelText('Merchant'), '!')
     expect(onChange).toHaveBeenLastCalledWith('merchant.name', 'METRO OIL!')
+  })
+
+  it('sends the buyer under the write path the server accepts', async () => {
+    // `getByLabelText` with an exact string, not `/sold to/i`: two labels here
+    // begin "Sold to" and the regex matches both, which is a "found multiple
+    // elements" failure rather than an assertion.
+    //
+    // The buyer is the one party on a BIR invoice the merchant fields cannot
+    // stand in for, and `merchant.name` is the path next door -- so the value
+    // and the path are both asserted, because a field wired to its neighbour
+    // renders perfectly and corrects the wrong column.
+    const onChange = renderForm()
+    await userEvent.type(screen.getByLabelText('Sold to'), '!')
+    expect(onChange).toHaveBeenLastCalledWith('buyer.name', 'IDEAL SOURCE!')
+    await userEvent.type(screen.getByLabelText('Sold to TIN'), '009-123-456-000')
+    expect(onChange).toHaveBeenLastCalledWith('buyer.tax_id', '009-123-456-000')
   })
 
   it('clears a text field to null rather than to the empty string', async () => {
@@ -196,12 +222,14 @@ describe('ReceiptForm', () => {
     expect(onChange).toHaveBeenLastCalledWith('receipt.date_raw', null)
   })
 
-  it('has no control that is not one of the seventeen it offers', () => {
-    // An absence assertion: an eighteenth path would be a 400 naming it, and a
-    // stray control is how one gets added by accident. 8 text + 6 money = 14
-    // textboxes, plus the legibility select and the two booleans.
+  it('has no control that is not one of the paths it offers', () => {
+    // An absence assertion: a path outside `_RECEIPT_FIELDS` would be a 400
+    // naming it, and a stray control is how one gets added by accident. The
+    // numbers below are the count of `TEXT_FIELDS` plus `MONEY_FIELDS`, and they
+    // are meant to be edited in step with those lists -- which is why the title
+    // no longer carries a cardinal that could disagree with them.
     renderForm()
-    expect(screen.getAllByRole('textbox')).toHaveLength(14)
+    expect(screen.getAllByRole('textbox')).toHaveLength(16)
     expect(screen.getAllByRole('checkbox')).toHaveLength(2)
     expect(screen.getAllByRole('combobox')).toHaveLength(1)
   })
@@ -278,8 +306,8 @@ describe('LineItemsTable', () => {
 })
 
 describe('inline field errors', () => {
-  // The whole seventeen-path map plus the two rows' cells, so a path the test
-  // does not name is still a rendered control that must stay clean.
+  // The whole receipt map plus the two rows' cells, so a path the test does not
+  // name is still a rendered control that must stay clean.
   const FIELDS: FieldMap = fieldsFromReceipt(RECEIPT)
 
   it('renders the server message beside the matched field, linked by aria-describedby', () => {

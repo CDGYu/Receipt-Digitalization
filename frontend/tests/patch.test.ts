@@ -14,6 +14,10 @@ const RECEIPT: ReceiptDetail = {
   confidence: '0.620' as Money,
   confidence_reasons: [],
   merchant_name_raw: 'METRO OIL',
+  // Who the receipt was issued TO, which is not who issued it. Both halves
+  // populated here and distinguishable from each other, like every other column
+  // in this fixture; the receipt that carries neither is its own test below.
+  buyer: { name: 'IDEAL SOURCE', tax_id: '009-123-456-000' },
   receipt_number: 'INV-88213',
   txn_date: '2026-07-14',
   // Deliberately garbled, with padding. `date_raw` is whatever the model read
@@ -117,12 +121,19 @@ describe('buildPatch', () => {
 
 describe('fieldsFromReceipt', () => {
   it('maps every correctable receipt path from the key the API reads it out under', () => {
-    // The read and write names differ for six of the seventeen. Transcribed from
-    // `_RECEIPT_FIELDS` (src/receipts/persist/repository.py:905-923) on the write
-    // side and `receipt_detail` (src/receipts/review/serializers.py:190-218) on
-    // the read side.
+    // The read name and the write name differ for many of these, and no count is
+    // quoted: the set grows and a number here would rot silently. Transcribed
+    // from `_RECEIPT_FIELDS` (src/receipts/persist/repository.py) on the write
+    // side and `receipt_detail` (src/receipts/review/serializers.py) on the read
+    // side.
     expect(fieldsFromReceipt(RECEIPT)).toMatchObject({
       'merchant.name': 'METRO OIL', // <- merchant_name_raw
+      // Nested under `buyer` on the read side, dotted on the write side, and the
+      // two spell the same path -- so unlike `merchant.name` this one is a
+      // rename of nothing. It is asserted anyway: `buyer` being an object is
+      // exactly what a client can get wrong.
+      'buyer.name': 'IDEAL SOURCE', // <- buyer.name
+      'buyer.tax_id': '009-123-456-000', // <- buyer.tax_id
       'receipt.number': 'INV-88213', // <- receipt_number
       'receipt.date': '2026-07-14', // <- txn_date
       'receipt.date_raw': "  1L/O7/2O26 '~ ", // <- date_raw, verbatim
@@ -142,12 +153,16 @@ describe('fieldsFromReceipt', () => {
     })
   })
 
-  it('emits exactly the seventeen receipt paths and six per line item', () => {
+  it('emits exactly the receipt paths _RECEIPT_FIELDS accepts, and six per line item', () => {
     // Pins the closed set in both directions: an invented path is a 400 naming
-    // it, and a missing one is an edit the reviewer cannot make.
+    // it, and a missing one is an edit the reviewer cannot make. The list is
+    // written out rather than counted, so adding a path here is the same edit as
+    // adding it to `_RECEIPT_FIELDS` and no cardinal in the title can rot.
     expect(Object.keys(fieldsFromReceipt(RECEIPT)).sort()).toEqual(
       [
         'merchant.name',
+        'buyer.name',
+        'buyer.tax_id',
         'receipt.number',
         'receipt.date',
         'receipt.date_raw',
@@ -178,6 +193,25 @@ describe('fieldsFromReceipt', () => {
         'line_items[1].line_total',
       ].sort(),
     )
+  })
+
+  it('carries a receipt with no Sold To block as null, never as empty text', () => {
+    // Not every BIR form is filled in, and the extractor answers `null` when it
+    // cannot read the block. `_coerce_optional_text(None)` is `None` while
+    // `_coerce_optional_text('')` is `''`, and they land as different column
+    // values -- so a `''` here would turn "nothing was printed" into "an empty
+    // string was printed" on a field nobody touched.
+    //
+    // The keys are still present, which is the other half: `buildPatch` compares
+    // by value, so a path missing from `original` reads as `undefined` and every
+    // untouched `null` would be sent as an edit nobody made.
+    const anonymous: ReceiptDetail = { ...RECEIPT, buyer: { name: null, tax_id: null } }
+    const fields = fieldsFromReceipt(anonymous)
+    expect(fields['buyer.name']).toBeNull()
+    expect(fields['buyer.tax_id']).toBeNull()
+    expect(Object.keys(fields)).toContain('buyer.name')
+    expect(Object.keys(fields)).toContain('buyer.tax_id')
+    expect(buildPatch(fields, fieldsFromReceipt(anonymous))).toEqual({})
   })
 
   it('leaves position out, because the UI does not offer it', () => {

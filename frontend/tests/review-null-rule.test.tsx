@@ -165,15 +165,21 @@ describe("design section 4's input half, over every control that is rendered", (
 
   it('skips a control only because HTML gives it no empty state to show one in', () => {
     // The measurement ADR-0027's dated correction records, asserted rather than
-    // recited: `_RECEIPT_FIELDS` has 17 keys, `ReceiptForm` renders one control
-    // for each, and exactly three of them -- the legibility `<select>` and the
-    // two booleans -- cannot carry a placeholder. So the mark reaches 14 of 17.
+    // recited: `ReceiptForm` renders one control per key of `_RECEIPT_FIELDS`,
+    // and exactly three of them -- the legibility `<select>` and the two
+    // booleans -- cannot carry a placeholder. The two counts below therefore
+    // move together, and the gap between them is the claim: it is three, and it
+    // is three because of the list this test also asserts. Neither number is
+    // recited from prose anywhere; both are read off the render.
     const { container } = render(
       <ReceiptForm fields={NOTHING_EXTRACTED} onChange={() => {}} />,
     )
 
-    expect(controlsIn(container)).toHaveLength(17)
-    expect(controlsIn(container).filter(honoursPlaceholder)).toHaveLength(14)
+    const all = controlsIn(container)
+    const marked = all.filter(honoursPlaceholder)
+    expect(all).toHaveLength(19)
+    expect(marked).toHaveLength(all.length - 3)
+    expect(marked).toHaveLength(16)
     expect(cannotCarryAMark(container).sort()).toEqual([
       'input[type=checkbox] Handwritten',
       'input[type=checkbox] Receipt is inconsistent',

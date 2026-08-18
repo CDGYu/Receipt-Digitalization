@@ -111,6 +111,10 @@ const RECEIPT: ReceiptDetail = {
   confidence: '0.620' as Money,
   confidence_reasons: [{ reason: 'validation errors present', penalty: '-0.35' as Money }],
   merchant_name_raw: 'Whole Foods Market',
+  // The Sold To party, which is not the merchant. The TIN line is printed on
+  // every BIR form in the golden set and filled on none, so `null` is what a
+  // real reply normally carries here.
+  buyer: { name: 'IDEAL SOURCE', tax_id: null },
   receipt_number: 'WF-100244',
   txn_date: '2026-07-14',
   // Garbled, so `confirms an untouched receipt with an empty patch` also proves
@@ -568,9 +572,9 @@ describe('ReviewScreen: editing and approval', () => {
     await user.click(screen.getByRole('button', { name: /approve/i }))
 
     expect(await screen.findByText(/review queue is empty/i)).toBeDefined()
-    // `97.43` with a `1` typed on the end. Every other one of the seventeen
-    // paths was left alone and must therefore be absent -- `exclude_unset` is
-    // what makes "absent" mean "do not touch".
+    // `97.43` with a `1` typed on the end. Every other correctable path was left
+    // alone and must therefore be absent -- `exclude_unset` is what makes
+    // "absent" mean "do not touch".
     expect(patchBody(fetchMock)).toEqual({ 'totals.total': '97.431' })
     expect(chain(fetchMock)).toEqual([
       'GET /review/next',
@@ -727,6 +731,32 @@ describe('ReviewScreen: editing and approval', () => {
 
     await screen.findByText(/review queue is empty/i)
     expect(patchBody(fetchMock)).toEqual({ 'receipt.date_raw': '14 JUL 2026' })
+  })
+
+  it('sends a corrected buyer under buyer.name, and nothing else', async () => {
+    // The end of the chain the other two tests only reach halves of: the field
+    // is in `TEXT_FIELDS`, the path is in the `FieldMap`, and the edit arrives
+    // in the body under the name `_RECEIPT_FIELDS` maps to `buyer_name_raw`.
+    // Without the `patch.ts` half the form renders correctly and this body is
+    // `{}`.
+    const fetchMock = stubApi({
+      ...DRAINING,
+      'PATCH /receipts/a1': [200, storedAs({ buyer: { name: 'IDEAL SOURCE INC.', tax_id: null } })],
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const user = userEvent.setup()
+
+    render(<ReviewScreen />)
+    await screen.findByRole('heading', { level: 1, name: 'Whole Foods Market' })
+    const soldTo = screen.getByLabelText('Sold to')
+    await user.clear(soldTo)
+    await user.type(soldTo, 'IDEAL SOURCE INC.')
+    await user.click(screen.getByRole('button', { name: /approve/i }))
+
+    await screen.findByText(/review queue is empty/i)
+    // `buyer.tax_id` is absent, not null: it was `null` on the way in and the
+    // reviewer never opened it, so `exclude_unset` must never see it at all.
+    expect(patchBody(fetchMock)).toEqual({ 'buyer.name': 'IDEAL SOURCE INC.' })
   })
 
   it('edits a line item by its position and leaves the rest of the row alone', async () => {
