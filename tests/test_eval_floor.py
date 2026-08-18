@@ -121,6 +121,36 @@ def test_a_label_declares_every_field_the_schema_declares(json_path: Path):
     )
 
 
+@pytest.mark.parametrize(
+    "json_path",
+    [*_labels(), TEMPLATE_PATH],
+    ids=lambda p: p.stem,
+)
+def test_array_order_agrees_with_the_position_values(json_path: Path):
+    """Two orderings, and only one of them is what the eval actually reads.
+
+    ``field_accuracy`` joins ``line_items[i]`` by ARRAY INDEX; ``position`` is
+    what every human reader trusts. When they disagree, every field of both
+    rows is scored against the wrong row and nothing anywhere says so.
+
+    **This would not have caught the printed-order defect fixed in 417c206.**
+    There ``position`` equalled its index and both were wrong together, against
+    the paper. This catches the other half: a row moved in the array while its
+    ``position`` value stays put, or the reverse.
+
+    R051 cannot see it either. Its message promises "0-based, contiguous, and
+    in printed order", but its check is ``sorted(positions) == list(range(n))``
+    -- every permutation satisfies that, so a shuffled label validates with no
+    findings at any severity. See ISSUE-005.
+    """
+    truth = _truth(json_path)
+    positions = [item.position for item in truth.line_items]
+    assert positions == list(range(len(positions))), (
+        f"{json_path.stem}: array order and position values disagree -- "
+        f"positions are {positions} at indices {list(range(len(positions)))}"
+    )
+
+
 def test_every_flagged_row_carries_a_printed_name_and_no_amounts():
     """A blank pre-printed row: a name read off the paper, and nothing else.
 
