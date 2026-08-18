@@ -769,19 +769,40 @@ def _blocks(text: str) -> list[str]:
     return [b for b in re.split(r"\n\s*\n", text) if b.strip()]
 
 
-#: The two settings of the flag. The tolerance is whitespace around the `=`
-#: and nothing more: rewriting the bullet in JSON style (`"is_template_row":
-#: true`) does not match, and is meant not to.
+#: The two settings of the flag. Tolerant of whitespace around the `=` and of
+#: case; a JSON-style rewrite (`"is_template_row": true`) does not match.
 _FLAG_TRUE = re.compile(r"is_template_row\s*=\s*true", re.IGNORECASE)
 _FLAG_FALSE = re.compile(r"is_template_row\s*=\s*false", re.IGNORECASE)
 
 #: A numbered rule of `SYSTEM_EXTRACTION`, e.g. "9. BLANK PRE-PRINTED ROWS.".
 _RULE_HEADING = re.compile(r"^\s*\d+\.\s+[A-Z]")
 
-#: Sentence-ish split. `meta.ambiguous_fields` survives it -- no space after
-#: that dot -- while a sentence wrapped across lines does not, since `\s+`
-#: spans the newline.
-_CLAUSE = re.compile(r"\.\s+")
+#: Clause split: at a sentence end, and at the start of a list item -- a `-`
+#: bullet or an "(a)" verify step. `meta.ambiguous_fields` survives it, there
+#: being no space after that dot.
+#:
+#: The list-item half is load-bearing, not tidiness. The verify steps are
+#: separated by newlines and not by periods, so on a sentence-only split the
+#: whole (a)..(e) checklist collapses into ONE clause -- putting step (a)'s
+#: `is_template_row = true` in the same clause as step (b)'s "could not read"
+#: and step (e)'s "unsure". Measured: that made the illegibility bound below
+#: fail on correct text.
+_CLAUSE = re.compile(r"\.\s+|\n\s*(?=[-(])")
+
+#: What "about illegibility" is keyed on. Stems, so `illegible`, `illegibly`
+#: and `illegibility` all match. This is a lexical pin and a synonym walks
+#: straight past it -- "smudged", "defeats you", "you cannot make out" are all
+#: invisible here. Stated rather than implied; see the bound's docstring.
+_ILLEGIBILITY = (
+    "illegib",
+    "unreadab",
+    "cannot read",
+    "can not read",
+    "could not read",
+    "couldn't read",
+    "cannot be read",
+    "could not be read",
+)
 
 
 def _descriptions(node: object) -> list[str]:
@@ -865,8 +886,8 @@ def test_the_prompt_ties_the_flag_to_the_paper_not_to_the_models_eyesight() -> N
     says to assert on the shipped pair because filing a sentence in one turn
     rather than the other should not change a verdict. This guarantee is the
     exception, because it is about WHERE the instruction lives: a checklist that
-    mentions both settings is not the rule that defines them, and only the
-    system turn states rules. Measured: adding one plausible clause to verify
+    mentions both settings is not the rule that defines them. Measured: adding
+    one plausible clause to verify
     step (a) -- "not even with is_template_row = false" -- let the user turn
     satisfy the round-1 version of this test with BOTH statements of the
     contrast deleted, taking `meta.ambiguous_fields` free from step (e).
@@ -888,6 +909,35 @@ def test_the_prompt_ties_the_flag_to_the_paper_not_to_the_models_eyesight() -> N
     branch has repeatedly been bitten by. Taken deliberately: the alternative is
     not catching an inversion, and a wrongly flagged purchase leaves the
     arithmetic with nothing downstream able to tell.
+
+    THE MIRROR PROPERTY, and the part that actually holds the guarantee shut:
+
+        No clause anywhere in the shipped request may attach
+        `is_template_row = true` to illegibility.
+
+    The checks above bind the PRESENCE of a correct statement; they say nothing
+    about an incorrect one alongside it. Four measured shapes shipped the
+    destructive instruction with 24 passing: widening the anchored sentence to
+    "BLANK ON THE PAPER, or written but illegible"; a clean inversion keeping a
+    `blank` mention on the true side and `meta.ambiguous_fields` on the false
+    side; an extra bullet reading "if you cannot read a row at all, set
+    is_template_row = true"; and the same inversion relocated into rule 5, which
+    names only `= true` and so never enters `contrast` at all.
+
+    This bound is the "somewhere else to go" test the `false` side already gets,
+    run in the other direction, and it is deliberately NOT turn-scoped or
+    rule-anchored -- rule 5 is neither the contrast rule nor the user turn, and
+    the shape lands there just as happily. It also removes the load from the
+    asymmetry above: the `true` side no longer needs clause [3] to lack the word
+    "blank" in order to stay honest.
+
+    ITS FLOOR, stated rather than implied. Detecting "about illegibility" needs
+    words, so this is a lexical pin exactly like the `"blank"` one. It keys on
+    the stems in `_ILLEGIBILITY`: illegib*, unreadab*, and the "cannot/could not
+    (be) read" spellings. A synonym evades it -- "smudged", "you cannot make it
+    out", "defeats you" -- and so does a paraphrase that never names reading at
+    all. It catches the four shapes above and every other shape that says one of
+    those words; it is not a proof that the request is free of the instruction.
     """
     rules = [b for b in _blocks(P.SYSTEM_EXTRACTION) if _RULE_HEADING.match(b)]
     contrast = [b for b in rules if _FLAG_TRUE.search(b) and _FLAG_FALSE.search(b)]
@@ -908,6 +958,20 @@ def test_the_prompt_ties_the_flag_to_the_paper_not_to_the_models_eyesight() -> N
                 "is_template_row = false is set without routing the row to "
                 "meta.ambiguous_fields:\n" + clause
             )
+
+    # The mirror property. Whole shipped request: a clause setting the flag true
+    # is wrong wherever it lives, and rule 5 is neither the contrast rule nor the
+    # user turn.
+    for clause in _CLAUSE.split(_shipped()):
+        if not _FLAG_TRUE.search(clause):
+            continue
+        illegibility = [w for w in _ILLEGIBILITY if w in clause.lower()]
+        assert not illegibility, (
+            "a clause sets is_template_row = true and talks about illegibility "
+            f"({', '.join(illegibility)}). A filled row the model cannot read "
+            f"is a PURCHASE; flagging it drops it from every total and nothing "
+            f"downstream can tell:\n{clause}"
+        )
 
 
 def test_the_blank_row_flag_is_steered_off_the_rows_R052_calls_an_error() -> None:
@@ -945,10 +1009,12 @@ def test_the_blank_row_flag_is_steered_off_the_rows_R052_calls_an_error() -> Non
     guidance bought for nothing.
 
     What stands in for the converse is the cardinality tripwire below. It fires
-    on any change to the set, in either direction, and forces one human decision:
-    is the new member a BIR summary label the blank-row rule has to name?
-    Marking that subset in the rule set would close it properly -- that is
-    `rules.py`, reported rather than reached.
+    when the set changes SIZE, and forces one human decision: is the new member a
+    BIR summary label the blank-row rule has to name? A cardinality-preserving
+    edit -- swapping one member for another -- passes it untouched. That hole is
+    known and parked, not overlooked. Marking a BIR-summary subset in the rule
+    set would close it properly -- that is `rules.py`, reported rather than
+    reached.
     """
     assert len(TOTAL_ROW_STRONG) == 42, (
         "TOTAL_ROW_STRONG changed size. Decide whether the new or removed member "
