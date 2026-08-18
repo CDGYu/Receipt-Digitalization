@@ -769,11 +769,19 @@ def _blocks(text: str) -> list[str]:
     return [b for b in re.split(r"\n\s*\n", text) if b.strip()]
 
 
-#: The two settings of the flag, matched loosely so that respacing the prompt
-#: does not false-alarm. A block asserting both is a block drawing the
-#: distinction, whatever prose it uses to draw it.
+#: The two settings of the flag. The tolerance is whitespace around the `=`
+#: and nothing more: rewriting the bullet in JSON style (`"is_template_row":
+#: true`) does not match, and is meant not to.
 _FLAG_TRUE = re.compile(r"is_template_row\s*=\s*true", re.IGNORECASE)
 _FLAG_FALSE = re.compile(r"is_template_row\s*=\s*false", re.IGNORECASE)
+
+#: A numbered rule of `SYSTEM_EXTRACTION`, e.g. "9. BLANK PRE-PRINTED ROWS.".
+_RULE_HEADING = re.compile(r"^\s*\d+\.\s+[A-Z]")
+
+#: Sentence-ish split. `meta.ambiguous_fields` survives it -- no space after
+#: that dot -- while a sentence wrapped across lines does not, since `\s+`
+#: spans the newline.
+_CLAUSE = re.compile(r"\.\s+")
 
 
 def _descriptions(node: object) -> list[str]:
@@ -814,12 +822,17 @@ def test_the_extraction_prompt_separates_the_three_tins_on_the_form() -> None:
     page, so without the warning it is what an obliging model reaches for. The
     warning has to hang off `buyer.tax_id` rather than float loose in the
     request.
+
+    "merchant" and "footer" are deliberately NOT checked. Both are already true
+    of `prompts.py` at 5c4a82f, before this task touched it -- rule 1 names the
+    merchant, rule 5 excludes "footer text" -- so no change this task can make
+    would fail them. "buyer" and "printer" are both false at that revision, so
+    those two bind.
     """
     shipped = _shipped()
     lowered = shipped.lower()
-    for who in ("merchant", "buyer", "printer"):
+    for who in ("buyer", "printer"):
         assert who in lowered, who
-    assert "footer" in lowered
 
     tin_blocks = [b for b in _blocks(shipped) if "buyer.tax_id" in b]
     assert tin_blocks, "nothing in the request says what buyer.tax_id takes"
@@ -839,31 +852,62 @@ def test_the_prompt_ties_the_flag_to_the_paper_not_to_the_models_eyesight() -> N
     row the model could not read, so the distinction has to be drawn here, and
     the unreadable case has to be given somewhere else to go.
 
-    The block is located by the two SETTINGS of the flag rather than by the
-    prose contrasting them, so a rewording does not false-alarm: a block saying
-    both when the flag is true and when it is false is the block drawing the
-    distinction, whatever words it uses.
+    Located by the two SETTINGS of the flag rather than by the prose
+    contrasting them. Locating it by `meta.ambiguous_fields` does NOT work, and
+    the first version of this test made exactly that mistake: the user turn's
+    verify block names that path for an unrelated reason -- every field you were
+    unsure about goes there -- and names the flag as well, in step (a), so an
+    `any()` over every block mentioning the flag was satisfied by two unrelated
+    instructions sharing a block. Measured: with BOTH statements of the contrast
+    deleted, that version passed, and so did all 1216 tests.
 
-    Locating it by `meta.ambiguous_fields` instead does NOT work, and the first
-    version of this test made exactly that mistake. The user turn's verify block
-    names that path for an unrelated reason -- every field you were unsure about
-    goes there -- and it also names the flag, in step (a). An `any()` over every
-    block mentioning the flag was therefore satisfied by the coincidence of two
-    unrelated instructions sharing a block. Measured 2026-08-18: with BOTH
-    statements of the contrast deleted from `prompts.py`, the old assertion
-    passed, and so did all 1216 tests.
+    TURN-SCOPED AND RULE-ANCHORED, against this section's header rule, which
+    says to assert on the shipped pair because filing a sentence in one turn
+    rather than the other should not change a verdict. This guarantee is the
+    exception, because it is about WHERE the instruction lives: a checklist that
+    mentions both settings is not the rule that defines them, and only the
+    system turn states rules. Measured: adding one plausible clause to verify
+    step (a) -- "not even with is_template_row = false" -- let the user turn
+    satisfy the round-1 version of this test with BOTH statements of the
+    contrast deleted, taking `meta.ambiguous_fields` free from step (e).
+
+    Inside that rule the two settings are bound to their meanings SEPARATELY,
+    because a rule can name both and still say the opposite of the truth.
+    Measured: swapping `true` and `false` inside the contrast -- telling the
+    model a blank row is `false` and an unreadable purchase is `true` -- passed
+    every earlier version of this test, while shipping the instruction to flag
+    every unreadable purchase.
+
+    The binding on `true` is an EXISTENCE check, not a universal one: rule 9
+    legitimately sets `is_template_row = true` a second time, in the sentence
+    asking for the untouched rows, and that sentence has no reason to repeat the
+    word "blank". The binding on `false` IS universal -- every clause setting
+    the flag false must route the row to `meta.ambiguous_fields`.
+
+    Pinning the word "blank" is a word pin, and word pins on prose are what this
+    branch has repeatedly been bitten by. Taken deliberately: the alternative is
+    not catching an inversion, and a wrongly flagged purchase leaves the
+    arithmetic with nothing downstream able to tell.
     """
-    contrast = [
-        b for b in _blocks(_shipped()) if _FLAG_TRUE.search(b) and _FLAG_FALSE.search(b)
-    ]
+    rules = [b for b in _blocks(P.SYSTEM_EXTRACTION) if _RULE_HEADING.match(b)]
+    contrast = [b for b in rules if _FLAG_TRUE.search(b) and _FLAG_FALSE.search(b)]
     assert contrast, (
-        "no block says both when is_template_row is true and when it is false"
+        "no numbered rule states both when is_template_row is true and when it "
+        "is false; a verify-step checklist naming both is not that rule"
     )
     for block in contrast:
-        assert "meta.ambiguous_fields" in block, (
-            "the flag's two settings are contrasted without telling the model "
-            "where an unreadable filled row goes instead:\n" + block
+        clauses = _CLAUSE.split(block)
+        assert any(_FLAG_TRUE.search(c) and "blank" in c.lower() for c in clauses), (
+            "nothing binds is_template_row = true to the row being blank on the "
+            "paper, so the setting could mean anything:\n" + block
         )
+        set_false = [c for c in clauses if _FLAG_FALSE.search(c)]
+        assert set_false, block
+        for clause in set_false:
+            assert "meta.ambiguous_fields" in clause, (
+                "is_template_row = false is set without routing the row to "
+                "meta.ambiguous_fields:\n" + clause
+            )
 
 
 def test_the_blank_row_flag_is_steered_off_the_rows_R052_calls_an_error() -> None:
@@ -891,13 +935,26 @@ def test_the_blank_row_flag_is_steered_off_the_rows_R052_calls_an_error() -> Non
     `TOTAL DUE VAT INCLUSIVE` to `TOTAL_ROW_STRONG` leaves this test passing
     while the prompt names neither.
 
-    No converse assertion is written, because the right one does not exist at
-    this size. The blank-row rule names 5 of the set's 42 members and hedges
-    with "and the like"; requiring all 42 would demand a system prompt several
-    times the ~1200 tokens `prompts.py`'s own docstring caps it at, and it is
-    already over. Marking a BIR-summary subset in the rule set would close it
-    properly -- that is `rules.py`, reported rather than reached.
+    A full converse is not written, and the reason is semantic, not budgetary.
+    An earlier draft of this docstring said naming all 42 members would cost a
+    system prompt "several times" its ~1200-token cap; that was wrong by an
+    order of magnitude, measured at roughly +8%. The real objection is that the
+    set is not all BIR. It holds `CASH`, `CHANGE DUE`, `TENDERED`, `THANK YOU`
+    and `CUSTOMER COPY` -- thermal-POS footer rows. A sentence telling the model
+    the BIR summary block "is ... THANK YOU, CUSTOMER COPY" would be wrong
+    guidance bought for nothing.
+
+    What stands in for the converse is the cardinality tripwire below. It fires
+    on any change to the set, in either direction, and forces one human decision:
+    is the new member a BIR summary label the blank-row rule has to name?
+    Marking that subset in the rule set would close it properly -- that is
+    `rules.py`, reported rather than reached.
     """
+    assert len(TOTAL_ROW_STRONG) == 42, (
+        "TOTAL_ROW_STRONG changed size. Decide whether the new or removed member "
+        "is a BIR summary label the blank-row rule must name, then update this "
+        "count -- growth is the direction the list below cannot see."
+    )
     shipped = _shipped()
     for label in (
         "TOTAL SALES",
@@ -927,16 +984,30 @@ def test_no_shipped_instruction_confines_line_items_to_purchases() -> None:
     Scoped to the extraction request. `TRIAGE_PROMPT` is a separate call that
     builds no line items at all, and its purchasable-rows-only count is correct
     where it stands.
+
+    The guard below is not decoration. Without it this test was vacuable:
+    measured, rewording `purchasable` to `purchased` in both places and
+    restoring the pre-Task-6 confinement left ZERO matching blocks, so the loop
+    never ran and the test passed with the contradiction fully back in the
+    shipped request.
+
+    Its floor, stated rather than papered over: the guard fires when the word
+    disappears from the request entirely, not when only one of the two blocks is
+    reworded. Keying on the constrained thing instead -- blocks naming "line
+    item" -- is broader but wrong: rule 1 mentions line items while telling the
+    model not to add them up, and has no business naming the flag.
     """
-    for block in _blocks(_shipped()):
-        if "purchasable" in block.lower():
-            assert "is_template_row" in block, block
+    constraining = [b for b in _blocks(_shipped()) if "purchasable" in b.lower()]
+    assert constraining, (
+        "no block constrains line_items to purchases at all; the word this test "
+        "keys on was reworded, and the loop below would pass vacuously"
+    )
+    for block in constraining:
+        assert "is_template_row" in block, block
 
 
 def test_every_description_the_model_is_shown_is_inside_the_bundle_hash() -> None:
-    """`prompt_bundle_hash` is the key `receipts eval` groups its results by.
-
-    Pydantic `description=` text ships to the model inside the tool schema
+    """Pydantic `description=` text ships to the model inside the tool schema
     (`build_tool_schema` keeps descriptions -- that is what they are for), so it
     is prompt text built outside `prompts.py`, in violation of that module's own
     first line. Task 1 reworded `is_template_row` and added `Buyer`; runs from
@@ -957,7 +1028,7 @@ def test_the_bundle_hash_moves_when_a_description_the_model_sees_changes() -> No
     """The containment test above would still pass on a bundle nobody hashes.
 
     Rewording the real field and rebuilding the model is the only check that the
-    grouping key actually moves. The mutation is undone in `finally` and the
+    bundle hash actually moves. The mutation is undone in `finally` and the
     restoration is asserted, because `LineItem` is global to the whole suite.
     """
     field = ExtractedLineItem.model_fields["is_template_row"]
