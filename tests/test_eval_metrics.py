@@ -119,10 +119,14 @@ def test_breakdown_puts_meta_paths_in_self_report_not_transcription():
     assert bd.self_report_total > 0
 
 
-def test_breakdown_classifies_by_prefix_not_by_a_list_of_names():
+def test_breakdown_classifies_an_unseen_meta_field_by_its_prefix():
     """A meta path the classifier has never been told about still lands in
-    self_report. This is the property review standard 19 asks for: one bounded
-    rule, not an enumeration that a new schema field silently escapes."""
+    self_report. The prefix half of the grouping is what this pins: a `meta`
+    field added to the schema next year needs no edit here (review standard
+    19). The self-reports that do not live under `meta.` are a separate,
+    declared set and are pinned separately -- the old name for this test said
+    "not by a list of names", which stopped being true of the module when that
+    set was introduced."""
     from eval.metrics import _group
 
     assert _group("meta.some_field_added_next_year") == "self_report"
