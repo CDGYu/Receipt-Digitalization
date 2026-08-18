@@ -9,16 +9,17 @@ proved invisible to it).
 Last updated: **2026-08-18**, by the session that **finished** Phase 6 merchant
 fingerprinting — reviewed the branch's one unreviewed task, ran the whole-branch
 review, closed one fix wave and one scoped re-review, corrected **ADR-0043**,
-merged by true fast-forward and pushed — and then **answered T2 steps 2 and 4**
-by running them: granite at `max_edge=2048` with a 768 control, and
-`VLM_USE_TOOLS=true` with the flag as the only variable. **Both answers are
-"no".** Several claims in `docs/KNOWN_ISSUES.md` and in this pair were falsified
-by measurement along the way, including seven places that asked for a provider
-class the user had already ruled out.
+merged by true fast-forward and pushed — and then **answered T2 steps 2, 3 and 4
+by running them.** Steps 2 and 4 are "no" (2048 does not help; do not enable
+tool-use locally). **Step 3 is YES on both counts, and it unblocks the project**:
+`gemma4:cloud` is vision-capable, free-tier and tool-capable. Many claims in
+`docs/KNOWN_ISSUES.md` and in this pair were falsified by measurement along the
+way, including seven places asking for a provider class the user had ruled out,
+and **one of my own** — the Gemini key was never in git history.
 **No count of refreshes is written here** — it is a number that moves without its
 sentence changing, which is review standard 5.
 
-**Freshness anchor `a0b610f`** — the last commit that is not this handoff pair.
+**Freshness anchor `41711a2`** — the last commit that is not this handoff pair.
 **It is written twice below — here and inside the command.** Moving one and not
 the other is what happened on this file's previous refresh, and the gate caught
 it because it parses the anchor out of the *command*.
@@ -33,7 +34,7 @@ else: a stamp cannot name the commit that writes it. The test is a command,
 not a commit and not a count:
 
 ```
-git log --oneline a0b610f..main -- ":(top,exclude)docs/MEMORY.md" ":(top,exclude)docs/NEXT_SESSION_PROMPT.md"
+git log --oneline 41711a2..main -- ":(top,exclude)docs/MEMORY.md" ":(top,exclude)docs/NEXT_SESSION_PROMPT.md"
 git log --oneline refs/remotes/origin/main..main   # what a push would send
 git ls-remote --heads origin main                  # authoritative on what is pushed
 git branch --no-merged main                        # must name NOTHING
@@ -156,9 +157,27 @@ answer.)*
   what `lookup` keys off, so enabling it would silently disable Phase 6's
   hint-retrieval path. `_TOOLS_OFF_BY_DEFAULT` keeping `ollama` is right for a
   **fourth** reason — not the capability claim, not the 400, but measured
-  output. **ADR-0002's tool-use non-negotiable now conflicts with a
-  measurement; that is recorded in ISSUE-001 and needs a user ruling.** Scoped
-  to this model only.
+  output. **The ADR-0002 conflict this raised is RESOLVED (2026-08-18) without
+  softening the rule** — step 3 measured tool-use working properly on
+  `gemma4:cloud`, so granite is a per-model exception, recorded in ADR-0002's
+  dated correction.
+- **T2 STEP 3 IS ANSWERED AND BOTH ANSWERS ARE YES** (2026-08-18) — **the first
+  path to a real accuracy number since 2026-07-28.** `gemma4:cloud` is
+  vision-capable, reachable on the **free tier**, and honours a `tools` payload
+  (`finish_reason: tool_calls`, arguments parsed into the schema). Three things
+  to carry: **the paywall is per model** (`qwen3.5:cloud` and `kimi-k2.6:cloud`
+  answer *"requires a subscription"*); **a successful pull proves nothing**,
+  because it fetches a manifest rather than weights, so only an inference call
+  distinguishes access from availability; and **`ollama signin` must run inside
+  the Docker container**, since the host CLI cannot see the daemon on `11435`.
+  **Nothing is pointed at it yet** — `.env` still names granite, and
+  `VLM_BASE_URL` needs no change because the local daemon proxies.
+- **The next real milestone is T2 step 5, the local→Cloud escalation** — steps
+  2, 3 and 4 are all answered, and step 5 is the first that needs building.
+  **It starts with a measured constraint:** `_TOOLS_OFF_BY_DEFAULT` is keyed on
+  the **provider** while the exception is per **model**, and granite and
+  `gemma4:cloud` are both provider `ollama`, so one `VLM_USE_TOOLS` cannot serve
+  both tiers.
 - **`merchants.receipt_count` is credited for a duplicate caught after
   extraction, and NOT for a re-uploaded image** — the image path returns before
   any merchant is resolved. Three documents said the opposite in three different
@@ -1726,14 +1745,17 @@ written before 2026-08-10 points at a different item. **No count is given**: two
 entries have been answered since, and a count here would have to be maintained
 against a list that lives somewhere else (ADR-0032 §3).
 
-1. **An Ollama runtime that can actually read a receipt, + a freshly rotated
-   key** — for ISSUE-001, and therefore for all calibration. **Not a hosted
-   provider:** the 2026-08-14 ruling is Ollama-only, and this entry named a
-   hosted one until 2026-08-18. What is left is **Ollama Cloud** (step 3 of
-   ISSUE-001's ordered plan), because 2026-08-18 measured that the local model
-   is not a primary at any resolution. The key half is unchanged and is
-   security, not accuracy: **rotate** the exposed Gemini key regardless —
-   revoking it survives the ruling, reissuing it does not.
+1. ~~**An Ollama runtime that can actually read a receipt, + a rotated key.**~~
+   **LARGELY CLOSED 2026-08-18.** The runtime half is solved: `gemma4:cloud` is
+   vision-capable, free-tier and honours tool-use (ISSUE-001 step 3). The Gemini
+   block is deleted from `.env`, and **the "it is in the public repo's history"
+   claim was FALSE** — verified four ways, it was never committed; it had been
+   conflated with item 7's golden-label TIN. Revoking at Google is still worth
+   doing and costs nothing now.
+   **What remains is a decision, not a blocker:** whether `gemma4:cloud` reads
+   receipts well enough (it has not seen one), whether the free tier survives a
+   full run, and **whether receipt images may leave this machine at all** — the
+   local-only setup never sent them anywhere.
 2. **R060/R061 OCR grounding (P2.T2)** — model returns the text it read / a
    cheap OCR pass / drop the rules. Also gates bbox highlighting.
 3. ~~**Whether GitHub Actions should run again.**~~ **ANSWERED 2026-08-11: yes.

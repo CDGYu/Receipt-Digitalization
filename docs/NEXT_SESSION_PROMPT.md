@@ -183,11 +183,19 @@ for you.
    (its **triage** pass reads the merchant name exactly, at both resolutions —
    see ADR-0043's dated correction) and the whole 2026-07-29 **timing table**,
    which reproduces in neither direction.
-3. **Stand up Ollama Cloud** (`ollama signin`; still Ollama, no code change) and
-   check two unverified things: whether a strong enough vision model is offered,
-   and whether it accepts a `tools` payload. **Step 2 makes this the load-bearing
-   step, not a fallback** — if no Cloud model can read, the accuracy goal has no
-   path on Ollama-only.
+3. ~~**Stand up Ollama Cloud.**~~ **ANSWERED 2026-08-18, and BOTH answers are
+   yes — on the free tier.** Signed in; **`gemma4:cloud`** is vision-capable,
+   reachable, and honours a `tools` payload properly (`finish_reason:
+   tool_calls`, arguments parsed into the requested schema). **This is the first
+   path to a real accuracy number since 2026-07-28.** Three things to carry:
+   **the paywall is per model** — `qwen3.5:cloud` and `kimi-k2.6:cloud` both
+   answer *"requires a subscription"* while `gemma4:cloud` runs; **a pull proves
+   nothing**, because it fetches a manifest and not weights, so only an inference
+   call distinguishes access from availability; and **`ollama signin` must run
+   inside the Docker container** (`docker exec -it ollama ollama signin`) — the
+   host CLI cannot even see the daemon, which listens on host `11435`.
+   **Nothing is pointed at it yet**: `.env` still names `granite3.2-vision:2b`,
+   and `VLM_BASE_URL` needs no change because the local daemon proxies.
 4. ~~**Set `VLM_USE_TOOLS=true`.**~~ **ANSWERED 2026-08-18: do NOT, on the local
    path.** Ran r002 at 768 with the flag on against the same-day control, flag
    as the only variable. **The `/v1` shim accepts a `tools` payload — no 400**,
@@ -201,17 +209,34 @@ for you.
    **`_TOOLS_OFF_BY_DEFAULT` keeping `ollama` is correct** — for a reason none
    of the three previously written beside it. ISSUE-001 has the tables, the
    three anti-vacuity checks, and the 5.5× speedup with its caveats.
-   **One conflict is recorded and NOT resolved, because it needs your ruling:**
-   ADR-0002 and the steering rules make tool-use structured output a
-   non-negotiable, and on the only model in play it costs accuracy. **Scoped to
-   this model** — it says nothing about a Cloud-tier model, where a schema would
-   usually help, which is why the non-negotiable exists.
-5. **Build the local→Cloud escalation.** Real design work: `make_client` returns
-   one client, and nothing records which model produced a kept extraction — without
-   that no eval can attribute accuracy to a model, and a good number could be
-   hiding the fact that everything escalated. Report the escalation *rate* beside
-   the accuracy figure. Probably an ADR.
+   **The ADR-0002 conflict this raised is RESOLVED (2026-08-18) and the rule was
+   not softened.** Step 3 measured tool-use working properly on `gemma4:cloud`,
+   so the non-negotiable is vindicated on a model that can read; granite is
+   recorded as a **per-model exception** in ADR-0002's dated correction. A 2.5B
+   model that reads nothing either way is evidence about that model, not against
+   schema-constrained output. **`VLM_USE_TOOLS=true` is right for the Cloud
+   tier and wrong for the local one** — which is the next bullet's problem.
+5. **Build the local→Cloud escalation. THIS IS THE NEXT REAL MILESTONE** — steps
+   2, 3 and 4 are all answered, and this is the first one that needs building
+   rather than running. Real design work: `make_client` returns one client, and
+   nothing records which model produced a kept extraction — without that no eval
+   can attribute accuracy to a model, and a good number could be hiding the fact
+   that everything escalated. Report the escalation *rate* beside the accuracy
+   figure. Probably an ADR.
+   **Start from a measured constraint rather than rediscovering it:**
+   `_TOOLS_OFF_BY_DEFAULT` is keyed on the **provider**, and the exception is per
+   **model** — `granite3.2-vision:2b` and `gemma4:cloud` are both provider
+   `ollama`, so one `VLM_USE_TOOLS` cannot be off for the local model and on for
+   the cloud one. Widening the key to `(provider, model)`, or moving the choice
+   into whatever selects the tier, is this milestone's decision to make.
+   ADR-0002's 2026-08-18 correction records it and **deliberately does not fix
+   it**.
 6. **Run the first real baseline**, detached, and commit the results file.
+   **Now actually possible** — see step 3. Unmeasured before it can be trusted:
+   whether `gemma4:cloud` reads a receipt at all, the free tier's rate limits and
+   quotas, and whether a full run completes on them. **And it is a decision, not
+   a detail, that a cloud tier sends receipt images off this machine** — the
+   local-only setup did not.
 7. **Grow the golden set.** Three receipts cannot validate any accuracy claim —
    one receipt is 33 percentage points. This gates the goal more fundamentally
    than the model does.
@@ -1338,13 +1363,16 @@ machine run never overwrites a `reviewed` row; optional-import discipline;
 tool-use structured output; few-shot images first; consistency never cached;
 `python -m pytest` offline and Node-free.
 
-**One of those is in unresolved conflict with a measurement.** *Tool-use
-structured output* is the standing rule (ADR-0002), and on the only model
-currently in play it **costs** accuracy — measured 2026-08-18, T2 step 4: the
-shim accepts the payload, the extraction is unchanged, and triage loses the
-merchant guess Phase 6 depends on. **Do not flip `VLM_USE_TOOLS` on the strength
-of this list.** ISSUE-001 has the evidence; the conflict needs a user ruling and
-is scoped to this model.
+**One of those carries a measured per-model exception, and the rule was NOT
+softened.** *Tool-use structured output* stands (ADR-0002), and step 3 measured
+it working properly on `gemma4:cloud` — a real `tool_calls` array with arguments
+parsed into the requested schema. **`granite3.2-vision:2b` is the exception**:
+tools on leaves the extraction identical and costs triage the merchant guess
+Phase 6's `lookup` keys off, so `_TOOLS_OFF_BY_DEFAULT` is right for that model.
+**So `VLM_USE_TOOLS=true` is correct for the Cloud tier and wrong for the local
+one — and the flag is keyed on the provider, which cannot express that.** Both
+are provider `ollama`. ADR-0002's 2026-08-18 correction records the exception and
+the constraint; ISSUE-001 has the tables.
 
 **PAN:** ADR-0018 + 0020 + corrections; any `_PAN_RE` change replays the
 committed battery both ways, two-instance-tests, keeps the structural guards
@@ -1595,18 +1623,24 @@ measured text disagree, the measurement wins.**
    The item never stopped being the blocking one; it was pointing at a provider
    class you had ruled out, in four places in this file and two in
    `docs/MEMORY.md`.**]**
-   > **Recommended: still do this first, and it is still not close** — but the
-   > thing to do has changed twice. **Ollama Cloud is now the whole path**
-   > (ISSUE-001 step 3): 2026-08-18 measured the local model reading no more at
-   > `max_edge` 2048 than at 768, core accuracy identical, so "local primary
-   > with Cloud as fallback" has lost its local half. Two things about Cloud are
-   > **unverified** and one command each settles them: whether it offers a
-   > vision model strong enough, and whether it accepts a `tools` payload.
-   > **The recommendation's old evidence does not transfer** — ISSUE-001's
-   > "Readiness check, 2026-08-11" is about *hosted* wiring, and that ruling
-   > superseded it. **Only a human can sign in**, and the old Gemini key must be
-   > rotated regardless: it was echoed to a terminal, the repo is public, and
-   > revoking it is not reissuing it.
+   > **LARGELY CLOSED 2026-08-18 — the runtime half is solved.** You signed in,
+   > and `gemma4:cloud` is vision-capable, free-tier, and honours a `tools`
+   > payload. Both of the things this item called unverified are now measured;
+   > ISSUE-001 step 3 has them. **What is left of this item is not a blocker but
+   > a decision**: whether `gemma4:cloud` actually reads receipts well enough
+   > (it has not seen one), whether the free tier's limits survive a full run,
+   > and **whether receipt images may leave this machine at all** — the
+   > local-only setup never sent them anywhere, and that is a judgement about
+   > third-party businesses' tax IDs, not a configuration detail.
+   > **The Gemini key half is DONE and I was wrong about it.** The commented
+   > block is deleted from `.env` (2026-08-18). I described it repeatedly as
+   > sitting in a public repo's history; **it never was.** Verified four ways —
+   > `git log -S` and `-G` both return zero commits, a broader pattern returns
+   > zero, `.env` appears in no commit, and it is gitignored. I had conflated it
+   > with item 7's golden-label TIN, which genuinely is in 11 commits. The real
+   > exposure is the recorded one: it was **echoed to a terminal** on
+   > 2026-07-28. Revoking at Google is still worth doing and now costs nothing,
+   > since Gemini is out of scope — but it is not the emergency I called it.
 2. ~~**The theme control.**~~ **DONE, merged 2026-08-11 — ADR-0038.** Three
    states (`system` removes the attribute, so ADR-0027's precedence rule stays
    reachable both ways), a `<select>` in the header beside sign-out, one
@@ -1723,10 +1757,11 @@ measured text disagree, the measurement wins.**
     > distinguished only by its left border and `Try again` reads as a thin
     > outline on white. Both are ADR-0027 token questions and they are cheapest
     > answered together.
-**If you want the short version:** **1 is the one that matters** — it gates all
-calibration and Phase 6's only metric, and it now means **Ollama Cloud**, not a
-hosted provider. *("Everything but the key is verified" stood here until
-2026-08-18; it described hosted wiring the ruling superseded.)*
+**If you want the short version:** **1 is largely closed as of 2026-08-18** —
+`gemma4:cloud` works, the Gemini block is deleted, and what remains of it is a
+judgement about sending receipt images off this machine. *(This line has twice
+named the wrong thing: a hosted provider until 2026-08-18, then two Cloud
+questions that are now measured.)* **The next thing to build is T2 step 5.**
 Say no to **4** and **6**. Leave **8**, **9** and **10** until 1 lands. **7 is
 not a tidy-up** — its values are in 11 commits of a public repo's history, so it
 is a rewrite-history / go-private / accept-it decision, and it is yours.
@@ -1840,13 +1875,14 @@ which nothing can observe.
 **Then** pick from the START HERE index, or answer the questions above and let
 that pick for you.
 
-**Item 1 in "Blocked on me" is still the one that matters**, and no milestone
-since has changed that — but **what it asks for has changed, and this paragraph
-named the forbidden thing until 2026-08-18.** Under the Ollama-only ruling the
-answer is **Ollama Cloud**, and 2026-08-18 removed the local alternative by
-measurement rather than by opinion. "Everything but the key is verified" was
-about *hosted* wiring and **does not transfer** — two things about Cloud are
-unverified, and one command each settles them.
+**Item 1 gated this project from 2026-07-28 to 2026-08-18. It is now largely
+closed**, and this paragraph has named the wrong thing twice — a hosted provider
+the ruling forbade, then two Cloud questions that are now measured. `gemma4:cloud`
+reads as vision-capable, free-tier and tool-capable (ISSUE-001 step 3).
+**What is left of it is a judgement, not a blocker**: whether that model reads
+receipts well enough, whether the free tier survives a full run, and **whether
+receipt images may leave this machine at all.** The next thing to *build* is
+step 5, the escalation.
 
 **The one thing §0f left open on purpose is closed (2026-08-13).**
 `scripts/verify.py`'s module docstring no longer claims `.github/workflows/` is
