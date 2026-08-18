@@ -493,6 +493,27 @@ def test_findings_are_written_and_a_review_task_is_opened(session_factory, stora
         assert task.priority >= 0
 
 
+def test_expected_buyer_reaches_the_rules(settings, session_factory, storage):
+    """EXPECTED_BUYER_NAME must survive all the way to a persisted finding.
+
+    The chain is Settings -> the context ``process_receipt`` builds -> the
+    per-attempt context ``_evaluate`` builds -> ``validate()`` ->
+    ``validation_findings``. Every link lives in a different module and the rule
+    unit tests can see none of them: R014/R015 were inert on every real run
+    while ``tests/test_rules.py`` was entirely green.
+
+    The ``settings`` fixture is ``Settings(_env_file=None, ...)``, so a
+    developer's own ``.env`` cannot steer this either way.
+    """
+    job = _job(storage)
+    configured = settings.model_copy(update={"expected_buyer_name": "IDEAL SOURCE"})
+    process_receipt(job, client=_Client([_triage(), _good()]), storage=storage,
+                    session_factory=session_factory, settings=configured)
+    with session_factory() as session:
+        ids = set(session.scalars(select(ValidationFinding.rule_id)))
+    assert "R014" in ids   # _good() carries no buyer
+
+
 def test_repair_resolved_findings_are_kept_as_history(session_factory, storage, settings):
     """Findings accumulate across passes via ``resolved_by_repair``.
 

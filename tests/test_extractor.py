@@ -332,3 +332,85 @@ def test_cache_prevents_a_second_call():
     extract_with_repair(IMG, client, ctx=CTX, cache=cache)
     extract_with_repair(IMG, client, ctx=CTX, cache=cache)
     assert len(client.calls) == 1  # second run served from cache
+
+
+def test_evaluate_carries_every_context_field_through_to_the_rules(monkeypatch):
+    """PROPERTY: `_evaluate` hands the rules every ValidationContext field it was
+    given, except `parse_error`, which it must overwrite with this response's.
+
+    `_evaluate` builds a fresh context per attempt so `parse_error` describes
+    THIS response rather than being written into a context shared across a
+    thread pool. It used to do that by ENUMERATING the fields to carry over, and
+    an enumeration carries only the fields that existed when it was written: it
+    dropped `expected_buyer_name` and `expected_buyer_tax_id`, so R014/R015 were
+    inert on every real pipeline run while every rule unit test stayed green.
+
+    This iterates `dataclasses.fields()` instead of naming fields, so it needs no
+    edit when field ten arrives — and the first loop is what makes that true. A
+    new field left at its default in the probe would make "carried" and "dropped
+    and re-defaulted" indistinguishable, so the probe is required to differ from
+    the default on every field, and says so by name when it does not.
+    """
+    import dataclasses
+
+    from receipts.extract.clients.base import VLMResponse
+    from receipts.extract.extractor import _evaluate
+    from receipts.extract.schema import ConsistencyResult, Legibility
+    from receipts.validate import validator as validator_module
+    from receipts.validate.context import RuleConfig
+    from receipts.validate.report import Severity
+    from receipts.validate.rules import Rule
+
+    probe_ctx = ValidationContext(
+        triage=TriageResult(
+            document_type=DocumentType.HANDWRITTEN_RECEIPT,
+            legibility=Legibility.POOR,
+            estimated_line_item_count=7,
+        ),
+        ocr_text="probe ocr text",
+        merchant="probe merchant",
+        consistency=ConsistencyResult(runs=3, disputed=["totals.total"]),
+        parse_error="the caller's parse error",
+        expected_buyer_name="IDEAL SOURCE",
+        expected_buyer_tax_id="222-222-222-000",
+        config=RuleConfig(max_qty=D("7")),
+        today=date(2026, 1, 2),
+    )
+
+    for f in dataclasses.fields(ValidationContext):
+        default = (
+            f.default if f.default is not dataclasses.MISSING else f.default_factory()
+        )
+        assert getattr(probe_ctx, f.name) != default, (
+            f"probe_ctx.{f.name} is still its default; give this field a "
+            "distinctive value, or the test cannot tell carried from dropped"
+        )
+
+    seen: list[ValidationContext] = []
+
+    class _CtxProbe(Rule):
+        id = "R999"
+        severity = Severity.INFO
+
+        def check(self, r, ctx):
+            seen.append(ctx)
+            return []
+
+    monkeypatch.setattr(validator_module, "RULES", [_CtxProbe()])
+
+    response = VLMResponse(parsed=None, raw=None, model_id="probe",
+                           parse_error="this response did not parse")
+    _evaluate(response, probe_ctx)
+
+    assert len(seen) == 1
+    carried = seen[0]
+    for f in dataclasses.fields(ValidationContext):
+        if f.name == "parse_error":
+            continue
+        assert getattr(carried, f.name) == getattr(probe_ctx, f.name), \
+            f"_evaluate dropped ValidationContext.{f.name}"
+
+    # The one field that must NOT be carried: it describes this response...
+    assert carried.parse_error == "this response did not parse"
+    # ...and the caller's context is not written through in the process.
+    assert probe_ctx.parse_error == "the caller's parse error"
