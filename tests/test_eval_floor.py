@@ -33,7 +33,7 @@ GOLDEN_LABELS = Path(__file__).resolve().parents[1] / "eval" / "golden" / "label
 
 #: An empty extraction must score below this. Stated as a literal, never
 #: derived from the code under test: a bound computed by the thing it checks
-#: moves with the defect. Measured 2026-08-18: r001 3.6%, r002 4.3%, r003 5.6%.
+#: moves with the defect. Measured 2026-08-18: r001 3.6%, r002 4.2%, r003 5.6%.
 MAX_FLOOR = 0.10
 
 
