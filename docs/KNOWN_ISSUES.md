@@ -790,3 +790,204 @@ results file says so.
   decision 6 (tier-dependent conditioning).
 - ISSUE-001 — the baseline run that turns the eval divergence above from a note
   into a wrong number.
+
+---
+
+## ISSUE-003 — A blank pre-printed row drops the unit the form prints on it
+
+**Status:** OPEN — deliberately not fixed. The fix is in `schema.py` or
+`prompts.py`, both closed when this was found.
+**Owner action required:** yes — whether a template row should carry `unit`
+at all. Until that is answered the labelling rule below stands.
+**Discovered:** 2026-08-18, labelling the golden set for the buyer-and-blank-rows
+milestone, by reading `eval/golden/images/r001.jpg`. **Pre-existing:** the
+contract gap arrived with `is_template_row` itself. **Blocks:** nothing today.
+
+### The labelling rule, so nobody has to re-derive it
+
+**A row with `is_template_row: true` carries its printed product name and
+nothing else. `unit` is `null` on a flagged row even when the form pre-prints
+one.**
+
+That is the rule. The rest of this entry is why, and is not needed to follow it.
+
+### What is wrong
+
+`LineItem.is_template_row`'s schema description — which ships to the model —
+scopes a blank row to one field: "the row itself is still checked, so
+transcribe the printed product name". Prompt rule 9 enumerates the same
+shape: printed name in `description_raw`, `is_template_row = true`, and
+`qty`, `unit_price` and `line_total` null. Neither mentions `unit`, and
+`LineItem.unit` has no `description` at all, so nothing reaches the model
+about it in either channel.
+
+The paper says otherwise. `eval/golden/images/r001.jpg` pre-prints `Lt.` in
+the Unit column against **all six** product rows, including the five that were
+never written in. `eval/golden/labels/r001.json` records that fact in
+`meta.notes` and leaves `unit` null on the five flagged rows, while the one
+filled row (CLEAN DIESEL) carries `unit: "Lt."`. So identically-printed
+content is treated two ways inside one file.
+
+### Why it is not being fixed
+
+Labelling `unit: "Lt."` on the five flagged rows creates **five permanently
+unearnable transcription paths**: the shipped contract never asks for the
+field on such a row, so a model that does everything it is told still loses
+them. That is the same punish-a-correct-model defect the golden labels were
+just corrected to remove, rebuilt on a new axis. Between an incomplete label
+and a label that penalises correct behaviour, the milestone chose incomplete
+and wrote the observation into the notes so the gap is visible.
+
+### It is unguarded, and that is the risk
+
+Nothing fails if somebody "fixes" the inconsistency the wrong way. Setting
+`unit: "Lt."` on all five flagged rows leaves the whole suite green. The
+argument FOR the edit is in the tracked tree (r001's note about the six
+pre-printed `Lt.`s); this entry is the only record of the ruling against it.
+
+### How to resume
+
+1. Decide the contract question: does a blank pre-printed row transcribe every
+   pre-printed cell on that row, or only the product name?
+2. If every cell: give `LineItem.unit` a `description`, extend prompt rule 9
+   to name it, then relabel r001's five flagged rows — in that order, so the
+   paths become earnable before they become truth.
+3. If only the product name: nothing to do in code. Consider saying so in
+   `is_template_row`'s description, so the next labeller does not have to find
+   this entry.
+
+### Related
+
+- `eval/golden/labels/r001.json` — `meta.notes` records the six pre-printed
+  `Lt.`s; the five flagged rows leave `unit` null.
+- ISSUE-004 — why re-reading the image is the only instrument that would have
+  found this in the first place.
+
+---
+
+## ISSUE-004 — Nothing checks a label against its photograph, and per-label rot is open by design
+
+**Status:** OPEN — structural, not a defect to fix. Recorded so the pins are
+not mistaken for something they are not.
+**Owner action required:** no.
+**Discovered:** 2026-08-18, when a printed-order defect in `r001.json` and
+`r002.json` was caught by a human reading a plan against the images — not by
+any test. **Pre-existing:** since the golden set existed. **Blocks:** nothing;
+it bounds what green means.
+
+### What is wrong
+
+`eval/golden/images/` is gitignored — receipts carry PII — so the labels are
+the only tracked artefact and **no test can compare a label to the paper it
+describes.** A transcription that is simply wrong is invisible to CI at any
+level of effort.
+
+The pins added in `tests/test_eval_floor.py` do not change this, and are not
+meant to. Their job is to make **wholesale rot and schema drift loud**, not to
+establish truth:
+
+- `test_a_label_declares_every_field_the_schema_declares` — a schema field the
+  labels never picked up. Covers `TEMPLATE.json` too, because the README tells
+  labellers to copy it.
+- `test_every_flagged_row_carries_a_printed_name_and_no_amounts`
+- `test_at_least_one_label_records_a_buyer_name`
+- `test_array_order_agrees_with_the_position_values`
+
+### The residual, measured
+
+**A single label's content rotting alone stays green.** Verified 2026-08-18:
+blanking `r001.json`'s buyer block and deleting all five of its flagged rows —
+leaving r002 and r003 untouched — passes the full suite, 1228 tests. P1 still
+sees every declared field, P2 still finds flagged rows in r002, and P3 still
+finds a buyer name in r002 and r003.
+
+This is by design. The alternative is a test that transcribes r001's rows,
+which would fire on a legitimate re-read of the image and become an obstacle
+to truth rather than a guard on it.
+
+`test_array_order_agrees_with_the_position_values` narrows the residual: after
+it, ordering rot **inside** one label is loud even though content rot is not.
+
+### How to resume
+
+There is no code change that closes this. What would help, in rough order of
+cost:
+
+1. Treat any label edit as needing the image re-read, and say which image was
+   read in the commit message — the convention this milestone started.
+2. Record per-receipt evidence in `meta.notes` when it is a reading of the
+   paper (paper order, pre-printed units, printed phrases like
+   "Total Sales (VAT Inclusive)"), so a later reviewer can audit without the
+   photograph.
+3. If the corpus ever reaches its 50–100 target, a second labeller
+   independently re-reading a sample is the only real instrument.
+
+### Related
+
+- ISSUE-003 — found only by reading the image; unguarded for the same reason.
+- ISSUE-005 — the production-side ordering guard that does not guard.
+
+---
+
+## ISSUE-005 — R051's message promises printed order; its check accepts any permutation
+
+**Status:** OPEN — deliberately not fixed. `src/receipts/validate/rules.py` was
+closed when this was found.
+**Owner action required:** no — the fix is small and uncontroversial, it simply
+had no owner in this milestone.
+**Discovered:** 2026-08-18, while pinning the golden labels' array order.
+**Pre-existing:** yes, since R051 was written. **Blocks:** nothing today; it
+means one operator-facing sentence is not true.
+
+### What is wrong
+
+R051 tells the operator:
+
+```
+Line item positions are {positions}, expected {expected}. Positions must be
+0-based, contiguous, and in printed order.
+```
+
+Its check is:
+
+```python
+positions = [i.position for i in r.line_items]
+expected = list(range(len(positions)))
+if sorted(positions) == expected:
+    return []
+```
+
+`sorted()` discards order, so **every permutation passes.** Only gaps,
+repeats and off-by-one bases are caught. The third clause of the message —
+"and in printed order" — is enforced by nothing.
+
+Verified 2026-08-18 on `eval/golden/labels/r001.json` with its array slots 0
+and 3 swapped and each row keeping its own `position` value, so the list reads
+`[3, 1, 2, 0, 4, 5]`: `validate()` returns **zero findings at any severity**.
+
+This matters because `field_accuracy` joins `line_items[i]` by **array index**
+while `position` is what a human reads. When the two disagree, every field of
+both rows is scored against the wrong row, silently.
+
+### What is already guarded, and what is not
+
+The golden labels are now covered by
+`tests/test_eval_floor.py::test_array_order_agrees_with_the_position_values`,
+which fails on exactly the mutation above. **That pin covers the labels and
+`TEMPLATE.json` only.** An extraction coming out of the pipeline is checked by
+R051 and by nothing else, so the gap is open on the production path.
+
+### How to resume
+
+1. In R051, compare `positions == expected` rather than
+   `sorted(positions) == expected`. The message then becomes true as written.
+2. Confirm no fixture relies on the looser rule before changing it: a permuted
+   extraction that previously validated clean will start producing a finding,
+   which is the point, but it is still a behaviour change.
+3. Pin it with a permutation, not a gap — a test built from a missing or
+   repeated position passes under both implementations and proves nothing.
+
+### Related
+
+- ISSUE-004 — the eval-side half of the same ordering problem.
+- ADR-0040 — why `field_accuracy` joins by index.
