@@ -960,8 +960,20 @@ def test_the_prompt_ties_the_flag_to_the_paper_not_to_the_models_eyesight() -> N
     Measured: verify step (b) reworded to the `= true` spelling; a direct
     prohibition, "Never set is_template_row = true because a row is illegible";
     and `LineItem.is_template_row`'s own description reworded to the `= true`
-    spelling, since it already says "could not read". Polarity awareness is
-    parked as well -- it would be a second prose heuristic, not a fix.
+    spelling.
+
+    That third one is not caused by the description's own wording, and an
+    earlier draft of this docstring said it was. Measured: strip every keyed
+    word out of the description and it STILL fires. `_CLAUSE` barely splits
+    JSON, so the tool schema arrives as a handful of very large clauses -- 141
+    clauses across the whole bundle, the largest 1706 chars -- and the clause
+    carrying the description also carries `Legibility.UNREADABLE`'s enum value
+    `"unreadable"`, measured 1541 characters away. A description saying nothing
+    whatsoever about legibility is matched against a permanent schema token no
+    rewording can remove.
+
+    Polarity awareness is parked as well -- it would be a second prose
+    heuristic, not a fix.
     """
     rules = [b for b in _blocks(P.SYSTEM_EXTRACTION) if _RULE_HEADING.match(b)]
     contrast = [b for b in rules if _FLAG_TRUE.search(b) and _FLAG_FALSE.search(b)]
@@ -987,6 +999,10 @@ def test_the_prompt_ties_the_flag_to_the_paper_not_to_the_models_eyesight() -> N
     # through. `_bundle_text` adds the tool-schema `description=` text, which
     # round 0 of this task established as model-facing and which `prompts.py`'s
     # own docstring calls out as the thing it does not contain.
+    #
+    # `_shipped()` is redundant here -- measured, `_bundle_text()` alone catches
+    # every shape, and `_shipped()` alone catches none that it does not. Kept
+    # for legibility, not for coverage.
     #
     # Whitespace is normalised first because `prompts.py` hard-wraps at ~85
     # columns and six of the eight `_ILLEGIBILITY` entries are multi-word, so a
