@@ -119,6 +119,28 @@ def receipt_summary(receipt: Receipt) -> dict[str, Any]:
 
 
 def _line_item(item: LineItem) -> dict[str, Any]:
+    """One line item of ``GET /receipts/{id}``.
+
+    **Every column in ``_LINE_ITEM_FIELDS`` has a key here**, which is the
+    P5.T3b property applied to line items: a field a reviewer may overwrite is
+    a field they must first be able to see. ``is_template_row`` was the
+    exception and was not a deliberate one -- a dotted ``PATCH`` of it returned
+    200 and flipped the flag while nothing in the response mentioned it, and
+    that flag decides whether the row leaves the accounting ledger
+    (``_purchases``, ``export/xlsx.py``) and whether the totals reconcile
+    against it (``_purchased``, ``validate/rules.py``).
+    ``test_every_correctable_line_item_column_is_readable_in_the_detail`` is
+    the binding; it names the missing column rather than counting.
+
+    Readable is not editable. The review UI offers six of these and declines
+    ``position`` and ``is_template_row`` on measured grounds (see
+    ``LineItemsTable.tsx`` and ISSUE-006) -- being shown a value you cannot
+    edit is safe, overwriting one you were never shown is not.
+
+    ``modifiers``, ``bbox`` and ``line_confidence`` are read-only in the other
+    direction: they have no key in ``_LINE_ITEM_FIELDS`` at all, so no
+    correction can reach them.
+    """
     return {
         "position": item.position,
         "description_raw": item.description_raw,
@@ -127,6 +149,7 @@ def _line_item(item: LineItem) -> dict[str, Any]:
         "unit": item.unit,
         "unit_price": money(item.unit_price),
         "line_total": money(item.line_total),
+        "is_template_row": item.is_template_row,
         "modifiers": item.modifiers,
         "bbox": item.bbox,
         "line_confidence": money(item.line_confidence),

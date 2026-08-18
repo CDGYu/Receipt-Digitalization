@@ -991,3 +991,99 @@ R051 and by nothing else, so the gap is open on the production path.
 
 - ISSUE-004 — the eval-side half of the same ordering problem.
 - ADR-0040 — why `field_accuracy` joins by index.
+
+---
+
+## ISSUE-006 — A reviewer cannot see which rows will vanish from the export
+
+**Status:** OPEN — the readability half is fixed; surfacing the flag in the
+review UI is a design decision, not a bug fix.
+**Owner action required:** yes — whether the review screen should show
+`is_template_row`, and if so as a read-only marker or as an editable control.
+**Discovered:** 2026-08-19, in the whole-branch review of
+`feat/buyer-and-blank-rows`. **Pre-existing:** no — the flag arrived on this
+branch. **Blocks:** nothing; it bounds what a reviewer's approval means.
+
+### What was fixed
+
+`is_template_row` is in `_LINE_ITEM_FIELDS`, so a dotted
+`PATCH {"line_items[0].is_template_row": true}` returns 200 and flips it —
+and `_line_item` (`review/serializers.py`) emitted no key for it, so the value
+was correctable and unreadable at once. That is the P5.T3b defect class
+(*a reviewer could overwrite what the machine read without ever being shown
+it*) one dict over from where it was closed.
+
+`_line_item` now emits the key, and
+`test_every_correctable_line_item_column_is_readable_in_the_detail`
+(`tests/test_api_read.py`) binds `_LINE_ITEM_FIELDS` to it as a property —
+the same binding `test_every_correctable_receipt_column_is_readable_in_the_detail`
+already gives `_RECEIPT_FIELDS`. It names the missing column rather than
+failing a count, proven by writing it before the key existed.
+
+### What is still open
+
+**The review UI does not render the flag.** `LineItemsTable` offers six
+columns plus a read-only `position`; a flagged row and a purchased row look
+identical on screen. So a reviewer approving a receipt cannot see which of its
+rows will be absent from the export's review sheet (`_purchases`,
+`export/xlsx.py`) and excluded from every arithmetic check (`_purchased`,
+`validate/rules.py`).
+
+Making it *readable* was a bug fix, because correctable implies readable.
+Making it *editable* is not the same question and is deliberately unanswered:
+`position` is the worked precedent — in `_LINE_ITEM_FIELDS`, readable, and
+deliberately not offered, with the measurement behind that recorded at
+`frontend/src/review/LineItemsTable.tsx`. Being shown a value you cannot edit
+is safe; overwriting one you were never shown is not. That asymmetry is why no
+allow-list binds the editable set to the correctable one.
+
+### The residual, measured
+
+**A mis-flagged row is loud only while another purchase survives.** Measured
+2026-08-19 with `validate()` over a two-row receipt totalling 1000.00:
+
+| receipt | mis-flag one filled row | finding |
+|---|---|---|
+| two purchases, subtotal printed | sum short by 400.00 | `R020` **error** |
+| two purchases, no subtotal | sum short by 400.00 | `R024` **warn** |
+| one purchase, either way | `_purchased` becomes empty | **nothing at all** |
+
+The last row is the one that matters here, and it is the shape the whole
+golden corpus has: `sum_line_nets` returns `None` on an empty purchase set, so
+`R020.applies` and `R024.applies` are both false and the arithmetic goes
+offline rather than firing. Re-measured on the labels themselves — flagging
+r001's `CLEAN DIESEL`, r002's `DieselPlus` or r003's `DSL-2` produces **zero
+findings at any severity**, because each of the three receipts has exactly one
+filled row.
+
+**This is not a pre-existing silence.** At the merge base (`a26d6c1`)
+`is_template_row` did not exist, `export/xlsx.py` wrote every line item, and
+the labels recorded that blank pre-printed rows "must NOT be emitted as line
+items" at all — so no row could vanish, because none was transcribed. The flag
+is what makes both the transcription and the vanishing possible, and this
+entry is the record that the second half arrived without a way for a reviewer
+to see it.
+
+### How to resume
+
+1. Answer the contract question: is the flag *shown* (a marker on the row, so
+   an approval means the reviewer accepted the split) or *shown and editable*
+   (a reviewer can re-classify a row)?
+2. If shown only: render it in `LineItemsTable` as a non-interactive marker.
+   No server change — the key is already in the detail response.
+3. If editable: it needs a control in `LineItemsTable` and a key in
+   `fieldsFromReceipt`, and `test_every_correctable_receipt_path_is_offered_by_the_review_client`
+   (`tests/test_repository.py`) — which today binds `_RECEIPT_FIELDS` only and
+   says why line items are out of scope — has to grow a line-item half. That
+   decision also has to say what happens to `position`, which is correctable
+   and deliberately not offered for a different reason.
+4. Either way, pin the arithmetic residual above with the **one-purchase**
+   shape, not the two-purchase one: a two-row mutation is caught by R020/R024
+   already and would prove nothing about the silent case.
+
+### Related
+
+- ISSUE-003 — the other open question about what a flagged row carries.
+- ADR-0044 §6 — what the label pins do and do not establish.
+- `docs/adr/0016-review-next-resumes-the-callers-task.md` — the P5.T3b defect
+  this repeats, and the fix that bound the receipt half.

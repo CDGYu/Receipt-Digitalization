@@ -39,8 +39,14 @@ from fastapi.testclient import TestClient  # noqa: E402
 from config.settings import Settings  # noqa: E402
 from receipts.extract.schema import Legibility  # noqa: E402
 from receipts.ingest.storage import LocalStorage  # noqa: E402
-from receipts.persist.models import Base, Correction, Receipt, ValidationFinding  # noqa: E402
-from receipts.persist.repository import _RECEIPT_FIELDS  # noqa: E402
+from receipts.persist.models import (  # noqa: E402
+    Base,
+    Correction,
+    LineItem,
+    Receipt,
+    ValidationFinding,
+)
+from receipts.persist.repository import _LINE_ITEM_FIELDS, _RECEIPT_FIELDS  # noqa: E402
 from receipts.persist.session import make_engine, make_session_factory  # noqa: E402
 from receipts.persist.users import ROLE_ADMIN, ROLE_REVIEWER, create_user  # noqa: E402
 from receipts.review.api import MAX_PAGE_LIMIT, MAX_PAGE_OFFSET, create_app  # noqa: E402
@@ -411,6 +417,124 @@ def test_every_correctable_receipt_column_is_readable_in_the_detail(
     assert {
         column: _at(body, path) for column, path in sorted(_COLUMN_TO_DETAIL_PATH.items())
     } == {column: _rendered(value) for column, value in sorted(stored.items())}
+
+
+#: ``line_items`` column -> the key ``_line_item`` exposes it at. Written out
+#: for the same reason the receipt map above is: nothing turns a column name
+#: into a response key, and the two happening to coincide today is not a rule.
+#: A column deliberately renamed on the way out is declared here; a column with
+#: no key at all is the defect this exists to catch.
+_LINE_ITEM_COLUMN_TO_DETAIL_KEY = {
+    "position": "position",
+    "description_raw": "description_raw",
+    "sku": "sku",
+    "qty": "qty",
+    "unit": "unit",
+    "unit_price": "unit_price",
+    "line_total": "line_total",
+    # Correctable since the blank-pre-printed-row milestone, and readable only
+    # since the branch review that found it missing. A reviewer is shown a
+    # normal editable row either way, and this flag decides whether that row
+    # leaves the accounting ledger and whether the totals reconcile against it.
+    # It is deliberately NOT editable in the review UI -- see ISSUE-006; being
+    # shown a value you cannot edit is safe, overwriting one you were never
+    # shown is not.
+    "is_template_row": "is_template_row",
+}
+
+
+def test_every_correctable_line_item_column_is_readable_in_the_detail(
+    reviewer_client, session_factory
+):
+    """The P5.T3b property, one dict over.
+
+    ``test_every_correctable_receipt_column_is_readable_in_the_detail`` binds
+    ``_RECEIPT_FIELDS`` to ``receipt_detail``. It binds nothing about line
+    items, and the same defect it exists to catch reappeared in
+    ``_LINE_ITEM_FIELDS``: ``is_template_row`` was correctable -- a dotted
+    ``PATCH`` of it returns 200 and flips the flag -- while ``_line_item``
+    emitted no key for it, so a reviewer could overwrite what the machine read
+    without ever being shown it. That flag decides what leaves the accounting
+    ledger (``_purchases`` in ``export/xlsx.py``) and what the totals reconcile
+    against (``_purchased`` in ``validate/rules.py``).
+
+    Stated as a property over ``_LINE_ITEM_FIELDS``, not as a list of eight
+    names, so it fires on the next unpaired addition rather than on the next
+    reviewer to notice. The failure names the missing column, which a count
+    could not.
+
+    **Editability is a separate judgement and is not asserted here.**
+    ``position`` is the worked precedent: readable, deliberately not offered in
+    the UI, with a measured reason at ``LineItemsTable.tsx``. Reading and
+    writing are pinned apart on purpose --
+    ``test_every_correctable_receipt_path_is_offered_by_the_review_client``
+    (``tests/test_repository.py``) is what binds the *editable* set, and it
+    deliberately excludes line items.
+    """
+    receipt_uuid = uuid.uuid4()
+    with session_factory() as session:
+        session.add(
+            Receipt(
+                id=receipt_uuid,
+                status=ReceiptStatus.NEEDS_REVIEW,
+                confidence=Decimal("0.500"),
+                merchant_name_raw="PILIPINAS FUEL",
+                txn_date=date(2026, 7, 5),
+                currency="PHP",
+                total=Decimal("2000.00"),
+                image_key="receipts/2026/07/li/original.jpg",
+                image_phash="",
+                # Every correctable column distinct and non-null, for the reason
+                # ``_seed`` gives RECEIPT_B distinct values: two columns sharing
+                # one value (or both being NULL) would let a wrong key through.
+                # ``is_template_row=True`` is the non-default setting, so a key
+                # wired to the wrong column cannot pass by accident.
+                line_items=[
+                    LineItem(
+                        position=3,
+                        description_raw="PREMIUM 97",
+                        sku="SKU-97",
+                        qty=Decimal("2.5000"),
+                        unit="L",
+                        unit_price=Decimal("70.0000"),
+                        line_total=Decimal("175.0000"),
+                        is_template_row=True,
+                    )
+                ],
+            )
+        )
+        session.commit()
+
+    body = reviewer_client.get(f"/receipts/{receipt_uuid}").json()
+    assert len(body["line_items"]) == 1, body["line_items"]
+    item = body["line_items"][0]
+
+    with session_factory() as session:
+        stored = session.get(Receipt, receipt_uuid).line_items[0]
+        columns = {
+            column: getattr(stored, column) for column in _LINE_ITEM_COLUMN_TO_DETAIL_KEY
+        }
+
+    correctable = {column for column, _coerce in _LINE_ITEM_FIELDS.values()}
+    assert correctable == set(_LINE_ITEM_COLUMN_TO_DETAIL_KEY), (
+        "_LINE_ITEM_FIELDS changed: add the new column to "
+        "_LINE_ITEM_COLUMN_TO_DETAIL_KEY naming the key _line_item exposes "
+        "*that column's value* at -- the assertion below compares them, so a "
+        "key that merely exists fails"
+    )
+    assert [
+        column
+        for column, key in sorted(_LINE_ITEM_COLUMN_TO_DETAIL_KEY.items())
+        if key not in item
+    ] == [], (
+        "a column a reviewer may correct has no key in the line item "
+        "receipt_detail returns, so they can overwrite what the machine read "
+        "without being shown it. Add it to _line_item "
+        "(review/serializers.py)."
+    )
+    assert {
+        column: item[key] for column, key in sorted(_LINE_ITEM_COLUMN_TO_DETAIL_KEY.items())
+    } == {column: _rendered(value) for column, value in sorted(columns.items())}
 
 
 def test_detail_returns_the_number_the_time_and_the_payment_method(reviewer_client, receipt_id):
