@@ -271,6 +271,68 @@ not simply flip the flag.
 - **Any accuracy claim.** One receipt, one model (ADR-0039).
 - **That tool-use causes the speedup.** Correlated in one run, mechanism unmeasured.
 
+### Measurement (2026-08-18) — step 3 is answered, and BOTH answers are yes
+
+**Step 3 asked two unverified things about Ollama Cloud: whether a strong enough
+vision model is offered, and whether it accepts a `tools` payload. Both are yes,
+on the free tier.** This is the first time since 2026-07-28 that a path to a
+real accuracy number exists.
+
+Signed in as `charlesyyyu2622`. **The daemon runs in Docker** (container
+`ollama`, `ollama/ollama`, host `11435` → container `11434`, named volume at
+`/root/.ollama`), so `ollama signin` has to happen **inside the container** —
+`docker exec -it ollama ollama signin`. Signing in on the Windows host
+authenticates a CLI that serves nothing; the host CLI cannot even see the daemon,
+because it defaults to port 11434 where nothing listens.
+
+**A vision-capable cloud model, reachable and free: `gemma4:cloud`.**
+
+| model | vision | pull | inference |
+|---|---|---|---|
+| `gemma4:cloud` | yes | ok | **works, free tier** |
+| `qwen3.5:cloud` (397B) | yes | ok | **402 — "requires a subscription"** |
+| `kimi-k2.6:cloud` | yes | ok | **402 — "requires a subscription"** |
+
+**The paywall is per model, not blanket.** A pull succeeds for all three — it
+fetches a manifest, not weights — so *pull success is not access*. Only an
+inference call distinguishes them, and that is the check to run for any
+candidate.
+
+**Tool-use works properly on it**, which is the second question:
+
+    finish_reason : tool_calls
+    tool_calls    : [{"function": {"name": "emit_receipt",
+                      "arguments": "{\"merchant\":\"ACME\",\"total\":\"12.50\"}"}}]
+
+A real `tool_calls` array with arguments parsed into the requested schema — not
+JSON smuggled through `content`. **ADR-0002's tool-use rule is vindicated on a
+model that can read**, and its 2026-08-18 correction records the granite
+exception as per-model rather than a softening of the rule.
+
+**Nothing was pointed at it.** `.env` still names `granite3.2-vision:2b`;
+`VLM_BASE_URL` needs no change, because the local daemon is still the endpoint —
+it proxies. Switching is `VLM_MODEL_EXTRACT` / `VLM_MODEL_TRIAGE`, plus
+`VLM_USE_TOOLS=true`, and `VLM_TIMEOUT_S` can likely come down a long way.
+
+#### The constraint this uncovered, and it belongs to step 5
+
+**`_TOOLS_OFF_BY_DEFAULT` is keyed on the provider; the exception is per model.**
+`granite3.2-vision:2b` and `gemma4:cloud` are both provider `ollama`, so one
+`VLM_USE_TOOLS` cannot be off for the local model and on for the cloud one.
+Under the two-tier escalation this is a defect in the knob's granularity, not a
+preference. Recorded in ADR-0002's correction; **deliberately not fixed**, because
+where the decision lives is the escalation ADR's business.
+
+#### What this does NOT establish
+
+- **That `gemma4:cloud` reads receipts well.** It has not seen one. Everything
+  above is capability and access, not accuracy.
+- **That the free tier is adequate.** Rate limits, quotas and whether a full
+  baseline run completes on it are all unmeasured.
+- **Anything about cost or data handling.** A cloud tier sends receipt images
+  off this machine, which the local-only setup did not. That is a decision, not
+  a detail.
+
 ### Goal
 
 Run `python -m eval.run_baseline` over the three hand-verified golden receipts and
