@@ -785,6 +785,254 @@ def test_R053_blank_description(ctx):
 
 
 # --------------------------------------------------------------------------- #
+# Template rows — a blank pre-printed row is not a purchase
+#
+# Philippine BIR sales invoices are pre-printed forms: the product names are
+# printed, the quantity and amount columns are blank, and on a real receipt the
+# blank rows OUTNUMBER the filled ones (r001 prints six, one is filled). They
+# are transcribed so nothing on the paper is lost, and `is_template_row` marks
+# them so the arithmetic never counts them.
+#
+# The split these tests pin: a rule that reads a row's AMOUNTS uses only the
+# purchases; a rule whose subject is the row's own presence on the paper
+# (R013, R051, R052, R053) keeps every row.
+# --------------------------------------------------------------------------- #
+
+
+def r002_shaped(totals: Totals) -> ReceiptExtraction:
+    """r002: one pre-printed blank row plus the handwritten DieselPlus line."""
+    return ReceiptExtraction(
+        line_items=[
+            LineItem(position=0, description_raw="MaxiPower", is_template_row=True),
+            LineItem(position=1, description_raw="DieselPlus", qty=D("17.39"),
+                     unit_price=D("115.00"), line_total=D("2000.00")),
+        ],
+        totals=totals,
+    )
+
+
+def test_a_template_row_does_not_break_the_line_item_arithmetic(ctx):
+    """MaxiPower and MaxiGreen are printed and blank on r002.
+
+    Counted as purchases they would drag the line-item sum away from the
+    total and raise a reconciliation ERROR on a receipt that reconciles.
+    """
+    r = r002_shaped(Totals(subtotal=D("1785.71"), tax=D("214.29"), total=D("2000.00")))
+    ids = {f.rule_id for f in validate(r, ctx).findings}
+    assert "R020" not in ids and "R021" not in ids
+
+
+def test_a_template_row_does_not_silence_the_arithmetic(ctx):
+    """The half of the property the silence test above cannot see.
+
+    A blank row has a null `line_total`, so before template rows were excluded
+    the line-item sum was UNCOMPUTABLE and R020 skipped itself — on r001, on
+    r002, on every pre-printed form. The rule did not tolerate the blank row,
+    it went inert, and a receipt whose lines genuinely disagree with its
+    printed figures sailed through. Excluding the row has to restore the
+    check, not just quiet it.
+    """
+    r = r002_shaped(Totals(subtotal=D("2678.57"), tax=D("321.43"), total=D("3000.00")))
+    assert fired(r, ctx, "R020")
+
+
+def test_r053_does_not_fire_on_a_template_row(ctx):
+    """A transcribed blank row is not an empty description."""
+    r = ReceiptExtraction(
+        line_items=[LineItem(description_raw="MaxiPower", is_template_row=True)]
+    )
+    assert not fired(r, ctx, "R053")
+
+
+def test_r053_still_fires_on_an_unflagged_empty_row(ctx):
+    """The flag must not become a blanket amnesty for empty rows."""
+    r = ReceiptExtraction(line_items=[LineItem(description_raw="")])
+    assert fired(r, ctx, "R053")
+
+
+def test_a_wrongly_flagged_PURCHASE_is_silently_dropped_from_the_arithmetic(ctx):
+    """The one way this feature can do real harm, pinned so it is a KNOWN cost.
+
+    Nothing downstream can distinguish a genuinely blank pre-printed row from a
+    filled row the model flagged by mistake -- both arrive as a description with
+    null amounts. This test does not assert the harm is prevented, because it
+    cannot be: it asserts the shape, so a later reader finds it documented
+    rather than discovering it on a real ledger.
+
+    A flagged row carrying a real amount is excluded from reconciliation, so a
+    receipt whose totals DISAGREE with its purchases still validates clean.
+    """
+    r = ReceiptExtraction(
+        line_items=[
+            LineItem(position=0, description_raw="DieselPlus", line_total=D("2000.00"),
+                     is_template_row=True),  # wrongly flagged
+        ],
+        totals=Totals(subtotal=D("2678.57"), tax=D("321.43"), total=D("3000.00")),
+    )
+    ids = {f.rule_id for f in validate(r, ctx).findings}
+    assert "R020" not in ids, (
+        "a wrongly flagged purchase is invisible to reconciliation -- this is a "
+        "known, accepted cost of is_template_row and is why the prompt must be "
+        "explicit that the flag describes the PAPER, not the model's confidence"
+    )
+
+
+def test_a_flagged_rows_row_math_is_not_checked(ctx):
+    """R021 reads a row's three amounts, so it reads purchases only."""
+    r = ReceiptExtraction(
+        line_items=[
+            LineItem(position=0, description_raw="MaxiPower", qty=D("2"),
+                     unit_price=D("100.00"), line_total=D("999.00"),
+                     is_template_row=True),
+        ]
+    )
+    assert not fired(r, ctx, "R021")
+
+
+def test_a_flagged_row_does_not_make_up_R042s_sample_count(ctx):
+    """R042 needs four priced items before a median means anything.
+
+    A flagged row must not be one of the four: counting it lets the rule run
+    on three purchases and call the dearest of them an outlier.
+    """
+    r = ReceiptExtraction(
+        line_items=[
+            LineItem(position=0, description_raw="SACHET A", qty=D("1"),
+                     unit_price=D("1.00"), line_total=D("1.00")),
+            LineItem(position=1, description_raw="SACHET B", qty=D("1"),
+                     unit_price=D("1.00"), line_total=D("1.00")),
+            LineItem(position=2, description_raw="GAS RANGE", qty=D("1"),
+                     unit_price=D("500.00"), line_total=D("500.00")),
+            LineItem(position=3, description_raw="MOTOR OIL", qty=D("1"),
+                     unit_price=D("30000.00"), line_total=D("30000.00"),
+                     is_template_row=True),
+        ]
+    )
+    assert not fired(r, ctx, "R042")
+
+
+def test_R020s_finding_counts_only_the_purchases(ctx):
+    """`item_count` and "across N items" are read by the REPAIR MODEL.
+
+    The sum holds over the purchases, so the count that travels with it has to
+    be the purchases too -- telling the model a sum of one line spans six
+    invites it to go looking for five amounts that were never there. The
+    tolerance floor scales off the same count, and blank rows contributed no
+    rounding to absorb.
+    """
+    r = r002_shaped(Totals(subtotal=D("2678.57"), tax=D("321.43"), total=D("3000.00")))
+    findings = validate(r, ctx).by_rule("R020")
+    assert findings, "R020 must fire for this test to say anything"
+    assert findings[0].context["item_count"] == 1
+    assert "across 1 items" in findings[0].message
+
+
+def test_R024s_finding_counts_only_the_purchases(ctx):
+    """The same count, on the no-subtotal fallback path."""
+    r = r002_shaped(Totals(total=D("3000.00")))
+    findings = validate(r, ctx).by_rule("R024")
+    assert findings, "R024 must fire for this test to say anything"
+    assert findings[0].context["item_count"] == 1
+
+
+def test_R013_is_silent_when_every_printed_row_was_blank(ctx):
+    """R013 asks whether the body of the receipt was read, and it was.
+
+    Filtering here would demand line items from a form whose product rows are
+    genuinely all blank, and the repair prompt would push the model to invent
+    purchases to satisfy it.
+    """
+    r = ReceiptExtraction(
+        line_items=[
+            LineItem(position=0, description_raw="MaxiPower", is_template_row=True),
+            LineItem(position=1, description_raw="MaxiGreen", is_template_row=True),
+        ]
+    )
+    assert not fired(r, ctx, "R013")
+
+
+def test_two_blank_pre_printed_rows_are_not_a_double_read(ctx):
+    """R050's live false positive on r001, not a hypothetical.
+
+    `normalize_desc` drops a trailing number, so the printed `PREMIUM 97` and
+    `PREMIUM 95` rows normalise to the same string; blank, they also share
+    their null qty, unit_price and line_total. Two adjacent rows of a form are
+    not a line the model read twice.
+    """
+    r = ReceiptExtraction(
+        line_items=[
+            LineItem(position=0, description_raw="PREMIUM 97", is_template_row=True),
+            LineItem(position=1, description_raw="PREMIUM 95", is_template_row=True),
+            LineItem(position=2, description_raw="CLEAN DIESEL", qty=D("9.8"),
+                     unit_price=D("102.00"), line_total=D("1000.00")),
+        ],
+        totals=Totals(subtotal=D("892.86"), tax=D("107.14"), total=D("1000.00")),
+    )
+    assert not fired(r, ctx, "R050")
+
+
+def test_a_flagged_rows_numbers_stay_out_of_the_plausibility_statistics(ctx):
+    """R042 and R043 read amounts, so they read purchases only.
+
+    A row with no amounts cannot move either rule, so the fixture gives the
+    flagged row absurd ones: that is the same wrongly-flagged case pinned
+    above, and the same accepted cost -- named here for R042 and R043 so the
+    exclusion is not silently assumed to be untestable.
+    """
+    r = clean_receipt()
+    r.line_items.append(
+        LineItem(position=3, description_raw="EGGS TRAY", qty=D("1"),
+                 unit_price=D("50.00"), line_total=D("50.00"))
+    )
+    r.line_items.append(
+        LineItem(position=4, description_raw="MOTOR OIL", qty=D("99999"),
+                 unit_price=D("999999.00"), line_total=D("1.00"), is_template_row=True)
+    )
+    assert not fired(r, ctx, "R042")
+    assert not fired(r, ctx, "R043")
+
+
+def test_R051_still_counts_template_rows_as_rows_on_the_form(ctx):
+    """Positions are the printed order of the paper, blank rows included.
+
+    Filtering here would renumber r001's one purchase to position 3 of a
+    one-item list and fire the rule on every pre-printed form.
+    """
+    r = ReceiptExtraction(
+        line_items=[
+            LineItem(position=0, description_raw="PREMIUM 97", is_template_row=True),
+            LineItem(position=1, description_raw="CLEAN DIESEL", qty=D("9.8"),
+                     unit_price=D("102.00"), line_total=D("1000.00")),
+            LineItem(position=2, description_raw="MOTOR OIL", is_template_row=True),
+        ]
+    )
+    assert not fired(r, ctx, "R051")
+
+
+def test_R052_still_rejects_a_summary_row_that_was_flagged_as_a_template_row(ctx):
+    """R052 judges what a row IS. A misfiled SUBTOTAL row is still misfiled."""
+    r = clean_receipt()
+    r.line_items.append(
+        LineItem(position=3, description_raw="SUBTOTAL", line_total=D("847.50"),
+                 is_template_row=True)
+    )
+    assert fired(r, ctx, "R052")
+
+
+def test_R053_still_fires_on_a_template_row_that_was_never_transcribed(ctx):
+    """The flag's promise is that the printed text WAS captured.
+
+    A flagged row with no description is a line of paper that was lost, which
+    is the outcome transcribing blank rows exists to prevent. R053 is the only
+    rule that can see it, so it keeps reading every row.
+    """
+    r = ReceiptExtraction(
+        line_items=[LineItem(position=0, description_raw="", is_template_row=True)]
+    )
+    assert fired(r, ctx, "R053")
+
+
+# --------------------------------------------------------------------------- #
 # Grounding
 # --------------------------------------------------------------------------- #
 

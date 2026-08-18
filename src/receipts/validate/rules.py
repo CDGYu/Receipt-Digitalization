@@ -22,7 +22,7 @@ from datetime import date
 from decimal import Decimal, InvalidOperation
 from typing import ClassVar, Iterable, NamedTuple
 
-from ..extract.schema import ReceiptExtraction
+from ..extract.schema import LineItem, ReceiptExtraction
 from ..normalize.text import normalize_merchant_name
 from .context import ValidationContext
 from .report import Finding, Severity
@@ -117,12 +117,37 @@ def discount_magnitude(value: Decimal | None) -> Decimal:
     return abs(value) if value is not None else Decimal(0)
 
 
+def _purchased(r: ReceiptExtraction) -> list[LineItem]:
+    """The line items that are purchases -- template rows excluded.
+
+    One helper rather than a filter repeated per rule: the rules that must
+    agree about what counts as a purchase are exactly the rules that will
+    drift apart if each keeps its own predicate.
+
+    NOT every rule that reads `line_items` wants this. The split is what the
+    rule is talking ABOUT: a rule that reads a row's amounts is talking about
+    purchases and uses this helper; a rule whose subject is the row's own
+    presence on the paper -- R013 (was the body read at all), R051 (printed
+    order), R052 (this row is a summary row), R053 (this row's text was never
+    transcribed) -- is talking about the form and keeps every row.
+    """
+    return [i for i in r.line_items if not i.is_template_row]
+
+
 def sum_line_nets(r: ReceiptExtraction) -> Decimal | None:
-    """Sum of line_total + signed modifiers. None if any line_total is missing."""
-    if not r.line_items:
+    """Sum of purchased line_total + signed modifiers, template rows excluded.
+    None if any purchased line_total is missing.
+
+    Returning None makes R020 and R024 SKIP, so the blank pre-printed rows of a
+    BIR form had to come out of this sum rather than merely be tolerated inside
+    it: a null `line_total` on any one of them took the whole reconciliation
+    offline for the receipt.
+    """
+    purchased = _purchased(r)
+    if not purchased:
         return None
     total = Decimal(0)
-    for item in r.line_items:
+    for item in purchased:
         net = item.net_total()
         if net is None:
             return None
@@ -523,16 +548,21 @@ class LineItemsSumToSubtotal(Rule):
         if total is None:  # gated by applies(); a rule must never raise
             return []
 
+        # Only the purchases were summed, so only they set the tolerance and
+        # only they are counted in the message -- a floor scaled by the blank
+        # rows of a form would loosen the check by rows that contributed
+        # nothing to it, and the count would name items the sum does not hold.
+        item_count = len(_purchased(r))
         tol = ctx.tol(self.id)
         # Per-line rounding accumulates, so scale the floor with line count.
-        tol["floor"] = max(tol["floor"], Decimal("0.01") * len(r.line_items))
+        tol["floor"] = max(tol["floor"], Decimal("0.01") * item_count)
 
         comparands = self._comparands(r)
         if any(within_tolerance(total, c.value, **tol) for c in comparands):
             return []
 
         lead = (
-            f"Line items sum to {m(total)} across {len(r.line_items)} items and "
+            f"Line items sum to {m(total)} across {item_count} items and "
             f"reconcile with no printed figure: {render_comparisons(total, comparands)}."
         )
         if len(comparands) > 1:
@@ -549,7 +579,7 @@ class LineItemsSumToSubtotal(Rule):
                 field_paths=["line_items", *(c.field_path for c in comparands)],
                 context={
                     "line_sum": str(total),
-                    "item_count": len(r.line_items),
+                    "item_count": item_count,
                     "prices_include_tax": r.totals.prices_include_tax,
                     "compared_against": {c.key: str(c.value) for c in comparands},
                     "differences": {c.key: str(total - c.value) for c in comparands},
@@ -567,13 +597,13 @@ class LineItemMath(Rule):
     def applies(self, r, ctx) -> bool:
         return any(
             i.qty is not None and i.unit_price is not None and i.line_total is not None
-            for i in r.line_items
+            for i in _purchased(r)
         )
 
     def check(self, r, ctx) -> list[Finding]:
         tol = ctx.tol(self.id)
         findings: list[Finding] = []
-        for item in r.line_items:
+        for item in _purchased(r):
             if item.qty is None or item.unit_price is None or item.line_total is None:
                 continue
             expected = item.qty * item.unit_price
@@ -712,8 +742,10 @@ class LineItemsSumToTotal(Rule):
         if line_sum is None or r.totals.total is None:  # gated by applies()
             return []
 
+        # Purchases only, for the reasons given on R020.check.
+        item_count = len(_purchased(r))
         tol = ctx.tol(self.id)
-        tol["floor"] = max(tol["floor"], Decimal("0.01") * len(r.line_items))
+        tol["floor"] = max(tol["floor"], Decimal("0.01") * item_count)
 
         comparands = self._comparands(r, r.totals.total)
         if any(within_tolerance(line_sum, c.value, **tol) for c in comparands):
@@ -735,7 +767,7 @@ class LineItemsSumToTotal(Rule):
                 field_paths=["line_items", "totals.total"],
                 context={
                     "line_sum": str(line_sum),
-                    "item_count": len(r.line_items),
+                    "item_count": item_count,
                     "prices_include_tax": r.totals.prices_include_tax,
                     "compared_against": {c.key: str(c.value) for c in comparands},
                     "differences": {c.key: str(line_sum - c.value) for c in comparands},
@@ -933,11 +965,11 @@ class UnitPricesSane(Rule):
     MIN_SAMPLES = 4
 
     def applies(self, r, ctx) -> bool:
-        prices = [i.unit_price for i in r.line_items if i.unit_price and i.unit_price > 0]
+        prices = [i.unit_price for i in _purchased(r) if i.unit_price and i.unit_price > 0]
         return len(prices) >= self.MIN_SAMPLES
 
     def check(self, r, ctx) -> list[Finding]:
-        priced = [i for i in r.line_items if i.unit_price and i.unit_price > 0]
+        priced = [i for i in _purchased(r) if i.unit_price and i.unit_price > 0]
         med = median([i.unit_price for i in priced])
         limit = med * ctx.config.unit_price_outlier_factor
 
@@ -970,11 +1002,11 @@ class QtySane(Rule):
     description = "Quantities are positive and not absurdly large."
 
     def applies(self, r, ctx) -> bool:
-        return any(i.qty is not None for i in r.line_items)
+        return any(i.qty is not None for i in _purchased(r))
 
     def check(self, r, ctx) -> list[Finding]:
         findings: list[Finding] = []
-        for item in r.line_items:
+        for item in _purchased(r):
             if item.qty is None:
                 continue
             if Decimal(0) < item.qty <= ctx.config.max_qty:
@@ -1064,11 +1096,16 @@ class NoDuplicateLineItems(Rule):
     description = "Adjacent identical rows may indicate a double-read line."
 
     def applies(self, r, ctx) -> bool:
-        return len(r.line_items) >= 2
+        return len(_purchased(r)) >= 2
 
     def check(self, r, ctx) -> list[Finding]:
+        # Purchases only. `normalize_desc` drops a trailing number, so a form's
+        # printed `PREMIUM 97` and `PREMIUM 95` rows normalise alike and, left
+        # blank, match on qty, unit_price and line_total too -- adjacent rows of
+        # a pre-printed form, reported as a line the model read twice.
         findings: list[Finding] = []
-        for prev, item in zip(r.line_items, r.line_items[1:]):
+        purchased = _purchased(r)
+        for prev, item in zip(purchased, purchased[1:]):
             same = (
                 normalize_desc(prev.description_raw) == normalize_desc(item.description_raw)
                 and prev.qty == item.qty
