@@ -1,8 +1,13 @@
 """All prompt text for the extraction pipeline.
 
-Nothing outside this module may build a prompt string. Business logic that
+Nothing outside this module may build a prompt STRING. Business logic that
 concatenates prompt fragments inline becomes impossible to version, diff, or
 attribute accuracy changes to.
+
+One thing the model is told is nonetheless not written here: the `description=`
+text on `extract.schema` fields, which reaches it inside the tool schema. That
+text is covered by `prompt_bundle_hash()` rather than by hand -- see
+`_bundle_text`.
 
 Rules for editing this file:
   1. Bump PROMPT_VERSION on ANY change to the text below.
@@ -13,16 +18,21 @@ Rules for editing this file:
      injected in the user turn where they are close to the image.
   4. No examples in the system prompt. Few-shot examples are merchant-specific
      and belong in the user turn.
+  5. Rewording a schema `description=` is a prompt change as well. It needs no
+     PROMPT_VERSION bump -- `_bundle_text` hashes the tool schema, so the eval
+     grouping key moves by itself -- but rule 2 applies to it just the same.
 """
 
 from __future__ import annotations
 
 import hashlib
+import json
 from dataclasses import dataclass, field
 
+from .json_io import build_tool_schema
 from .schema import ReceiptExtraction, TriageResult  # noqa: F401  (re-exported)
 
-PROMPT_VERSION = "1.0.0"
+PROMPT_VERSION = "1.1.0"
 
 
 # --------------------------------------------------------------------------- #
@@ -69,7 +79,10 @@ RULES, in priority order:
    - If a digit is obscured, do not guess the whole number - null the field.
 
 5. LINE ITEMS.
-   - One object per purchasable line, in printed order, position starting at 0.
+   - One object per row of the ITEMS GRID, in printed order, position starting
+     at 0: every purchasable line, plus every blank pre-printed row, which you
+     mark is_template_row = true (rule 9). Nothing from the summary block below
+     the grid is a line item.
    - A line that wraps onto two physical rows is ONE line item.
    - Item-level discounts or promos printed beneath an item go into that item's
      modifiers array, NOT as separate line items.
@@ -91,9 +104,34 @@ RULES, in priority order:
      bands), fill totals.tax_breakdown with one object per band. Do not compute
      bands that are not printed.
 
-8. OUTPUT.
-   Return exactly one JSON object matching the provided schema. No markdown code
-   fences. No prose before or after. No explanation.
+8. THE BUYER.
+   The block naming who the receipt was issued TO - labelled "SOLD TO",
+   "Sold to:", or "Registered Name" - fills buyer.name, and the TIN printed
+   inside that same block fills buyer.tax_id.
+   - A BIR sales invoice carries THREE different tax identification numbers:
+     the MERCHANT's at the top, the BUYER's in the Sold To block, and the
+     PRINTER's in the footer line naming the printing press. buyer.tax_id takes
+     the Sold To one and nothing else - never the footer's.
+   - Printed but left empty is null, for buyer.name and buyer.tax_id alike.
+
+9. BLANK PRE-PRINTED ROWS.
+   These forms print product names into the items grid before the sale, and the
+   seller writes into only the rows that were bought. Transcribe the untouched
+   rows too: emit each as a line item with its printed name in description_raw,
+   is_template_row = true, and qty, unit_price and line_total null. Nothing is
+   ever added up from them.
+   - Rows of the items grid ONLY. The summary block beneath it - TOTAL SALES,
+     VATABLE SALES, VAT EXEMPT SALES, TOTAL AMOUNT, AMOUNT DUE and the like -
+     is pre-printed too, and those rows are not line items at all, flagged or
+     otherwise. Their figures belong in totals.
+   - is_template_row = true means BLANK ON THE PAPER. A row somebody did write
+     in, whose handwriting you cannot read, is a real purchase: emit it with
+     is_template_row = false, leave the unreadable fields null, and name them
+     in meta.ambiguous_fields. Flagging it would erase the purchase.
+
+10. OUTPUT.
+    Return exactly one JSON object matching the provided schema. No markdown
+    code fences. No prose before or after. No explanation.
 """
 
 
@@ -142,13 +180,21 @@ Extract this receipt into the schema.
 {merchant_hints}{few_shots}
 Reminders for this receipt:
 - Print type: {print_type}
-- Expected line items: roughly {expected_items}
+- Expected line items: roughly {expected_items} purchased rows. Blank pre-printed
+  product rows are additional to that count, not part of it.
 - Known issues with this image: {issues}
 {addendum}
 Work top to bottom through the receipt. Before returning, verify:
-  (a) every line item you listed is a purchasable item, not a subtotal or footer line
-  (b) you have not invented any number that is not printed
-  (c) every field you were unsure about is listed in meta.ambiguous_fields
+  (a) every line item you listed is either a purchasable item or a blank
+      pre-printed product row marked is_template_row = true - never a summary
+      row from below the items grid, and never a footer line
+  (b) is_template_row is set only where the paper is blank, never where you
+      merely could not read what was written
+  (c) if the form has a "SOLD TO" / "Sold to:" / "Registered Name" block, the
+      buyer came from THAT block, and buyer.tax_id is not the printer's TIN
+      from the footer
+  (d) you have not invented any number that is not printed
+  (e) every field you were unsure about is listed in meta.ambiguous_fields
 
 Return JSON only.
 """
@@ -309,10 +355,18 @@ def prompt_hash(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
 
 
-def prompt_bundle_hash() -> str:
-    """Hash of every prompt constant. Changes whenever any template changes,
-    which is what you group eval results by."""
-    bundle = "\x00".join(
+def _bundle_text() -> str:
+    """Every instruction the model is shown, gathered into one string.
+
+    The templates above are not the whole of it. Pydantic `description=` text on
+    the extraction schema reaches the model inside the tool schema -- that is
+    what `build_tool_schema` preserves descriptions for -- so a reworded field
+    description changes the instructions without touching a single template
+    here. Hashing the tool schema puts that text under the same version signal,
+    so `receipts eval` cannot group a run from before such a change together
+    with a run from after it.
+    """
+    return "\x00".join(
         [
             PROMPT_VERSION,
             SYSTEM_EXTRACTION,
@@ -322,6 +376,13 @@ def prompt_bundle_hash() -> str:
             FEW_SHOT_HEADER,
             HANDWRITING_ADDENDUM,
             REPAIR_PROMPT_TEMPLATE,
+            json.dumps(build_tool_schema(ReceiptExtraction), sort_keys=True),
         ]
     )
-    return prompt_hash(bundle)
+
+
+def prompt_bundle_hash() -> str:
+    """Hash of every prompt constant and of the schema text the model is shown.
+    Changes whenever any of them changes, which is what you group eval results
+    by."""
+    return prompt_hash(_bundle_text())

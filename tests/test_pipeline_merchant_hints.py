@@ -20,8 +20,10 @@ by way of the normalizer built one stage earlier -- the receipt's currency.
 from __future__ import annotations
 
 import io
+import json
 import logging
 import random
+import re
 import uuid
 from datetime import date
 from decimal import Decimal as D
@@ -38,6 +40,7 @@ from config.settings import Settings  # noqa: E402
 from receipts.extract import prompts as P  # noqa: E402
 from receipts.extract.clients.base import VLMClient, VLMResponse  # noqa: E402
 from receipts.extract.clients.limits import reset_vlm_gate  # noqa: E402
+from receipts.extract.json_io import build_tool_schema  # noqa: E402
 from receipts.extract.schema import (  # noqa: E402
     DocumentType,
     Legibility,
@@ -61,6 +64,7 @@ from receipts.persist.models import (  # noqa: E402
 from receipts.persist.session import make_engine, make_session_factory  # noqa: E402
 from receipts.pipeline import process_receipt  # noqa: E402
 from receipts.validate.context import ValidationContext  # noqa: E402
+from receipts.validate.rules import TOTAL_ROW_STRONG, normalize_desc  # noqa: E402
 
 CTX = ValidationContext(today=date(2026, 7, 26))
 
@@ -741,3 +745,186 @@ def test_a_late_resolved_merchant_that_disagrees_on_currency_is_reported(
     message = warnings[-1].getMessage()
     assert str(job.id) in message
     assert "USD" in message and "PHP" in message
+
+
+# --------------------------------------------------------------------------- #
+# Task 6: what the model is actually told
+#
+# `build_extraction_prompt` composes only the user turn; the numbered rules live
+# in `SYSTEM_EXTRACTION`, and the model is handed both in ONE request. So the
+# tests below assert against the pair, exactly as the hash tests above already
+# model a sent prompt (`user_sent + system_sent`). Asserting against either half
+# alone would pass or fail on where a sentence was filed rather than on whether
+# the model was told it.
+# --------------------------------------------------------------------------- #
+
+
+def _shipped() -> str:
+    """Every word of the extraction request: system turn plus user turn."""
+    return P.SYSTEM_EXTRACTION + "\n" + P.build_extraction_prompt(TriageResult(), None, [])
+
+
+def _blocks(text: str) -> list[str]:
+    """Blank-line-separated blocks. Each numbered rule is exactly one block."""
+    return [b for b in re.split(r"\n\s*\n", text) if b.strip()]
+
+
+def _descriptions(node: object) -> list[str]:
+    """Every `description` string anywhere in a JSON Schema."""
+    found: list[str] = []
+    if isinstance(node, dict):
+        for key, value in node.items():
+            if key == "description" and isinstance(value, str):
+                found.append(value)
+            else:
+                found.extend(_descriptions(value))
+    elif isinstance(node, list):
+        for item in node:
+            found.extend(_descriptions(item))
+    return found
+
+
+def test_the_extraction_prompt_asks_for_the_buyer_and_names_every_spelling() -> None:
+    """Three golden receipts, three different labels for the same block.
+
+    r001 prints `SOLD TO`, r002 prints `SOLD TO` above `Registered Name :`, and
+    r003 prints `Sold to:`. A prompt naming one spelling misses the other two,
+    and the assertion is case-SENSITIVE for that reason: lowercasing collapses
+    two of the three into one string, so a case-insensitive check would pass on
+    a prompt that named only one of them.
+    """
+    shipped = _shipped()
+    for spelling in ('"SOLD TO"', '"Sold to:"', '"Registered Name"'):
+        assert spelling in shipped, spelling
+    assert "buyer.name" in shipped
+
+
+def test_the_extraction_prompt_separates_the_three_tins_on_the_form() -> None:
+    """Merchant header, buyer block, printer footer -- three different numbers.
+
+    All three golden labels record the footer TIN as the PRINTER's. An empty
+    buyer block leaves the footer TIN as the nearest TIN-shaped thing on the
+    page, so without the warning it is what an obliging model reaches for. The
+    warning has to hang off `buyer.tax_id` rather than float loose in the
+    request.
+    """
+    shipped = _shipped()
+    lowered = shipped.lower()
+    for who in ("merchant", "buyer", "printer"):
+        assert who in lowered, who
+    assert "footer" in lowered
+
+    tin_blocks = [b for b in _blocks(shipped) if "buyer.tax_id" in b]
+    assert tin_blocks, "nothing in the request says what buyer.tax_id takes"
+    assert any("printer" in b.lower() for b in tin_blocks), (
+        "the buyer.tax_id instruction never warns off the printer's TIN"
+    )
+
+
+def test_the_extraction_prompt_asks_for_blank_pre_printed_rows() -> None:
+    assert "is_template_row" in _shipped()
+
+
+def test_the_prompt_ties_the_flag_to_the_paper_not_to_the_models_eyesight() -> None:
+    """A wrongly flagged purchase is dropped from every total, silently.
+
+    Nothing downstream can tell a row that was blank on the paper from a filled
+    row the model could not read, so the distinction has to be drawn here, and
+    the unreadable case has to be given somewhere else to go.
+    """
+    flag_blocks = [b for b in _blocks(_shipped()) if "is_template_row" in b]
+    assert flag_blocks
+    assert any("meta.ambiguous_fields" in b for b in flag_blocks), (
+        "the flag is never contrasted with the unreadable-handwriting case"
+    )
+
+
+def test_the_blank_row_flag_is_steered_off_the_rows_R052_calls_an_error() -> None:
+    """The BIR summary block is pre-printed too, and R052 is an ERROR.
+
+    `NoTotalRowAsLineItem` reads flagged rows as well as unflagged ones -- it is
+    the only remaining signal that a printed amount landed in `line_items`
+    instead of `totals` -- and one ERROR costs a flat 0.35 against an
+    auto-approve threshold of 0.85. So "transcribe every pre-printed row",
+    written without naming the items grid, would put an ERROR on every real
+    receipt, once per line of its summary block.
+
+    Each label below is checked against `TOTAL_ROW_STRONG` as well as against
+    the prompt, so the two cannot drift apart: the prompt must warn about the
+    rows the validator actually errors on.
+    """
+    shipped = _shipped()
+    for label in (
+        "TOTAL SALES",
+        "VATABLE SALES",
+        "VAT EXEMPT SALES",
+        "TOTAL AMOUNT",
+        "AMOUNT DUE",
+    ):
+        assert normalize_desc(label) in TOTAL_ROW_STRONG, label
+        assert label in shipped, label
+
+    flag_blocks = [b for b in _blocks(shipped) if "is_template_row" in b]
+    assert any("TOTAL SALES" in b for b in flag_blocks), (
+        "the summary-block exclusion is not attached to the flag instruction"
+    )
+
+
+def test_no_shipped_instruction_confines_line_items_to_purchases() -> None:
+    """The request must not ask for the blank rows and then ask for them back.
+
+    Before Task 6 the system turn said "One object per purchasable line" and the
+    user turn's verify step said "every line item you listed is a purchasable
+    item, not a subtotal or footer line" -- while the tool schema, built from
+    `LineItem.is_template_row`, described a row that is deliberately NOT a
+    purchase. All three shipped in the same request.
+
+    Scoped to the extraction request. `TRIAGE_PROMPT` is a separate call that
+    builds no line items at all, and its purchasable-rows-only count is correct
+    where it stands.
+    """
+    for block in _blocks(_shipped()):
+        if "purchasable" in block.lower():
+            assert "is_template_row" in block, block
+
+
+def test_every_description_the_model_is_shown_is_inside_the_bundle_hash() -> None:
+    """`prompt_bundle_hash` is the key `receipts eval` groups its results by.
+
+    Pydantic `description=` text ships to the model inside the tool schema
+    (`build_tool_schema` keeps descriptions -- that is what they are for), so it
+    is prompt text built outside `prompts.py`, in violation of that module's own
+    first line. Task 1 reworded `is_template_row` and added `Buyer`; runs from
+    before and after that change group under an identical hash.
+    """
+    bundle = P._bundle_text()
+    assert P.prompt_bundle_hash() == P.prompt_hash(bundle)
+
+    descriptions = _descriptions(build_tool_schema(ReceiptExtraction))
+    assert descriptions, "the tool schema carries no descriptions at all"
+    for text in descriptions:
+        # The bundle embeds the tool schema as JSON, so a description holding a
+        # newline appears escaped. Compare it in the form it is hashed in.
+        assert json.dumps(text)[1:-1] in bundle, text[:60]
+
+
+def test_the_bundle_hash_moves_when_a_description_the_model_sees_changes() -> None:
+    """The containment test above would still pass on a bundle nobody hashes.
+
+    Rewording the real field and rebuilding the model is the only check that the
+    grouping key actually moves. The mutation is undone in `finally` and the
+    restoration is asserted, because `LineItem` is global to the whole suite.
+    """
+    field = ExtractedLineItem.model_fields["is_template_row"]
+    original = field.description
+    before = P.prompt_bundle_hash()
+    try:
+        field.description = "SENTINEL: a materially different instruction"
+        ExtractedLineItem.model_rebuild(force=True)
+        ReceiptExtraction.model_rebuild(force=True)
+        assert P.prompt_bundle_hash() != before
+    finally:
+        field.description = original
+        ExtractedLineItem.model_rebuild(force=True)
+        ReceiptExtraction.model_rebuild(force=True)
+    assert P.prompt_bundle_hash() == before
