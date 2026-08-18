@@ -3,6 +3,15 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { expect, test } from '@playwright/test'
 import type { Browser, Locator, Page, Route } from '@playwright/test'
+// Typed, not `Record<string, unknown>`. The untyped literal is what let these
+// fixtures fall behind the API: `buyer` was added to `ReceiptDetail` and every
+// one of them went on omitting it, `tsc -b` compiled them anyway, and
+// `fieldsFromReceipt` threw in the browser -- 8 of 15 specs painting the
+// load-failure state, with all five gates green. `Money` is a branded string,
+// so an amount needs `as Money`; that is the cost, and it is the same pattern
+// tests/patch.test.ts and tests/review-screen.test.tsx already use.
+import type { Metrics } from '../src/api/admin'
+import type { ConfidenceReason, Finding, LineItem, Money, ReceiptDetail, ReviewTask } from '../src/api/types'
 
 /** The browser pass: put every surface on a real screen and record what it looks
  *  like -- plan Task 5, ADR-0027's "a browser pass is part of done".
@@ -132,7 +141,7 @@ interface Fixture {
 const TASK_ID = '3f1b7c52-0000-4000-8000-000000000001'
 const RECEIPT_ID = '3f1b7c52-0000-4000-8000-000000000002'
 
-function task(overrides: Record<string, unknown> = {}) {
+function task(overrides: Partial<ReviewTask> = {}): ReviewTask {
   return {
     id: TASK_ID,
     receipt_id: RECEIPT_ID,
@@ -150,12 +159,12 @@ function finding(
   ruleId: string,
   severity: string,
   message: string,
-  extra: Record<string, unknown> = {},
-) {
+  extra: Partial<Finding> = {},
+): Finding {
   return { rule_id: ruleId, severity, message, context: null, resolved_by_repair: false, ...extra }
 }
 
-function lineItem(position: number, values: Record<string, unknown>) {
+function lineItem(position: number, values: Partial<LineItem> = {}): LineItem {
   return {
     position,
     description_raw: null,
@@ -176,15 +185,15 @@ function lineItem(position: number, values: Record<string, unknown>) {
  * (`review.spec.ts` records `'1234.56'` in, `'1234.5600'` out), so a fixture that
  * used two decimals would make the money column line up better here than it does
  * in production. */
-function fullReceipt(overrides: Record<string, unknown> = {}) {
+function fullReceipt(overrides: Partial<ReceiptDetail> = {}): ReceiptDetail {
   return {
     id: RECEIPT_ID,
     status: 'needs_review',
-    confidence: '0.570',
+    confidence: '0.570' as Money,
     confidence_reasons: [
-      { reason: 'totals do not reconcile', penalty: '-0.350' },
-      { reason: 'date looks implausible', penalty: '-0.080' },
-    ],
+      { reason: 'totals do not reconcile', penalty: '-0.350' as Money },
+      { reason: 'date looks implausible', penalty: '-0.080' as Money },
+    ] satisfies ConfidenceReason[],
     merchant_name_raw: 'TOTAL WINE',
     // These fixtures are untyped object literals, so `tsc -b` cannot say when
     // one falls behind the reply it stands for -- and `fieldsFromReceipt` reads
@@ -205,29 +214,29 @@ function fullReceipt(overrides: Record<string, unknown> = {}) {
     duplicate_of: null,
     receipt_is_inconsistent: true,
     totals: {
-      subtotal: '925.0000',
-      tax: '80.0000',
-      discount: '5.0000',
-      total: '1000.0000',
-      tender: '1100.0000',
-      change: '100.0000',
+      subtotal: '925.0000' as Money,
+      tax: '80.0000' as Money,
+      discount: '5.0000' as Money,
+      total: '1000.0000' as Money,
+      tender: '1100.0000' as Money,
+      change: '100.0000' as Money,
     },
     line_items: [
       lineItem(0, {
         description_raw: 'CABERNET SAUVIGNON 2019',
         sku: 'SKU-1001',
-        qty: '2.0000',
+        qty: '2.0000' as Money,
         unit: 'btl',
-        unit_price: '45.0000',
-        line_total: '90.0000',
+        unit_price: '45.0000' as Money,
+        line_total: '90.0000' as Money,
       }),
       lineItem(1, {
         description_raw: 'SPARKLING WATER 750ML',
         sku: 'SKU-2002',
-        qty: '3.0000',
+        qty: '3.0000' as Money,
         unit: 'btl',
-        unit_price: '4.5000',
-        line_total: '13.5000',
+        unit_price: '4.5000' as Money,
+        line_total: '13.5000' as Money,
       }),
     ],
     findings: [
@@ -254,7 +263,7 @@ function fullReceipt(overrides: Record<string, unknown> = {}) {
  *
  * `confidence: null` with `confidence_reasons: null` is the rail's "never
  * recorded" branch, which no seeded row reaches either. */
-function nullReceipt() {
+function nullReceipt(): ReceiptDetail {
   return fullReceipt({
     confidence: null,
     confidence_reasons: null,
@@ -271,21 +280,21 @@ function nullReceipt() {
     payment_method: null,
     card_last4: null,
     totals: {
-      subtotal: '0.0000',
+      subtotal: '0.0000' as Money,
       tax: null,
-      discount: '0.0000',
+      discount: '0.0000' as Money,
       total: null,
       tender: null,
-      change: '0.0000',
+      change: '0.0000' as Money,
     },
     line_items: [
       lineItem(0, {
         description_raw: 'GALVANISED BOLT M8',
         sku: 'SKU-7781',
-        qty: '12.0000',
+        qty: '12.0000' as Money,
         unit: 'ea',
-        unit_price: '0.0000',
-        line_total: '0.0000',
+        unit_price: '0.0000' as Money,
+        line_total: '0.0000' as Money,
       }),
       lineItem(1, {
         description_raw: '',
@@ -304,7 +313,7 @@ function nullReceipt() {
  *  ERROR and one WARN; `Severity` has a third member and nothing seeds it). One
  *  finding carries a `context` payload so the disclosure has something to open
  *  onto, and one is flagged `resolved_by_repair`. */
-function severitiesReceipt() {
+function severitiesReceipt(): ReceiptDetail {
   return fullReceipt({
     findings: [
       finding('R020', 'error', 'totals do not reconcile: 925.00 + 80.00 - 5.00 != 1000.00', {
@@ -318,7 +327,7 @@ function severitiesReceipt() {
   })
 }
 
-function metrics(overrides: Record<string, unknown> = {}) {
+function metrics(overrides: Partial<Metrics> = {}): Metrics {
   return {
     counts_by_status: { auto_approved: 128, needs_review: 9, reviewed: 74 },
     auto_approval_rate: '0.598',

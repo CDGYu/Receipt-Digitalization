@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../src/api/client'
 import { SubmitError, completeTask, patchReceipt, submitReview } from '../src/api/review'
 import type { FieldMap } from '../src/review/patch'
+import type { Money, ReceiptDetail } from '../src/api/types'
 
 /** `submitReview`, expected to reject.
  *
@@ -163,19 +164,24 @@ describe('the two calls the chain is made of', () => {
 
 /** A `ReceiptDetail` good enough for `fieldsFromReceipt`, with overrides.
  *
- * Typed `Record<string, unknown>` rather than `ReceiptDetail`, so `tsc` will not
- * say when it falls behind the reply it stands for -- and it did: `buyer` was
- * added to the API and this stub went on omitting it until `fieldsFromReceipt`
- * threw `Cannot read properties of undefined`. `receipt.totals.*` has been
- * dereferenced without a guard since the file was written, so this is the same
- * exposure the client already carries and not a new one; what it costs is
- * recorded in the task report rather than papered over with an `?.` here, which
- * would turn a loud mis-shaped reply into a silently empty form. */
-function detail(over: Record<string, unknown> = {}): Record<string, unknown> {
+ * **Annotated, and that is the point.** This was `Record<string, unknown>`, and
+ * the looseness cost exactly what it looks like it would: `buyer` was added to
+ * `ReceiptDetail`, this stub went on omitting it, `tsc -b` compiled it, and
+ * `fieldsFromReceipt` threw `Cannot read properties of undefined` at run time.
+ * The identical hole in `e2e/visual.spec.ts` fired in the same hour, where no
+ * gate runs at all. `Money` is branded, so the amounts need `as Money` -- the
+ * cost of the annotation, paid once, against a defect class that had already
+ * fired twice.
+ *
+ * No `?.` was added to `fieldsFromReceipt` instead. `receipt.totals.*` has been
+ * dereferenced without a guard since that file was written; optional-chaining
+ * `buyer` would turn a loud mis-shaped reply into a silently empty form, which
+ * is the worse failure. */
+function detail(over: Partial<ReceiptDetail> = {}): ReceiptDetail {
   return {
     id: 'r1',
     status: 'reviewed',
-    confidence: '0.620',
+    confidence: '0.620' as Money,
     confidence_reasons: [],
     merchant_name_raw: 'METRO OIL',
     buyer: { name: 'IDEAL SOURCE', tax_id: null },
@@ -192,10 +198,10 @@ function detail(over: Record<string, unknown> = {}): Record<string, unknown> {
     duplicate_of: null,
     receipt_is_inconsistent: false,
     totals: {
-      subtotal: '1000.0000',
+      subtotal: '1000.0000' as Money,
       tax: null,
       discount: null,
-      total: '1000.0000',
+      total: '1000.0000' as Money,
       tender: null,
       change: null,
     },
