@@ -1087,3 +1087,196 @@ to see it.
 - ADR-0044 §6 — what the label pins do and do not establish.
 - `docs/adr/0016-review-next-resumes-the-callers-task.md` — the P5.T3b defect
   this repeats, and the fix that bound the receipt half.
+
+---
+
+## ISSUE-007 — `PROMPT_VERSION` is unenforced, and no test that fires for the right reason is available
+
+**Status:** OPEN — deliberately not pinned. The reasoning is the point of this
+entry; the alternative was a test that reads as a guard and is not one.
+**Owner action required:** yes — whether `eval/harness.py` should key results
+on `prompt_bundle_hash()` instead of on `PROMPT_VERSION`. That is a change to
+the committed-results contract (spec §16), not a bug fix.
+**Discovered:** 2026-08-19, in the whole-branch review of
+`feat/buyer-and-blank-rows`. **Pre-existing:** yes, since `PROMPT_VERSION`
+existed. **Blocks:** nothing today; it means one module rule is honour-system.
+
+### What is wrong
+
+`src/receipts/extract/prompts.py` rule 1 requires `PROMPT_VERSION` to be bumped
+on **any** change to the prompt text, and rule 5 extends that to a reworded
+schema `description=`, because `eval/harness.py` names its output file from
+`PROMPT_VERSION`.
+
+Nothing enforces it. **Measured 2026-08-19: reverting `PROMPT_VERSION` from
+`"1.1.0"` to `"1.0.0"` — undoing this branch's own bump, which covers a
+reworded `is_template_row` description, a new `Buyer` block and new prompt
+rules — passes the full suite, 1236 tests.** The one reference to the constant
+outside `prompts.py` is `eval/harness.py:_prompt_version()`.
+
+The consequence is concrete. `_write_report` writes
+`eval/results/{date}-{prompt_version}.json` with a plain `write_text`, and the
+payload's `prompt_version` key repeats it. An un-bumped prompt change made on
+the same day as an earlier run **overwrites that run's artefact**; on a later
+day it files under a key that describes the wrong prompt. Either way the eval
+grouping key no longer identifies what was measured — the exact defect rule 5
+names.
+
+### Why no pin was added
+
+The mechanism that *would* enforce it already exists and already works.
+`_bundle_text()` covers every prompt constant **and** the tool-schema JSON, and
+`prompt_bundle_hash()` moves when any of them changes — proven by
+`test_the_bundle_hash_moves_when_a_description_the_model_sees_changes`
+(`tests/test_pipeline_merchant_hints.py`), which rewords the real field and
+asserts the hash moves. **`prompt_bundle_hash()` has no production caller.**
+
+The only test shape that closes the gap from the test side is a checked-in
+`{PROMPT_VERSION: prompt_bundle_hash()}` table. It was considered and rejected,
+for two reasons that are about the shape rather than the effort:
+
+1. **Its red state has two remedies of identical cost, and only one is the
+   rule.** Edit the prompt without bumping and the table goes red; the cheapest
+   way to green is to paste the new hash under the old version, which *is* the
+   defect, and it is exactly as many keystrokes as bumping. A guard whose
+   easiest green is the thing it guards against is a reminder, not an
+   enforcement — and afterwards it passes while encoding nothing.
+2. **It fires on every legitimate bump too, and cannot tell the two apart.**
+   Rule 1 already puts one obligation on a prompt edit; the table adds a second
+   one, in another file, satisfiable without satisfying the first.
+
+A bare `assert PROMPT_VERSION == "1.1.0"` was not considered further: it goes
+red on the next legitimate bump and green again the moment the literal is
+updated, having checked nothing about the text at all.
+
+**An honest gap is preferable to a test that passes for the wrong reason.**
+This entry is that gap, written down.
+
+### How to resume
+
+1. Decide the contract question: should the eval grouping key be
+   `prompt_bundle_hash()` rather than `PROMPT_VERSION`? The hash already covers
+   what rule 5 is about and needs no human discipline.
+2. If yes, the smallest honest version is **additive**: put the bundle hash in
+   `_report_to_dict`'s payload beside `prompt_version`, and in the filename, so
+   an un-bumped change can no longer collide with the run before it. That gives
+   `prompt_bundle_hash()` its first production caller, which ADR-0044 records as
+   open.
+3. Note that `eval/results/` is empty by ADR-0039 decision 2, so no committed
+   artefact constrains the naming choice yet. That will not stay true.
+4. Only after the harness reads the hash is a pin worth writing, and then it
+   pins the harness rather than the constant.
+
+### Related
+
+- ADR-0044 — lists `prompt_bundle_hash()`'s missing production caller as open.
+- ISSUE-002 — the other place a recorded `prompt_hash` names something that was
+  not what was sent.
+- `docs/adr/0039-the-local-path-is-a-liveness-check.md` — why `eval/results/` is
+  empty.
+
+---
+
+## ISSUE-008 — Two copies of "which rows are purchases", with nothing binding them
+
+**Status:** OPEN — recorded, not fixed. Neither copy is wrong today; the risk is
+drift.
+**Owner action required:** no.
+**Discovered:** 2026-08-19, in the whole-branch review of
+`feat/buyer-and-blank-rows`. **Pre-existing:** no — both arrived with
+`is_template_row`. **Blocks:** nothing.
+
+### What is wrong
+
+The same predicate is written twice, in `src/receipts/export/xlsx.py` as
+`_purchases` and in `src/receipts/validate/rules.py` as `_purchased`. Both
+return the line items whose `is_template_row` is false, and the two
+comprehensions differ only in variable naming.
+
+`xlsx.py` is deliberately decoupled from the ORM and from `validate`
+(ADR-0010), so sharing the helper is not free — that decoupling is why the
+second copy exists rather than being an oversight, and `_purchases`' docstring
+already points at `_purchased` in prose.
+
+Both are separately pinned:
+`tests/test_xlsx.py::test_a_template_row_is_not_exported_as_a_purchase` and
+`::test_the_items_count_counts_purchases_not_pre_printed_rows` on one side,
+`tests/test_rules.py::test_R020s_finding_counts_only_the_purchases` and
+`::test_R024s_finding_counts_only_the_purchases` on the other. So a change to
+either copy alone is caught. **Nothing catches a change to the *concept* that
+is applied to only one of them** — if "purchase" ever grows a second condition,
+one side gets it and the suite stays green.
+
+### How to resume
+
+Do not merge them for tidiness; the module boundary is deliberate. If the
+predicate gains a second condition, the cheap binding is a test that asserts the
+two functions agree on one constructed receipt covering every case — one test,
+in neither module's suite, that fails when the concept splits.
+
+### Related
+
+- ADR-0010 — why `export/xlsx.py` does not import from `persist` or `validate`.
+- ISSUE-006 — the reviewer-facing half of the same flag.
+
+---
+
+## ISSUE-009 — `CorrectionPatch` no longer describes the contract it validates
+
+**Status:** OPEN — recorded, not fixed. Harmless today because `extra="allow"`
+makes the undeclared paths work anyway.
+**Owner action required:** no.
+**Discovered:** 2026-08-19, in the whole-branch review of
+`feat/buyer-and-blank-rows`. **Pre-existing:** no — both gaps arrived with this
+branch's new fields. **Blocks:** nothing; it means the published API schema is
+incomplete.
+
+### What is wrong
+
+`src/receipts/review/schemas.py` declares the `PATCH /receipts/{id}` body. Two
+of this branch's correctable paths are absent from it:
+
+- `CorrectionPatch` has no `buyer` field, and its docstring enumerates the
+  closed set as "`merchant.name`, `receipt.*`, `totals.*`, `payment.*`,
+  `meta.*`, and `line_items[i].*`" — `buyer.*` is missing from both.
+- `_LineItemPatch` has no `is_template_row`.
+
+Neither breaks anything: `_PATCH_MODEL_CONFIG` is `ConfigDict(extra="allow")` at
+every level, and `apply_corrections` is the single place that decides whether a
+path is known — which is the deliberate design, so that "unknown field" has one
+error currency (400) rather than two.
+
+**What it does break is the published schema.** Measured 2026-08-19:
+`CorrectionPatch.model_json_schema()` has top-level properties
+`['line_items', 'merchant', 'meta', 'payment', 'receipt', 'totals']`, and
+neither the string `buyer` nor `is_template_row` appears anywhere in it —
+`$defs._LineItemPatch` lists seven properties and not the flag. FastAPI
+publishes that schema as OpenAPI, so a client generated from it cannot send
+either field, while the route accepts both.
+
+The docstring is the sharper half: it names the closed set as a fact, and the
+set it names is no longer the set `_RECEIPT_FIELDS` holds.
+
+### How to resume
+
+1. Add a `buyer` sub-model and `is_template_row` to `_LineItemPatch`, mirroring
+   the existing sub-models. That is the whole change; nothing downstream reads
+   these declarations except OpenAPI.
+2. Delete the enumeration from `CorrectionPatch`'s docstring rather than
+   extending it, or point it at `_RECEIPT_FIELDS`/`_LINE_ITEM_FIELDS` by name. A
+   copy of a closed set in prose is a copy that rots — the same reasoning
+   `4297547` applied to the design docs.
+3. `tests/test_api_write.py` already exercises both paths through the route, so
+   the declarations need no new test. What would need one is the property that
+   every path in the two maps is declared — and that would be a third copy of
+   the binding
+   `test_every_correctable_receipt_path_is_offered_by_the_review_client` and
+   `test_every_correctable_line_item_column_is_readable_in_the_detail` already
+   give, so decide whether a third is wanted before writing it.
+
+### Related
+
+- ISSUE-006 — the readability half, which was a defect rather than a
+  documentation gap.
+- `docs/adr/0016-review-next-resumes-the-callers-task.md` — the
+  two-independent-lists failure this is a benign instance of.
