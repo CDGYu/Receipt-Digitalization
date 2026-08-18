@@ -147,6 +147,18 @@ class Receipt(Base):
         sa.Uuid, ForeignKey("merchants.id"), nullable=True
     )
     merchant_name_raw: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
+    #: Who the receipt was issued TO -- the "Sold To" / "Registered Name" block,
+    #: mirroring :class:`receipts.extract.schema.Buyer`. Distinct from the
+    #: merchant columns above, which are who *issued* it: a BIR sales invoice
+    #: carries both names and both TINs, and they are different numbers.
+    #:
+    #: Both nullable, deliberately. Most receipts name no buyer at all, and every
+    #: receipt in the golden set leaves the buyer TIN blank; NOT NULL here would
+    #: turn an ordinary receipt into a persist-stage failure. There is no
+    #: ``buyer_address``: the forms print a Business Address line for the buyer
+    #: and it is blank throughout the golden set (see ``Buyer``'s docstring).
+    buyer_name_raw: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
+    buyer_tax_id: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
     receipt_number: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
     txn_date: Mapped[date | None] = mapped_column(sa.Date, nullable=True)
     txn_time: Mapped[time | None] = mapped_column(sa.Time, nullable=True)
@@ -241,6 +253,19 @@ class LineItem(Base):
     modifiers: Mapped[Any] = mapped_column(_jsonb(), nullable=False, default=list)
     bbox: Mapped[Any | None] = mapped_column(_jsonb(), nullable=True, default=None)
     line_confidence: Mapped[Decimal] = mapped_column(_RATIO, nullable=False, default=Decimal("0"))
+    #: A pre-printed product row left blank on the form -- transcribed so nothing
+    #: on the paper is lost, but NOT a purchase (mirrors
+    #: :attr:`receipts.extract.schema.LineItem.is_template_row`).
+    #:
+    #: Carries *both* a Python-side ``default`` and a ``server_default``, for the
+    #: same reason as ``validation_findings.created_at`` above: ``ALTER TABLE ...
+    #: ADD COLUMN ... NOT NULL`` with no default fails on both SQLite and
+    #: Postgres once the table holds a row, and ``line_items`` holds one per line
+    #: of every processed receipt. The server default only ever backfills; the
+    #: ORM supplies ``False`` for every row it writes itself.
+    is_template_row: Mapped[bool] = mapped_column(
+        sa.Boolean, nullable=False, default=False, server_default=sa.false()
+    )
 
     receipt: Mapped[Receipt] = relationship(back_populates="line_items")
 
