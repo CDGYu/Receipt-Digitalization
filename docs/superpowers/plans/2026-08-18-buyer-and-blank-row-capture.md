@@ -756,7 +756,32 @@ shapes that exist today and say so.
 
 - [ ] **Step 2: Add the template rows to r001 and r002**
 
-Each as a line item with `"is_template_row": true`, `description_raw` exactly as pre-printed, every amount `null`, and `position` continuing the existing sequence.
+Each as a line item with `"is_template_row": true`, `description_raw` exactly as
+pre-printed, and every amount `null`.
+
+**`position` is PAPER ORDER, not append order.** `prompts.py`
+rule 5 says "one object per row of the ITEMS GRID, **in printed order**,
+position starting at 0", and `RECEIPT_SYSTEM_SPEC.md:292` defines `position` as
+"Order as printed, 0-based". `field_accuracy` joins `line_items[i]` by array
+index, so a label in append order does not line up with an extraction that
+follows the prompt.
+
+Measured on r001 against a model following the shipped prompt **perfectly**:
+append order scores **20/28 (71.43%) with 4 hallucinations**; paper order scores
+**28/28 (100%) with 0**. The four phantoms are CLEAN DIESEL's `qty`, `unit`,
+`unit_price` and `line_total` -- read correctly off the paper and counted as
+inventions. r001's own `meta.notes` already records the paper order, so the
+append-order label contradicted its own evidence inside one file.
+
+**r001 paper order:** PREMIUM 97, PREMIUM 95, REGULAR 91, **CLEAN DIESEL**,
+POWER DIESEL, MOTOR OIL -- so the one filled row sits at position **3**.
+
+**r002 paper order must be READ OFF THE IMAGE.** Nothing in the tracked tree
+records where `DieselPlus` sits relative to `MaxiPower` and `MaxiGreen`, which
+makes that label unauditable. Read `eval/golden/images/r002.*`, order the rows
+as printed, and add a paper-order sentence to r002's notes as evidence -- the
+way r001 already has one. If the image will not settle it, stop and say so
+rather than guessing.
 
 - [ ] **Step 3: Update the notes rather than deleting them**
 
