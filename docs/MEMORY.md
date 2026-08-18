@@ -19,7 +19,7 @@ and **one of my own** — the Gemini key was never in git history.
 **No count of refreshes is written here** — it is a number that moves without its
 sentence changing, which is review standard 5.
 
-**Freshness anchor `27f765e`** — the last commit that is not this handoff pair.
+**Freshness anchor `56b0bc2`** — the last commit that is not this handoff pair.
 **It is written twice below — here and inside the command.** Moving one and not
 the other is what happened on this file's previous refresh, and the gate caught
 it because it parses the anchor out of the *command*.
@@ -34,7 +34,7 @@ else: a stamp cannot name the commit that writes it. The test is a command,
 not a commit and not a count:
 
 ```
-git log --oneline 27f765e..main -- ":(top,exclude)docs/MEMORY.md" ":(top,exclude)docs/NEXT_SESSION_PROMPT.md"
+git log --oneline 56b0bc2..main -- ":(top,exclude)docs/MEMORY.md" ":(top,exclude)docs/NEXT_SESSION_PROMPT.md"
 git log --oneline refs/remotes/origin/main..main   # what a push would send
 git ls-remote --heads origin main                  # authoritative on what is pushed
 git branch --no-merged main                        # must name NOTHING
@@ -106,8 +106,9 @@ answer.)*
 - **Buyer / Sold-To capture and blank-row transcription is COMPLETE AND MERGED**
   (2026-08-19, true fast-forward `a26d6c1` -> `27f765e`, **45 commits, single
   parent each, zero merge commits**). `feat/buyer-and-blank-rows` is kept at its
-  merge point. Decision: **ADR-0044**. It **corrects ADR-0040**, whose decisions
-  1 and 2 were amended in place by `0669678`. Ledger:
+  merge point. Decisions: **ADR-0044** (the model-facing surface is two channels)
+  and **ADR-0045** (a brief is a claim about the tree). 0044 **corrects
+  ADR-0040**, whose decisions 1 and 2 were amended in place by `0669678`. Ledger:
   `.superpowers/sdd/2026-08-18-buyer-and-blank-row-capture/progress.md`
   (gitignored -- open by path). New: **ISSUE-003 through ISSUE-009**.
   **What it delivered: the eval harness stopped punishing correct behaviour.**
@@ -1902,7 +1903,7 @@ ADR-0012, ADR-0013, ADR-0014.
 
 **Phase 5 — the review UI.** `frontend/` (React 19 + Vite + TS): login, the
 review screen, `ConfidenceRail`, `FindingsPanel`, `ImagePane`, `ReceiptForm`
-(all 17 correctable paths), `LineItemsTable`, `MoneyInput`, `patch.ts`,
+(every correctable path), `LineItemsTable`, `MoneyInput`, `patch.ts`,
 `session.ts`, `ErrorBoundary`. Strictly sequential `PATCH → complete → next`;
 ⌘/Ctrl+Enter approves; a rewrite warning that **holds the screen**. Served
 same-origin under `/app` by a guarded `StaticFiles` mount. Plus

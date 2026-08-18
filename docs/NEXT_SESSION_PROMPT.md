@@ -169,11 +169,117 @@ is a summary of one).
 | ~~**T3 — buyer and blank rows**~~ | **CLOSED 2026-08-19.** Merged by true fast-forward, 45 commits. Left ISSUE-003..009. | `docs/MEMORY.md` section, ADR-0044 |
 | **T2 — make accuracy measurable** | Blocked on hardware and one user action. **Phase 6 is now built and unvalidated because of it.** | §C below, `docs/KNOWN_ISSUES.md` ISSUE-001 |
 
-**T2 is the only track with anything in it, and it has been blocked on the same
-user action since 2026-08-11.** Phase 6 shipping did not change that — it added a
-second thing that cannot be measured. Read §0h for what the close cost, then pick
-from section A, or answer the questions under "Blocked on me" and let that pick
-for you.
+**T2 is no longer the only track.** It is still blocked on the same user action,
+but the 2026-08-19 milestone added a user-facing request that was never started
+and seven recorded issues. The ordered list below is the index; each row names
+where its detail lives, and **where a row and its section disagree, the section
+wins** (ADR-0030).
+
+---
+
+# THE OPEN WORK, as of 2026-08-19 (main @ the pair commit)
+
+**Read `docs/MEMORY.md`'s "Buyer and blank rows" section first** " + EM + " it is the record
+of what just shipped, and three of the items below are things it deliberately did
+not do.
+
+## A. Started as a user request, never built " + EM + " HIGHEST VALUE
+
+**A1. The results-list screen + admin-only export button ("M2").** The user asked
+for this on 2026-08-18: *"work on the output since I want it to directly go in
+the excel or make another function for the UI/UX of this project that will show
+the lists of results."* Design was agreed in-session and **then displaced** by the
+Summit Fuel buyer defect, which became the whole milestone. It was never started.
+
+Agreed shape, from that conversation: a **results list** screen showing processed
+receipts, with an **export button that is admin-only**, and **no filters in v1**.
+Audience is reviewers and admins.
+
+- Backend already exists: `GET /export/xlsx` ships and `src/receipts/export/xlsx.py`
+  now carries `buyer` / `buyer_tax_id` columns and filters template rows.
+- Frontend precedent: `frontend/src/admin/` for the admin-only pattern,
+  `frontend/src/review/ReviewScreen.tsx` for the list-and-detail shape.
+- **This needs brainstorming first** " + EM + " it is architectural (a new screen), so it
+  gets a spec under `docs/superpowers/specs/` before a plan.
+
+## B. What the 2026-08-19 milestone left behind
+
+All seven are OPEN in `docs/KNOWN_ISSUES.md`, all deliberately recorded rather
+than fixed. **ISSUE-006 first** " + EM + " it is the only one with a silent-wrong-answer
+shape.
+
+| issue | one line | why it was not fixed |
+|---|---|---|
+| **ISSUE-006** | A reviewer who mis-flags the **sole** purchase gets **zero findings at any severity** and the row silently leaves the export. All three golden receipts have that one-purchase shape. | The readability half is fixed; **surfacing the flag in the review UI is a design decision**, and the arithmetic pin needs the one-purchase shape, not the two-purchase one. |
+| **ISSUE-003** | A blank pre-printed row drops the unit the form prints on it (`Lt.` on all six r001 rows). | The contract scopes a template row to its printed name; the fix is in `schema.py` / `prompts.py`. Labelling it would create five permanently unearnable paths. |
+| **ISSUE-004** | Nothing checks a golden label against its photograph; per-label content rot is open **by design**. | Per-receipt pins are tautological or transcriptions. The pins that exist close wholesale rot and schema drift. Re-reading the image is the only instrument. |
+| **ISSUE-005** | `R051`'s message promises printed order; its check accepts any permutation. | `rules.py` was closed for that milestone. One-line fix, needs its own RED. |
+| **ISSUE-007** | `PROMPT_VERSION` is unenforced and reverting it passes the whole suite. | No test fires for the right reason: a checked-in `{version: hash}` table has two remedies of identical cost, so **its easiest green is the defect**. Real fix: give `prompt_bundle_hash()` a production caller " + EM + " a contract decision, and it changes spec " + SEC + "16's filename. |
+| **ISSUE-008** | `xlsx._purchases` and `rules._purchased` are identical predicates with nothing binding them. | Neither is wrong today; the risk is drift. A `LineItem.is_purchase` on the schema is the single source. |
+| **ISSUE-009** | `CorrectionPatch`'s docstring no longer describes the contract it validates; OpenAPI does not document `buyer.*` or `is_template_row`. | Harmless because `extra="allow"`, but the prose and the schema both mislead. |
+
+**Also left behind, not yet issues:**
+
+- **Playwright is not a gate**, and it caught a defect all five gates were green
+  on " + EM + " the review screen never painted in a real browser. `tsc -b` now covers
+  `frontend/e2e/`, which closes the fixture-drift half but not the runtime half.
+- **A `<fieldset>` with a legend for the buyer pair.** At 1024px the grid is two
+  columns and the pair splits across a row break; a fieldset would group it and
+  give the two TINs an accessible grouping. Design judgement, deliberately not
+  taken.
+- **`_autosize` measures the stored value, not the rendered one**, so a money
+  column can display `####` in Excel. Pre-existing, untouched, and
+  **unverifiable in-repo** " + EM + " nothing here renders a spreadsheet.
+
+## C. T2 " + EM + " make accuracy measurable (`docs/KNOWN_ISSUES.md` ISSUE-001)
+
+Steps 2, 3 and 4 were **answered by running them** on 2026-08-18 " + EM + " read them
+below rather than re-running; ADR-0039 is the standing rule that the local path
+is a liveness check only.
+
+- **Step 5, the escalation design, is the open one.** `VLM_USE_TOOLS` is per
+  **provider**, not per model, so the two tiers cannot differ on it " + EM + " a real
+  constraint, since granite loses its merchant guess with tools on while
+  `gemma4:cloud` needs them.
+- **The real blocker is unchanged:** no full baseline run has ever completed, so
+  Phase 6's merchant matching and this milestone's buyer capture are both built
+  and unvalidated. **The user's ruling stands: cloud egress is authorised for the
+  GOLDEN SET only.** Production upload routing to the cloud is a separate
+  decision and has **not** been made.
+- **Cloud inference is not deterministic at `temperature=0`** " + EM + " two identical
+  `gemma4:cloud` runs disagreed. This raises Phase 7's value (below).
+
+## D. Phases 7 and 8
+
+- **P7.T1 self-consistency.** `run_consistency` exists in `extract/extractor.py`
+  with zero references in `pipeline.py`. Gate on `triage.is_handwritten`, never
+  `document_type`; consistency runs are never cached. **Re-read it with provider
+  variance in mind** " + EM + " it was scoped to handwriting, and cloud nondeterminism is
+  exactly what it remedies.
+- **P3.T6 / P8.T1 threshold sweep + weights into `config/rules.yaml`** " + EM + " blocked
+  on ISSUE-001.
+- **P8.T2 grow the held-out set.** The corpus target is 50" + EM + "100 receipts; it is 3.
+  `eval/golden/TEMPLATE.json` now declares every schema field and is pinned, so
+  a copied template can no longer silently omit one.
+
+## E. Still open from earlier phases
+
+R060/R061 grounding decision (also gates bbox); score `is_handwritten` from
+triage too; `is_receipt` has no consumer (never hard-reject on it). See
+" + SEC + "6 below for the full list and " + SEC + "7 for what is deferred with rulings.
+
+## F. Blocked on the user " + EM + " ask early, these gate other work
+
+1. **Rotate the Gemini API key at Google.** It was deleted from `.env` on
+   2026-08-18, and deleting it there **changes nothing about the exposure**.
+   *(Corrected under my own name: it was **never** in this repo's git history "
+   + EM + " I claimed it was, verified four ways, and was wrong.)*
+2. **`min-height: 60vh`** (item 14) " + EM + " undecided.
+3. **Browser-pass I7** (item 12) " + EM + " undecided.
+4. **Does A1 go before the ISSUE-006 UI half?** They touch the same screens.
+
+---
+
 
 **T2's ordered steps, all recorded in ISSUE-001's 2026-08-14 ruling block:**
 
@@ -1351,7 +1457,7 @@ only the number that gets written down and kept was wrong.
 
 R060/R061 grounding decision (also gates bbox); score `is_handwritten` from
 triage too; `is_receipt` has no consumer (never hard-reject on it); blank
-pre-printed template rows (sibling of R052).
+~~blank pre-printed template rows (sibling of R052)~~ **DONE 2026-08-19** — `is_template_row`, ADR-0044.
 
 ## 7. Deferred, with rulings
 
