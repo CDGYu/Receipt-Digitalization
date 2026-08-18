@@ -232,11 +232,16 @@ for you.
    ADR-0002's 2026-08-18 correction records it and **deliberately does not fix
    it**.
 6. **Run the first real baseline**, detached, and commit the results file.
-   **Now actually possible** — see step 3. Unmeasured before it can be trusted:
-   whether `gemma4:cloud` reads a receipt at all, the free tier's rate limits and
-   quotas, and whether a full run completes on them. **And it is a decision, not
-   a detail, that a cloud tier sends receipt images off this machine** — the
-   local-only setup did not.
+   **`gemma4:cloud` DOES read the receipt** (2026-08-18, r002: merchant, TIN,
+   invoice, line item, both totals and payment all exact, 0 validation errors,
+   confidence 0.700, in 25 seconds). **User ruling: golden set only** — routing
+   production uploads to the cloud is a separate decision, not yet made.
+   **⚠ DO NOT REPORT A SINGLE RUN AS THE BASELINE.** Cloud inference is **not
+   deterministic at `temperature=0`** — two identical runs scored 55.56% and
+   61.11%, differing on whether `totals.subtotal` was read at all. A one-shot
+   number will move on its own and be read as a regression. Repeats and a spread,
+   or the figure is a sample wearing a number's clothes. Still unmeasured: the
+   free tier's rate limits, quotas and whether a full run completes on them.
 7. **Grow the golden set.** Three receipts cannot validate any accuracy claim —
    one receipt is 33 percentage points. This gates the goal more fundamentally
    than the model does.
@@ -1310,6 +1315,13 @@ until ISSUE-001 runs. Phase 6 was built and cannot be validated.
 Wire `run_consistency` (`extract/extractor.py`, zero references in
 `pipeline.py`) for handwritten/low-legibility; **gate on
 `triage.is_handwritten`, never `document_type`**; consistency runs never cached.
+
+**Its value went up on 2026-08-18 for a reason it was not designed for.** Cloud
+inference is **not deterministic at `temperature=0`** — two identical
+`gemma4:cloud` runs on r002 disagreed, one reading `totals.subtotal` and the
+other not. Self-consistency is exactly the remedy for that, and it was scoped to
+handwriting. Worth re-reading the phase with provider variance in mind before
+building it, and note that r002 *is* handwritten, so the gate would fire here.
 
 ## 5. Phase 8 — calibration & eval-harness honesty
 

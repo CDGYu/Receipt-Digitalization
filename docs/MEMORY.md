@@ -19,7 +19,7 @@ and **one of my own** — the Gemini key was never in git history.
 **No count of refreshes is written here** — it is a number that moves without its
 sentence changing, which is review standard 5.
 
-**Freshness anchor `41711a2`** — the last commit that is not this handoff pair.
+**Freshness anchor `12ae743`** — the last commit that is not this handoff pair.
 **It is written twice below — here and inside the command.** Moving one and not
 the other is what happened on this file's previous refresh, and the gate caught
 it because it parses the anchor out of the *command*.
@@ -34,7 +34,7 @@ else: a stamp cannot name the commit that writes it. The test is a command,
 not a commit and not a count:
 
 ```
-git log --oneline 41711a2..main -- ":(top,exclude)docs/MEMORY.md" ":(top,exclude)docs/NEXT_SESSION_PROMPT.md"
+git log --oneline 12ae743..main -- ":(top,exclude)docs/MEMORY.md" ":(top,exclude)docs/NEXT_SESSION_PROMPT.md"
 git log --oneline refs/remotes/origin/main..main   # what a push would send
 git ls-remote --heads origin main                  # authoritative on what is pushed
 git branch --no-merged main                        # must name NOTHING
@@ -161,8 +161,30 @@ answer.)*
   softening the rule** — step 3 measured tool-use working properly on
   `gemma4:cloud`, so granite is a per-model exception, recorded in ADR-0002's
   dated correction.
-- **T2 STEP 3 IS ANSWERED AND BOTH ANSWERS ARE YES** (2026-08-18) — **the first
-  path to a real accuracy number since 2026-07-28.** `gemma4:cloud` is
+- **`gemma4:cloud` READS THE RECEIPT** (2026-08-18) — **the blocker since
+  2026-07-28 is gone.** On r002 at 2048 with tool-use on: merchant name, TIN,
+  invoice number, the real line item, both totals and the payment method all
+  **exactly right**, 0 validation errors, confidence **0.700**, in **25 seconds**
+  against granite's 30–39 minutes. Transcription **61.11% vs 11.11%**.
+  **ADR-0043's TIN-first design is live rather than hypothetical** — the
+  strongest fingerprint on this corpus was read exactly.
+  **User ruling: golden set only, for now.** Production upload routing to the
+  cloud is a separate decision and has NOT been made.
+- **⚠ CLOUD INFERENCE IS NOT DETERMINISTIC AT `temperature=0`.** Two identical
+  runs disagreed — 55.56% vs 61.11%, one read `totals.subtotal` and the other
+  did not. The local path was stable across repeats; this tier is not.
+  **Three consequences:** a single-run baseline is a *sample*, not a number, and
+  would have silently corrupted step 6; **`ResponseCache`'s stated justification
+  for caching temperature-0 calls does not hold here**; and **Phase 7
+  self-consistency is now more valuable than it was designed to be** — it was
+  built for handwriting, and it is the remedy for provider variance.
+- **Two things that look like defects and are not.** `date` null on `03-28-26`
+  is **correct** (genuinely ambiguous, `date_raw` kept, R011 *info*) — but the
+  critical-fields gate counts it as a miss, an ADR-0040-family metric question.
+  And `MaxiPower`/`MaxiGreen` are the **pre-printed template rows** the golden
+  notes say must not be emitted: §6's open item, now **reachable and
+  reproducible**, and why line-item precision is 0.33 while **recall is 1.00**.
+- **T2 STEP 3 IS ANSWERED AND BOTH ANSWERS ARE YES** (2026-08-18) — `gemma4:cloud` is
   vision-capable, reachable on the **free tier**, and honours a `tools` payload
   (`finish_reason: tool_calls`, arguments parsed into the schema). Three things
   to carry: **the paywall is per model** (`qwen3.5:cloud` and `kimi-k2.6:cloud`
