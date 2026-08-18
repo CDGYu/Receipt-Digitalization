@@ -1,7 +1,10 @@
-# Buyer / Sold-To capture, and the receipt-is-ours check
+# Buyer / Sold-To capture, the receipt-is-ours check, and blank-row transcription
 
 **Status:** design approved 2026-08-18. Not yet implemented.
-**Milestone:** M1 (buyer capture). **Spec:** §6 (data model), §10 (validation), §17 (config).
+**Milestone:** M1. **Spec:** §6 (data model), §10 (validation), §17 (config).
+**Scope grew once, on a user ruling:** §3.9 and §3.10 were added after approval
+of the buyer half, and §3.9 partially reverses a decision the golden labels
+record. Read those two before assuming this is only about the buyer.
 **Blocked on nothing.** Every fact below was derived on 2026-08-18 from the three
 golden images and the tree, not from prose.
 
@@ -170,7 +173,69 @@ finding a reviewer cannot clear**, and an unactionable blocking finding is worse
 than no rule. Money-field rules do not apply here — these are text — but
 ADR-0027's `null` ≠ empty rendering does.
 
-### 3.9 Two Excel columns
+### 3.9 Blank pre-printed rows are CAPTURED and FLAGGED, not emitted as purchases
+
+**User ruling, 2026-08-18: the extraction must list everything printed on the
+receipt, including rows and fields left blank.** This reverses part of a recorded
+decision and the reversal is deliberate, so both halves are written down.
+
+**What the golden labels said, and why.** All three carry a note that the blank
+pre-printed product rows "are blank template rows and **must NOT be emitted as
+line items**" — r001 names six (`PREMIUM 97, PREMIUM 95, REGULAR 91, CLEAN
+DIESEL, POWER DIESEL, MOTOR OIL`) of which one is filled; r002 names
+`MaxiPower` and `MaxiGreen`. The reason was sound: a line item is a thing
+purchased, and the arithmetic rules (`R020`–`R025`) reconcile line items against
+the totals.
+
+**The resolution keeps both properties.** `LineItem` gains
+`is_template_row: bool = False`. A blank pre-printed row is emitted **with the
+flag set**, so the transcription is complete; every arithmetic and
+line-item-quality rule **skips flagged rows**, so the totals still reconcile.
+
+This is not a compromise between the two positions — it is the observation that
+they were never in conflict. "What is printed on the form" and "what was bought"
+are two different questions, and the old decision only looked wrong because one
+field was being asked to answer both.
+
+**Consequences that must land in the same change:**
+
+- **`R053` must not fire on a flagged row.** Its whole complaint is "empty
+  description but null amount", which is the *definition* of a template row.
+  Unflagged, it would fire on every receipt in the corpus.
+- **The golden labels gain the flagged rows** — six on r001, two on r002 — rather
+  than being rewritten. Their notes stay, restated as *why the flag exists*.
+- **Line-item F1 must compare like with like.** Today `gemma4:cloud` scores
+  precision 0.33 with recall 1.00 on r002 *because* it emitted the two template
+  rows. Once they are expected and flagged, the same output is a clean match —
+  **the model was reading the form correctly and the metric was wrong about it.**
+- **The export excludes flagged rows from the review sheet** by default: an
+  accounting ledger listing something nobody bought is a defect, and the flag is
+  what makes excluding them a one-line filter rather than a judgement.
+
+**The prompt must ask for them explicitly**, and say that a pre-printed row with
+no quantity or amount is to be emitted with the flag rather than dropped. It must
+also say the flag is about the *row being blank on the form*, not about the model
+being unsure — an unreadable filled row is `meta.ambiguous_fields`, not a
+template row.
+
+### 3.10 Every labelled field on the form, including the empty ones
+
+The same ruling covers fields, not just rows: a labelled field that exists on the
+form and is blank should be represented as an explicit `null`, not omitted.
+
+**Mostly this already holds** — the schema's fields are `| None` and default to
+`None`, so an unfilled `buyer.tax_id` is already a null rather than an absence.
+§2 is the worked example: the TIN line is printed on all three receipts and
+filled on none, which is why `R014` keys on `name` and not on `tax_id`.
+
+**What is genuinely missing is coverage**, and it is out of scope here: `Terms`,
+`Plate No.`, `Bus. Style`, `Car Make` and the buyer's `Business Address` are all
+printed on these forms and have no schema field at all. Adding them is a
+separate, mechanical milestone; this design adds only the buyer, because the
+buyer is the one with a rule attached. **Recorded so the ruling is not treated as
+satisfied when it is only half satisfied.**
+
+### 3.11 Two Excel columns
 
 `export/xlsx.py`'s review sheet gains buyer name and buyer TIN. The summary sheet
 is unchanged: the buyer is a per-receipt fact, and on this corpus it is constant,
@@ -211,6 +276,17 @@ accuracy appear to drop.
   the same receipt disagreed. A buyer-match rule will therefore not fire
   identically across runs, and any measurement of its false-positive rate needs
   repeats.
+- **The template-row flag is a model judgement, not a fact the pipeline can
+  check.** Nothing downstream can tell a genuinely blank pre-printed row from a
+  filled row the model failed to read — both arrive as a description with null
+  amounts. A model that flags a *filled* row silently removes a purchase from
+  the arithmetic. That is the one way §3.9 can do real harm, and it argues for
+  pinning the distinction in tests with both shapes rather than trusting the
+  flag.
+- **The pipeline default is now a cloud model** (`.env`, 2026-08-18), so every
+  receipt processed leaves the machine. The egress ruling on record authorised
+  the golden set; this widens it in practice. Reverting both model lines to
+  `granite3.2-vision:2b` restores a fully local pipeline that cannot read.
 
 ## 7. Testing
 
