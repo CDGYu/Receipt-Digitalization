@@ -790,9 +790,12 @@ _RULE_HEADING = re.compile(r"^\s*\d+\.\s+[A-Z]")
 _CLAUSE = re.compile(r"\.\s+|\n\s*(?=[-(])")
 
 #: What "about illegibility" is keyed on. Stems, so `illegible`, `illegibly`
-#: and `illegibility` all match. This is a lexical pin and a synonym walks
-#: straight past it -- "smudged", "defeats you", "you cannot make out" are all
-#: invisible here. Stated rather than implied; see the bound's docstring.
+#: and `illegibility` all match. SIX OF THE EIGHT ARE MULTI-WORD, so a clause
+#: must be whitespace-normalised before it is tested -- `prompts.py` hard-wraps
+#: at ~85 columns and a wrap through "could not / read" hid them entirely.
+#: This is a lexical pin and a synonym walks straight past it -- "smudged",
+#: "defeats you", "you cannot make out" are all invisible here. Stated rather
+#: than implied; see the bound's docstring.
 _ILLEGIBILITY = (
     "illegib",
     "unreadab",
@@ -910,10 +913,10 @@ def test_the_prompt_ties_the_flag_to_the_paper_not_to_the_models_eyesight() -> N
     not catching an inversion, and a wrongly flagged purchase leaves the
     arithmetic with nothing downstream able to tell.
 
-    THE MIRROR PROPERTY, and the part that actually holds the guarantee shut:
+    THE MIRROR PROPERTY, the independent half of the guarantee:
 
-        No clause anywhere in the shipped request may attach
-        `is_template_row = true` to illegibility.
+        No clause of anything the model is shown -- the rendered request OR the
+        tool schema -- may attach `is_template_row = true` to illegibility.
 
     The checks above bind the PRESENCE of a correct statement; they say nothing
     about an incorrect one alongside it. Four measured shapes shipped the
@@ -925,19 +928,40 @@ def test_the_prompt_ties_the_flag_to_the_paper_not_to_the_models_eyesight() -> N
     names only `= true` and so never enters `contrast` at all.
 
     This bound is the "somewhere else to go" test the `false` side already gets,
-    run in the other direction, and it is deliberately NOT turn-scoped or
-    rule-anchored -- rule 5 is neither the contrast rule nor the user turn, and
-    the shape lands there just as happily. It also removes the load from the
-    asymmetry above: the `true` side no longer needs clause [3] to lack the word
-    "blank" in order to stay honest.
+    run in the other direction. Deliberately NOT turn-scoped or rule-anchored,
+    and deliberately not limited to `_shipped()`: rule 5 is neither the contrast
+    rule nor the user turn, and the tool-schema `description=` text is a channel
+    again beyond that -- round 0 of this task established it as model-facing,
+    and relocating the instruction into it shipped GREEN until this bound was
+    widened to `_bundle_text()`.
 
-    ITS FLOOR, stated rather than implied. Detecting "about illegibility" needs
-    words, so this is a lexical pin exactly like the `"blank"` one. It keys on
-    the stems in `_ILLEGIBILITY`: illegib*, unreadab*, and the "cannot/could not
-    (be) read" spellings. A synonym evades it -- "smudged", "you cannot make it
-    out", "defeats you" -- and so does a paraphrase that never names reading at
-    all. It catches the four shapes above and every other shape that says one of
-    those words; it is not a proof that the request is free of the instruction.
+    It is an INDEPENDENT check, not a relief for the `"blank"` pin above. An
+    earlier draft of this docstring claimed it took the load off that pin.
+    Measured, and false: an inversion binding `= true` to illegibility only,
+    worded with none of the keyed vocabulary ("whose handwriting defeats you"),
+    is caught by the existence check ALONE -- delete that one assertion and the
+    same prompt runs green. The asymmetry above is still fully load-bearing.
+
+    ITS FLOOR, stated rather than implied, on BOTH sides. Round 2 recorded the
+    false-alarm cost of the `"blank"` pin and round 3 recorded none for this
+    one; that asymmetry in the documentation was itself the defect.
+
+    What it MISSES. Detecting "about illegibility" needs words, so this is a
+    lexical pin exactly like the `"blank"` one. It keys on the stems in
+    `_ILLEGIBILITY`: illegib*, unreadab*, and the "cannot/could not (be) read"
+    spellings. A synonym walks past it -- "smudged", "you cannot make it out",
+    "defeats you" -- and so does a paraphrase that never names reading at all.
+    Parked with its measurements rather than answered one synonym at a time.
+
+    What it OVER-FIRES on. The property says a clause may not ATTACH the flag to
+    illegibility; the implementation is that a clause may not CO-MENTION them,
+    and co-mention cannot see polarity. Three pieces of correct text are red as
+    a result, and the likeliest is a one-word edit to text that already ships.
+    Measured: verify step (b) reworded to the `= true` spelling; a direct
+    prohibition, "Never set is_template_row = true because a row is illegible";
+    and `LineItem.is_template_row`'s own description reworded to the `= true`
+    spelling, since it already says "could not read". Polarity awareness is
+    parked as well -- it would be a second prose heuristic, not a fix.
     """
     rules = [b for b in _blocks(P.SYSTEM_EXTRACTION) if _RULE_HEADING.match(b)]
     contrast = [b for b in rules if _FLAG_TRUE.search(b) and _FLAG_FALSE.search(b)]
@@ -959,18 +983,25 @@ def test_the_prompt_ties_the_flag_to_the_paper_not_to_the_models_eyesight() -> N
                 "meta.ambiguous_fields:\n" + clause
             )
 
-    # The mirror property. Whole shipped request: a clause setting the flag true
-    # is wrong wherever it lives, and rule 5 is neither the contrast rule nor the
-    # user turn.
-    for clause in _CLAUSE.split(_shipped()):
-        if not _FLAG_TRUE.search(clause):
+    # The mirror property, over every channel the model is told anything
+    # through. `_bundle_text` adds the tool-schema `description=` text, which
+    # round 0 of this task established as model-facing and which `prompts.py`'s
+    # own docstring calls out as the thing it does not contain.
+    #
+    # Whitespace is normalised first because `prompts.py` hard-wraps at ~85
+    # columns and six of the eight `_ILLEGIBILITY` entries are multi-word, so a
+    # wrap hid them. `_FLAG_TRUE` already spans a wrap through its `\s*`; this
+    # is that same tolerance applied to the other half of the check.
+    for clause in _CLAUSE.split(_shipped() + "\n" + P._bundle_text()):
+        flat = " ".join(clause.split())
+        if not _FLAG_TRUE.search(flat):
             continue
-        illegibility = [w for w in _ILLEGIBILITY if w in clause.lower()]
+        illegibility = [w for w in _ILLEGIBILITY if w in flat.lower()]
         assert not illegibility, (
             "a clause sets is_template_row = true and talks about illegibility "
             f"({', '.join(illegibility)}). A filled row the model cannot read "
             f"is a PURCHASE; flagging it drops it from every total and nothing "
-            f"downstream can tell:\n{clause}"
+            f"downstream can tell:\n{flat}"
         )
 
 
