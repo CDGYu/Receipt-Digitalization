@@ -184,6 +184,18 @@ def seed(db_url: str, storage_root: Path, *, reset: bool) -> dict[str, str]:
                     {"reason": "date looks implausible", "penalty": "-0.080"},
                 ],
                 merchant_name_raw="TOTAL WINE",
+                # The *Sold To* party, distinct from the merchant who sold.
+                # Both halves are correctable (`buyer.name`, `buyer.tax_id`),
+                # so leaving them NULL made two of the receipt's correctable
+                # columns untestable and broke this seed's own "every
+                # correctable column holds a distinct non-null value" rule --
+                # a spec running against the real server never exercised a
+                # populated buyer at all. Neither value is a 13-19 digit
+                # all-numeric run, for the reason given on `payment_method`
+                # below; verified against `redact_pan`, which returns both
+                # unchanged.
+                buyer_name_raw="IDEAL SOURCE",
+                buyer_tax_id="009-123-456-000",
                 receipt_number="OR-2026-0042",
                 txn_date=date(2026, 7, 2),
                 date_raw="02/07/2026",

@@ -35,14 +35,25 @@ change can recover one already stranded.
 
 The same milestone surfaced a second, smaller gap in the same screen, fixed
 alongside this one because it has the same cause — two independently written
-lists of the same columns that nothing bound together. `_RECEIPT_FIELDS`
-(`persist/repository.py`) accepts corrections for 17 paths and `receipt_detail`
-(`review/serializers.py`) returned 17 top-level keys, and they were **different**
-17s: `receipt.number`, `receipt.time` and `payment.method` were correctable but
-had no key in the response at all, so a reviewer could overwrite what the
-machine read without ever being shown it. All three columns
-(`receipt_number`, `txn_time`, `payment_method`) were present in the database
-the whole time.
+lists of the same columns that nothing bound together. **Measured 2026-07-30;
+both counts have since moved and this sentence is the record of that day, not
+of today.** `_RECEIPT_FIELDS` (`persist/repository.py`) accepted corrections
+for 17 paths and `receipt_detail` (`review/serializers.py`) returned 17
+top-level keys, and they were **different** 17s: `receipt.number`,
+`receipt.time` and `payment.method` were correctable but had no key in the
+response at all, so a reviewer could overwrite what the machine read without
+ever being shown it. All three columns (`receipt_number`, `txn_time`,
+`payment_method`) were present in the database the whole time.
+
+`_RECEIPT_FIELDS` holds **19** paths as of 2026-08-19, `buyer.name` and
+`buyer.tax_id` having arrived on `feat/buyer-and-blank-rows`. What keeps the
+defect from recurring is not the count but
+`test_every_correctable_receipt_column_is_readable_in_the_detail`, which binds
+the two lists as a property and fails on the next unpaired addition. It binds
+receipt columns only: the same defect reappeared in `_LINE_ITEM_FIELDS` and was
+found in the 2026-08-19 branch review, which added the line-item twin
+`test_every_correctable_line_item_column_is_readable_in_the_detail`
+(ISSUE-006).
 
 ## Decision
 

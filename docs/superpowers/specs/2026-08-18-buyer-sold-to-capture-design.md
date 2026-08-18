@@ -198,7 +198,13 @@ line-item-quality rule skips flagged rows" — unachievable as written, and the
 brief that carried it contradicted itself on R051. `R052` and `R053` deliberately
 keep reading every row: after flagged amounts leave `sum_line_nets`, R052 is the
 **only** remaining signal that a printed amount landed in `line_items` instead of
-`totals`, and R053 is the only check that the transcription happened at all.)*
+`totals`, and R053 is the only check that the transcription happened at all.*
+
+*The consequence list below opened with a bullet that had not been corrected
+with it — "`R053` must not fire on a flagged row" — which this paragraph
+contradicts and the shipped `R053` refutes: it has no `is_template_row` check
+and reads every row. It is **deleted** as of 2026-08-19 rather than reworded,
+because the correct statement of it is the sentence you have just read.)*
 
 This is not a compromise between the two positions — it is the observation that
 they were never in conflict. "What is printed on the form" and "what was bought"
@@ -207,11 +213,12 @@ field was being asked to answer both.
 
 **Consequences that must land in the same change:**
 
-- **`R053` must not fire on a flagged row.** Its whole complaint is "empty
-  description but null amount", which is the *definition* of a template row.
-  Unflagged, it would fire on every receipt in the corpus.
-- **The golden labels gain the flagged rows** — six on r001, two on r002 — rather
-  than being rewritten. Their notes stay, restated as *why the flag exists*.
+- **The golden labels gain the flagged rows** — five on r001, two on r002 —
+  rather than being rewritten. Their notes stay, restated as *why the flag
+  exists*. *(Corrected 2026-08-19: said "six on r001". The form prints six
+  product rows and r001 fills one of them in, so five are flagged; this bullet
+  counts flagged rows, not printed ones. The paragraph four above already has
+  it right — it names all six and says "of which one is filled".)*
 - **Line-item F1 must compare like with like.** Today `gemma4:cloud` scores
   precision 0.33 with recall 1.00 on r002 *because* it emitted the two template
   rows. Once they are expected and flagged, the same output is a clean match —

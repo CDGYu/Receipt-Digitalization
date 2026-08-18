@@ -895,18 +895,33 @@ establish truth:
 
 ### The residual, measured
 
-**A single label's content rotting alone stays green.** Verified 2026-08-18:
-blanking `r001.json`'s buyer block and deleting all five of its flagged rows —
-leaving r002 and r003 untouched — passes the full suite, 1228 tests. P1 still
-sees every declared field, P2 still finds flagged rows in r002, and P3 still
-finds a buyer name in r002 and r003.
+**A single label's content rotting alone stays green — but the mutation has
+to be tidy about it.** Re-measured 2026-08-19, the suite now being 1236 tests:
 
-This is by design. The alternative is a test that transcribes r001's rows,
-which would fire on a legitimate re-read of the image and become an obstacle
-to truth rather than a guard on it.
+- Blanking `r001.json`'s buyer block and deleting all five of its flagged rows,
+  leaving r002 and r003 untouched, gives **1 failed, 1235 passed**. The failure
+  is `test_array_order_agrees_with_the_position_values[r001]`: the deletion
+  leaves `CLEAN DIESEL` alone in the array carrying `position: 3`, so positions
+  `[3]` no longer match indices `[0]`.
+- Renumbering that survivor to `position: 0` — one more edit, and the one a
+  careful vandal or a careless script would make — gives **1236 passed**. P1
+  still sees every declared field, P2 still finds flagged rows in r002, and P3
+  still finds a buyer name in r002 and r003.
 
-`test_array_order_agrees_with_the_position_values` narrows the residual: after
-it, ordering rot **inside** one label is loud even though content rot is not.
+So the residual is real and the entry stands; the array-order pin narrows it by
+one step rather than closing it.
+
+**This paragraph said "passes the full suite, 1228 tests" until 2026-08-19, and
+that was wrong when it was written, not rotted.** The array-order pin landed at
+`6169893` five minutes before `b3868e8` wrote this entry, and the entry lists
+that pin among the four above — so the mutation was not re-run against the tree
+being described, and the count came from an earlier one. It is exactly the
+failure ADR-0028 names: a measurement quoted rather than re-derived, inside a
+section headed *measured*.
+
+The residual is by design. The alternative is a test that transcribes r001's
+rows, which would fire on a legitimate re-read of the image and become an
+obstacle to truth rather than a guard on it.
 
 ### How to resume
 
