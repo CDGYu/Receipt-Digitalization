@@ -685,18 +685,58 @@ Write the failing test first:
 def test_is_template_row_is_scored_as_a_self_report_not_a_transcription() -> None:
     """A False-defaulting bool in an averaged group is a free point per row.
 
-    Measured before this routing existed: a prediction that read NOTHING off
-    r001 scored 11.8%, and adding the field alone took it to 16.7%.
+    Measured before this routing existed: a prediction that got r001's row
+    count right and read nothing scored 2/17, and adding this one field alone
+    took it to 3/18.
     """
-    truth = {"line_items": [{"description_raw": "CLEAN DIESEL", "is_template_row": False}]}
-    pred = {"line_items": [{"description_raw": "", "is_template_row": False}]}
-    breakdown = field_accuracy(truth, pred)
-    assert breakdown.transcription.total == 1  # description_raw only
+    one = _extraction(items=[LineItem(position=0, description_raw="CLEAN DIESEL")])
+    two = _extraction(items=[LineItem(position=0, description_raw="CLEAN DIESEL"),
+                             LineItem(position=1, description_raw="PREMIUM 97")])
+
+    # The defect scales at one free point per row, so the per-row delta is
+    # what this pins -- not a whole-receipt total that shifts for other reasons.
+    per_row = (field_breakdown(two, two).line_items_total
+               - field_breakdown(one, one).line_items_total)
+
+    assert per_row == <MEASURE IT>
+    assert field_breakdown(one, one).self_report_total == <MEASURE IT>
 ```
 
-Adapt the assertion to `field_accuracy`'s real return shape — read
-`eval/metrics.py` first. **The property to pin is that the flag does not appear
-in the transcription denominator**, however that module expresses it.
+**The API above is real and the signature order matters. Do not guess it:**
+`field_breakdown(predicted, truth) -> FieldBreakdown` takes `ReceiptExtraction`
+objects (not dicts), `predicted` FIRST, and returns flat integer fields --
+`transcription_total`, `line_items_total`, `self_report_total`, `core_total`,
+and their `_correct` counterparts. There is no `breakdown.transcription.total`.
+`field_accuracy(predicted, truth) -> dict[str, bool]` is the per-path map, but
+it will NOT answer this question: a routed leaf is still a scored path and still
+appears in that dict, so the dict cannot tell you which group counted it. The
+counts are the only public evidence. Use `_extraction(items=[...])` and
+`LineItem(...)` from the existing fixtures at the top of
+`tests/test_eval_metrics.py`. Every symbol named in this task exists -- if you
+reach for a helper that does not, write the assertion a different way rather
+than adding one to make the snippet true.
+
+**`<MEASURE IT>` is not a placeholder you may leave in, and not a number you may
+predict.** Run the assertion, read the real total off the failure, and write
+that number in. This plan deliberately does not state it: a count derived from
+which of `position`, `description_raw` and the flag are filled is exactly the
+kind of number a plan gets wrong, and a test written to a guessed constant
+passes for the wrong reason. Report both the before and after totals.
+
+**The property to pin is that the flag does not appear in the transcription
+denominator**, however that module expresses it. `_group` currently reads the
+path string alone and routes `meta.*` to `self_report`; `is_template_row` is
+the first self-report leaf that does not live under `meta.`, so a purely
+positional rule can no longer express the grouping.
+
+**The bound, and the trap.** A leaf that records the model's CLAIM ABOUT THE
+PAPER rather than a transcription of printed content must never enter the
+transcription denominator, and the set of such leaves must be declared in ONE
+place that the grouping reads. Do not grow a per-field list one name at a time
+with no stated rule for what belongs on it -- that is the enumerated defence,
+and this repo has watched it fail to converge four rounds running. Either state
+the rule that admits a leaf to the set, or leave the set at exactly the two
+shapes that exist today and say so.
 
 **Values read from the images on 2026-08-18 — transcribe exactly, do not normalise:**
 
