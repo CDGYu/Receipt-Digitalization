@@ -328,6 +328,7 @@ def query_export_receipts(
     date_to: date_cls | None,
     min_confidence: Decimal | None,
     limit: int,
+    offset: int = 0,
 ) -> list[Receipt]:
     """Receipts for ``GET /export/xlsx``: the same filters as
     :func:`~receipts.persist.repository.query_receipts`, plus the
@@ -340,6 +341,9 @@ def query_export_receipts(
     needs exactly that. Ordered ``created_at`` then ``id``, matching
     ``query_receipts``, so the two entry points never disagree about paging
     order.
+
+    ``offset`` pages that same total order. It defaults to 0 because
+    ``receipts.cli`` calls this function without one.
 
     ``line_items`` and ``merchant`` are eager-loaded with ``selectinload``
     (fix round 1, F3): both are default-lazy relationships
@@ -370,7 +374,7 @@ def query_export_receipts(
     if min_confidence is not None:
         query = query.where(Receipt.confidence >= min_confidence)
 
-    query = query.order_by(Receipt.created_at, Receipt.id).limit(limit)
+    query = query.order_by(Receipt.created_at, Receipt.id).limit(limit).offset(offset)
     return list(session.scalars(query))
 
 

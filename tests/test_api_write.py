@@ -876,6 +876,108 @@ def test_export_refuses_rather_than_truncating(admin_client, monkeypatch):
     assert "narrow" in response.text.lower()
 
 
+def test_export_query_pages_without_repeating_or_skipping(
+    session_factory, receipt_id, other_receipt_id
+):
+    """``offset`` walks the total order ``created_at, id`` establishes.
+
+    Paged one row at a time, the union of the pages is exactly the unpaged
+    result and no id appears twice. Asserted over ids rather than over ORM
+    identities, because two sessions return different instances for one row.
+    """
+    from receipts.review.serializers import query_export_receipts
+
+    def page(offset: int) -> list[str]:
+        with session_factory() as session:
+            rows = query_export_receipts(
+                session, status=None, merchant_id=None, date_from=None,
+                date_to=None, min_confidence=None, limit=1, offset=offset,
+            )
+            return [str(row.id) for row in rows]
+
+    with session_factory() as session:
+        unpaged = [
+            str(row.id)
+            for row in query_export_receipts(
+                session, status=None, merchant_id=None, date_from=None,
+                date_to=None, min_confidence=None, limit=100,
+            )
+        ]
+
+    # Anti-vacuity: a fixture yielding fewer than two rows would let a broken
+    # offset pass, because page 0 alone would equal the unpaged result.
+    assert len(unpaged) >= 2, "fixture must produce at least two exportable receipts"
+
+    walked: list[str] = []
+    for offset in range(len(unpaged)):
+        walked.extend(page(offset))
+
+    assert walked == unpaged
+    assert len(set(walked)) == len(walked)
+    assert page(len(unpaged)) == []
+
+
+def test_export_query_pages_a_created_at_tie_without_losing_a_row(session_factory):
+    """The ``id`` half of the order is what makes it total, and paging needs total.
+
+    Two receipts sharing a ``created_at`` are ordered only by ``id``. Without
+    that tie-break the database may return them in either order per query, and
+    a paged walk would then repeat one and skip the other.
+    """
+    from datetime import UTC, datetime
+
+    from receipts.persist.models import Receipt
+    from receipts.review.serializers import query_export_receipts
+
+    shared = datetime(2026, 7, 4, 12, 0, 0, tzinfo=UTC)
+    ids = [uuid.uuid4(), uuid.uuid4()]
+    with session_factory() as session:
+        for index, receipt_uuid in enumerate(ids):
+            session.add(
+                Receipt(
+                    id=receipt_uuid,
+                    status=ReceiptStatus.AUTO_APPROVED,
+                    confidence=Decimal("0.900"),
+                    merchant_name_raw=f"TIED {index}",
+                    currency="USD",
+                    total=Decimal("1.00"),
+                    image_key=make_image_key(receipt_uuid, "original"),
+                    image_phash="",
+                    created_at=shared,
+                )
+            )
+        session.commit()
+
+    def page(offset: int) -> list[str]:
+        with session_factory() as session:
+            return [
+                str(row.id)
+                for row in query_export_receipts(
+                    session, status=None, merchant_id=None, date_from=None,
+                    date_to=None, min_confidence=None, limit=1, offset=offset,
+                )
+            ]
+
+    with session_factory() as session:
+        unpaged = [
+            str(row.id)
+            for row in query_export_receipts(
+                session, status=None, merchant_id=None, date_from=None,
+                date_to=None, min_confidence=None, limit=100,
+            )
+        ]
+
+    tied = [str(receipt_uuid) for receipt_uuid in ids]
+    # Anti-vacuity: if the two rows did not land adjacent under one timestamp,
+    # this test is not exercising a tie at all.
+    positions = sorted(unpaged.index(one) for one in tied)
+    assert positions[1] - positions[0] == 1, "the two tied rows should be adjacent"
+
+    walked = [one for offset in range(len(unpaged)) for one in page(offset)]
+    assert walked == unpaged
+    assert sorted(one for one in walked if one in tied) == sorted(tied)
+
+
 # --------------------------------------------------------------------------- #
 # Fix round 1 (F1, F2, F3): a leaked temp file, an unbounded read, and an
 # N+1 a docstring claimed did not exist.
