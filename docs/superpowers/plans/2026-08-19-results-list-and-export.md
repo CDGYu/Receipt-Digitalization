@@ -476,7 +476,12 @@ Append to `frontend/tests/client.test.ts`. That file stubs fetch with
 ```ts
 /** A binary body, which `jsonResponse` cannot express. */
 function blobResponse(status: number, body: string, headers?: Record<string, string>): Response {
-  return new Response(new Blob([body]), { status, headers })
+  // Encoded bytes, not a `Blob`: under `environment: 'jsdom'` the global
+  // `Blob` is jsdom's and has no `stream()`, while jsdom supplies no
+  // `Response`, so the global `Response` is Node's undici -- which duck-types
+  // the jsdom Blob as blob-like and then calls `stream()` on it. Measured:
+  // `TypeError: object.stream is not a function`. The two can never combine.
+  return new Response(new TextEncoder().encode(body), { status, headers })
 }
 
 describe('requestBlob', () => {
@@ -626,7 +631,12 @@ Copy those three rather than inventing new ones.
 ```ts
 /** A binary body, which `jsonResponse` cannot express. */
 function blobResponse(status: number, body: string, headers?: Record<string, string>): Response {
-  return new Response(new Blob([body]), { status, headers })
+  // Encoded bytes, not a `Blob`: under `environment: 'jsdom'` the global
+  // `Blob` is jsdom's and has no `stream()`, while jsdom supplies no
+  // `Response`, so the global `Response` is Node's undici -- which duck-types
+  // the jsdom Blob as blob-like and then calls `stream()` on it. Measured:
+  // `TypeError: object.stream is not a function`. The two can never combine.
+  return new Response(new TextEncoder().encode(body), { status, headers })
 }
 
 /** Capture the anchor `downloadExportWorkbook` builds, without navigating.
