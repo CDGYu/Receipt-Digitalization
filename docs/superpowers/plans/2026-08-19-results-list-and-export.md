@@ -28,6 +28,7 @@ Copied from the spec and the repo's non-negotiables. **Every task's requirements
 - **Commit messages are ASCII only** — use `--` where you want an em dash. Git Bash heredocs break on non-ASCII in this environment; `git commit -m` with a plain ASCII string is fine.
 - **All existing tests pass unmodified.** Anything that seems to need an existing test changed is a **stop-and-report**, not a licence to edit it. Task 5 has the one sanctioned exception, and it is additive.
 - Run `python -m pytest` (bare — `pyproject.toml` sets `addopts = "-q"`, so `-q` prints no pass count). Frontend: `npm test` **and** `npm run typecheck`, which `npm test` does not do.
+- **`@testing-library/jest-dom` is NOT a dependency here and there is no `setupFiles`.** `toBeInTheDocument`, `toHaveTextContent` and their siblings do not exist — using one is a `TypeError` at the assertion, not a failing expectation, so a test written with them cannot even report the thing it was checking. Use the repo's own idiom: `expect(screen.queryByRole(...)).toBeNull()`, `expect(el.textContent).toMatch(...)`.
 - **`vi.unstubAllGlobals()` does not undo `vi.spyOn`, and nothing in this repo sets `restoreMocks`.** A spy therefore outlives the test that installed it and is handed to the next one. Measured in Task 4: a `document.createElement` spy leaked across tests, so the second test received the *first* test's element with its state already set, and an assertion about a default value could not fail — deleting the constant it guarded left the suite green. **Any test file that calls `vi.spyOn` needs its own `afterEach(() => vi.restoreAllMocks())`.**
 - **Where a code block in this plan and the linter disagree, the linter wins.** `ruff` here sets `line-length = 100` and enables `UP017`, which prefers `datetime.UTC` over `timezone.utc`. Rewrap or substitute, preserve the semantics exactly, and say in your report that you did. This is not licence to change behaviour — only spelling and layout.
 
@@ -1001,4 +1002,45 @@ git commit -m "feat(ui): /app/receipts is the fourth screen"
 
 *(This plan does not self-amend. Append findings here as they are found, with the date. Read this section before trusting any task above — every milestone in this repo's history has found defects in its own plan, and every one was the controller's.)*
 
-- *(none yet)*
+**2026-08-19 — nine defects, every one the controller's, every one found by an implementer or
+reviewer who measured instead of transcribing. Listed in the order they were found.**
+
+1. **Task 6's Files block named a test file no step in it touches** (`receipts-screen.test.tsx`,
+   which belongs to Task 5). Found by the pre-flight scan before any dispatch. Left alone it reads
+   as licence to edit another task's green tests.
+2. **Task 2's brief never mentioned `PAGINATED_PATHS`.** `test_the_behavioural_cases_cover_every_paginated_route`
+   derives the paginated-route set from the built app, so a new paginated route fails it by
+   construction. The implementer stopped rather than edit a test it was not told to touch.
+3. **Task 1's `created_at`-tie test could not witness the tie**, and its anti-vacuity guard was a
+   tautology: `session_factory` seeds zero receipts, so the table held exactly the two rows the
+   test inserted, `positions` was always `[0, 1]`, and the guard could never fail. Closed by
+   pinning the emitted `ORDER BY` instead; the guard was deleted rather than rewritten.
+4. **Task 2's `_listed_receipt_ids` claimed `limit=2` "forces more than one page"**; the fixture
+   yields exactly two exportable receipts, so `has_more` was `False` on the first page and the loop
+   never ran. Measured with a request-counting plugin: two requests, both at `offset=0`. The
+   route's `has_more: True` was therefore pinned by nothing.
+5. **Task 3's `blobResponse` fixture cannot run in this environment.** `new Response(new Blob([...]))`
+   throws `TypeError: object.stream is not a function` — under jsdom the global `Blob` is jsdom's
+   (no `stream()`) while the global `Response` is undici's, and Vitest's jsdom env replaces `Blob`
+   but not `Response`. Three tests died in the fixture before reaching the code under test.
+6. **Task 3's brief mandated an unguarded `await response.blob()`** where the sibling `request`
+   guards its body read and converts a failure into `ApiError` with a status. A connection dropped
+   mid-download — the likeliest real failure of a large `.xlsx` — rejected with a raw `TypeError`.
+7. **Task 3's tests could not see the `ApiError` guarantee the task states.** `rejects.toThrow(string)`
+   is a substring match on the message and passes for any `Error` subclass, so `new Error(...)` in
+   place of either throw left all five tests green — invisible to the whole 391-test suite.
+8. **Task 4's `spyOnAnchorClick` left the fallback-filename test unable to fail.** `vi.unstubAllGlobals()`
+   does not undo `vi.spyOn`, so the `document.createElement` spy leaked and the next test received
+   the previous anchor with `download` already set. `FALLBACK_FILENAME` was deletable with the
+   suite green. Also: `anchor.href` and the fetched blob were pinned by nothing, and
+   `{limit: 50, offset: 50}` used one value twice so a swap of the two parameters was undetectable.
+9. **Task 5's fixtures used `@testing-library/jest-dom` matchers that do not exist here.**
+   `toBeInTheDocument` / `toHaveTextContent` are a `TypeError` at the assertion rather than a
+   failing expectation, so such a test cannot even report what it was checking. Also, the brief
+   promised **one** additive edit to `stylesheets.test.ts`; two are required — the `CENSUS` entry
+   and the hard-coded stylesheet count, which is an equality by design so that a new stylesheet
+   lands there.
+
+**The shape worth carrying:** three of the nine were assertions that could not fail, and two more
+were "proofs" that were themselves wrong. Not one was a defect in shipped behaviour. Every one was
+caught by someone running the mutation rather than reasoning about it.
