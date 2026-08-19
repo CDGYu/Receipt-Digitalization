@@ -1985,10 +1985,16 @@ git log --oneline refs/remotes/origin/main..main  # what a push would send
 python scripts/verify.py                          # background it; exceeds a 2-min timeout
 ```
 
-**`main` IS NOT PUSHED.** That is the one piece of state this file will state
-outright, because it was true at the moment of writing and the command above is
-what settles it. Every `main` push is a one-time authorization the push
-consumes; the last one was consumed by the push it authorised. **Ask.**
+**No push state is written here, and that is deliberate.** The command above is
+the answer. **Every `main` push is a one-time authorization the push consumes**,
+so the next one needs its own fresh ask no matter what the command says.
+
+*(An earlier draft of this very refresh said "`main` IS NOT PUSHED", defending
+it as the one piece of state worth stating outright. It was true when committed
+and **false within the hour**, because the push it was describing then happened.
+That is ADR-0032 §2 — a claim can rot inside the commit that carries it — and
+this file had already learned to delete push state once before. It got
+reintroduced anyway. Read the command.)*
 
 **Last full controller-run of `python scripts/verify.py`: 2026-08-20 at the
 merged tip, all five gates PASS.** Everything committed after it is this handoff
