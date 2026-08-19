@@ -149,3 +149,47 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
   return parseSuccess<T>(response, path)
 }
+
+/** The filename a `Content-Disposition: attachment` header names, or `null`.
+ *
+ *  Deliberately narrow: it reads the quoted `filename="..."` form the export
+ *  route actually sends and returns `null` for anything else, rather than
+ *  growing a parser for RFC 6266's full grammar including `filename*`. A
+ *  caller that gets `null` supplies its own name; a caller that gets a wrong
+ *  name would not know.
+ */
+function attachmentFilename(response: Response): string | null {
+  const header = response.headers.get('Content-Disposition')
+  const match = header?.match(/filename="([^"]+)"/)
+  return match ? match[1] : null
+}
+
+/** `request`, for a body that is not JSON.
+ *
+ *  Everything up to `response.ok` is identical -- same credentials, same 401
+ *  side effect, same `ApiError` carrying the server's own message -- because
+ *  **the export route's failures are still JSON even though its successes are
+ *  not.** Only the success path differs.
+ *
+ *  This exists because `request<T>` unconditionally calls `response.text()`
+ *  and `JSON.parse`s it, so a workbook reaches the caller as
+ *  `expected JSON from /export/xlsx` rather than as bytes.
+ */
+export async function requestBlob(
+  path: string,
+  init?: RequestInit,
+): Promise<{ blob: Blob; filename: string | null }> {
+  const response = await fetch(path, {
+    ...init,
+    credentials: 'same-origin',
+    headers: mergeHeaders(init),
+  })
+  if (response.status === 401) {
+    unauthorizedHandler()
+    throw new ApiError(401, await errorMessage(response))
+  }
+  if (!response.ok) {
+    throw new ApiError(response.status, await errorMessage(response))
+  }
+  return { blob: await response.blob(), filename: attachmentFilename(response) }
+}

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
-import { ApiError, request, onUnauthorized } from '../src/api/client'
+import { ApiError, request, requestBlob, onUnauthorized } from '../src/api/client'
 
 function jsonResponse(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), {
@@ -194,5 +194,68 @@ describe('request headers', () => {
     body.append('file', new Blob(['x']), 'receipt.jpg')
     await request('/upload', { method: 'POST', body })
     expect(sentHeaders(fetchMock).get('Content-Type')).toBeNull()
+  })
+})
+
+/** A binary body, which `jsonResponse` cannot express.
+ *
+ *  The bytes go in as a `Uint8Array` rather than as `new Blob([body])`, which
+ *  throws `TypeError: object.stream is not a function` here. Under
+ *  `environment: 'jsdom'` the two globals come from different implementations:
+ *  jsdom supplies `Blob` (and its Blob has no `stream()` -- measured on jsdom
+ *  30.0.1) while jsdom supplies no `Response` at all, so `Response` is Node's.
+ *  Node's constructor accepts the jsdom Blob as blob-like on its
+ *  `arrayBuffer`/`Symbol.toStringTag` duck-type and then calls `stream()` on
+ *  it. A `Uint8Array` is read by the same one implementation at both ends.
+ */
+function blobResponse(status: number, body: string, headers?: Record<string, string>): Response {
+  return new Response(new TextEncoder().encode(body), { status, headers })
+}
+
+describe('requestBlob', () => {
+  it('returns the body as a blob on success', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(blobResponse(200, 'xlsx-bytes')))
+    const { blob } = await requestBlob('/export/xlsx')
+    expect(await blob.text()).toBe('xlsx-bytes')
+  })
+
+  it('reads the filename out of Content-Disposition', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        blobResponse(200, 'x', {
+          'Content-Disposition': 'attachment; filename="receipts-export.xlsx"',
+        }),
+      ),
+    )
+    const { filename } = await requestBlob('/export/xlsx')
+    expect(filename).toBe('receipts-export.xlsx')
+  })
+
+  it('reports no filename when the header is absent, rather than inventing one', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(blobResponse(200, 'x')))
+    const { filename } = await requestBlob('/export/xlsx')
+    expect(filename).toBeNull()
+  })
+
+  it("surfaces the server's message on a 400, not a generic one", async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        jsonResponse(400, { error: { message: 'narrow the filter and try again' } }),
+      ),
+    )
+    await expect(requestBlob('/export/xlsx')).rejects.toThrow('narrow the filter and try again')
+  })
+
+  it('fires the unauthorized handler on a 401, like request does', async () => {
+    const handler = vi.fn()
+    onUnauthorized(handler)
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(jsonResponse(401, { error: { message: 'not authenticated' } })),
+    )
+    await expect(requestBlob('/export/xlsx')).rejects.toThrow()
+    expect(handler).toHaveBeenCalledOnce()
   })
 })
