@@ -51,7 +51,15 @@ function blobResponse(status: number, body: string, headers?: Record<string, str
 /** Capture the anchor `downloadExportWorkbook` builds, without navigating.
  *
  *  jsdom does not act on `click`, so nothing escapes the test; the spy exists
- *  to read `download` and `href` back off the element. */
+ *  to read `download` and `href` back off the element -- both of which the
+ *  header test does read, so this is a description of the file and not of an
+ *  intention.
+ *
+ *  `createObjectURL` is stubbed for two jobs at once: it makes the object URL
+ *  a known constant (`blob:stub`) that `href` and `revokeObjectURL` can be
+ *  pinned against, and it records the blob it was handed, which is the only
+ *  link between the bytes `requestBlob` returned and the thing the anchor
+ *  points at. Read it back with `vi.mocked(URL.createObjectURL).mock.calls`. */
 function spyOnAnchorClick(): HTMLAnchorElement {
   vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:stub')
   const anchor = document.createElement('a')
@@ -62,18 +70,38 @@ function spyOnAnchorClick(): HTMLAnchorElement {
 
 describe('fetchExportReceipts', () => {
   it('asks for a page with the limit and offset it was given', async () => {
+    // **Distinct values, and the whole URL.** `{limit: 50, offset: 50}` cannot
+    // tell the two parameters apart -- swapping the `query.set` calls passed --
+    // and `toContain('limit=50')` is satisfied by `limit=500` as well.
     const fetchMock = stub(jsonResponse(200, { items: [], has_more: false }))
-    await fetchExportReceipts({ limit: 50, offset: 50 })
-    const url = String(fetchMock.mock.calls[0]?.[0])
-    expect(url).toContain('limit=50')
-    expect(url).toContain('offset=50')
+    await fetchExportReceipts({ limit: 25, offset: 50 })
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('/export/receipts?limit=25&offset=50')
   })
 
   it('asks for the export scope, not the unfiltered receipts list', async () => {
     // The whole design rests on this path. `/receipts` would silently widen it.
-    const fetchMock = stub(jsonResponse(200, { items: [], has_more: false }))
-    await fetchExportReceipts()
-    expect(String(fetchMock.mock.calls[0]?.[0])).toContain('/export/receipts')
+    // A non-empty page with `has_more: true`, so that a body invented by this
+    // function rather than read off the response cannot match.
+    const page = {
+      items: [
+        {
+          id: '1f0b2c3d',
+          status: 'needs_review',
+          confidence: '0.42',
+          merchant_name_raw: 'Kopi Roasters',
+          txn_date: '2026-08-01',
+          currency: 'PHP',
+          total: '19.99',
+          created_at: '2026-08-01T09:15:00+00:00',
+        },
+      ],
+      has_more: true,
+    }
+    const fetchMock = stub(jsonResponse(200, page))
+    await expect(fetchExportReceipts()).resolves.toEqual(page)
+    // Exactly this path, which pins the suffix ternary too: with no params the
+    // query string is omitted entirely, so a bare trailing `?` fails here.
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('/export/receipts')
   })
 })
 
@@ -87,6 +115,18 @@ describe('downloadExportWorkbook', () => {
     const anchor = spyOnAnchorClick()
     await downloadExportWorkbook()
     expect(anchor.download).toBe('receipts-export.xlsx')
+    // **A `download` anchor with no `href` downloads nothing in a browser**, and
+    // until this line every test passed with `anchor.href = url` deleted -- the
+    // feature's whole user-visible effect could regress green. Read off the
+    // property rather than `getAttribute`: measured, jsdom leaves a `blob:` URL
+    // opaque, so both return exactly the assigned string here.
+    expect(anchor.href).toBe('blob:stub')
+    // ...and that URL is made from the bytes that arrived. Nothing else ties
+    // `requestBlob`'s body to the anchor, so `URL.createObjectURL(new Blob())`
+    // also passed. Asserted by content, not `toBeInstanceOf(Blob)`: the body
+    // comes back as Node's Blob, which is not the jsdom global (measured).
+    const created = vi.mocked(URL.createObjectURL).mock.calls[0]?.[0]
+    expect(await (created as Blob).text()).toBe('x')
   })
 
   it('falls back to a constant name when the header is absent', async () => {
@@ -101,6 +141,9 @@ describe('downloadExportWorkbook', () => {
     const revoke = vi.spyOn(URL, 'revokeObjectURL')
     spyOnAnchorClick()
     await downloadExportWorkbook()
-    expect(revoke).toHaveBeenCalledOnce()
+    // The URL it created, not merely *a* URL: revoking some other string leaves
+    // the blob attached to the document for its lifetime, and a bare call count
+    // cannot see that.
+    expect(revoke).toHaveBeenCalledExactlyOnceWith('blob:stub')
   })
 })
