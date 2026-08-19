@@ -907,7 +907,7 @@ git commit -m "feat(ui): a results list, with the export button admins alone see
 
 **Files:**
 - Modify: `frontend/src/route.ts`, `frontend/src/main.tsx`
-- Test: `frontend/tests/admin-screen.test.tsx` (additive — this is where the `currentRoute` cases live), `frontend/tests/receipts-screen.test.tsx`
+- Test: `frontend/tests/admin-screen.test.tsx` (additive — this is where the `currentRoute` cases live). **That is the only test file this task touches**; `receipts-screen.test.tsx` belongs to Task 5 and is already green.
 
 **Interfaces:**
 - Consumes: `ReceiptsScreen` from Task 5.
