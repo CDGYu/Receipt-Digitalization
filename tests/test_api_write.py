@@ -918,11 +918,15 @@ def test_export_query_pages_without_repeating_or_skipping(
 
 
 def test_export_query_pages_a_created_at_tie_without_losing_a_row(session_factory):
-    """The ``id`` half of the order is what makes it total, and paging needs total.
+    """A paged walk over a tied pair returns every row exactly once.
 
-    Two receipts sharing a ``created_at`` are ordered only by ``id``. Without
-    that tie-break the database may return them in either order per query, and
-    a paged walk would then repeat one and skip the other.
+    Both receipts are seeded with one ``created_at``, which is the case a
+    paged walk is likeliest to lose a row on. This pins the walk, not the
+    tie-break that makes the order total: SQLite returns tied rows in a
+    stable order for repeated identical queries, so these assertions stay
+    green even with ``Receipt.id`` dropped from the ``ORDER BY``. That clause
+    is pinned separately, by asserting the emitted SQL rather than the row
+    order, in ``test_export_query_orders_by_created_at_then_id`` below.
     """
     from datetime import UTC, datetime
 
@@ -968,14 +972,48 @@ def test_export_query_pages_a_created_at_tie_without_losing_a_row(session_factor
         ]
 
     tied = [str(receipt_uuid) for receipt_uuid in ids]
-    # Anti-vacuity: if the two rows did not land adjacent under one timestamp,
-    # this test is not exercising a tie at all.
-    positions = sorted(unpaged.index(one) for one in tied)
-    assert positions[1] - positions[0] == 1, "the two tied rows should be adjacent"
-
     walked = [one for offset in range(len(unpaged)) for one in page(offset)]
     assert walked == unpaged
     assert sorted(one for one in walked if one in tied) == sorted(tied)
+
+
+def test_export_query_orders_by_created_at_then_id(session_factory):
+    """``created_at`` leads and ``id`` breaks its ties, asserted on the SQL.
+
+    Paging is only safe over a *total* order, and ``created_at`` alone is not
+    one: it is ``server_default=sa.func.now()``, which on SQLite is
+    ``CURRENT_TIMESTAMP`` at second resolution, so same-second inserts share
+    it. No behavioural test in this module can witness the ``id`` tie-break --
+    SQLite orders tied rows stably across repeated identical queries, so a
+    paged walk agrees with the unpaged list with or without it. Asserting the
+    emitted clause instead does not depend on that behaviour: it fails as soon
+    as the tie-break leaves the query, whichever engine compiled it.
+    """
+    from receipts.review.serializers import query_export_receipts
+
+    statements: list[str] = []
+
+    def _record(conn, cursor, statement, parameters, context, executemany):
+        statements.append(statement)
+
+    with session_factory() as session:
+        engine = session.get_bind()
+        event.listen(engine, "before_cursor_execute", _record)
+        try:
+            query_export_receipts(
+                session, status=None, merchant_id=None, date_from=None,
+                date_to=None, min_confidence=None, limit=1, offset=0,
+            )
+        finally:
+            event.remove(engine, "before_cursor_execute", _record)
+
+    ordered = [one for one in statements if "ORDER BY" in one]
+    assert len(ordered) == 1, f"expected exactly one ordered SELECT, got {statements}"
+    order_by = ordered[0][ordered[0].index("ORDER BY"):]
+
+    assert "receipts.created_at" in order_by, f"created_at missing from: {order_by}"
+    assert "receipts.id" in order_by, f"the id tie-break is missing from: {order_by}"
+    assert order_by.index("receipts.created_at") < order_by.index("receipts.id")
 
 
 # --------------------------------------------------------------------------- #
