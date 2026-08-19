@@ -151,16 +151,20 @@ function bodyRows(table: HTMLElement): HTMLTableRowElement[] {
 // --------------------------------------------------------------------------- //
 
 describe('the route switch, which is deliberately not a router', () => {
-  it('maps each of the three paths', () => {
+  it('maps each of the four paths', () => {
     expect(currentRoute('/app/login')).toBe('login')
     expect(currentRoute('/app/admin')).toBe('admin')
+    expect(currentRoute('/app/receipts')).toBe('receipts')
     expect(currentRoute('/app/review')).toBe('review')
   })
 
-  it('keeps the admin route across a trailing slash, and defaults everything else', () => {
+  it('keeps a named route across a trailing slash, and defaults everything else', () => {
     // The backend serves a history fallback (`_SpaFiles(..., html=True)`), so
-    // `/app/admin` and `/app/admin/` are both real reload targets.
+    // `/app/admin` and `/app/admin/` are both real reload targets, and so are
+    // `/app/receipts` and `/app/receipts/`. Both branches use `startsWith` for
+    // exactly this reason; equality would drop the slashed form into the queue.
     expect(currentRoute('/app/admin/')).toBe('admin')
+    expect(currentRoute('/app/receipts/')).toBe('receipts')
     expect(currentRoute('/app/')).toBe('review')
     expect(currentRoute('/')).toBe('review')
     expect(currentRoute('/app/anything-else')).toBe('review')

@@ -24,19 +24,22 @@ import { ErrorBoundary } from './ErrorBoundary'
 import { currentRoute } from './route'
 import { currentIdentity, hydrateIdentity, isSignedIn, setSignedIn, subscribe } from './session'
 import { LoginPage } from './login/LoginPage'
+import { ReceiptsScreen } from './receipts/ReceiptsScreen'
 import { ReviewScreen } from './review/ReviewScreen'
 import { SignOutControl } from './SignOutControl'
 import { ThemeControl } from './ThemeControl'
 
-/** Three screens, no routing library -- three paths do not need one.
+/** Four screens, no routing library -- four paths do not need one.
  *
  * **Every client-side path must keep its final segment free of a dot.** Task
  * 1's mount only falls back to the shell for requests whose last segment has no
  * file extension (`_names_a_file` in src/receipts/review/api.py); a path like
  * `/app/receipt/inv-2026.01` is read as a missing *file* and gets a 404 rather
- * than the app. `/app/login` and `/app/review` are safe. Anything built from
- * receipt data -- an id, a merchant name, an uploaded filename -- is not, so it
- * belongs in a query string, not in a path segment.
+ * than the app. `/app/login`, `/app/review`, `/app/admin` and `/app/receipts`
+ * are safe. Anything built from receipt data -- an id, a merchant name, an
+ * uploaded filename -- is not, so it belongs in a query string, not in a path
+ * segment. That is why the results list's rows are not links in v1: a row
+ * carries a receipt id, and `/app/receipt/inv-2026.01` would 404 on reload.
  *
  * Session state lives in `./session` rather than in this component's `useState`,
  * and the 401 handler is registered when that module is *imported* -- before
@@ -97,14 +100,23 @@ function App() {
   if (!signedIn) {
     return <LoginPage onSignedIn={() => setSignedIn(true)} />
   }
+  // Read once into a local and switched on twice, rather than called per branch:
+  // two `currentRoute()` calls would be two reads of `window.location.pathname`
+  // in a single render, which is what the docstring above promises there is not.
+  const route = currentRoute()
   return (
     <>
       <header>
         <ThemeControl />
         <SignOutControl />
       </header>
-      {currentRoute() === 'admin' ? (
+      {route === 'admin' ? (
         <AdminScreen identity={identity} now={Date.now()} />
+      ) : route === 'receipts' ? (
+        // The same `identity` object `AdminScreen` gets, and nothing else: this
+        // screen reads `role` to decide whether to offer the export button, and
+        // needs no clock -- it renders no ages.
+        <ReceiptsScreen identity={identity} />
       ) : (
         <ReviewScreen />
       )}

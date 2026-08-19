@@ -5,7 +5,7 @@
  * `session.ts`'s signed-in guess; and the backend already serves a history
  * fallback (`_SpaFiles(..., html=True)` in src/receipts/review/api.py), so
  * `/app/admin` survives a reload without one. Adding a router would be a new
- * runtime dependency for three paths (ADR-0027 section 4).
+ * runtime dependency for four paths (ADR-0027 section 4).
  *
  * **Every path literal below must keep its last segment free of a dot**, and
  * the rule is pinned in `tests/admin-screen.test.tsx` rather than trusted:
@@ -22,7 +22,7 @@
  * and dropping a signed-in reviewer on the queue is better than telling them a
  * URL they did not type is wrong.
  */
-export type Route = 'login' | 'review' | 'admin'
+export type Route = 'login' | 'review' | 'admin' | 'receipts'
 
 export function currentRoute(pathname: string = window.location.pathname): Route {
   if (pathname === '/app/login') {
@@ -32,6 +32,12 @@ export function currentRoute(pathname: string = window.location.pathname): Route
   // the same route and not a silent fall-through to the review queue.
   if (pathname.startsWith('/app/admin')) {
     return 'admin'
+  }
+  // Same `startsWith`, for the same reason. The results list is reached only by
+  // typing or bookmarking the path -- nothing in the app links to it yet -- so
+  // the slashed form a browser offers is the likelier of the two to arrive.
+  if (pathname.startsWith('/app/receipts')) {
+    return 'receipts'
   }
   return 'review'
 }
