@@ -46,10 +46,13 @@ git log --oneline refs/remotes/origin/main..main  # what the pending push would 
 
 **The results list and the admin export button merged by true fast-forward on
 2026-08-20** — `b563242` -> `f0dc7b6`, **23 commits**, single parent each, zero
-merge commits. **No ADR**: the one candidate decision — the two export routes
-share a scope predicate and differ only in guard — is pinned behaviourally
-instead, and the whole-branch review judged the pin enough. It left
-**ISSUE-010 and ISSUE-011**. `docs/MEMORY.md`'s section is the record.
+merge commits. Decision: **ADR-0046** — the list is a projection of the export's
+query, and a screen nothing mounts is not delivered. It left **ISSUE-010 and
+ISSUE-011**. `docs/MEMORY.md`'s section is the record.
+
+*(The milestone closed with **no** ADR: the whole-branch review judged the
+behavioural pin enough. One was written the next day at the user's request,
+which is why ADR-0046 cites no branch commits and post-dates the merge.)*
 
 **The thing to know before touching it:** the list is a projection of the
 export's own query. `GET /export/receipts` pages `query_export_receipts`, the
@@ -166,334 +169,198 @@ re-review. The close then ran in full, and §0f is its record.
 
 ## START HERE — every open task, in one place
 
-Written 2026-08-11 because this file had grown to a thousand lines and the open
-work was scattered across nine sections. **This index is a pointer, not a
-second source** — each row names where the detail lives, and where a row and its
-section disagree, **the section wins** (ADR-0030: a finding is a claim, and so
-is a summary of one).
+**This index is a pointer, not a second source.** Each row names where the
+detail lives, and where a row and its source disagree, **the source wins**
+(ADR-0030: a finding is a claim, and so is a summary of one).
 
-### One track is closed. The other has not moved in a week.
+Rewritten 2026-08-20 to carry **every** open issue rather than the current
+milestone's. The register below is complete as of that date: eleven issues, of
+which nine are open.
 
-| track | state | where |
-|---|---|---|
-| ~~**T1 — finish Phase 6**~~ | **CLOSED 2026-08-18.** Merged by true fast-forward, nothing carries over. | **§0h** is the record, ADR-0043 |
-| ~~**T3 — buyer and blank rows**~~ | **CLOSED 2026-08-19.** Merged by true fast-forward, 45 commits. Left ISSUE-003..009. | `docs/MEMORY.md` section, ADR-0044 |
-| ~~**T4 — the results list (was "A1")**~~ | **CLOSED 2026-08-20.** Merged by true fast-forward, 23 commits. No ADR. Left ISSUE-010..011. | `docs/MEMORY.md` section, §A below |
-| **T2 — make accuracy measurable** | Blocked on hardware and one user action. **Phase 6 and the buyer capture are both built and unvalidated because of it.** | §D below, `docs/KNOWN_ISSUES.md` ISSUE-001 |
+### The tracks
 
-**T2 is the only track with nothing shipped against it.** Three milestones have
-now landed around it while it stayed blocked on the same user action. The
-user-facing request that was open in the previous version of this file — the
-results list — shipped on 2026-08-20; what remains beside T2 is a set of
-recorded issues, of which **ISSUE-010 is the cheapest and ISSUE-006 the most
-dangerous.** The ordered list below is the index; each row names
-where its detail lives, and **where a row and its section disagree, the section
-wins** (ADR-0030).
+| # | track | state | where the detail is |
+|---|---|---|---|
+| **T2** | **Make accuracy measurable** | **BLOCKED, and it is the thing gating the project.** Untouched by the last three milestones. | §1 below, `docs/KNOWN_ISSUES.md` ISSUE-001 |
+| T5 | Look at what shipped | **OPEN and cheap.** Nobody has opened `/app/receipts`. | §2 below, ISSUE-010 |
+| T6 | Correctness issues left recorded | **OPEN.** ISSUE-005, 006, 007, 008, 009. | §3 below |
+| T7 | Phases 7 and 8 | Partly blocked on T2. | §4 below |
+| T8 | Earlier-phase leftovers | Open, unblocked, low priority. | §5 below |
+| ~~T1~~ | ~~Phase 6 merchants~~ | **CLOSED 2026-08-18.** ADR-0043. | `docs/MEMORY.md` |
+| ~~T3~~ | ~~Buyer and blank rows~~ | **CLOSED 2026-08-19.** ADR-0044, ADR-0045. | `docs/MEMORY.md` |
+| ~~T4~~ | ~~The results list ("A1")~~ | **CLOSED 2026-08-20.** ADR-0046. | `docs/MEMORY.md`, §7 |
+
+**If you want one sentence:** the cheapest valuable thing is **T5** (open the
+screen, click Export); the most important thing is **T2** (a model that can read
+a receipt), and it has been blocked since 2026-07-28.
 
 ---
 
-# THE OPEN WORK, as of 2026-08-20 (main @ the pair commit)
+## THE COMPLETE ISSUE REGISTER
 
-**Read `docs/MEMORY.md`'s "The results list and the admin export button" section
-first** — it is the record of what just shipped, and two of the items below are
-things it deliberately did not do.
+**All eleven, as of 2026-08-20.** `docs/KNOWN_ISSUES.md` is the source for every
+row and **is not to be re-derived** — each entry there records the diagnosis,
+what was already fixed, and the exact steps to resume.
 
-*(The previous version of this section carried eighteen lines of leaked string
-concatenation — `" + EM + "` and `" + SEC + "` where an em dash and a section
-sign belonged — introduced by the commit that wrote it. They are gone because
-the section was rewritten, not patched. If you are generating this file from a
-script, **use the Write tool**: a Git Bash heredoc breaks on non-ASCII here, and
-that is what produced them.)*
-
-## A. What just shipped, so nobody looks for it
-
-**A1 — the results-list screen and the admin-only export button — is DONE**
-(2026-08-20, `b563242` -> `f0dc7b6`, 23 commits). It was the highest-value item
-in the previous version of this list. `/app/receipts` lists processed receipts;
-the export button renders only for an admin. **No filters, rows not clickable,
-by ruling.**
-
-Two things about it are worth knowing before touching that area:
-
-- **The list is a projection of the export's own query.** `GET /export/receipts`
-  pages `query_export_receipts`, the same function the workbook uses, so the two
-  cannot disagree about scope. Do not "simplify" it to `GET /receipts` — that
-  route applies no status exclusion and its `status` filter is a single
-  equality, which is the defect the whole milestone exists to close.
-- **The two export routes differ in guard and only in guard**, and that is
-  pinned. `require_user` for the list, `require_role(ROLE_ADMIN)` for the
-  workbook.
-
-## B. What this milestone left behind
-
-- **ISSUE-010 — nobody has opened `/app/receipts` in a browser.** The download
-  in particular has never run in one: a detached anchor plus a synchronous
-  `revokeObjectURL` are the documented cross-browser failure modes, `click` is
-  stubbed under jsdom, and `e2e/**` is excluded from the Vitest run. **This is
-  the highest-value unverified thing in the repository right now**, because it
-  is the milestone's entire user-visible effect.
-- **ISSUE-011 — a measured-false spelling in four test files.** Pre-existing;
-  this milestone removed one instance and deliberately left the rest, because a
-  fix wave editing four files it never touched is the over-reach ADR-0032 and
-  ADR-0042 both name.
-
-## C. What the 2026-08-19 milestone left behind, still open
-
-All seven are OPEN in `docs/KNOWN_ISSUES.md`. **ISSUE-006 first** — it is the
-only one with a silent-wrong-answer shape.
-
-| issue | one line | why it was not fixed |
+| issue | one line | state |
 |---|---|---|
-| **ISSUE-006** | A reviewer who mis-flags the **sole** purchase gets **zero findings at any severity** and the row silently leaves the export. All three golden receipts have that one-purchase shape. | The readability half is fixed; **surfacing the flag in the review UI is a design decision**, and the arithmetic pin needs the one-purchase shape. |
-| **ISSUE-003** | A blank pre-printed row drops the unit the form prints on it (`Lt.` on all six r001 rows). | The contract scopes a template row to its printed name; labelling it would create five permanently unearnable paths. |
-| **ISSUE-004** | Nothing checks a golden label against its photograph; per-label content rot is open **by design**. | Per-receipt pins are tautological or transcriptions. Re-reading the image is the only instrument. |
-| **ISSUE-005** | `R051`'s message promises printed order; its check accepts any permutation. | One-line fix, needs its own RED. |
-| **ISSUE-007** | `PROMPT_VERSION` is unenforced and reverting it passes the whole suite. | **Its easiest green is the defect.** Real fix: give `prompt_bundle_hash()` a production caller — a contract decision. |
-| **ISSUE-008** | `xlsx._purchases` and `rules._purchased` are identical predicates with nothing binding them. | Neither is wrong today; the risk is drift. A `LineItem.is_purchase` is the single source. |
-| **ISSUE-009** | `CorrectionPatch`'s docstring no longer describes the contract it validates. | Harmless because `extra="allow"`, but the prose and the schema both mislead. |
+| **ISSUE-001** | **The first real baseline run has never completed.** No accuracy number in this project is measured. Gates T2, Phase 6's success metric, P3.T6/P8.T1, and any precision claim. | **OPEN — the blocker** |
+| ISSUE-002 | A repair attempt's `extraction_runs.prompt_hash` names a prompt that was never sent. | OPEN, pre-existing, deliberately not fixed |
+| ISSUE-003 | A blank pre-printed row drops the unit the form prints on it (`Lt.` on all six r001 rows). | OPEN by design — labelling it creates five unearnable paths |
+| ISSUE-004 | Nothing checks a golden label against its photograph; per-label content rot is open. | OPEN **by design** — re-reading the image is the only instrument |
+| ISSUE-005 | `R051`'s message promises printed order; its check accepts any permutation. | OPEN — one-line fix, needs its own RED |
+| **ISSUE-006** | **A reviewer who mis-flags the *sole* purchase gets zero findings at any severity and the row silently leaves the export.** All three golden receipts have that shape. | **OPEN — the only silent-wrong-answer** |
+| ISSUE-007 | `PROMPT_VERSION` is unenforced; reverting it passes the whole suite. **Its easiest green is the defect.** | OPEN — needs a contract decision |
+| ISSUE-008 | `xlsx._purchases` and `rules._purchased` are identical predicates with nothing binding them. | OPEN — drift risk, not wrong today |
+| ISSUE-009 | `CorrectionPatch`'s docstring no longer describes the contract it validates; OpenAPI omits `buyer.*` and `is_template_row`. | OPEN — harmless, misleading |
+| **ISSUE-010** | **Nobody has opened `/app/receipts` in a browser, and the download has never run in one.** | **OPEN — cheapest high value** |
+| ISSUE-011 | A measured-false `class="undefined"` spelling survives in four test files. | OPEN — pre-existing, cosmetic |
 
-**Also left behind, not yet issues:** a `<fieldset>` with a legend for the buyer
-pair; and `_autosize` measuring the stored value rather than the rendered one,
-so a money column can display `####` in Excel — **unverifiable in-repo**,
-nothing here renders a spreadsheet.
+---
 
-## D. The blocking track — make accuracy measurable (ISSUE-001)
+## THE WORK, IN PRIORITY ORDER
 
-**Unchanged by the last two milestones, and still the thing that gates the
-project.** Steps 2, 3 and 4 were answered by running them on 2026-08-18; read
-them in `docs/KNOWN_ISSUES.md` rather than re-running (ADR-0039).
+### §1. T2 — make accuracy measurable (ISSUE-001). THE BLOCKER.
 
-- **Step 5, the local→Cloud escalation, is the open one and is the next real
-  build.** `make_client` returns one client, and nothing records which model
-  produced a kept extraction — without that no eval can attribute accuracy to a
-  model, and a good number could be hiding the fact that everything escalated.
-  Report the escalation *rate* beside the accuracy figure.
-- **Start from a measured constraint:** `_TOOLS_OFF_BY_DEFAULT` is keyed on the
-  **provider**, and the exception is per **model**. `granite3.2-vision:2b` and
-  `gemma4:cloud` are both provider `ollama`, so one `VLM_USE_TOOLS` cannot be
-  off for the local model and on for the cloud one. Widening the key to
+**Nothing in this project has a measured accuracy number.** Phase 6's merchant
+matching and the buyer capture are both **built and unvalidated** because of it.
+Three milestones have shipped around this without touching it.
+
+Steps 2, 3 and 4 were **answered by running them** on 2026-08-18 — read them in
+ISSUE-001 rather than re-running (**ADR-0039**: the local path is a liveness
+check only, and its §16 table means nothing about accuracy).
+
+- **Step 5 — build the local→Cloud escalation. THIS IS THE NEXT REAL BUILD.**
+  `make_client` returns one client, and **nothing records which model produced a
+  kept extraction** — without that no eval can attribute accuracy to a model,
+  and a good number could be hiding the fact that everything escalated. Report
+  the escalation **rate** beside the accuracy figure. Probably an ADR.
+  **Start from the measured constraint:** `_TOOLS_OFF_BY_DEFAULT` is keyed on
+  the **provider**, and the exception is per **model** — `granite3.2-vision:2b`
+  and `gemma4:cloud` are both provider `ollama`, so one `VLM_USE_TOOLS` cannot
+  be off for the local model and on for the cloud one. Widening the key to
   `(provider, model)`, or moving the choice into whatever selects the tier, is
-  that milestone's decision to make.
-- **No full baseline run has ever completed**, so Phase 6's merchant matching
-  and the buyer capture are both built and unvalidated. **Cloud egress is
-  authorised for the GOLDEN SET only.**
-- **Cloud inference is not deterministic at `temperature=0`** — two identical
-  `gemma4:cloud` runs disagreed. Repeats and a spread, or the figure is a sample
-  wearing a number's clothes.
+  this milestone's decision. **ADR-0002**'s 2026-08-18 correction records the
+  constraint and deliberately does not fix it.
+- **Step 6 — run the first real baseline**, detached, and commit the results
+  file. **`gemma4:cloud` DOES read the receipt** (2026-08-18, r002: merchant,
+  TIN, invoice, line item, both totals and payment all exact, 0 validation
+  errors, in 25 seconds). **User ruling: golden set only.**
+  **⚠ DO NOT REPORT A SINGLE RUN AS THE BASELINE.** Cloud inference is **not
+  deterministic at `temperature=0`** — two identical runs scored 55.56% and
+  61.11%. Repeats and a spread, or the figure is a sample wearing a number's
+  clothes.
+- **Step 7 — grow the golden set.** Three receipts cannot validate any accuracy
+  claim; one receipt is 33 percentage points. This gates the goal more
+  fundamentally than the model does.
+- **Step 8 — calibrate thresholds** (P3.T6 / P8.T1) on a held-out split.
 
-## E. Phases 7 and 8
+**Standing rulings that bound this work:** Ollama only, no hosted APIs
+(2026-08-14); high extraction accuracy is the goal, with no target number yet;
+cloud egress is authorised for the **golden set only** — routing production
+uploads to the cloud is a separate decision and has **not** been made.
+
+### §2. T5 — look at what shipped (ISSUE-010). CHEAPEST HIGH VALUE.
+
+**Nobody has opened `/app/receipts`.** Four things need a person, in descending
+order of risk:
+
+1. **The download has never run in a browser.** `downloadExportWorkbook`
+   (`frontend/src/api/receipts.ts`) builds a **detached** anchor, clicks it, and
+   revokes the object URL **synchronously** in a `finally`. Both are the
+   documented cross-browser failure modes for blob downloads. jsdom stubs
+   `click`, so every test passes either way. **This is the milestone's entire
+   user-visible effect.**
+2. **Two stacked negative margins** under the heading. The arithmetic is right;
+   `AdminScreen` does this once and nothing here has done it twice in a row.
+3. **Whether the not-extracted em dash reads as "missing"** in a right-aligned
+   cell rather than as a stray hairline.
+4. A `border-radius` on a `border-collapse: collapse` table, which browsers
+   ignore. **Pre-existing as a pattern** — `TaskTable` and `LineItemsTable` both
+   already do it, so it is a repo-wide question, not this screen's.
+
+**How:** `python scripts/seed_review_e2e.py --reset`, then
+`cd frontend && npx playwright test visual` (**the `visual` filter re-seeds**; a
+full run consumes its one queued task by design). Then open the screen as an
+admin *and* as a reviewer, and **click Export**.
+
+**Also still unseen, repo-wide: dark theme at any width, and 768.** The scope of
+what has ever been looked at is the *SUPERSEDED IN PART* block of
+`docs/superpowers/specs/2026-08-05-review-ui-browser-pass.md` — that block is
+the source; do not restate it.
+
+### §3. T6 — the recorded correctness issues
+
+**ISSUE-006 first.** It is the only one where a user gets a confidently wrong
+answer. The readability half is fixed; **surfacing the flag in the review UI is
+a design decision**, and the arithmetic pin needs the one-purchase shape rather
+than the two-purchase one. It touches the same screens as the results list, so
+read **ADR-0046** before changing either.
+
+Then, in rough order of cheapness: **ISSUE-005** (one line, needs its own RED),
+**ISSUE-008** (a `LineItem.is_purchase` on the schema is the single source),
+**ISSUE-009** (declarations plus a docstring), **ISSUE-011** (four deletions —
+say the class *ships unpainted*, do not describe the mechanism), **ISSUE-007**
+(needs a contract decision first: give `prompt_bundle_hash()` a production
+caller, which changes spec §16's filename), **ISSUE-002**, **ISSUE-003**,
+**ISSUE-004**.
+
+### §4. T7 — Phases 7 and 8
 
 - **P7.T1 self-consistency.** `run_consistency` exists in `extract/extractor.py`
-  with zero references in `pipeline.py`. Gate on `triage.is_handwritten`, never
-  `document_type`; consistency runs are never cached. **Cloud nondeterminism
-  raises its value** — it was scoped to handwriting, and r002 *is* handwritten.
-- **P3.T6 / P8.T1 threshold sweep + weights into `config/rules.yaml`** — blocked
-  on ISSUE-001.
-- **P8.T2 grow the held-out set.** The corpus target is 50–100 receipts; it is 3.
-  One receipt is 33 percentage points.
+  with **zero references in `pipeline.py`**. Gate on `triage.is_handwritten`,
+  **never `document_type`**; consistency runs are never cached. **Its value went
+  up for a reason it was not designed for**: cloud inference is nondeterministic
+  at `temperature=0`, and self-consistency is exactly that remedy. r002 *is*
+  handwritten, so the gate would fire.
+- **P3.T6 / P8.T1** threshold sweep + confidence weights into
+  `config/rules.yaml` — **blocked on ISSUE-001**.
+- **P8.T2** grow the held-out set. Target 50–100 receipts; it is 3.
 
-## F. Still open from earlier phases
+### §5. T8 — still open from earlier phases
 
-R060/R061 grounding decision (also gates bbox); score `is_handwritten` from
-triage too; `is_receipt` has no consumer (never hard-reject on it). See §6 below
-for the full list and §7 for what is deferred with rulings.
-
-## G. Blocked on the user — ask early, these gate other work
-
-1. **Rotate the Gemini API key at Google.** It was deleted from `.env` on
-   2026-08-18, and deleting it there **changes nothing about the exposure**.
-   *(Corrected under my own name: it was **never** in this repo's git
-   history — I claimed it was, verified four ways, and was wrong.)*
-2. **A browser pass on `/app/receipts`** (ISSUE-010) — and whether the download
-   actually works in a real browser. Cheapest while the surface is fresh.
-3. **`min-height: 60vh`** (item 14) — undecided.
-4. **Browser-pass I7** (item 12) — undecided.
-5. **Whether `main` gets pushed.** 24 commits are waiting; every push is a
-   one-time authorization the push consumes.
+R060/R061 grounding decision (also gates bbox highlighting); score
+`is_handwritten` from triage too; `is_receipt` has no consumer (**never
+hard-reject on it**). §6 below has the full list, §7 what is deferred with
+rulings.
 
 ---
 
+## BLOCKED ON THE USER — surface these, do not guess
 
-**T2's ordered steps, all recorded in ISSUE-001's 2026-08-14 ruling block:**
+1. **Rotate the Gemini API key at Google.** Deleted from `.env` 2026-08-18;
+   deleting it there **changes nothing about the exposure**. *(Corrected under
+   my own name: it was **never** in this repo's git history — I claimed it was,
+   verified four ways, and was wrong. The real exposure is that it was echoed to
+   a terminal on 2026-07-28.)*
+2. **A browser pass on `/app/receipts`** (ISSUE-010) — cheapest while the
+   surface is fresh, and the only way to learn whether the download works.
+3. **Do the public golden labels need scrubbing?** Real third-party names, TINs
+   and addresses. **Not a tidy-up:** the TIN is in **11 commits** of a public
+   repo, so it is a rewrite-history / go-private / accept-it decision.
+4. **`min-height: 60vh`** on the failure notice (item 14) — undecided.
+5. **Browser-pass I7** (item 12) — a 401 mid-review swaps in the login form with
+   no message. Touches **ADR-0024**'s contract, so it is a contract change, not
+   a drive-by fix.
+6. **Should the Playwright visual run become a sixth gate?** Recommended **no,
+   not yet** — it would pin 43 recorded undersized hit targets as the baseline.
+7. **Should the citation sweep become a repo script?** Recommended **no** —
+   every prose defect found needed a human to notice the *claim* was wrong.
+8. **R060/R061 grounding**, and the **two queued PAN scoped decisions** (the
+   grouping residual and the `{1,2}` separator) — all recommended **defer**.
 
-1. **Pick the Ollama runtime.** The user ruled **Ollama only — no hosted APIs**,
-   and **high extraction accuracy** as the goal. Those two plus this machine
-   (2-core i3, no usable GPU, one 2.5B model) are **over-constrained**. Decided
-   2026-08-14: keep `granite3.2-vision:2b` local as primary, add **Ollama Cloud**
-   as a confidence-triggered fallback, and move to a better-specced machine.
-   **Step 2 below now argues against the "local primary" half of that** — read it
-   before acting on this one.
-2. ~~**Give granite one fair test at `max_edge=2048`.**~~ **ANSWERED 2026-08-18,
-   and the answer is no.** Ran on r002 at 2048 with a **768 control**, same
-   commit, same scorer, timeout raised on both so it could not be a second
-   variable. **Core transcription accuracy is identical (2/13) at both
-   resolutions**; line-item F1 is 0.00 at both; and **2048 hallucinated two
-   fields to 768's zero**, including a date of `03-75-26` against a truth of
-   `2026-03-28`. Its higher headline number is entirely blank line-item rows
-   earning structural credit. **`granite3.2-vision:2b` is not a primary**, and
-   no machine changes that. ISSUE-001 has the table and the method — **do not
-   re-run it** (ADR-0039). Two claims died with it: *"granite reads nothing"*
-   (its **triage** pass reads the merchant name exactly, at both resolutions —
-   see ADR-0043's dated correction) and the whole 2026-07-29 **timing table**,
-   which reproduces in neither direction.
-3. ~~**Stand up Ollama Cloud.**~~ **ANSWERED 2026-08-18, and BOTH answers are
-   yes — on the free tier.** Signed in; **`gemma4:cloud`** is vision-capable,
-   reachable, and honours a `tools` payload properly (`finish_reason:
-   tool_calls`, arguments parsed into the requested schema). **This is the first
-   path to a real accuracy number since 2026-07-28.** Three things to carry:
-   **the paywall is per model** — `qwen3.5:cloud` and `kimi-k2.6:cloud` both
-   answer *"requires a subscription"* while `gemma4:cloud` runs; **a pull proves
-   nothing**, because it fetches a manifest and not weights, so only an inference
-   call distinguishes access from availability; and **`ollama signin` must run
-   inside the Docker container** (`docker exec -it ollama ollama signin`) — the
-   host CLI cannot even see the daemon, which listens on host `11435`.
-   **Nothing is pointed at it yet**: `.env` still names `granite3.2-vision:2b`,
-   and `VLM_BASE_URL` needs no change because the local daemon proxies.
-4. ~~**Set `VLM_USE_TOOLS=true`.**~~ **ANSWERED 2026-08-18: do NOT, on the local
-   path.** Ran r002 at 768 with the flag on against the same-day control, flag
-   as the only variable. **The `/v1` shim accepts a `tools` payload — no 400**,
-   so this issue's stated fear does not reproduce. **The extraction is
-   identical**, not merely equal-scoring: same nulls, same 24-entry mismatch
-   list. **But triage degrades, and in the field everything else depends on** —
-   `merchant_name_guess` goes from exactly right to **empty**, and
-   `lookup(session, name_guess)` keys off it, so enabling tool-use silently
-   disables Phase 6's hint-retrieval path (ADR-0043 decision 1). `legibility`
-   and `est_items` also regress; only `is_receipt` improves.
-   **`_TOOLS_OFF_BY_DEFAULT` keeping `ollama` is correct** — for a reason none
-   of the three previously written beside it. ISSUE-001 has the tables, the
-   three anti-vacuity checks, and the 5.5× speedup with its caveats.
-   **The ADR-0002 conflict this raised is RESOLVED (2026-08-18) and the rule was
-   not softened.** Step 3 measured tool-use working properly on `gemma4:cloud`,
-   so the non-negotiable is vindicated on a model that can read; granite is
-   recorded as a **per-model exception** in ADR-0002's dated correction. A 2.5B
-   model that reads nothing either way is evidence about that model, not against
-   schema-constrained output. **`VLM_USE_TOOLS=true` is right for the Cloud
-   tier and wrong for the local one** — which is the next bullet's problem.
-5. **Build the local→Cloud escalation. THIS IS THE NEXT REAL MILESTONE** — steps
-   2, 3 and 4 are all answered, and this is the first one that needs building
-   rather than running. Real design work: `make_client` returns one client, and
-   nothing records which model produced a kept extraction — without that no eval
-   can attribute accuracy to a model, and a good number could be hiding the fact
-   that everything escalated. Report the escalation *rate* beside the accuracy
-   figure. Probably an ADR.
-   **Start from a measured constraint rather than rediscovering it:**
-   `_TOOLS_OFF_BY_DEFAULT` is keyed on the **provider**, and the exception is per
-   **model** — `granite3.2-vision:2b` and `gemma4:cloud` are both provider
-   `ollama`, so one `VLM_USE_TOOLS` cannot be off for the local model and on for
-   the cloud one. Widening the key to `(provider, model)`, or moving the choice
-   into whatever selects the tier, is this milestone's decision to make.
-   ADR-0002's 2026-08-18 correction records it and **deliberately does not fix
-   it**.
-6. **Run the first real baseline**, detached, and commit the results file.
-   **`gemma4:cloud` DOES read the receipt** (2026-08-18, r002: merchant, TIN,
-   invoice, line item, both totals and payment all exact, 0 validation errors,
-   confidence 0.700, in 25 seconds). **User ruling: golden set only** — routing
-   production uploads to the cloud is a separate decision, not yet made.
-   **⚠ DO NOT REPORT A SINGLE RUN AS THE BASELINE.** Cloud inference is **not
-   deterministic at `temperature=0`** — two identical runs scored 55.56% and
-   61.11%, differing on whether `totals.subtotal` was read at all. A one-shot
-   number will move on its own and be read as a regression. Repeats and a spread,
-   or the figure is a sample wearing a number's clothes. Still unmeasured: the
-   free tier's rate limits, quotas and whether a full run completes on them.
-7. **Grow the golden set.** Three receipts cannot validate any accuracy claim —
-   one receipt is 33 percentage points. This gates the goal more fundamentally
-   than the model does.
-8. **Calibrate thresholds** (P3.T6 / P8.T1) on a held-out split.
+---
 
-**Also outstanding, security not accuracy:** the exposed Gemini key still sits
-commented in `.env` at 55 characters, unrotated since it was echoed to a terminal
-on 2026-07-28, in a repo that is public. Revoking it survives the Ollama-only
-ruling; reissuing it does not.
-
-### Step 0 — always, before anything
-
-Run the commands in the block above. Then read, in this order:
-`docs/MEMORY.md` (state + **review standards 1–26**) → the ADR index
-(`docs/adr/README.md`) → the ADRs its rows send you to. Your own memory index
-carries the cross-session lessons; **`docs/KNOWN_ISSUES.md` is ISSUE-001's home
-and is not to be re-derived** (ADR-0039 **§1** for the accuracy figures, §3 for
-the timing — this pointer said §3 for both until 2026-08-12, and §3 is scoped to
-the timing alone). **It holds a second issue as of 2026-08-18: ISSUE-002**, a
-repair attempt's `extraction_runs.prompt_hash` naming a prompt that was never
-sent. Pre-existing, deliberately not fixed, and put there rather than here
-**because this file is rewritten every session and that one is not.**
-
-### A. Needs no ruling — start here if you want to build something
-
-| # | Task | Where the detail is |
-|---|---|---|
-| ~~A1~~ | ~~**I6**~~ — **CLOSED 2026-08-14 (§0g).** | — |
-| ~~A2~~ | ~~**I8**~~ — **CLOSED 2026-08-14 (§0g).** | — |
-| ~~A3~~ | ~~**I9**~~ — **CLOSED 2026-08-14 (§0g).** | — |
-| A4 | Test-shape debt: the row-highlight pin on `.style.background`, the vacuous `getByText(/carol/)`, the class-name guard's three parked leaks | §1.5 |
-| A5 | §1.3's shipped residuals — the hardcoded `0.85`/`0.60` band, `.screen > div`, per-row labels, `--color-null` on `surface-active`, `SignOutControl`'s 4.39:1 `.error` in dark | §1.3 |
-| A6 | The citation residual — `path:NNN` citations, ~unaudited; resolve each against the line it points at. **No count: it is anchor-dependent** — measured 2026-08-12, requiring a directory separator gives 44 and not requiring one gives 72, against the 71 this row used to assert. Derive it with the anchor you intend | §1.2, ADR-0028 §5 |
-
-**A5's contrast item is visual, and so was everything A1–A3 closed.** ADR-0029 §4
-is the list of what a green `verify.py` cannot see; jsdom renders no colour and
-lays nothing out, so these need a browser and a person. **§0g is what that costs
-when nobody looks**: the milestone that closed A1–A3 shipped a layout regression
-past all five gates and ten reviews, and it was found only by measuring a
-browser. **The three screens it changed have since been seen** — at 1440 and 375
-in light, on 2026-08-14 — **and looking raised a question no measurement could**
-(§0g, and item 13 in "Blocked on me"). **Dark theme at any width, and 768, remain
-unseen at every surface.**
-
-### B. Needs a ruling from the user — do not guess
-
-All in **"Blocked on me"** below, with a recommendation each.
-**Numbers there are stable from 2026-08-11**; resolved items stay struck
-through rather than being removed, because renumbering aged citations three
-times in one day. New items are appended, never inserted — item **14** was
-added 2026-08-14.
-
-**[Corrected 2026-08-14 — this said "Seven live items".** Re-derived by
-enumerating the list rather than counting from memory: the live set was **nine**
-(1, 4, 6, 7, 8, 9, 10, 12, 13), and had been since item 12 was added. **No count
-replaces it** — the list is one screen below, it moves whenever an item is ruled
-on, and a number here is a second copy that only ever disagrees with the first.
-Read the list.**]**
-
-### C. Blocked on hardware, not on code
-
-**ISSUE-001.** No code change is pending — ADR-0002 makes the provider switch
-environment variables. **The readiness check this paragraph used to cite is
-about HOSTED wiring, and hosted providers are ruled out** (2026-08-14,
-Ollama-only); it is kept in ISSUE-001 as the record of what was tried, not as an
-instruction. **The remaining path is Ollama Cloud**, ISSUE-001's step 3.
-
-**"Blocked on hardware" is now the wrong heading for the local half.** Measured
-2026-08-18: `granite3.2-vision:2b` reads no more at `max_edge` 2048 than at 768
-— core accuracy identical — so it is **not blocked on a better machine, it is
-blocked on weights**. A better-specified box makes it faster, not correct.
-
-**Do not re-run the local baseline to see how bad it is.** Measured twice, seven
-weeks apart, and it got slower — 1896s for one receipt on 2026-08-11 against
-~1371s in July. That is **ADR-0039**, which also settles that a local run is a
-*liveness check* whose §16 table means nothing about accuracy, and that liveness
-artefacts never enter `eval/results/`.
-
-Blocked behind it: **P3.T6 / P8.T1** (threshold sweep, confidence weights into
-`config/rules.yaml`), **Phase 6**'s top-10-merchant accuracy metric, and any
-real precision claim. Phase 6 and 7 can be *built* without it — see §3 and §4.
-
-### D. Phases not yet started
-
-**Phase 6** merchants & few-shot (§3) · **Phase 7** self-consistency (§4) ·
-**Phase 8** the rest of the eval harness (§5) · earlier-phase leftovers (§6).
-Each names its own spec section and its blockers.
-
-### What is NOT open
-
-**Eval field accuracy is redefined (ADR-0040, §0d)** — the metric no longer has
-a ~40% floor a model reaches by producing nothing, and P8.T3's `null`-precision
-rule now covers every ratio the harness reports.
+## WHAT IS NOT OPEN — do not re-do these
 
 The deployment story is complete: entry point (**ADR-0035**), container
-(**ADR-0036**), CI (**ADR-0037**), guide (`docs/DEPLOYMENT.md`). The theme
-control (**ADR-0038**), the shared page bound (**ADR-0034**), the corrections
-read route (**ADR-0031**) and the CLI `--limit` bound all shipped. §1.6's
-"packaging gap" was **withdrawn** — it was never one.
+(**ADR-0036**), CI (**ADR-0037**), guide (`docs/DEPLOYMENT.md`). Eval field
+accuracy is redefined (**ADR-0040**, corrected by **ADR-0044**). Also shipped:
+the theme control (**ADR-0038**), the shared page bound (**ADR-0034**), the
+corrections read route (**ADR-0031**), the CLI `--limit` bound, merchant
+fingerprinting (**ADR-0043**), buyer/blank-row capture (**ADR-0044**), and the
+results list (**ADR-0046**). §1.6's "packaging gap" was **withdrawn** — it was
+never one.
 
 ---
 
@@ -514,6 +381,15 @@ read route (**ADR-0031**) and the CLI `--limit` bound all shipped. §1.6's
    in this file: `ls docs/adr/*.md | grep -v README | wc -l` (how many ADRs) and
    `grep -cE "^\| *\[?0[0-9]{3}" docs/adr/README.md` (how many index rows).
    Mandatory before touching the matching area:
+   - **0046** — *the list is a projection of the export's query, and a screen
+     nothing mounts is not delivered.* **Read before touching `/app/receipts`,
+     either export route, or any new screen or entry point.** Decision 1 is why
+     the list is not built on `GET /receipts`; decision 2 is the guard asymmetry
+     a later reader will want to "tidy" away; decision 3 is why a new paginated
+     route must join `PAGINATED_PATHS`; decision 5 is that **a screen nothing
+     mounts is deletable with every gate green**, which happened here in the
+     very next screen after a test was built to close it for `/app/admin`; and
+     decision 6 is that **a mutation which does not compile proves nothing**.
    - **0045** — *a brief is a claim about the tree, and relaying one makes it
      yours.* **Read before writing a plan, before dispatching any task, and
      before ordering work on a finding somebody else measured.** Decision 1
@@ -2024,8 +1900,9 @@ nine with their measurements, and **ADR-0045 — newly cited in the reading orde
 above, having been cited nowhere in this file until today — is the ADR that
 addresses exactly this.**
 
-**Then** pick from the START HERE index, or answer the questions under "Blocked
-on me" and let that pick for you.
+**Then** pick from the START HERE index — which as of 2026-08-20 carries **every
+open issue**, not just the current milestone's — or answer the questions under
+"Blocked on the user" and let that pick for you.
 
 **If you want the shortest honest answer to "what next":** either **ISSUE-010**
 — open `/app/receipts` in a browser and click Export, which is the cheapest
@@ -2033,6 +1910,13 @@ high-value thing on the board and the only way to learn whether the download
 works at all — or **ISSUE-001 step 5**, the local-to-Cloud escalation, which is
 the thing that has gated this project since 2026-07-28 and is the next real
 build.
+
+**Read these before you touch anything**, in this order: `docs/MEMORY.md` (state
+plus **review standards 1–26**) → `docs/adr/README.md` → the ADRs its rows send
+you to, of which **ADR-0046 and ADR-0045 are the two written most recently and
+the two most likely to change what you do**. `docs/KNOWN_ISSUES.md` is the
+source for all eleven issues and **is not to be re-derived**. Your own memory
+index carries the cross-session lessons that are not in this repo at all.
 
 **If anything in this document disagrees with the repo, the repo wins.** This
 file has been wrong at the start of several sessions, including one where the

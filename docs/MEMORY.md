@@ -19,7 +19,7 @@ and **one of my own** — the Gemini key was never in git history.
 **No count of refreshes is written here** — it is a number that moves without its
 sentence changing, which is review standard 5.
 
-**Freshness anchor `6112a83`** — the last commit that is not this handoff pair.
+**Freshness anchor `4c24970`** — the last commit that is not this handoff pair.
 **It is written twice below — here and inside the command.** Moving one and not
 the other is what happened on this file's previous refresh, and the gate caught
 it because it parses the anchor out of the *command*.
@@ -34,7 +34,7 @@ else: a stamp cannot name the commit that writes it. The test is a command,
 not a commit and not a count:
 
 ```
-git log --oneline 6112a83..main -- ":(top,exclude)docs/MEMORY.md" ":(top,exclude)docs/NEXT_SESSION_PROMPT.md"
+git log --oneline 4c24970..main -- ":(top,exclude)docs/MEMORY.md" ":(top,exclude)docs/NEXT_SESSION_PROMPT.md"
 git log --oneline refs/remotes/origin/main..main   # what a push would send
 git ls-remote --heads origin main                  # authoritative on what is pushed
 git branch --no-merged main                        # must name NOTHING
@@ -106,10 +106,11 @@ answer.)*
 - **The results list and the admin export button is COMPLETE AND MERGED**
   (2026-08-20, true fast-forward `b563242` -> `f0dc7b6`, **23 commits, single
   parent each, zero merge commits**). `feat/results-list-and-export` is kept at
-  its merge point and pushed. **No ADR** — the one decision that was a candidate
-  (the two export routes share a scope predicate and differ only in guard) is
-  pinned behaviourally instead, and the whole-branch review judged the pin
-  enough. Design:
+  its merge point and pushed. Decision: **ADR-0046** (the list is a projection of
+  the export's query, and a screen nothing mounts is not delivered). *(The
+  milestone closed with no ADR — the whole-branch review judged the behavioural
+  pin enough — and one was written the next day at the user's request, after the
+  merge. That is why it cites no branch commits.)* Design:
   `docs/superpowers/specs/2026-08-19-results-list-and-export-design.md`. Plan:
   `docs/superpowers/plans/2026-08-19-results-list-and-export.md` — **read its
   dated defect log first; it records nine plan defects, every one the
@@ -454,7 +455,8 @@ merge commits.** Spec
 `docs/superpowers/specs/2026-08-19-results-list-and-export-design.md`, plan
 `docs/superpowers/plans/2026-08-19-results-list-and-export.md`, ledger
 `.superpowers/sdd/2026-08-19-results-list-and-export/progress.md` (gitignored).
-**No ADR**, deliberately. All five gates PASS at the merged tip, controller-run.
+Decision: **ADR-0046**, written 2026-08-20 after the merge. All five gates PASS
+at the merged tip, controller-run.
 
 ### The idea, and why it is not a variant of `GET /receipts`
 
