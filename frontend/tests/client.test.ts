@@ -258,4 +258,50 @@ describe('requestBlob', () => {
     await expect(requestBlob('/export/xlsx')).rejects.toThrow()
     expect(handler).toHaveBeenCalledOnce()
   })
+
+  // `rejects.toThrow(string)` is only a substring match against `.message`, and
+  // `rejects.toThrow()` matches any thrown Error at all -- so both tests above
+  // stay green if these throws become `new Error(...)`. The type and the status
+  // are what Task 4 discriminates on, and they are what `request`'s own failure
+  // tests pin. Pinning the message alone pins nothing.
+  it('throws an ApiError carrying the status on a 400, not a bare Error', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        jsonResponse(400, { error: { message: 'narrow the filter and try again' } }),
+      ),
+    )
+    const error = await requestBlob('/export/xlsx').catch((e: unknown) => e)
+    expect(error).toBeInstanceOf(ApiError)
+    expect((error as ApiError).status).toBe(400)
+  })
+
+  it('throws an ApiError carrying the status on a 401, not a bare Error', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(jsonResponse(401, { error: { message: 'not authenticated' } })),
+    )
+    const error = await requestBlob('/export/xlsx').catch((e: unknown) => e)
+    expect(error).toBeInstanceOf(ApiError)
+    expect((error as ApiError).status).toBe(401)
+  })
+
+  it('turns a body it cannot read into an ApiError, like request does', async () => {
+    // `fetch` resolves as soon as the headers arrive, so a connection dropped
+    // mid-download rejects `response.blob()` with a raw `TypeError` -- the most
+    // likely real failure of a large .xlsx export, which is the whole reason
+    // this function exists. `parseSuccess` guards the equivalent read for the
+    // same reason: every consumer that discriminates on `ApiError` falls into
+    // its generic branch on a raw TypeError and loses the status.
+    const truncated = new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('partial'))
+        controller.error(new TypeError('terminated'))
+      },
+    })
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(truncated, { status: 200 })))
+    const error = await requestBlob('/export/xlsx').catch((e: unknown) => e)
+    expect(error).toBeInstanceOf(ApiError)
+    expect((error as ApiError).message).toBe('the response to /export/xlsx could not be read')
+  })
 })

@@ -173,7 +173,7 @@ function attachmentFilename(response: Response): string | null {
  *
  *  This exists because `request<T>` unconditionally calls `response.text()`
  *  and `JSON.parse`s it, so a workbook reaches the caller as
- *  `expected JSON from /export/xlsx` rather than as bytes.
+ *  `expected JSON from /export/xlsx (200)` rather than as bytes.
  */
 export async function requestBlob(
   path: string,
@@ -191,5 +191,15 @@ export async function requestBlob(
   if (!response.ok) {
     throw new ApiError(response.status, await errorMessage(response))
   }
-  return { blob: await response.blob(), filename: attachmentFilename(response) }
+  let blob: Blob
+  try {
+    blob = await response.blob()
+  } catch {
+    // `fetch` resolves on headers, so a connection dropped mid-download rejects
+    // here with a raw `TypeError`, and a large .xlsx is where that happens.
+    // `parseSuccess` guards its own read for the same reason, and this
+    // reports it with the same message.
+    throw new ApiError(response.status, `the response to ${path} could not be read`)
+  }
+  return { blob, filename: attachmentFilename(response) }
 }
