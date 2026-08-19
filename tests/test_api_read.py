@@ -1371,3 +1371,56 @@ def test_no_offset_reaches_the_database_as_a_500(admin_client, receipt_id, path)
     }
 
     assert 500 not in statuses.values(), statuses
+
+
+# --------------------------------------------------------------------------- #
+# The two export routes' filter surface (design 2026-08-19, decision 1)
+# --------------------------------------------------------------------------- #
+
+
+def _query_param_names(app, path):
+    """Every query parameter one route path declares, off the built app.
+
+    Read the way ``_paginated_params`` reads it -- ``route.dependant``'s
+    ``query_params`` rather than the source signature -- so a parameter that
+    arrives through a dependency is counted too.
+    """
+    names = set()
+    for route in _walk_routes(app):
+        dependant = getattr(route, "dependant", None)
+        if dependant is None or route.path != path:
+            continue
+        names.update(field.name for field in dependant.query_params)
+    return names
+
+
+def test_the_two_export_routes_declare_the_same_filters(app):
+    """One filter surface at both ends, derived from the app rather than listed.
+
+    ``GET /export/receipts`` and ``GET /export/xlsx`` answer for the same set of
+    receipts (design 2026-08-19, decision 1). The section 8 property that pins
+    that is witnessed on the ``status`` axis only -- it compares the two routes'
+    ids for the default scope and for ``status=pending``, and never sends a
+    merchant, a date or a confidence. A filter added to one route and not the
+    other, or two of them transposed, changes what one side answers for
+    arguments no test sends, and every test here stays green.
+
+    This names no filter, so it fails on the next filter added to either route
+    without anybody having thought of that filter: the bounded-property shape
+    ADR-0045 decision 5 asks for. An enumeration of the filters that exist today
+    is the thing that would go stale instead.
+
+    ``limit`` and ``offset`` are subtracted because the list pages and the
+    workbook does not -- the workbook is bounded by ``_EXPORT_MAX_ROWS`` and
+    refuses rather than truncating. That is the one difference between the two
+    surfaces that is deliberate.
+
+    Equality rather than a subset in one direction: a filter the workbook
+    honours and the list does not is the same defect seen from the other end.
+    """
+    listing = _query_param_names(app, "/export/receipts")
+    workbook = _query_param_names(app, "/export/xlsx")
+
+    # Anti-vacuity: two empty sets are equal, and a mistyped path yields them.
+    assert workbook, "no query parameters found on /export/xlsx"
+    assert listing - {"limit", "offset"} == workbook
