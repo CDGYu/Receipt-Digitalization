@@ -1016,6 +1016,64 @@ def test_export_query_orders_by_created_at_then_id(session_factory):
     assert order_by.index("receipts.created_at") < order_by.index("receipts.id")
 
 
+def _listed_receipt_ids(client, **params) -> set[str]:
+    """Every id ``GET /export/receipts`` yields, paged to exhaustion.
+
+    ``limit=2`` forces more than one page on any realistic fixture, so the
+    property below covers the paging path rather than only the first window.
+    """
+    ids: set[str] = set()
+    offset = 0
+    while True:
+        response = client.get(
+            "/export/receipts", params={**params, "limit": 2, "offset": offset}
+        )
+        assert response.status_code == 200, response.text
+        body = response.json()
+        ids.update(str(row["id"]) for row in body["items"])
+        if not body["has_more"]:
+            return ids
+        offset += 2
+
+
+def test_the_list_and_the_workbook_name_the_same_receipts(admin_client, pending_receipt_id):
+    """One predicate at both ends -- design section 2, and the reason this route exists.
+
+    The list is a projection of the export's own query, so the two cannot
+    disagree about scope. Stated as a set equality rather than an enumeration
+    of statuses: an enumeration would need editing every time a
+    ``ReceiptStatus`` member is added, and the enumeration is what goes stale.
+    """
+    listed = _listed_receipt_ids(admin_client)
+    in_workbook = _receipt_ids_in(admin_client.get("/export/xlsx"))
+
+    # Anti-vacuity, both halves. Two empty sets are equal.
+    assert listed, "fixture must produce at least one exportable receipt"
+    assert listed == in_workbook
+
+    # And the equality is not trivially "everything": the excluded status is
+    # absent from both, and present in both once it is asked for.
+    assert str(pending_receipt_id) not in listed
+
+    asked = _listed_receipt_ids(admin_client, status="pending")
+    asked_workbook = _receipt_ids_in(
+        admin_client.get("/export/xlsx", params={"status": "pending"})
+    )
+    assert str(pending_receipt_id) in asked
+    assert asked == asked_workbook
+
+
+def test_the_list_is_visible_to_a_reviewer_the_workbook_is_not(reviewer_client):
+    """The two routes share a scope predicate and differ only in guard.
+
+    Seeing the ledger and extracting it are different acts (design decision 3).
+    Pinned rather than commented, because matching guards is exactly what a
+    later reader would "tidy" these two into.
+    """
+    assert reviewer_client.get("/export/receipts").status_code == 200
+    assert reviewer_client.get("/export/xlsx").status_code == 403
+
+
 # --------------------------------------------------------------------------- #
 # Fix round 1 (F1, F2, F3): a leaked temp file, an unbounded read, and an
 # N+1 a docstring claimed did not exist.

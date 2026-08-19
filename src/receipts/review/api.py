@@ -78,6 +78,7 @@ from .schemas import (
     CorrectionPatch,
     ErrorBody,
     ErrorDetail,
+    ExportReceiptListResponse,
     HealthStatus,
     MetricsResponse,
     ReceiptListResponse,
@@ -250,6 +251,50 @@ def _install_read_routes(app: FastAPI) -> None:
             items = [receipt_summary(receipt) for receipt in rows[:limit]]
         return {"items": items, "has_more": len(rows) > limit}
 
+    @app.get("/export/receipts", response_model=ExportReceiptListResponse)
+    def list_export_receipts(
+        request: Request,
+        user: Annotated[SessionUser, Depends(require_user)],
+        status: ReceiptStatus | None = None,
+        merchant_id: uuid.UUID | None = None,
+        date_from: date | None = None,
+        date_to: date | None = None,
+        min_confidence: Decimal | None = None,
+        limit: PageLimit = 50,
+        offset: PageOffset = 0,
+    ) -> Any:
+        """The receipts ``GET /export/xlsx`` would write, one page at a time.
+
+        **Deliberately not a variant of ``GET /receipts``.** That route applies
+        no status exclusion and its ``status`` filter is a single equality, so
+        it cannot express "every status except these two" -- which is why
+        ``query_export_receipts`` exists as a separate function at all. A list
+        screen built on it would show rows the workbook silently omits.
+
+        Calling the export's own query instead makes the two agree by
+        construction rather than by two rules kept in step. The scope predicate
+        is shared; the **guard is not** -- this route is ``require_user`` while
+        the workbook is admin-only, because seeing the ledger and extracting it
+        are different acts. ``GET /receipts`` already serves ``receipt_summary``
+        rows to any signed-in user unscoped, so this discloses nothing new.
+
+        ``has_more`` comes from a ``limit + 1`` fetch, matching every other
+        paginated route here.
+        """
+        with request.app.state.session_factory() as session:
+            rows = query_export_receipts(
+                session,
+                status=status,
+                merchant_id=merchant_id,
+                date_from=date_from,
+                date_to=date_to,
+                min_confidence=min_confidence,
+                limit=limit + 1,
+                offset=offset,
+            )
+            items = [receipt_summary(receipt) for receipt in rows[:limit]]
+        return {"items": items, "has_more": len(rows) > limit}
+
     @app.get("/receipts/{receipt_id}")
     def get_one_receipt(
         receipt_id: uuid.UUID,
@@ -302,8 +347,8 @@ def _install_read_routes(app: FastAPI) -> None:
         re-filtered here, which would be dead code under the invariant --
         ``test_a_pan_never_reaches_the_corrections_route``.
 
-        Like the other two list routes, ``has_more`` comes off a ``limit + 1``
-        fetch. That makes three sites carrying ``limit=limit + 1``; anchor on
+        Like the other list routes, ``has_more`` comes off a ``limit + 1``
+        fetch. Several sites carry ``limit=limit + 1``; anchor on
         text unique to this one when mutating (review standard 16).
         """
         visible_to = None if user.role == ROLE_ADMIN else user.username

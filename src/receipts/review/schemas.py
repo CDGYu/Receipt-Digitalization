@@ -33,6 +33,7 @@ __all__ = [
     "CorrectionPatch",
     "ErrorBody",
     "ErrorDetail",
+    "ExportReceiptListResponse",
     "HealthStatus",
     "MetricsResponse",
     "QueueStatsOut",
@@ -61,7 +62,7 @@ class ErrorBody(BaseModel):
 class _PageResponse(BaseModel):
     """One page of rows, plus whether another exists.
 
-    Three routes share this body. Each keeps its **own** subclass rather than
+    Several routes share this body. Each keeps its **own** subclass rather than
     reusing this one directly, because distinct response models give distinct
     OpenAPI schema names -- that was the recorded reason the bodies were
     duplicated, and subclassing preserves it while removing the copy.
@@ -96,6 +97,18 @@ class CorrectionListResponse(_PageResponse):
     (``GET /receipts/{receipt_id}/corrections``).
 
     A page here is one receipt's audit trail, oldest first.
+    """
+
+
+class ExportReceiptListResponse(_PageResponse):
+    """One page of :func:`receipt_summary` rows scoped to the export
+    (``GET /export/receipts``).
+
+    A separate model from :class:`ReceiptListResponse` despite the identical
+    body, for this module's recorded reason: distinct response models give
+    distinct OpenAPI schema names. The two routes also mean different things --
+    this one answers "what would the workbook contain", and that is the whole
+    point of it existing.
     """
 
 

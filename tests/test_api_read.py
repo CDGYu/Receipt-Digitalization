@@ -685,6 +685,9 @@ READ_ROUTES = [
     ("GET", "/receipts/{id}/image", {"reviewer", "admin"}),
     ("GET", "/review/next", {"reviewer", "admin"}),
     ("GET", "/export/xlsx", {"admin"}),
+    # M2 (design 2026-08-19, decision 3), and beside the workbook deliberately:
+    # the two export routes share a scope predicate and differ only in guard.
+    ("GET", "/export/receipts", {"reviewer", "admin"}),
     # Not a P4.T5 receipt route: the admin UI's reload path (design 2026-08-05 §2).
     ("GET", "/auth/me", {"reviewer", "admin"}),
     # Also the admin UI's and also not a receipt route: the queue listing
@@ -1213,14 +1216,16 @@ def test_the_corrections_paging_window_is_refused_outside_its_bounds(
 # The shared page bound (ADR-0034)
 # --------------------------------------------------------------------------- #
 
-#: The three routes that page, as URL templates. This is a list, so it is a
+#: The routes that page, as URL templates. This is a list, so it is a
 #: claim (review standard 20) -- and
 #: ``test_the_behavioural_cases_cover_every_paginated_route`` is what checks it,
-#: by deriving the same set from the built app.
+#: by deriving the same set from the built app. No count is written here: one
+#: goes stale at the next paginated route, and the list is immediately below.
 PAGINATED_PATHS = [
     "/receipts",
     "/review/tasks",
     "/receipts/{receipt_id}/corrections",
+    "/export/receipts",
 ]
 
 
