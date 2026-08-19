@@ -290,6 +290,21 @@ describe('the table renders the row shape the serializer sends', () => {
     }
   })
 
+  it('renders an empty-string status as not-extracted, because the cast is unchecked', async () => {
+    // The one column `receipt_summary` types as `str` and never sends null, so
+    // the row shape says it cannot be missing. `request<T>` is an unchecked
+    // cast, and `''` is the third state design section 4 names -- the one
+    // `ui/Value` exists to catch, and the one a bare `{row.status}` renders as a
+    // blank cell indistinguishable from a column that was never drawn.
+    stubPage({ items: [rowFixture({ status: '' })], has_more: false })
+
+    render(<ReceiptsScreen identity={ADMIN} />)
+
+    const table = await screen.findByRole('table')
+    const cell = cellUnder(bodyRows(table)[0], table, 'Status')
+    expect(within(cell).getByRole('img', { name: 'not extracted' })).toBeDefined()
+  })
+
   it('keeps a currency the extractor did read, even when the amount is missing', async () => {
     // `null` total and a real currency is a receipt whose amount was not read,
     // not a receipt with no currency -- and dropping the code because its
@@ -485,7 +500,7 @@ describe('one role="alert" region, whatever went wrong', () => {
 
 describe('every class this screen references exists in its stylesheet', () => {
   // Under Vitest's `css: false` a `.module.css` import is a proxy whose keys echo
-  // back as strings, so `styles.tabel` renders `class="undefined"` and every
+  // back as strings, so `styles.tabel` ships unpainted and every
   // rendering test above still passes. Anything about the CSS itself therefore
   // has to be read off the file -- the same shape `admin-screen.test.tsx`,
   // `review-null-rule.test.tsx` and `value.test.tsx` use.

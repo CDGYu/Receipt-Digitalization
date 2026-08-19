@@ -305,10 +305,14 @@ export function ReceiptsScreen({ identity }: ReceiptsScreenProps) {
                     )}
                     <Value value={row.total} kind="money" />
                   </td>
-                  {/* The one column the serializer never sends as null, and the
-                      one that is plain text rather than a `Chip` -- see the
-                      docstring. */}
-                  <td className={styles.status}>{row.status}</td>
+                  {/* Plain text rather than a `Chip` -- see the docstring -- and `Value`
+                      is how this tree renders plain text. `receipt_summary` types
+                      this `str` and never sends null, but `request<T>` is an
+                      unchecked cast and `''` is the third state `Value` exists to
+                      catch. The wire spelling is carried unchanged. */}
+                  <td className={styles.status}>
+                    <Value value={row.status} kind="text" />
+                  </td>
                   <td className={styles.number}>
                     <Value value={row.confidence} kind="count" />
                   </td>
