@@ -1379,11 +1379,15 @@ def test_no_offset_reaches_the_database_as_a_500(admin_client, receipt_id, path)
 
 
 def _query_param_names(app, path):
-    """Every query parameter one route path declares, off the built app.
+    """Every query parameter one route path declares **directly**, off the
+    built app.
 
     Read the way ``_paginated_params`` reads it -- ``route.dependant``'s
-    ``query_params`` rather than the source signature -- so a parameter that
-    arrives through a dependency is counted too.
+    ``query_params`` rather than the source signature.
+
+    ``directly`` is the bound: a sub-dependency's query parameters live in
+    ``dependant.dependencies`` and this does not recurse. Both export routes
+    declare every filter inline, so nothing is missed today.
     """
     names = set()
     for route in _walk_routes(app):

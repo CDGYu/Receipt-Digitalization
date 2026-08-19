@@ -252,8 +252,7 @@ and apply it in the final query expression, which currently reads
 Add one sentence to the docstring, next to the existing paragraph about matching `query_receipts`' ordering:
 
 ```
-    ``offset`` pages that same total order. It defaults to 0 because
-    ``receipts.cli`` calls this function without one.
+    ``offset`` pages that same total order. It defaults to 0.
 ```
 
 - [ ] **Step 4: Run the test and the two suites it could disturb**
