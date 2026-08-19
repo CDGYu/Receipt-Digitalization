@@ -330,6 +330,34 @@ const CENSUS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
     '.button:hover:not(:disabled)': 'border-color',
     '.button:disabled': 'opacity, cursor: not-allowed',
   },
+  'receipts/ReceiptsScreen.module.css': {
+    '.screen':
+      'box-sizing: border-box, display: flex, flex-direction: column, align-items: stretch, gap, max-width, margin, padding, color, font-family',
+    '.heading': 'margin, font-size, font-weight, line-height',
+    '.who': 'margin, color, font-size, line-height',
+    '.scope': 'margin, color, font-size, line-height',
+    '.alert':
+      'margin, padding, border, border-left-width, border-radius, background, color, font-size, line-height',
+    '.alertLine': 'margin',
+    '.alertLine + .alertLine': 'margin-top',
+    '.waiting': 'margin, padding, color, font-size, line-height, text-align: center',
+    '.exportButton': 'align-self: flex-end',
+    '.note': 'margin, align-self: flex-end, color, font-size, line-height',
+    '.empty':
+      'margin, padding, border, border-radius, background, color, font-size, text-align: center',
+    '.scroller': 'max-width, overflow-x: auto',
+    '.table':
+      'width, min-width, border-collapse: collapse, border, border-radius, background, font-family, font-size, line-height',
+    '.head th':
+      'padding, border-bottom, color, font-size, font-weight, letter-spacing, text-align: left, text-transform: uppercase, white-space: nowrap',
+    '.row > td': 'padding, border-top, vertical-align: top',
+    '.date': 'white-space: nowrap',
+    '.merchant': 'min-width',
+    '.number': 'white-space: nowrap, text-align: right',
+    '.currency': 'margin-right, color, font-family',
+    '.status': 'white-space: nowrap',
+    '.more': 'align-self: center',
+  },
   'review/ConfidenceRail.module.css': {
     '.rail': 'border, border-radius, background, padding',
     '.heading': 'margin, font-family, font-size, font-weight, line-height',
@@ -569,7 +597,7 @@ describe('the census reads what is there, not what it hopes for', () => {
 
   it('is reading the real tree, not an empty one', () => {
     const files = stylesheets()
-    expect(files.length, 'no stylesheets found -- the whole census is vacuous').toBe(17)
+    expect(files.length, 'no stylesheets found -- the whole census is vacuous').toBe(18)
     let rules = 0
     let declarations = 0
     for (const file of files) {
