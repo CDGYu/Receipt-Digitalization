@@ -19,7 +19,7 @@ and **one of my own** — the Gemini key was never in git history.
 **No count of refreshes is written here** — it is a number that moves without its
 sentence changing, which is review standard 5.
 
-**Freshness anchor `56b0bc2`** — the last commit that is not this handoff pair.
+**Freshness anchor `6112a83`** — the last commit that is not this handoff pair.
 **It is written twice below — here and inside the command.** Moving one and not
 the other is what happened on this file's previous refresh, and the gate caught
 it because it parses the anchor out of the *command*.
@@ -34,7 +34,7 @@ else: a stamp cannot name the commit that writes it. The test is a command,
 not a commit and not a count:
 
 ```
-git log --oneline 56b0bc2..main -- ":(top,exclude)docs/MEMORY.md" ":(top,exclude)docs/NEXT_SESSION_PROMPT.md"
+git log --oneline 6112a83..main -- ":(top,exclude)docs/MEMORY.md" ":(top,exclude)docs/NEXT_SESSION_PROMPT.md"
 git log --oneline refs/remotes/origin/main..main   # what a push would send
 git ls-remote --heads origin main                  # authoritative on what is pushed
 git branch --no-merged main                        # must name NOTHING
@@ -103,6 +103,37 @@ answer.)*
   "NO BRANCH IN FLIGHT" for three days while one existed, in 2026-08, and then
   announced one for three days after it landed would have been the same defect
   in the other direction.
+- **The results list and the admin export button is COMPLETE AND MERGED**
+  (2026-08-20, true fast-forward `b563242` -> `f0dc7b6`, **23 commits, single
+  parent each, zero merge commits**). `feat/results-list-and-export` is kept at
+  its merge point and pushed. **No ADR** — the one decision that was a candidate
+  (the two export routes share a scope predicate and differ only in guard) is
+  pinned behaviourally instead, and the whole-branch review judged the pin
+  enough. Design:
+  `docs/superpowers/specs/2026-08-19-results-list-and-export-design.md`. Plan:
+  `docs/superpowers/plans/2026-08-19-results-list-and-export.md` — **read its
+  dated defect log first; it records nine plan defects, every one the
+  controller's.** Ledger:
+  `.superpowers/sdd/2026-08-19-results-list-and-export/progress.md` (gitignored
+  -- open by path; thirty rulings). New: **ISSUE-010 and ISSUE-011**.
+  **What it delivered:** `/app/receipts` lists processed receipts, with an
+  export button only admins see. Its one idea is that **the list is a projection
+  of the export's own query** — `GET /receipts` applies no status exclusion and
+  its `status` filter is a single equality, so a list built on it would show
+  rows the workbook silently omits. A new `GET /export/receipts` pages
+  `query_export_receipts`, the same function the workbook uses, so the two
+  cannot disagree about scope. **Proven red** by pointing the route at
+  `query_receipts`: the pending receipt appears in the list and not in the
+  workbook, which is the silent drop the design exists to prevent.
+  **What the close cost:** no Critical at any stage, and no defect in shipped
+  behaviour at any stage. **Three of the nine plan defects were assertions that
+  could not fail, and two "proofs" were themselves wrong** — including one of
+  the controller's own reproductions, which was malformed and would have
+  confirmed a finding on a syntax error. The sharpest find was that **the whole
+  screen was deletable with every gate green** — 22 tests, its own stylesheet,
+  the export button, all unreachable — until the mount was pinned; that is the
+  same class `frontend/tests/app-admin-route.test.tsx` was created to close for
+  `/app/admin`.
 - **Buyer / Sold-To capture and blank-row transcription is COMPLETE AND MERGED**
   (2026-08-19, true fast-forward `a26d6c1` -> `27f765e`, **45 commits, single
   parent each, zero merge commits**). `feat/buyer-and-blank-rows` is kept at its
@@ -281,9 +312,11 @@ answer.)*
 - **The shared page bound is COMPLETE AND MERGED** (2026-08-11, true
   fast-forward `0851c55` → `744b533`, single parent, two branch commits).
   `feat/shared-page-bound` is kept at its merge point and pushed. It closed the
-  `offset` 500 ADR-0031 reported: all three paginated routes now declare their
-  window through one `PageLimit`/`PageOffset`, and an out-of-range offset is a
-  422 from request validation. **ADR-0034** records the decision, the contract
+  `offset` 500 ADR-0031 reported: every paginated route declares its window
+  through one `PageLimit`/`PageOffset`, and an out-of-range offset is a
+  422 from request validation. **No count is written here** — it was "all
+  three" until the results list added a fourth, and the property is stated over
+  the *built app*, so it holds at any number. **ADR-0034** records the decision, the contract
   change, and the three mutations that proved the pin red. See "The shared page
   bound" below.
 - **The review-UI styling milestone is COMPLETE AND MERGED** (2026-08-07, true
@@ -413,6 +446,78 @@ answer.)*
   searching the tracked tree — open ledgers by path.**
 - **The repo is PUBLIC.** Verified 2026-07-31 via the GitHub API. See
   "Environment / provider" for what that exposes.
+
+## The results list and the admin export button -- COMPLETE AND MERGED (2026-08-20)
+
+**True fast-forward `b563242` -> `f0dc7b6`, 23 commits, single parent each, zero
+merge commits.** Spec
+`docs/superpowers/specs/2026-08-19-results-list-and-export-design.md`, plan
+`docs/superpowers/plans/2026-08-19-results-list-and-export.md`, ledger
+`.superpowers/sdd/2026-08-19-results-list-and-export/progress.md` (gitignored).
+**No ADR**, deliberately. All five gates PASS at the merged tip, controller-run.
+
+### The idea, and why it is not a variant of `GET /receipts`
+
+The list shows exactly the receipts the workbook contains, because it is served
+by the workbook's own query. `query_receipts` applies no status exclusion and
+its `status` filter is a **single equality**, so it cannot express "every status
+except these two" — which is why `query_export_receipts` exists separately at
+all. A screen built on the former would show rows the export silently omits.
+
+`GET /export/receipts` therefore pages `query_export_receipts` and serialises
+with `receipt_summary`. **The scope predicate is shared; the guard is not** —
+the list is `require_user`, the workbook stays `require_role(ROLE_ADMIN)`,
+because seeing the ledger and extracting it are different acts. That asymmetry
+is the thing a later reader is most likely to "tidy" into matching guards, so it
+is pinned behaviourally rather than commented.
+
+### Five things that will bite you
+
+- **`query_export_receipts` now takes `offset`, and its ORDER BY is pinned by
+  asserting the emitted SQL**, not by observing row order. A behavioural test
+  cannot witness the `id` tie-break on SQLite: two rows sharing a `created_at`
+  come back in the same order with or without it. That test exists and was
+  proven red three ways.
+- **`GET /export/xlsx` lives in `_install_write_routes` despite being a GET.**
+  The new route is in `_install_read_routes`. They are designed as a pair and
+  sit in different installers; do not tidy them together.
+- **A new paginated route must join `PAGINATED_PATHS`** in
+  `tests/test_api_read.py`. That guard derives the set from the *built app*, so
+  it fails by construction until you register the route — which is the guard
+  working, not a test to edit around.
+- **`request<T>` cannot carry a non-JSON body.** It unconditionally
+  `JSON.parse`s, so the workbook goes through `requestBlob`, which shares the
+  401 side effect, the `ApiError`-with-status, and the read guard.
+- **The two export routes' filter surfaces are converged by a test over the
+  built app.** Adding a filter to one and not the other fails it without anybody
+  naming a filter. Its bound: it reads *directly declared* parameters, so a
+  filter arriving through a `Depends(...)` is invisible to it.
+
+### What no gate here can see, and it is written down as ISSUE-010
+
+**Nobody has opened this screen in a browser.** The download in particular has
+never run in one: a detached anchor plus a synchronous `revokeObjectURL` are the
+documented cross-browser failure modes, `click` is stubbed under jsdom, and
+`e2e/**` is excluded from the Vitest run. A sentence claiming the census entries
+*had* been seen through a browser was found and deleted at the whole-branch
+review; deleting it removed the claim, not the gap.
+
+### The lesson this milestone paid for
+
+**Nine plan defects, every one the controller's, none in shipped behaviour.**
+Three were assertions that could not fail. Two "proofs" were themselves wrong —
+one of them the controller's own reproduction, which was malformed and would
+have confirmed a real finding on the strength of a syntax error. The corrective
+that worked every time was the same: **run the mutation, and check that the
+mutated tree still compiles**, because a red that comes from a parse error
+proves nothing about the property.
+
+**The sharpest find came last.** The entire screen — 22 tests, its own
+stylesheet, the export button, the backend route behind it — was deletable with
+all five gates green, because nothing pinned that `main.tsx` ever mounted it.
+`frontend/tests/app-admin-route.test.tsx` exists because the identical
+measurement was made for `/app/admin`; the class recurred anyway, in the very
+next screen.
 
 ## Buyer and blank rows -- COMPLETE AND MERGED (2026-08-19)
 

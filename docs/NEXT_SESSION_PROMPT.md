@@ -44,17 +44,28 @@ git log --oneline refs/remotes/origin/main..main  # what the pending push would 
 
 ## What last merged, and how to check what is pushed.
 
-**Buyer / Sold-To capture and blank-row transcription merged by true
-fast-forward on 2026-08-19** — `a26d6c1` -> `27f765e`, **45 commits**,
-single parent each, zero merge commits. Decision **ADR-0044**, which
-**corrects ADR-0040**. The eval harness stopped punishing correct behaviour:
-all three golden receipts reach **100% field accuracy with zero
-hallucinations**, from r001's 12/17 with 20 hallucinations at the branch point.
-That is the ruler being corrected, not the model improving. It left
-**ISSUE-003 through ISSUE-009**; **ISSUE-006 is the one to read first** — a
+**The results list and the admin export button merged by true fast-forward on
+2026-08-20** — `b563242` -> `f0dc7b6`, **23 commits**, single parent each, zero
+merge commits. **No ADR**: the one candidate decision — the two export routes
+share a scope predicate and differ only in guard — is pinned behaviourally
+instead, and the whole-branch review judged the pin enough. It left
+**ISSUE-010 and ISSUE-011**. `docs/MEMORY.md`'s section is the record.
+
+**The thing to know before touching it:** the list is a projection of the
+export's own query. `GET /export/receipts` pages `query_export_receipts`, the
+same function the workbook uses, so the two cannot disagree about scope.
+Rebuilding it on `GET /receipts` would reopen the defect it exists to close.
+
+**And the thing it leaves undone: nobody has opened the screen in a browser.**
+ISSUE-010. The download has never run in one, and no gate here can reach it.
+
+*(The previous last-merge was **Buyer / Sold-To capture and blank-row
+transcription**, 2026-08-19 — `a26d6c1` -> `27f765e`, 45 commits, single parent
+each, zero merge commits. Decision **ADR-0044**, which **corrects ADR-0040**. It
+left **ISSUE-003 through ISSUE-009**; **ISSUE-006 is the one to read first** — a
 reviewer who mis-flags the *sole* purchase on a receipt gets zero findings at
 any severity and the row silently leaves the export, and all three golden
-receipts have exactly that shape. `docs/MEMORY.md`'s section is the record.
+receipts have exactly that shape.)*
 
 *(The previous last-merge was **Phase 6 merchant fingerprinting**, 2026-08-18
 — `8f0b413` → `9a3ffa2`, thirty commits, single parent each, zero merge
@@ -167,116 +178,138 @@ is a summary of one).
 |---|---|---|
 | ~~**T1 — finish Phase 6**~~ | **CLOSED 2026-08-18.** Merged by true fast-forward, nothing carries over. | **§0h** is the record, ADR-0043 |
 | ~~**T3 — buyer and blank rows**~~ | **CLOSED 2026-08-19.** Merged by true fast-forward, 45 commits. Left ISSUE-003..009. | `docs/MEMORY.md` section, ADR-0044 |
-| **T2 — make accuracy measurable** | Blocked on hardware and one user action. **Phase 6 is now built and unvalidated because of it.** | §C below, `docs/KNOWN_ISSUES.md` ISSUE-001 |
+| ~~**T4 — the results list (was "A1")**~~ | **CLOSED 2026-08-20.** Merged by true fast-forward, 23 commits. No ADR. Left ISSUE-010..011. | `docs/MEMORY.md` section, §A below |
+| **T2 — make accuracy measurable** | Blocked on hardware and one user action. **Phase 6 and the buyer capture are both built and unvalidated because of it.** | §D below, `docs/KNOWN_ISSUES.md` ISSUE-001 |
 
-**T2 is no longer the only track.** It is still blocked on the same user action,
-but the 2026-08-19 milestone added a user-facing request that was never started
-and seven recorded issues. The ordered list below is the index; each row names
+**T2 is the only track with nothing shipped against it.** Three milestones have
+now landed around it while it stayed blocked on the same user action. The
+user-facing request that was open in the previous version of this file — the
+results list — shipped on 2026-08-20; what remains beside T2 is a set of
+recorded issues, of which **ISSUE-010 is the cheapest and ISSUE-006 the most
+dangerous.** The ordered list below is the index; each row names
 where its detail lives, and **where a row and its section disagree, the section
 wins** (ADR-0030).
 
 ---
 
-# THE OPEN WORK, as of 2026-08-19 (main @ the pair commit)
+# THE OPEN WORK, as of 2026-08-20 (main @ the pair commit)
 
-**Read `docs/MEMORY.md`'s "Buyer and blank rows" section first** " + EM + " it is the record
-of what just shipped, and three of the items below are things it deliberately did
-not do.
+**Read `docs/MEMORY.md`'s "The results list and the admin export button" section
+first** — it is the record of what just shipped, and two of the items below are
+things it deliberately did not do.
 
-## A. Started as a user request, never built " + EM + " HIGHEST VALUE
+*(The previous version of this section carried eighteen lines of leaked string
+concatenation — `" + EM + "` and `" + SEC + "` where an em dash and a section
+sign belonged — introduced by the commit that wrote it. They are gone because
+the section was rewritten, not patched. If you are generating this file from a
+script, **use the Write tool**: a Git Bash heredoc breaks on non-ASCII here, and
+that is what produced them.)*
 
-**A1. The results-list screen + admin-only export button ("M2").** The user asked
-for this on 2026-08-18: *"work on the output since I want it to directly go in
-the excel or make another function for the UI/UX of this project that will show
-the lists of results."* Design was agreed in-session and **then displaced** by the
-Summit Fuel buyer defect, which became the whole milestone. It was never started.
+## A. What just shipped, so nobody looks for it
 
-Agreed shape, from that conversation: a **results list** screen showing processed
-receipts, with an **export button that is admin-only**, and **no filters in v1**.
-Audience is reviewers and admins.
+**A1 — the results-list screen and the admin-only export button — is DONE**
+(2026-08-20, `b563242` -> `f0dc7b6`, 23 commits). It was the highest-value item
+in the previous version of this list. `/app/receipts` lists processed receipts;
+the export button renders only for an admin. **No filters, rows not clickable,
+by ruling.**
 
-- Backend already exists: `GET /export/xlsx` ships and `src/receipts/export/xlsx.py`
-  now carries `buyer` / `buyer_tax_id` columns and filters template rows.
-- Frontend precedent: `frontend/src/admin/` for the admin-only pattern,
-  `frontend/src/review/ReviewScreen.tsx` for the list-and-detail shape.
-- **This needs brainstorming first** " + EM + " it is architectural (a new screen), so it
-  gets a spec under `docs/superpowers/specs/` before a plan.
+Two things about it are worth knowing before touching that area:
 
-## B. What the 2026-08-19 milestone left behind
+- **The list is a projection of the export's own query.** `GET /export/receipts`
+  pages `query_export_receipts`, the same function the workbook uses, so the two
+  cannot disagree about scope. Do not "simplify" it to `GET /receipts` — that
+  route applies no status exclusion and its `status` filter is a single
+  equality, which is the defect the whole milestone exists to close.
+- **The two export routes differ in guard and only in guard**, and that is
+  pinned. `require_user` for the list, `require_role(ROLE_ADMIN)` for the
+  workbook.
 
-All seven are OPEN in `docs/KNOWN_ISSUES.md`, all deliberately recorded rather
-than fixed. **ISSUE-006 first** " + EM + " it is the only one with a silent-wrong-answer
-shape.
+## B. What this milestone left behind
+
+- **ISSUE-010 — nobody has opened `/app/receipts` in a browser.** The download
+  in particular has never run in one: a detached anchor plus a synchronous
+  `revokeObjectURL` are the documented cross-browser failure modes, `click` is
+  stubbed under jsdom, and `e2e/**` is excluded from the Vitest run. **This is
+  the highest-value unverified thing in the repository right now**, because it
+  is the milestone's entire user-visible effect.
+- **ISSUE-011 — a measured-false spelling in four test files.** Pre-existing;
+  this milestone removed one instance and deliberately left the rest, because a
+  fix wave editing four files it never touched is the over-reach ADR-0032 and
+  ADR-0042 both name.
+
+## C. What the 2026-08-19 milestone left behind, still open
+
+All seven are OPEN in `docs/KNOWN_ISSUES.md`. **ISSUE-006 first** — it is the
+only one with a silent-wrong-answer shape.
 
 | issue | one line | why it was not fixed |
 |---|---|---|
-| **ISSUE-006** | A reviewer who mis-flags the **sole** purchase gets **zero findings at any severity** and the row silently leaves the export. All three golden receipts have that one-purchase shape. | The readability half is fixed; **surfacing the flag in the review UI is a design decision**, and the arithmetic pin needs the one-purchase shape, not the two-purchase one. |
-| **ISSUE-003** | A blank pre-printed row drops the unit the form prints on it (`Lt.` on all six r001 rows). | The contract scopes a template row to its printed name; the fix is in `schema.py` / `prompts.py`. Labelling it would create five permanently unearnable paths. |
-| **ISSUE-004** | Nothing checks a golden label against its photograph; per-label content rot is open **by design**. | Per-receipt pins are tautological or transcriptions. The pins that exist close wholesale rot and schema drift. Re-reading the image is the only instrument. |
-| **ISSUE-005** | `R051`'s message promises printed order; its check accepts any permutation. | `rules.py` was closed for that milestone. One-line fix, needs its own RED. |
-| **ISSUE-007** | `PROMPT_VERSION` is unenforced and reverting it passes the whole suite. | No test fires for the right reason: a checked-in `{version: hash}` table has two remedies of identical cost, so **its easiest green is the defect**. Real fix: give `prompt_bundle_hash()` a production caller " + EM + " a contract decision, and it changes spec " + SEC + "16's filename. |
-| **ISSUE-008** | `xlsx._purchases` and `rules._purchased` are identical predicates with nothing binding them. | Neither is wrong today; the risk is drift. A `LineItem.is_purchase` on the schema is the single source. |
-| **ISSUE-009** | `CorrectionPatch`'s docstring no longer describes the contract it validates; OpenAPI does not document `buyer.*` or `is_template_row`. | Harmless because `extra="allow"`, but the prose and the schema both mislead. |
+| **ISSUE-006** | A reviewer who mis-flags the **sole** purchase gets **zero findings at any severity** and the row silently leaves the export. All three golden receipts have that one-purchase shape. | The readability half is fixed; **surfacing the flag in the review UI is a design decision**, and the arithmetic pin needs the one-purchase shape. |
+| **ISSUE-003** | A blank pre-printed row drops the unit the form prints on it (`Lt.` on all six r001 rows). | The contract scopes a template row to its printed name; labelling it would create five permanently unearnable paths. |
+| **ISSUE-004** | Nothing checks a golden label against its photograph; per-label content rot is open **by design**. | Per-receipt pins are tautological or transcriptions. Re-reading the image is the only instrument. |
+| **ISSUE-005** | `R051`'s message promises printed order; its check accepts any permutation. | One-line fix, needs its own RED. |
+| **ISSUE-007** | `PROMPT_VERSION` is unenforced and reverting it passes the whole suite. | **Its easiest green is the defect.** Real fix: give `prompt_bundle_hash()` a production caller — a contract decision. |
+| **ISSUE-008** | `xlsx._purchases` and `rules._purchased` are identical predicates with nothing binding them. | Neither is wrong today; the risk is drift. A `LineItem.is_purchase` is the single source. |
+| **ISSUE-009** | `CorrectionPatch`'s docstring no longer describes the contract it validates. | Harmless because `extra="allow"`, but the prose and the schema both mislead. |
 
-**Also left behind, not yet issues:**
+**Also left behind, not yet issues:** a `<fieldset>` with a legend for the buyer
+pair; and `_autosize` measuring the stored value rather than the rendered one,
+so a money column can display `####` in Excel — **unverifiable in-repo**,
+nothing here renders a spreadsheet.
 
-- **Playwright is not a gate**, and it caught a defect all five gates were green
-  on " + EM + " the review screen never painted in a real browser. `tsc -b` now covers
-  `frontend/e2e/`, which closes the fixture-drift half but not the runtime half.
-- **A `<fieldset>` with a legend for the buyer pair.** At 1024px the grid is two
-  columns and the pair splits across a row break; a fieldset would group it and
-  give the two TINs an accessible grouping. Design judgement, deliberately not
-  taken.
-- **`_autosize` measures the stored value, not the rendered one**, so a money
-  column can display `####` in Excel. Pre-existing, untouched, and
-  **unverifiable in-repo** " + EM + " nothing here renders a spreadsheet.
+## D. The blocking track — make accuracy measurable (ISSUE-001)
 
-## C. T2 " + EM + " make accuracy measurable (`docs/KNOWN_ISSUES.md` ISSUE-001)
+**Unchanged by the last two milestones, and still the thing that gates the
+project.** Steps 2, 3 and 4 were answered by running them on 2026-08-18; read
+them in `docs/KNOWN_ISSUES.md` rather than re-running (ADR-0039).
 
-Steps 2, 3 and 4 were **answered by running them** on 2026-08-18 " + EM + " read them
-below rather than re-running; ADR-0039 is the standing rule that the local path
-is a liveness check only.
+- **Step 5, the local→Cloud escalation, is the open one and is the next real
+  build.** `make_client` returns one client, and nothing records which model
+  produced a kept extraction — without that no eval can attribute accuracy to a
+  model, and a good number could be hiding the fact that everything escalated.
+  Report the escalation *rate* beside the accuracy figure.
+- **Start from a measured constraint:** `_TOOLS_OFF_BY_DEFAULT` is keyed on the
+  **provider**, and the exception is per **model**. `granite3.2-vision:2b` and
+  `gemma4:cloud` are both provider `ollama`, so one `VLM_USE_TOOLS` cannot be
+  off for the local model and on for the cloud one. Widening the key to
+  `(provider, model)`, or moving the choice into whatever selects the tier, is
+  that milestone's decision to make.
+- **No full baseline run has ever completed**, so Phase 6's merchant matching
+  and the buyer capture are both built and unvalidated. **Cloud egress is
+  authorised for the GOLDEN SET only.**
+- **Cloud inference is not deterministic at `temperature=0`** — two identical
+  `gemma4:cloud` runs disagreed. Repeats and a spread, or the figure is a sample
+  wearing a number's clothes.
 
-- **Step 5, the escalation design, is the open one.** `VLM_USE_TOOLS` is per
-  **provider**, not per model, so the two tiers cannot differ on it " + EM + " a real
-  constraint, since granite loses its merchant guess with tools on while
-  `gemma4:cloud` needs them.
-- **The real blocker is unchanged:** no full baseline run has ever completed, so
-  Phase 6's merchant matching and this milestone's buyer capture are both built
-  and unvalidated. **The user's ruling stands: cloud egress is authorised for the
-  GOLDEN SET only.** Production upload routing to the cloud is a separate
-  decision and has **not** been made.
-- **Cloud inference is not deterministic at `temperature=0`** " + EM + " two identical
-  `gemma4:cloud` runs disagreed. This raises Phase 7's value (below).
-
-## D. Phases 7 and 8
+## E. Phases 7 and 8
 
 - **P7.T1 self-consistency.** `run_consistency` exists in `extract/extractor.py`
   with zero references in `pipeline.py`. Gate on `triage.is_handwritten`, never
-  `document_type`; consistency runs are never cached. **Re-read it with provider
-  variance in mind** " + EM + " it was scoped to handwriting, and cloud nondeterminism is
-  exactly what it remedies.
-- **P3.T6 / P8.T1 threshold sweep + weights into `config/rules.yaml`** " + EM + " blocked
+  `document_type`; consistency runs are never cached. **Cloud nondeterminism
+  raises its value** — it was scoped to handwriting, and r002 *is* handwritten.
+- **P3.T6 / P8.T1 threshold sweep + weights into `config/rules.yaml`** — blocked
   on ISSUE-001.
-- **P8.T2 grow the held-out set.** The corpus target is 50" + EM + "100 receipts; it is 3.
-  `eval/golden/TEMPLATE.json` now declares every schema field and is pinned, so
-  a copied template can no longer silently omit one.
+- **P8.T2 grow the held-out set.** The corpus target is 50–100 receipts; it is 3.
+  One receipt is 33 percentage points.
 
-## E. Still open from earlier phases
+## F. Still open from earlier phases
 
 R060/R061 grounding decision (also gates bbox); score `is_handwritten` from
-triage too; `is_receipt` has no consumer (never hard-reject on it). See
-" + SEC + "6 below for the full list and " + SEC + "7 for what is deferred with rulings.
+triage too; `is_receipt` has no consumer (never hard-reject on it). See §6 below
+for the full list and §7 for what is deferred with rulings.
 
-## F. Blocked on the user " + EM + " ask early, these gate other work
+## G. Blocked on the user — ask early, these gate other work
 
 1. **Rotate the Gemini API key at Google.** It was deleted from `.env` on
    2026-08-18, and deleting it there **changes nothing about the exposure**.
-   *(Corrected under my own name: it was **never** in this repo's git history "
-   + EM + " I claimed it was, verified four ways, and was wrong.)*
-2. **`min-height: 60vh`** (item 14) " + EM + " undecided.
-3. **Browser-pass I7** (item 12) " + EM + " undecided.
-4. **Does A1 go before the ISSUE-006 UI half?** They touch the same screens.
+   *(Corrected under my own name: it was **never** in this repo's git
+   history — I claimed it was, verified four ways, and was wrong.)*
+2. **A browser pass on `/app/receipts`** (ISSUE-010) — and whether the download
+   actually works in a real browser. Cheapest while the surface is fresh.
+3. **`min-height: 60vh`** (item 14) — undecided.
+4. **Browser-pass I7** (item 12) — undecided.
+5. **Whether `main` gets pushed.** 24 commits are waiting; every push is a
+   one-time authorization the push consumes.
 
 ---
 
@@ -481,6 +514,22 @@ read route (**ADR-0031**) and the CLI `--limit` bound all shipped. §1.6's
    in this file: `ls docs/adr/*.md | grep -v README | wc -l` (how many ADRs) and
    `grep -cE "^\| *\[?0[0-9]{3}" docs/adr/README.md` (how many index rows).
    Mandatory before touching the matching area:
+   - **0045** — *a brief is a claim about the tree, and relaying one makes it
+     yours.* **Read before writing a plan, before dispatching any task, and
+     before ordering work on a finding somebody else measured.** Decision 1
+     makes pre-flighting a brief against the tree mandatory; decision 3 says a
+     claim you pass between agents becomes yours to re-derive; decision 4 says
+     "your number was wrong" is itself a claim. **It was written on 2026-08-19
+     and was cited nowhere in this file until 2026-08-20** — the session that
+     followed it produced nine plan defects, three of them assertions that could
+     not fail, and every one was caught by an implementer or reviewer who ran
+     the mutation instead of reasoning about it. It is the highest-yield ADR in
+     this repository for anyone running the subagent workflow.
+   - **0044** — the model-facing surface is two channels. **Read before touching
+     `prompts.py`, `schema.py`, or anything a model is shown.** It **corrects
+     ADR-0040**.
+   - **0043** — merchant identity is two-phase. **Read before touching
+     merchants, dedupe, or the prompt hash.** It **corrects ADR-0011**.
    - **0042** — a cited commit must stay reachable, and a rewrite carries its
      citations. **Read before citing a commit, before rewriting history other
      documents cite, and before writing about a commit no ref can reach.**
@@ -1914,16 +1963,16 @@ and was measured not to need it.)*
 
 ## Today's goal
 
-# NOTHING IS IN FLIGHT. Phase 6 merged on 2026-08-18.
+# NOTHING IS IN FLIGHT. The results list merged on 2026-08-20.
 
-**`git branch --no-merged main` must name nothing again.** That instruction was
-suspended from 2026-08-15 while `feat/merchant-fingerprinting` was open; it is
-restored. Run it rather than believing this sentence — it has been wrong in
-**both** directions, announcing no branch while one existed for three days.
+**`git branch --no-merged main` must name nothing.** Run it rather than
+believing this sentence — it has been wrong in **both** directions, announcing
+no branch while one existed for three days, and announcing one after it landed.
 
-**You are starting, not finishing.** The close ran in full: Task 7 reviewed, a
-whole-branch review on opus, one fix wave, one scoped re-review, one targeted
-correction of the defects that re-review found in the fix wave's own prose, then
+**You are starting, not finishing.** The close ran in full: six tasks each with
+a task review and a scoped re-review, a whole-branch review on the strongest
+model returning MERGE AFTER FIXES, one fix wave, one scoped re-review of that
+wave, one controller adjudication of the two findings the re-review raised, then
 a true fast-forward.
 
 **Run these first, and believe them over this document:**
@@ -1936,119 +1985,51 @@ git log --oneline refs/remotes/origin/main..main  # what a push would send
 python scripts/verify.py                          # background it; exceeds a 2-min timeout
 ```
 
-**Last full controller-run of `python scripts/verify.py`: 2026-08-18 at
-`75dc99e`, all five gates PASS**, and CI reports that same commit green on Linux
-across both Python versions plus the image build. Everything committed after it
-is this handoff pair — **`git log --oneline 75dc99e..main` is the check, not
-this sentence.** *(This line said "at the merge tip" until it was corrected the
-same day: a full run happened at `75dc99e` minutes after the sentence was
-written, so it understated. ADR-0032 §2 — a claim can rot immediately after the
-commit that carries it.)* **Re-run it rather than reasoning from any of that** —
-the number of things it does not check is the subject of half this document.
-**No pytest count is written here** — it moved twice during this milestone alone.
-Re-run rather than trusting it.
+**`main` IS NOT PUSHED.** That is the one piece of state this file will state
+outright, because it was true at the moment of writing and the command above is
+what settles it. Every `main` push is a one-time authorization the push
+consumes; the last one was consumed by the push it authorised. **Ask.**
 
-**No push state is written here at all any more, and that is the fix.** Every
-version of this paragraph that named one has rotted — twice in both directions,
-and once within hours of being written. **Every `main` push is a one-time
-authorization the push consumes**, so the next one needs its own fresh ask; what
-is waiting is `git log --oneline refs/remotes/origin/main..main` and nothing
-else. **Whether that command is empty depends on an ordering this sentence
-cannot know**: a session that pushes and *then* refreshes the pair leaves the
-pair commit waiting, while one that refreshes and then pushes leaves nothing.
-Both happen. *(This said the command "is expected to name it", which was wrong
-within the hour — the push came last that time.)*
+**Last full controller-run of `python scripts/verify.py`: 2026-08-20 at the
+merged tip, all five gates PASS.** Everything committed after it is this handoff
+pair. Re-run it rather than reasoning from that sentence.
 
-**Run the freshness command in `docs/MEMORY.md`'s stamp before trusting any of
-this.** If it lists anything, the tree moved after this was written — re-run
-`python scripts/verify.py` and re-read §0h before acting.
+**What this milestone proves, and it is not a new lesson — it is the same one
+again, in a place that had already been closed once.** The entire results-list
+screen was **deletable with all five gates green**: 22 tests, its own
+stylesheet, the export button, the backend route behind it, all unreachable by
+any user, because nothing pinned that `main.tsx` ever mounted it.
+`frontend/tests/app-admin-route.test.tsx` **exists because the identical
+measurement was made for `/app/admin`** — and the class recurred anyway, in the
+very next screen anyone built.
 
-**What this milestone proves about that instruction, more sharply than any
-previous one:** the close found **a behavioural regression the branch itself
-introduced** — reprocessing an original that had a semantic duplicate failed
-every time and destroyed the extraction it had just paid for — and **all five
-gates were green while it was live**. Then the fix wave closing it wrote three
-new false claims, one of them restating a clause it had been explicitly forbidden
-to write. §0h is the record. **No gate in this repository reads a sentence for
-truth.**
+**The second thing it proves is about proofs.** Two of this milestone's
+mutation "proofs" were themselves wrong, one of them the controller's own: a
+malformed edit left dangling JSX, the suite went red, and it would have
+confirmed a real finding on the strength of a **syntax error**. The corrective
+that worked every time: **run the mutation, and check the mutated tree still
+compiles.** A red that comes from a parse failure proves nothing about the
+property. `noUnusedLocals: true` makes this sharper than it sounds — deleting a
+branch but not its import fails the build, not the test.
 
-**And the sharpest thing §0g leaves you is not a task, it is a warning.** That
-milestone's only behavioural defect passed all five gates, five task reviews and
-five scoped re-reviews, and was caught by measuring a browser. **jsdom lays
-nothing out**, so no gate in this repo can see a layout regression.
+**Nine plan defects, every one the controller's, none in shipped behaviour.**
+Three were assertions that could not fail. The plan's dated defect log has all
+nine with their measurements, and **ADR-0045 — newly cited in the reading order
+above, having been cited nowhere in this file until today — is the ADR that
+addresses exactly this.**
 
-**The three screens have since been seen** (2026-08-14, `cd42e4f`), and the
-warning survives it twice over. Looking confirmed I6 and I8 by eye and produced
-**a question no measurement had raised** — item 14. And it covered **1440 and 375
-in light only**: dark theme at any width, 768, and every surface those three
-fixes did not touch are still rendered by nobody. **Seen is a scope, not a
-state**, which is why the browser-pass report states that scope in one block and
-six other places now point at it rather than repeat it.
+**Then** pick from the START HERE index, or answer the questions under "Blocked
+on me" and let that pick for you.
 
-**And there are now two gates on narrow slices of this document's own honesty.**
-`tests/test_sha_citations.py` fails if any backticked seven-character hex token
-in a tracked file names a commit no ref can reach.
-`tests/test_freshness_check.py` fails if the freshness command above stops
-detecting what it exists to detect, and also if the last refresh was unsound —
-a stamp measuring from the wrong commit, a refresh commit that carried something
-else, or an anchor that is itself a pair commit.
-
-**Neither says whether a sentence here is *true*.** The second exists because the
-command it guards had been silently broken twice, each time found by a person
-reading it. Every defect found on the branch that added the first was found by
-re-derivation, **none by a gate**, and the gates were green throughout.
-
-**Two gaps it leaves on purpose, so you know to cover them yourself:** whether
-this pair is fresh *right now* — run the command, no gate can assert it without
-being red through ordinary work — and whether a session ended without refreshing
-the pair at all, which is the most expensive failure in this project's history and
-which nothing can observe.
-
-**Then** pick from the START HERE index, or answer the questions above and let
-that pick for you.
-
-**Item 1 gated this project from 2026-07-28 to 2026-08-18. It is now largely
-closed**, and this paragraph has named the wrong thing twice — a hosted provider
-the ruling forbade, then two Cloud questions that are now measured. `gemma4:cloud`
-reads as vision-capable, free-tier and tool-capable (ISSUE-001 step 3).
-**What is left of it is a judgement, not a blocker**: whether that model reads
-receipts well enough, whether the free tier survives a full run, and **whether
-receipt images may leave this machine at all.** The next thing to *build* is
-step 5, the escalation.
-
-**The one thing §0f left open on purpose is closed (2026-08-13).**
-`scripts/verify.py`'s module docstring no longer claims `.github/workflows/` is
-untracked; ADR-0037 had reversed that on 2026-08-11 and the claim outlived it by
-two days. The paragraph now says what is true — the workflow is tracked, runs on
-every push, and its `Run the gates` step runs this script — and says why the
-gate list is not duplicated in YAML.
-
-**One thing that closure is worth more than:** re-deriving the *rest* of the
-docstring found a second false claim that nobody had reported — the
-parenthetical asserting `oxlint` appears "in no prose", contradicted by
-ADR-0017, ADR-0029 and this file — so the reported defect was **not** the only
-one, and a fix scoped to the report would have shipped the other.
-
-**[Corrected 2026-08-14 — this paragraph carried a second item that was already
-false when written.** It said the freshness check *"cannot see either edit: its
-pathspec omits `scripts/`."* **ADR-0021's 2026-08-13 correction had already
-dropped the inclusion list**, so the command excludes exactly the two pair files
-and watches everything else. Measured against the real graph: `b4a9c23`, which
-touches `scripts/verify.py` and nothing else, **is listed** by the current
-command. The claim described the pathspec the correction replaced — and
-`docs/MEMORY.md`'s stamp, which this sentence pointed at as its authority, says
-so in as many words.**]**
-
-**One thing §0d left open on purpose:** the two `format_breakdown` tests are the
-only tests of the shared renderer, and they sit in a module that skips whole
-without the `pipeline` extra. **No arrangement that leaves `format_breakdown` in
-`eval/run_baseline.py` makes them runnable without it** — closing it needs a
-production import change that was rightly refused at the last gate before merge.
-Coverage is unchanged from where the branch started; the mechanism is written
-down here so it is a decision rather than a surprise.
+**If you want the shortest honest answer to "what next":** either **ISSUE-010**
+— open `/app/receipts` in a browser and click Export, which is the cheapest
+high-value thing on the board and the only way to learn whether the download
+works at all — or **ISSUE-001 step 5**, the local-to-Cloud escalation, which is
+the thing that has gated this project since 2026-07-28 and is the next real
+build.
 
 **If anything in this document disagrees with the repo, the repo wins.** This
 file has been wrong at the start of several sessions, including one where the
-correct version was in git and the stale one was in the working tree. Verify
-before trusting, and say what you found — **and per ADR-0030, that applies to
-the findings in §1 as much as to the state in the header.**
+correct version was in git and the stale one was in the working tree, and one
+where it carried eighteen lines of leaked string concatenation into the section
+a reader is told to read first. Verify before trusting, and say what you found.
