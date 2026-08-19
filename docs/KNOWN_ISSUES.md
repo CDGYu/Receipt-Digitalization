@@ -1295,3 +1295,107 @@ set it names is no longer the set `_RECEIPT_FIELDS` holds.
   documentation gap.
 - `docs/adr/0016-review-next-resumes-the-callers-task.md` — the
   two-independent-lists failure this is a benign instance of.
+
+---
+
+## ISSUE-010 - The results list has never been opened in a browser
+
+**Opened 2026-08-20**, at the close of the results-list milestone (`b563242` ->
+`f0dc7b6`). Not a defect: a stated gap in what this repository can check.
+
+### What is unseen
+
+`/app/receipts` shipped with a new table, a new stylesheet, 21 new census
+entries and 22 tests. **No person has looked at it.** Four things follow from
+that, in descending order of risk:
+
+1. **The download has never run in a real browser.** `downloadExportWorkbook`
+   (`frontend/src/api/receipts.ts`) builds a **detached** anchor, clicks it, and
+   revokes the object URL **synchronously** in a `finally`. Both are the
+   documented cross-browser failure modes for blob downloads. jsdom stubs
+   `click`, so every test here passes either way. This is the milestone's
+   headline user-visible effect and it is the least verified thing in it.
+2. **Two stacked negative margins** under the heading
+   (`frontend/src/receipts/ReceiptsScreen.module.css`). The arithmetic is right
+   -- gap `2xl` plus margin `-2xl + xs` leaves `xs` at both joints -- but
+   `AdminScreen` does this once and nothing in this repository has done it twice
+   in a row.
+3. **Whether the not-extracted em dash reads as "missing"** inside a
+   right-aligned cell, rather than as a stray hairline.
+4. **A `border-radius` on a `border-collapse: collapse` table**, which browsers
+   ignore. Pre-existing as a pattern: `admin/TaskTable.module.css` and
+   `review/LineItemsTable.module.css` both already do it, so this is a
+   repository-wide question rather than this milestone's.
+
+### Why no gate sees any of it
+
+`css: false` in the Vitest config means a `.module.css` import returns a proxy,
+so class names are unpinnable by rendering tests; jsdom lays nothing out and
+renders no colour; `click` is stubbed; and `e2e/**` is excluded from the Vitest
+run, so Playwright is the only instrument that could reach items 1 and 2 and it
+is not a gate.
+
+**A claim that this had been checked was written and deleted.**
+`frontend/tests/stylesheets.test.ts` carried a sentence saying every census
+entry below it was looked at through a browser; the whole-branch review found it
+false the moment Task 5 added 21 entries. Deleting it removed the claim, not the
+gap. This issue is the gap.
+
+### How to resume
+
+1. `python scripts/seed_review_e2e.py --reset`, then
+   `cd frontend && npx playwright test visual` -- the `visual` filter re-seeds,
+   and a full run consumes its one queued task by design.
+2. Open `/app/receipts` as an admin and as a reviewer, and **click Export**.
+   Watch whether the file actually arrives. If it does not, the fix shapes are
+   `document.body.appendChild(anchor)` / `anchor.remove()` and revoking on a
+   later tick.
+3. Look at both themes. **Dark theme at any width remains unseen at every
+   surface in this app**, not only here.
+
+### Related
+
+- ADR-0029 - what the gates certify and what they cannot.
+- `docs/superpowers/specs/2026-08-05-review-ui-browser-pass.md` - the
+  *SUPERSEDED IN PART* block is the record of which surfaces have been seen, at
+  which widths, in which theme.
+
+---
+
+## ISSUE-011 - A measured-false spelling survives in four test files
+
+**Opened 2026-08-20.** Pre-existing; recorded now because the results-list
+milestone removed one instance and deliberately did not touch the rest.
+
+### What is wrong
+
+Four files state that a mistyped CSS-module key renders `class="undefined"`:
+`frontend/tests/admin-screen.test.tsx`,
+`frontend/tests/review-null-rule.test.tsx` (twice), and
+`frontend/tests/theme-control.test.tsx`.
+
+**It does not.** `frontend/tests/value.test.tsx` records the 2026-08-13
+measurement: under this suite the proxy returns a *scoped string*, so a typo
+renders a plausible-looking class that no stylesheet declares; in a real build
+the key is absent and React omits the attribute entirely. Only
+`String(undefined)` produces the literal.
+
+The guards those sentences justify are all correct. Only the stated mechanism is
+wrong, and it is wrong in the direction that makes the defect sound louder than
+it is -- a reader expecting `class="undefined"` in the DOM will not find it.
+
+### Why it was not fixed with the milestone that found it
+
+A fix wave editing four files it never otherwise touched is the over-reach
+ADR-0032 and ADR-0042 both name, and this project has watched consecutive waves
+introduce a false claim while closing one. The anchor is
+`grep -rn 'class="undefined"' frontend/tests/`, which also returns
+`value.test.tsx`'s two corrective mentions -- those are the record, not the
+error.
+
+### How to resume
+
+Delete the mechanism half of each sentence and say the class **ships
+unpainted**. That is the wording `value.test.tsx` records for the sites already
+corrected, and `frontend/tests/receipts-screen.test.tsx` is the worked example.
+Do not replace it with a more careful description of the proxy.
