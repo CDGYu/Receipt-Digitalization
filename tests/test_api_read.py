@@ -1318,7 +1318,12 @@ def test_the_behavioural_cases_cover_every_paginated_route(app):
 def test_an_out_of_range_offset_is_refused_by_validation_on_every_paged_route(
     admin_client, receipt_id, path, offset, expected
 ):
-    """``?offset=2**63`` was an unhandled 500 on all three of these routes.
+    """``?offset=2**63`` was an unhandled 500 on every paged route that then existed.
+
+    "Then" is load-bearing and the count is deliberately not written: routes
+    added after the bound landed were born declaring ``PageOffset`` and never
+    carried the defect, so a sentence saying "all of these routes" would grow
+    false as this parametrisation grows.
 
     ``offset`` was declared ``Query(0, ge=0)`` with no ceiling, so ``2**63``
     satisfied validation, reached SQLite and raised ``OverflowError`` -- which
