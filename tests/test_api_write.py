@@ -1019,21 +1019,30 @@ def test_export_query_orders_by_created_at_then_id(session_factory):
 def _listed_receipt_ids(client, **params) -> set[str]:
     """Every id ``GET /export/receipts`` yields, paged to exhaustion.
 
-    ``limit=2`` forces more than one page on any realistic fixture, so the
-    property below covers the paging path rather than only the first window.
+    ``limit=1`` is chosen against this fixture rather than as a generic "small
+    page". ``admin_client`` seeds exactly two exportable receipts, so one row
+    per page is the largest page that still leaves a second one to fetch: the
+    unfiltered call below makes two requests and sees ``has_more`` ``True`` on
+    the first and ``False`` on the second.
+
+    ``limit=2`` did neither. Both rows fitted the first page, ``has_more`` was
+    ``False`` on the first response, and the ``offset`` line never ran -- so
+    the route's ``True`` branch was pinned by nothing here. Callers that narrow
+    the set further (``status="pending"`` matches one row) still finish in a
+    single page; the unfiltered call is the one that exercises the loop.
     """
     ids: set[str] = set()
     offset = 0
     while True:
         response = client.get(
-            "/export/receipts", params={**params, "limit": 2, "offset": offset}
+            "/export/receipts", params={**params, "limit": 1, "offset": offset}
         )
         assert response.status_code == 200, response.text
         body = response.json()
         ids.update(str(row["id"]) for row in body["items"])
         if not body["has_more"]:
             return ids
-        offset += 2
+        offset += 1
 
 
 def test_the_list_and_the_workbook_name_the_same_receipts(admin_client, pending_receipt_id):
