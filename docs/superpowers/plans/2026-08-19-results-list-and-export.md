@@ -28,6 +28,7 @@ Copied from the spec and the repo's non-negotiables. **Every task's requirements
 - **Commit messages are ASCII only** — use `--` where you want an em dash. Git Bash heredocs break on non-ASCII in this environment; `git commit -m` with a plain ASCII string is fine.
 - **All existing tests pass unmodified.** Anything that seems to need an existing test changed is a **stop-and-report**, not a licence to edit it. Task 5 has the one sanctioned exception, and it is additive.
 - Run `python -m pytest` (bare — `pyproject.toml` sets `addopts = "-q"`, so `-q` prints no pass count). Frontend: `npm test` **and** `npm run typecheck`, which `npm test` does not do.
+- **`vi.unstubAllGlobals()` does not undo `vi.spyOn`, and nothing in this repo sets `restoreMocks`.** A spy therefore outlives the test that installed it and is handed to the next one. Measured in Task 4: a `document.createElement` spy leaked across tests, so the second test received the *first* test's element with its state already set, and an assertion about a default value could not fail — deleting the constant it guarded left the suite green. **Any test file that calls `vi.spyOn` needs its own `afterEach(() => vi.restoreAllMocks())`.**
 - **Where a code block in this plan and the linter disagree, the linter wins.** `ruff` here sets `line-length = 100` and enables `UP017`, which prefers `datetime.UTC` over `timezone.utc`. Rewrap or substitute, preserve the semantics exactly, and say in your report that you did. This is not licence to change behaviour — only spelling and layout.
 
 ---
