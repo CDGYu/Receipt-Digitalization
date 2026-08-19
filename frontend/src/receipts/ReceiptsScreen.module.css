@@ -218,9 +218,9 @@
   font-family: var(--font-mono);
 }
 
-/* The status is the wire spelling the server sent, rendered as plain text: `Chip`
- * requires an icon per tone and which glyph each `ReceiptStatus` gets is a design
- * decision nobody has made, so nothing is invented for it here. */
+/* `Chip` requires an icon per tone and which glyph each `ReceiptStatus` gets is
+ * a design decision nobody has made, so nothing is invented for the status
+ * column here. */
 .status {
   white-space: nowrap;
 }

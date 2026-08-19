@@ -130,7 +130,8 @@ export interface ReceiptDetail {
   findings: Finding[]
 }
 
-/** One row of `GET /receipts`, and the `receipt` half of `GET /review/next`.
+/** One row of `GET /receipts` and of `GET /export/receipts`, and the `receipt`
+ * half of `GET /review/next`.
  *
  * **Not derivable from `ReceiptDetail`.** `receipt_summary`
  * (review/serializers.py:80-96) puts `total` at the *top level*, while

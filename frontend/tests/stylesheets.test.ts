@@ -246,9 +246,8 @@ function censusFor(relative: string): Record<string, string> {
  *
  *  Derived from the files by `censusFor`, so updating it is a mechanical
  *  transcription rather than a judgement -- and *having* to update it is the
- *  point. Every entry below is a declaration that a reviewer looked at through a
- *  browser during the Task 5 pass, and a change to any of them should be a
- *  deliberate edit in two places rather than an invisible one in one. */
+ *  point. A change to any entry below should be a deliberate edit in two places
+ *  rather than an invisible one in one. */
 const CENSUS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
   // Derived by applying `censusOf`'s own rule to the file, not transcribed by
   // eye -- the header above calls this mechanical, and doing it by hand is how

@@ -300,9 +300,8 @@ should be seen by a person before it is called done.
   is an argument someone may want to make later; this design does not make it.
 - **ISSUE-006's review-UI half.** A reviewer who mis-flags the sole purchase on
   a receipt gets zero findings at any severity and the row leaves the export
-  silently. That defect is upstream of this screen: the row is already gone from
-  `query_export_receipts`' results before either the list or the workbook sees
-  it, so **this screen shows the same wrong answer consistently rather than
-  fixing or worsening it.** Surfacing the flag is a separate design decision on
-  the review screen, and the two touch the same surface — the ordering between
-  them is a user ruling that has not been given.
+  silently. That defect is upstream of this screen, so **this screen shows the
+  same wrong answer consistently rather than fixing or worsening it.** Surfacing
+  the flag is a separate design decision on the review screen, and the two touch
+  the same surface — the ordering between them is a user ruling that has not
+  been given.

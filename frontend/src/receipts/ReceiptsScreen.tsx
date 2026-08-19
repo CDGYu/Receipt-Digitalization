@@ -110,8 +110,7 @@ export interface ReceiptsScreenProps {
  *
  * There is no `Chip` on the status column either. `Chip` requires an `icon` per
  * tone and which icon each `ReceiptStatus` gets is a design decision nobody has
- * made, so the status renders as the plain text the server sent rather than
- * having a glyph invented for it here.
+ * made, so no glyph is invented for it here.
  *
  * The screen does not poll. Like `AdminScreen`, it is current as of its last
  * render.

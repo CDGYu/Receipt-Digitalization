@@ -20,14 +20,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
  * paginated table, an export button, its own stylesheet, 22 tests of its own --
  * and nothing in the suite could tell that no user could reach it. The compile
  * staying clean is what makes it damning: the deletion is not a mistake any gate
- * treats as one. The third case below closes that, and was proved red by exactly
- * that deletion rather than by reasoning about it.
+ * treats as one. The `/app/receipts` case below closes that, and was proved red
+ * by exactly that deletion rather than by reasoning about it.
  *
  * All three screens are mocked, and that is the point rather than a shortcut:
  * what is under test is the *switch*, not any one of the components. A real
  * `AdminScreen` here would pass for the wrong reason the day it renders an empty
- * state that happens to look like a review screen, and a real `ReviewScreen` or
- * `ReceiptsScreen` would fire requests that have nothing to do with routing.
+ * state that happens to look like a review screen, and a real `ReviewScreen`
+ * would fire requests that have nothing to do with routing.
  *
  * Both directions are asserted for each screen. A switch that renders the admin
  * screen everywhere is as broken as one that renders it nowhere, and only the

@@ -342,8 +342,7 @@ def query_export_receipts(
     ``query_receipts``, so the two entry points never disagree about paging
     order.
 
-    ``offset`` pages that same total order. It defaults to 0 because
-    ``receipts.cli`` calls this function without one.
+    ``offset`` pages that same total order. It defaults to 0.
 
     ``line_items`` and ``merchant`` are eager-loaded with ``selectinload``
     (fix round 1, F3): both are default-lazy relationships
