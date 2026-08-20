@@ -14,6 +14,8 @@ from typing import Any
 
 from pydantic import BaseModel
 
+from .schema import ReceiptExtraction
+
 _INDEXED = re.compile(r"^(.*?)\[(\d+)\]$")
 
 
@@ -156,3 +158,37 @@ def is_filled(value: object) -> bool:
     if value is None:
         return False
     return not (isinstance(value, (list, dict)) and len(value) == 0)
+
+
+def _content_paths(extraction: Any) -> dict[str, Any]:
+    """The filled ``core`` and ``line_items`` leaves of one extraction."""
+    return {
+        path: value
+        for path, value in flatten(extraction).items()
+        if group_of(path) in ("core", "line_items") and is_filled(value)
+    }
+
+
+def read_nothing(extraction: Any) -> bool:
+    """True when an extraction transcribed nothing from the paper.
+
+    Compared against a **default-constructed** extraction rather than against
+    emptiness, because emptiness is unreachable: ``ReceiptExtraction()`` carries
+    ``receipt.decimal_convention = 'point'``, which is ``core`` by design — the
+    convention is something the document prints, so a model is expected to read
+    it (:func:`group_of`'s own note says so).
+
+    Comparing to the default is what keeps this schema-derived in both
+    directions: a field added later that rests at a default is excluded without
+    anybody deciding, and a field the model actually fills is counted the same
+    way.
+
+    Covers the no-parse case without a clause of its own — ``_evaluate``
+    resolves a failed parse to exactly ``ReceiptExtraction()``.
+
+    The baseline is recomputed per call rather than cached in a module-level
+    constant: one call per rung costs microseconds against a VLM call measured
+    in minutes, and a cached copy is a second statement of the schema's defaults
+    that can go stale — the drift this predicate's whole design avoids.
+    """
+    return _content_paths(extraction) == _content_paths(ReceiptExtraction())
