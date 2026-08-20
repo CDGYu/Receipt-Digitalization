@@ -252,7 +252,7 @@ export function TaskTable({
                   )}
                 </td>
                 <td className={styles.age}>
-                  <Value value={ageOf(task.opened_at, now)} kind="count" />
+                  <Value value={ageOf(task.opened_at, now)} kind="count" align="end" />
                 </td>
                 {canRelease ? (
                   <td className={styles.action}>

@@ -29,13 +29,36 @@
   font-family: var(--font-sans);
 }
 
-/* The hairline left border is not decoration: it is what lets a scan down the
- * form find every gap without reading a single value (§4). Monospaced like
+/* The hairline border is not decoration: it is what lets a scan down the form
+ * find every gap without reading a single value (§4). Monospaced like
  * `.numeric` so the mark sits on the same rhythm as the numbers it stands in
- * for, rather than reading as prose. */
+ * for, rather than reading as prose.
+ *
+ * **It is a gutter, so it goes on the edge the column's values share.** Left is
+ * the default because a form is a stack of left-aligned fields, and there the
+ * borders line up into the vertical rule the scan follows. A right-aligned
+ * money column has no such left edge: the span shrink-wraps and is pushed
+ * right, so the rule lands at a different x in every row and aligns with
+ * nothing. Measured in a browser on 2026-08-20, on `/app/receipts` at 1440 in
+ * Chromium, Firefox and WebKit: a receipt carrying a currency but no total
+ * rendered `PHP|—`, with the rule falling between the code and the mark, which
+ * reads as a broken glyph rather than as "missing".
+ *
+ * `.notExtractedEnd` is that same rule mirrored, for a cell whose contents are
+ * flush right. Written out rather than composed: the declaration census records
+ * a rule per selector, and `value.test.tsx` pins both of these by value, so two
+ * explicit rules are two things a reader can check against what a browser
+ * showed them. */
 .notExtracted {
   font-family: var(--font-mono);
   color: var(--color-null);
   border-left: 2px solid var(--color-null);
   padding-left: var(--space-sm);
+}
+
+.notExtractedEnd {
+  font-family: var(--font-mono);
+  color: var(--color-null);
+  border-right: 2px solid var(--color-null);
+  padding-right: var(--space-sm);
 }

@@ -302,7 +302,7 @@ export function ReceiptsScreen({ identity }: ReceiptsScreenProps) {
                     {row.currency === null ? null : (
                       <span className={styles.currency}>{row.currency}</span>
                     )}
-                    <Value value={row.total} kind="money" />
+                    <Value value={row.total} kind="money" align="end" />
                   </td>
                   {/* Plain text rather than a `Chip` -- see the docstring -- and `Value`
                       is how this tree renders plain text. `receipt_summary` types
@@ -313,7 +313,7 @@ export function ReceiptsScreen({ identity }: ReceiptsScreenProps) {
                     <Value value={row.status} kind="text" />
                   </td>
                   <td className={styles.number}>
-                    <Value value={row.confidence} kind="count" />
+                    <Value value={row.confidence} kind="count" align="end" />
                   </td>
                 </tr>
               ))}

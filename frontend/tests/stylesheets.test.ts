@@ -534,6 +534,14 @@ const CENSUS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
     // treatment and is why it survived the review that found everything else
     // deletable.
     '.notExtracted': 'font-family, color, border-left, padding-left',
+    // The same rule mirrored, for a cell whose contents are flush right. Added
+    // 2026-08-20 after looking: at 1440 on `/app/receipts`, in Chromium, Firefox
+    // and WebKit alike, a receipt carrying a currency but no total rendered
+    // `PHP|—` -- the left-edge gutter landing between the currency code and the
+    // mark, aligned with nothing, because a right-aligned span shrink-wraps away
+    // from the edge the rule assumes. `value.test.tsx` pins this one by value
+    // too, in both directions: the mirrored pair present, the left pair absent.
+    '.notExtractedEnd': 'font-family, color, border-right, padding-right',
   },
 }
 

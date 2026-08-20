@@ -25,13 +25,35 @@ import styles from './Value.module.css'
  * through the accessibility tree rather than the attribute.
  *
  * A sighted reviewer gets the same distinction from the colour *and* the
- * hairline left border -- the scannability half of §4, which lets a reader find
+ * hairline border -- the scannability half of §4, which lets a reader find
  * every gap in a form without reading a single value, and which is also why the
  * mark is not colour alone.
  *
  * The null branch is deliberately **not** conditioned on `kind`. A missing
  * merchant name and a missing quantity are missing in exactly the same way, and
  * a rule with an exception is a rule someone will land on the wrong side of.
+ *
+ * ## `align` moves the gutter, and changes nothing about what the mark means
+ *
+ * The paragraph above still holds: what the mark *is* has no exceptions. What
+ * `align` picks is which edge the hairline sits on, and that is a property of
+ * the **cell**, not of the value -- so the caller that set `text-align` is the
+ * one that declares it. Default `'start'`, so every existing call site is
+ * unmoved.
+ *
+ * **`kind` cannot stand in for it, and that was measured rather than assumed.**
+ * Of the five call sites passing a numeric kind, two are left-aligned:
+ * `admin/StatTiles.tsx` renders a `count` in a tile whose stylesheet declares no
+ * `text-align` at all, and `review/ConfidenceRail.tsx` a `money` in the same
+ * shape. Keying the edge off `kind` would move the rule to the wrong side on
+ * both of those to fix the third.
+ *
+ * Why it needs fixing at all: a left-edge gutter works in a form because the
+ * fields share a left edge. In a right-aligned money column the span
+ * shrink-wraps and is pushed right, so the rule lands at a different x in every
+ * row. Seen in a browser on 2026-08-20 (`/app/receipts`, 1440, Chromium,
+ * Firefox and WebKit): a receipt with a currency and no total rendered `PHP|—`,
+ * the rule falling between the code and the mark.
  *
  * ## The empty string is the third state, and it gets the mark
  *
@@ -50,13 +72,18 @@ import styles from './Value.module.css'
  * and §4 puts the "cleared" chip **beside the label** rather than in the value
  * for that reason. The chip belongs to whichever component owns the edit.
  */
-export function Value({ value, kind }: {
+export function Value({ value, kind, align = 'start' }: {
   value: string | null
   kind: 'money' | 'text' | 'count'
+  align?: 'start' | 'end'
 }) {
   if (value === null || value === '') {
     return (
-      <span className={styles.notExtracted} role="img" aria-label="not extracted">
+      <span
+        className={align === 'end' ? styles.notExtractedEnd : styles.notExtracted}
+        role="img"
+        aria-label="not extracted"
+      >
         —
       </span>
     )

@@ -88,6 +88,36 @@ describe('Value — null is not zero, and neither is empty', () => {
     const { container: never } = render(<Value value={null} kind="text" />)
     expect(cleared.innerHTML).toBe(never.innerHTML)
   })
+
+  // §4's scan rule is a LEFT-edge gutter, and a browser showed it floating in a
+  // right-aligned money column: a receipt with a currency but no total rendered
+  // `PHP|—`, the 2px rule landing between the code and the mark and reading as a
+  // broken glyph rather than as "missing". The edge has to follow the cell, so
+  // the caller declares it.
+  //
+  // `kind` is deliberately NOT the axis, and that is measured rather than
+  // assumed. Of the five numeric-kind call sites, two are left-aligned --
+  // `StatTiles.tsx` renders a `count` in a tile with no `text-align` at all, and
+  // `ConfidenceRail.tsx` a `money` in the same shape -- so keying the edge off
+  // `kind` would move the rule to the wrong side on two surfaces to fix a third.
+  it('puts the scan rule on the edge the caller aligns to', () => {
+    const markOf = (c: HTMLElement): string => c.querySelector('span')!.className
+    const { container: start } = render(<Value value={null} kind="money" />)
+    const { container: end } = render(<Value value={null} kind="money" align="end" />)
+    // Both non-empty first: under `css: false` a missing key would render an
+    // absent attribute, and two absent attributes compare equal to each other.
+    expect(markOf(start), 'the default mark has no class at all').not.toBe('')
+    expect(markOf(end), 'the end-aligned mark has no class at all').not.toBe('')
+    expect(markOf(end), 'align="end" renders the same class as the default').not.toBe(
+      markOf(start),
+    )
+  })
+
+  it('defaults to the start edge, so every existing call site is unmoved', () => {
+    const { container: implicit } = render(<Value value={null} kind="text" />)
+    const { container: explicit } = render(<Value value={null} kind="text" align="start" />)
+    expect(implicit.innerHTML).toBe(explicit.innerHTML)
+  })
 })
 
 describe('Chip — the tone is never the only signal', () => {
@@ -850,6 +880,34 @@ describe('every class a component references exists in its stylesheet', () => {
     // §4 names the monospaced family for the mark alongside the colour, and
     // round 1 asserted it nowhere at all.
     expect(mark.get('font-family'), 'the mark lost --font-mono').toBe('var(--font-mono)')
+  })
+
+  it('mirrors the mark to the right edge, whole, for an end-aligned cell', () => {
+    // Every expectation names its literal on BOTH sides rather than comparing
+    // the two rules to each other. `end.get(x)).toBe(start.get(x))` passes when
+    // both are undefined, which is the shape that shipped three assertions that
+    // could not fail on an earlier branch.
+    const css = read('ui/Value.module.css')
+    const start = declarationsIn(css, '.notExtracted')
+    const end = declarationsIn(css, '.notExtractedEnd')
+
+    expect(start.get('border-left'), 'the start rule lost its border').toBe(
+      '2px solid var(--color-null)',
+    )
+    expect(end.get('border-right'), 'the end rule lost its border').toBe(
+      '2px solid var(--color-null)',
+    )
+    expect(start.get('padding-left'), 'the start rule lost its padding').toBe('var(--space-sm)')
+    expect(end.get('padding-right'), 'the end rule lost its padding').toBe('var(--space-sm)')
+
+    // The other two §4 signals carry across unchanged: mirroring moves the
+    // gutter, it does not make an end-aligned gap a quieter one.
+    expect(end.get('color'), 'the end rule lost its colour').toBe('var(--color-null)')
+    expect(end.get('font-family'), 'the end rule lost --font-mono').toBe('var(--font-mono)')
+
+    // ...and it carries the left edge nowhere, which would paint both sides.
+    expect(end.get('border-left'), 'the end rule paints both edges').toBeUndefined()
+    expect(end.get('padding-left'), 'the end rule pads both edges').toBeUndefined()
   })
 
   it('derives each computed list from its union, so a new tone cannot go unpainted', () => {
