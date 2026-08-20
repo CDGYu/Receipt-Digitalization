@@ -43,10 +43,34 @@ to be reported a constant.
 |---|---|---|
 | `triage` | local | the pass granite is measurably good at, and the cheapest place to get the merchant guess |
 | `extract` | local, then cloud | the user's ruling: run local first, fall back when it does not work. The two rungs are **roles filled by configuration**, not fixed identities — see §7 |
-| `repair` | whichever rung produced the kept extraction | repairing a rung that was discarded spends a call re-asking an answer already rejected |
+| `repair` | the **final** rung only | see §2.1 — a narrowing forced by how `extract_with_repair` is shaped |
 | `consistency` | not wired (P7.T1 is a separate milestone) | |
 
-### 2.1 What a tier is
+### 2.1 The repair budget, and a row this table got wrong
+
+An earlier version of the row above said repair "follows whichever rung produced
+the kept extraction". That describes a decomposition that does not exist:
+`extract_with_repair` performs the extract *and* its repair rounds in one call,
+so there is no way to run a rung's extract, decide to keep it, and only then
+spend its repairs — short of re-extracting, which is the cost the rule was
+trying to avoid.
+
+**So the rule is: non-final rungs run with `max_repairs=0`; the final rung gets
+the configured budget.** A non-final rung is a probe asking "can this model read
+this receipt at all", and repairs on a rung that may be discarded are spent
+re-asking a model that already failed — which on this hardware is tens of
+minutes per call.
+
+Two consequences, both accepted:
+
+- a non-final rung that *is* kept was kept on its first attempt and receives no
+  repair rounds. A deployment that wants the local model repaired configures it
+  as the only rung, where it is final;
+- with no fallback configured there is exactly one rung, it is final, and it
+  receives the configured budget — so **today's behaviour is unchanged**, which
+  is this design's standing requirement.
+
+### 2.2 What a tier is
 
 A tier is a **`(model, use_tools)` pair**, not a provider. On Ollama both rungs
 share the endpoint, the key and the timeout: the local daemon proxies `:cloud`
