@@ -60,19 +60,43 @@ This is why the milestone is small. It is not a multi-provider abstraction.
 
 ## 3. The fallback trigger
 
-The local rung's result is **discarded** when any of:
+The local rung's result is **discarded** when either of:
 
 1. the call raised (`VLMTransientError` / `VLMPermanentError` out of extract);
-2. the response carried a `parse_error`;
-3. the extraction **read nothing**.
+2. the extraction **read nothing**.
 
-Clause 3 needs a definition that cannot rot as the schema grows, and this project
-already has one.
+### Correction (2026-08-20, before implementation) — three clauses became two
 
-### 3.1 "Read nothing", defined by reuse and not by a new list
+This section listed a third clause, "the response carried a `parse_error`". It
+is **subsumed**, and specifying it separately would have been a check that can
+never independently fire. `_evaluate` in `extract/extractor.py` resolves a
+failed parse as `extraction = response.parsed or ReceiptExtraction()`, so a
+parse failure produces exactly a default-constructed extraction — which clause 2
+already catches. Measured, not reasoned.
 
-> The extraction read nothing ⟺ no path whose group is `core` or `line_items`
-> is filled.
+**The same measurement falsified clause 2's first definition**, which read "no
+path whose group is `core` or `line_items` is filled". A default-constructed
+`ReceiptExtraction()` has **one** filled `core` leaf —
+`receipt.decimal_convention = 'point'` — so that predicate is `False` on a
+totally empty extraction and would never have fired at all. `eval/metrics.py`
+explains why it is `core` rather than a self-report leaf: the convention "names a
+convention the document prints, so it is something the model had to read." That
+is right for accuracy scoring and fatal for an emptiness test.
+
+### 3.1 "Read nothing", defined against the schema's own default
+
+> The extraction read nothing ⟺ its filled `core` and `line_items` paths are
+> identical to those of a default-constructed `ReceiptExtraction()`.
+
+Comparing against the default rather than against emptiness is what makes it
+schema-derived in both directions: a field added later with a default is
+excluded automatically, and a field the model actually fills is counted
+automatically. Nothing is listed, so nothing rots.
+
+Verified on five cases before this was written: a default extraction reads
+nothing; a merchant name, a total, or `decimal_convention` read as `comma` each
+make it read *something*; and a difference confined to `meta.*` still reads
+nothing, because self-report is not content.
 
 `_group(path)` and `_is_filled(value)` in `eval/metrics.py` are ADR-0040's
 machinery. `_group` classifies a dotted path as `self_report`, `line_items` or
@@ -93,12 +117,18 @@ Testing after normalization would read that `PHP` as content the model produced,
 and the fallback would never fire. The predicate therefore takes
 `outcome.extraction`, before `normalize` is applied.
 
-### 3.3 Why the self-report group must be excluded
+### 3.3 Why the self-report group is still excluded
 
-A strict "every leaf is null" test can never be true: `prices_include_tax`
-defaults to `False`, and `meta.*` fields rest at `[]`/`None`/`False`. Those are
-the model's claims about the paper, not transcriptions from it — which is the
-distinction `_group` exists to draw.
+Comparing against the default handles fields that merely rest at a default, so
+the grouping is no longer load-bearing for *that*. It is still required for a
+different reason: `meta.*` is where the model describes its own reading, and a
+model that changes only its self-description — `meta.legibility`,
+`meta.is_handwritten` — has still transcribed nothing from the paper. Measured:
+an extraction differing from the default only under `meta.` reads as nothing,
+which is the intended answer.
+
+Keeping the group test also keeps one definition of "content" shared with
+`field_accuracy` rather than growing a second one, which is §4's whole point.
 
 ---
 
@@ -265,8 +295,11 @@ function. Not two mechanisms that must agree — review standard 19.
 
 Each pin is proven red before the fix, and each guarantee is reverted separately.
 
-1. The trigger fires on a raise, on a `parse_error`, and on a read-nothing
-   extraction — and **does not** fire on a partial-but-real one.
+1. The trigger fires on a raise and on a read-nothing extraction, and **does
+   not** fire on a partial-but-real one. A parse failure is covered as a case of
+   read-nothing rather than as its own clause, and the pin says so — asserting
+   it separately would be an assertion that cannot independently fail (§3's
+   correction).
 2. The cloud rung is not called when local returns something usable, and is
    called when it does not.
 3. Repair runs on the rung whose extraction was kept.
