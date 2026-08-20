@@ -1291,6 +1291,45 @@ emptiness form. The first two were proven red before the fix.
 `extractor.py:278`. Worth recording — the lesson is to check rationales, not to
 assume they are all false.
 
+### Task 4, as executed — an assertion that could not fail, and a test that read `.env`
+
+Task 4 shipped green (`f0051d2`, 1266 -> 1269, five gates PASS). Both headline
+findings were reproduced by the controller before acceptance.
+
+**D3 — the plan's third assertion could not fail.** Step 1 asserted
+`tiers.triage is not tiers.extract_rungs[0]`. `make_client` returns a **fresh**
+`FakeVLMClient` on every call, so two calls are always distinct objects and the
+assertion held whether or not `VLM_MODEL_TRIAGE` was honoured. Replaced with an
+assertion on the resolved model ids. **Reproduced**: with `make_pass_clients`
+mutated to ignore the triage model, the tree still imports and the replacement
+fails `assert 'extract-model' == 'triage-model'`; the original would have
+passed. That is the **fourth** can't-fail assertion in this repository's
+history, and the first caught before it landed.
+
+**D2 — the plan's `_settings()` helper read the developer's `.env`.** It omitted
+`_env_file=None`, so `Settings(vlm_provider="fake")` resolves
+`vlm_model_extract='gemma4:cloud'` and `vlm_use_tools=True` here. "With nothing
+configured" was therefore false, and the test passed **only because
+`VLM_MODEL_EXTRACT_FALLBACK` happens to be absent from this `.env`** — one line
+added there and the pin reddens for reasons unrelated to the code. Four
+pre-existing tests in the same file already pass `_env_file=None`; the plan
+ignored the file's own convention. **Verified** by the controller.
+
+**D1 — the ruff/import defect, fourth instance**, now with `F811` as well as
+`E402` because the plan re-imports `Settings`, which the file already has. The
+pattern named after Task 3 held exactly as predicted.
+
+**Rationales checked that held: eight**, including that
+`model_copy(update=...)` genuinely takes effect (proven by reading the field
+back on the copy, and pinned behaviourally by asserting on both rungs' model ids
+rather than on a count, which an ignored update would not have moved).
+
+**Open, reported not fixed:** `PassClients`' `frozen=True` is pinned by nothing —
+dropping it leaves all five gates green. A stated interface property with no
+test behind it, which is the class ADR-0046 decision 5 and the `_resolve_merchant`
+rollback both belong to. Outside Task 4's proof obligations; **for the
+whole-branch review.**
+
 ### Task 3, as executed — two defects, and five rationales that held
 
 Task 3 shipped green (`a9bc61c`, 1263 -> 1266, five gates PASS). The
