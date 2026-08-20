@@ -79,6 +79,68 @@ re-evaluated.
 > it changes what "the provider" means, which **ADR-0002** currently treats as a
 > single runtime choice.
 
+### Measurement (2026-08-21) — the empirical decider RAN, and the hypothesis is refuted
+
+**The ruling block above is wrong about what a legible image would do.** It
+argues that "granite reads nothing" rests entirely on a run the code flagged as
+unreadable, and predicts that at `max_edge=2048` granite "would finish at 2048
+for the first time, and that alone could move it off zero — not because the
+model improved, but because it would finally be shown a legible image."
+
+It finished at 2048. It did not move off zero.
+
+**Run:** r002, `max_edge=2048`, `VLM_TIMEOUT_S=3600`, `VLM_USE_TOOLS=false`,
+`granite3.2-vision:2b` via `scripts/try_one_receipt.py`, against the WSL Ollama
+on `:11435` — the endpoint `VLM_BASE_URL` names.
+
+| | 768 (the run this issue calls unreadable) | **2048** |
+|---|---|---|
+| triage | — | **590 s** |
+| extract | 2121 s | **6563 s** |
+| merchant / date / total | all null | **all null** |
+| line items | 0 | **0** |
+| fields transcribed correctly | 2 | **2** |
+| confidence | — | **0.000**, `needs_review` |
+| critical fields all correct | no | **no** |
+
+The only populated field was `currency: PHP`, and `DEFAULT_CURRENCY` supplied it
+— the model read nothing at all. Validation returned `R010` (total is null) as
+an error plus three warnings for the missing date, merchant and line items.
+
+**The percentages are not comparable and the numerators are.** This run reports
+8.33% (2/24) against the earlier 11.11% (2/18): the denominator grew because
+ADR-0044 added `buyer.*` and `is_template_row` to the golden labels, and
+`buyer.name` duly appears in the mismatch list. Two fields correct, both times.
+
+**Triage did not improve either**, which the ruling block did not predict: at
+2048 `merchant_name_guess` and `est_items` stayed correct, `is_receipt` stayed
+wrong, and `legibility` became wrong where 768 had it right.
+
+#### What this settles, and what it does not
+
+- **Settled: granite is not a viable extract rung on this hardware at any
+  resolution it can run.** 7153 s per receipt end to end, for nothing read.
+  Against roughly 25 s for `gemma4:cloud`.
+- **Settled: granite stays useful for triage.** `merchant_name_guess` was
+  correct at both resolutions, and ADR-0043 decision 1's hint path keys off it.
+- **Not settled: whether a larger local model would.** This is a measurement
+  about a 2.5B model on two CPU cores, not about local inference in general.
+- **Not settled: anything about `gemma4:cloud`'s accuracy.** That is step 6.
+
+#### A second finding, which is about the harness rather than the model
+
+**`VLM_TIMEOUT_S` bounds one HTTP attempt, not one `complete_json` call.**
+`OpenAICompatClient` passes `timeout=timeout_s` to `openai.OpenAI(...)` and never
+sets `max_retries`, which that SDK defaults to **2** (verified against the
+installed openai 2.48.0). So a single call can take up to **3 × `VLM_TIMEOUT_S`**
+before raising, and the retries are silent — nothing in the log distinguishes a
+first attempt from a third.
+
+That means **the 6563 s above is elapsed wall clock over an unknown number of
+attempts** and cannot be attributed to one inference. It also means this issue's
+earlier "extraction hit the 900 s timeout" was up to 2700 s of real time.
+Whether to pin `max_retries` is undecided and belongs with the escalation ADR.
+
 ### Correction (2026-08-18) — granite DOES declare tool support
 
 **The ruling block above says granite "declares no tool support, so it cannot use

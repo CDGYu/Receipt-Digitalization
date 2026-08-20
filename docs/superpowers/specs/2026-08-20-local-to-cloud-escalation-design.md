@@ -392,17 +392,65 @@ Recorded because they are not derivable from the tree and they gate the work.
   hardware would not improve comprehension in any case — ISSUE-001 already
   answered that: weights decide comprehension, hardware decides speed.
 
-### 11.1 One experiment is outstanding and should run before the ladder is locked
+### 11.1 The empirical decider RAN, and granite still reads nothing
 
-Granite has **never been given a fair test**. Every completed local run was
-forced to `max_edge=768`, where `resize_for_model` itself logged "estimated text
-height 7.7px is below 12px; text may be illegible". At the pipeline default of
-2048 it has never finished — triage alone took 887 s and extract hit the 900 s
-timeout.
+ISSUE-001 held that "granite reads nothing" rested on an image the code itself
+called illegible: every completed local run was forced to `max_edge=768`, where
+`resize_for_model` logged "estimated text height 7.7px is below 12px; text may
+be illegible", and at the pipeline default of 2048 it had never finished. The
+hypothesis was that a legible image "could move it off zero — not because the
+model improved, but because it would finally be shown a legible image."
 
-So "granite reads nothing" rests entirely on a run the code flagged as
-unreadable. ISSUE-001 calls the 2048 run **the empirical decider** for whether
-granite is a genuine first rung or a cost paid before every cloud call, and it
-needs only a raised `VLM_TIMEOUT_S` and one receipt. Its result does not change
-the mechanism this document specifies — the ladder is configurable either way —
-but it changes what the default ladder should be.
+**Run on 2026-08-20/21, r002, `max_edge=2048`, `VLM_TIMEOUT_S=3600`, tools off.
+The hypothesis is refuted.**
+
+| | 768 (ISSUE-001) | 2048 (this run) |
+|---|---|---|
+| triage | — | 590 s |
+| extract | 2121 s | **6563 s** |
+| merchant / date / total | all null | **all null** |
+| line items | 0 | **0** |
+| fields transcribed correctly | 2 | **2** |
+| confidence | — | **0.000** |
+
+The only populated field was `currency: PHP`, supplied by `DEFAULT_CURRENCY`
+rather than read from the paper — the exact case §3.1's predicate exists to
+catch. The reported percentages differ (11.11% of 18 versus 8.33% of 24) only
+because the golden denominator grew when ADR-0044 added `buyer.*` and
+`is_template_row`; the numerator is 2 in both.
+
+**Triage did not improve either.** At 2048 it kept the two answers that matter
+(`merchant_name_guess` correct, `est_items` correct), kept the wrong
+`is_receipt`, and got `legibility` *wrong* where 768 had it right.
+
+**So the default ladder is a single cloud rung for extract**, with granite kept
+for triage — where it is measurably good and where its 590 s is at least buying
+the merchant guess ADR-0043's hint path needs. A local extract rung remains
+configurable for a better local model, but nothing measured justifies enabling
+it: 7153 s per receipt against roughly 25 s for `gemma4:cloud`.
+
+### 11.2 `VLM_TIMEOUT_S` does not bound a call — it bounds one attempt
+
+Found while waiting for the run above, and **not recorded anywhere in this
+repository before now.**
+
+`OpenAICompatClient` passes `timeout=timeout_s` into `openai.OpenAI(...)` and
+never sets `max_retries`. That SDK defaults to **2 retries** (verified against
+the installed openai 2.48.0), so one `complete_json` can take up to
+**3 × `VLM_TIMEOUT_S`** before it raises. At the 3600 s used here that is a
+three-hour ceiling on a single call, and the retries are silent — nothing in the
+log distinguishes a first attempt from a third.
+
+Two consequences for this design:
+
+- **A failing local rung costs 3× the timeout before the fallback runs**, not
+  1×. The ladder is materially more expensive on the failure path than §2 makes
+  it sound, which matters most on exactly the hardware that makes a fallback
+  attractive.
+- **Any timing measured through this client is a wall clock over an unknown
+  number of attempts.** The 6563 s above is honest as elapsed time and cannot be
+  attributed to a single inference. ISSUE-001's earlier "extract hit the 900 s
+  timeout" was likewise up to 2700 s of real time.
+
+Whether to set `max_retries=0` or make it configurable is **not decided here** —
+it changes retry behaviour for every provider and belongs with the ADR.
