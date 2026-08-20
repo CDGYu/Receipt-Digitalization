@@ -376,6 +376,19 @@ class EvalReport:
     p50_latency_s: float | None = None         # 6
     p95_latency_s: float | None = None         # 6
 
+    #: How many receipts each extract rung produced the *kept* extraction for,
+    #: keyed by model id. ``None`` when unobservable -- the same rule
+    #: ``cost_per_receipt`` follows, and for the same reason: the injected
+    #: ``pipeline_fn`` cannot see which rung ran, so a caller that measures the
+    #: real pipeline (``eval.run_baseline``) fills it in. ``None``, never ``{}``:
+    #: an empty dict would read as "measured, and no rung ran".
+    #:
+    #: Counts rather than a derived escalation rate, because a percentage is
+    #: computed against a denominator that can go stale while the counts cannot
+    #: (design §6). ISSUE-001's stated fear is a good accuracy figure hiding the
+    #: fact that everything escalated, and this is the figure that answers it.
+    extract_rung_counts: dict[str, int] | None = None
+
     #: Receipts whose pipeline call raised, and ``(receipt_id, error)`` for each.
     n_failed: int = 0
     failures: list[tuple[str, str]] = field(default_factory=list)

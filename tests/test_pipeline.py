@@ -39,7 +39,12 @@ from receipts.extract.schema import (  # noqa: E402
     Totals,
     TriageResult,
 )
-from receipts.pipeline import build_eval_pipeline, prepare_image, run_receipt  # noqa: E402
+from receipts.pipeline import (  # noqa: E402
+    PassAttempt,
+    build_eval_pipeline,
+    prepare_image,
+    run_receipt,
+)
 from receipts.validate.context import ValidationContext  # noqa: E402
 from receipts.validate.report import ValidationReport  # noqa: E402
 
@@ -346,6 +351,74 @@ def test_build_eval_pipeline_missing_image_raises(tmp_path):
 
     with pytest.raises(FileNotFoundError):
         pipeline_fn(tmp_path / "labels" / "missing.json")
+
+
+def test_build_eval_pipeline_records_which_rung_was_kept(tmp_path):
+    """The sink is how attribution leaves the adapter.
+
+    ``run_eval``'s ``PipelineFn`` contract is ``(extraction, confidence)`` and
+    stays that way (design §6.1), so provenance travels out through a
+    caller-owned collector instead of widening it.
+
+    No label file is written: ``pipeline_fn`` reads only the *stem* of the path
+    it is handed, and the label itself is ``run_eval``'s business.
+    """
+    sink: list[PassAttempt] = []
+    pipeline_fn = build_eval_pipeline(
+        FakeVLMClient([_triage(), _good()], model_id="local"),
+        CTX,
+        tmp_path,
+        attribution_sink=sink,
+    )
+    _write_png(tmp_path / "r001.png")
+
+    pipeline_fn(tmp_path / "r001.json")
+
+    kept = [a for a in sink if a.pass_name == "extract" and a.kept]
+    assert [a.model_id for a in kept] == ["local"]
+
+
+def test_build_eval_pipeline_forwards_both_rung_clients(tmp_path):
+    """The adapter is the only route from a built ladder into a run.
+
+    ``make_pass_clients`` builds the rungs and ``run_receipt`` consumes them;
+    nothing joins the two unless this function forwards them. Dropping either
+    forwarding leaves the ladder built and never reached -- the shape this
+    milestone's own self-review flagged -- so both are pinned here, in one
+    assertion over the whole attribution record rather than three loose ones.
+
+    The first rung's response is unparseable, so it reads nothing and is
+    discarded; the fallback produces the kept extraction.
+    """
+    sink: list[PassAttempt] = []
+    # Two scripted responses, and correct behaviour consumes exactly one. The
+    # surplus is what lets this test print its own message: with the triage
+    # forwarding dropped, the triage pass lands on this client, and a
+    # one-response script would redden on "FakeVLMClient exhausted" -- a
+    # test-authoring failure -- instead of on the attribution below.
+    first = FakeVLMClient([_unparseable(), _unparseable()], model_id="local")
+    fallback = FakeVLMClient([_good()], model_id="cloud")
+    triage_client = FakeVLMClient([_triage()], model_id="triage-model")
+    pipeline_fn = build_eval_pipeline(
+        first,
+        CTX,
+        tmp_path,
+        triage_client=triage_client,
+        extract_fallback_client=fallback,
+        attribution_sink=sink,
+    )
+    _write_png(tmp_path / "r001.png")
+
+    extraction, _confidence = pipeline_fn(tmp_path / "r001.json")
+
+    assert extraction.merchant.name == "SUPERMART INC."
+    # One call on the first rung: its extract, and not the triage pass.
+    assert len(first.calls) == 1
+    assert [(a.pass_name, a.model_id, a.kept) for a in sink] == [
+        ("triage", "triage-model", True),
+        ("extract", "local", False),
+        ("extract", "cloud", True),
+    ]
 
 
 # --------------------------------------------------------------------------- #

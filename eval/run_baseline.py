@@ -1,11 +1,16 @@
 """One-command baseline runner (spec §15 M1 -> §16).
 
 Composes the pieces that already exist -- environment :class:`Settings`, the VLM
-client :func:`make_client` factory, the M1 :mod:`receipts.pipeline`, and the
-eval :mod:`eval.harness` -- into the single call a user makes to get real
+client :func:`make_pass_clients` factory, the M1 :mod:`receipts.pipeline`, and
+the eval :mod:`eval.harness` -- into the single call a user makes to get real
 baseline metrics over the golden set::
 
-    env Settings -> make_client -> build_eval_pipeline -> run_eval
+    env Settings -> make_pass_clients -> build_eval_pipeline -> run_eval
+
+**This is the only place the extract ladder is constructed**, which is what
+keeps the escalation on the eval path (design §5). Nothing under ``src/``
+outside :func:`~receipts.pipeline.run_receipt` can be handed a second rung,
+because nothing else builds one.
 
 This module owns no prompt text, no rules, and no provider details; it only
 *wires*. ``client`` and ``ctx`` are injectable, which is the same seam the
@@ -30,8 +35,8 @@ from pathlib import Path
 
 from config.settings import get_settings
 from receipts.extract.clients.base import VLMClient
-from receipts.extract.clients.factory import make_client
-from receipts.pipeline import build_eval_pipeline
+from receipts.extract.clients.factory import PassClients, make_pass_clients
+from receipts.pipeline import PassAttempt, build_eval_pipeline
 from receipts.validate.context import ValidationContext
 
 from .golden_set import GOLDEN_DIR
@@ -61,11 +66,24 @@ def run_baseline(
     """Run the M1 pipeline over the golden set and return the eval report.
 
     ``golden_dir`` defaults to :data:`eval.golden_set.GOLDEN_DIR`. When
-    ``client`` is ``None`` the client is built from the environment
+    ``client`` is ``None`` the per-pass clients are built from the environment
     (:func:`~config.settings.get_settings` +
-    :func:`~receipts.extract.clients.factory.make_client`); a ``fake`` provider
-    is refused with a clear :class:`RuntimeError` because it carries no scripted
-    responses. ``ctx`` defaults to a stock :class:`ValidationContext`.
+    :func:`~receipts.extract.clients.factory.make_pass_clients`); a ``fake``
+    provider is refused with a clear :class:`RuntimeError` because it carries no
+    scripted responses. ``ctx`` defaults to a stock :class:`ValidationContext`.
+
+    **An injected ``client`` is one rung and gets no ladder.** That seam is what
+    the offline tests and ``scripts`` use, and passing a client is not opting
+    into an escalation, so it is wrapped as a single-rung
+    :class:`~receipts.extract.clients.factory.PassClients` serving every pass --
+    exactly what this function did before the ladder existed. Building the
+    ladder on both branches would silently override the caller's client.
+
+    The returned report carries ``extract_rung_counts``: how many receipts each
+    extract rung produced the *kept* extraction for. It is folded out of the
+    per-run attribution after ``run_eval`` returns, which is the same route
+    ``cost_per_receipt`` takes and means it reaches the printed report and the
+    return value but not this run's own results JSON (design §6.1).
 
     ``default_currency`` overrides the configured ``DEFAULT_CURRENCY``; left
     ``None`` it is read from :class:`~config.settings.Settings`. Settings are
@@ -84,7 +102,13 @@ def run_baseline(
     if client is None:
         if settings.vlm_provider.strip().lower() == "fake":
             raise RuntimeError(_FAKE_PROVIDER_HINT)
-        client = make_client(settings)
+        tiers = make_pass_clients(settings)
+    else:
+        # An injected client is one rung, used for every pass -- exactly what
+        # this function did before the ladder existed. Passing a client is not
+        # opting into an escalation, and building the ladder here regardless
+        # would override the client the caller handed in.
+        tiers = PassClients(triage=client, extract_rungs=(client,))
 
     if ctx is None:
         ctx = ValidationContext()
@@ -92,13 +116,32 @@ def run_baseline(
     if default_currency is None:
         default_currency = settings.default_currency
 
+    attribution: list[PassAttempt] = []
     pipeline_fn = build_eval_pipeline(
-        client,
+        tiers.extract_rungs[0],
         ctx,
         golden_dir / "images",
         default_currency=default_currency,
+        triage_client=tiers.triage,
+        extract_fallback_client=(
+            tiers.extract_rungs[1] if len(tiers.extract_rungs) > 1 else None
+        ),
+        attribution_sink=attribution,
     )
-    return run_eval(golden_dir, pipeline_fn, results_dir=results_dir)
+    report = run_eval(golden_dir, pipeline_fn, results_dir=results_dir)
+
+    # Only the extract rung whose extraction was *kept* is counted. The triage
+    # pass is a different question, and a rung that ran and was discarded did
+    # not produce the extraction this report scored -- counting either would
+    # turn the answer to "did everything escalate?" into a call tally.
+    counts: dict[str, int] = {}
+    for entry in attribution:
+        if entry.pass_name == "extract" and entry.kept:
+            counts[entry.model_id] = counts.get(entry.model_id, 0) + 1
+    # ``None``, not ``{}``: an empty dict would read as "measured, and no rung
+    # ran". Only a run that scored no receipt at all leaves this empty.
+    report.extract_rung_counts = counts or None
+    return report
 
 
 def _pct(value: float | None) -> str:
@@ -156,6 +199,14 @@ def format_report(report: EvalReport) -> str:
     The failed count always shows, and each failure is listed with its error
     text when there is one — a partially failed run must be obvious on screen,
     not something you find later by reading the JSON.
+
+    **The per-rung counts print inside the accuracy block, not under it.** That
+    placement is the requirement rather than a nicety (design §6.2): ISSUE-001's
+    stated fear is a good accuracy figure hiding the fact that every receipt
+    escalated, and a number in a trailing section does not answer it. Counts,
+    not a derived escalation rate — a percentage needs a denominator that can go
+    stale while the counts cannot. Nothing prints when they are ``None``, which
+    is every offline run: an injected ``pipeline_fn`` cannot see a rung.
     """
 
     precision = (
@@ -170,6 +221,18 @@ def format_report(report: EvalReport) -> str:
     )
     p50 = f"{report.p50_latency_s:.2f}s" if report.p50_latency_s is not None else "n/a"
     p95 = f"{report.p95_latency_s:.2f}s" if report.p95_latency_s is not None else "n/a"
+
+    # Spliced into the accuracy block below rather than appended after it: the
+    # placement is the requirement (design §6.2). Nothing at all when the counts
+    # are `None` -- a bare heading with no rows under it would read as a
+    # measurement that came back empty, which is the opposite of "not measured".
+    rung_lines: list[str] = []
+    if report.extract_rung_counts:
+        rung_lines.append("  Extraction by rung:")
+        rung_lines.extend(
+            f"    {model_id:32s} {count}"
+            for model_id, count in sorted(report.extract_rung_counts.items())
+        )
 
     rule = "-" * 46
     lines = [
@@ -188,6 +251,7 @@ def format_report(report: EvalReport) -> str:
         f"  Line-item precision:      {_pct(report.line_item_precision)}",
         f"  Line-item recall:         {_pct(report.line_item_recall)}",
         f"  Line-item F1:             {_pct(report.line_item_f1)}",
+        *rung_lines,
         rule,
         f"  Cost per receipt:         {cost:>12}",
         f"  p50 latency:              {p50:>12}",

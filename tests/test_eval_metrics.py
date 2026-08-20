@@ -702,3 +702,36 @@ def test_the_artifact_keeps_the_per_path_map_sorted(tmp_path):
     assert row["transcription_correct"] < row["transcription_total"]
     assert payload["metrics"]["transcription_accuracy"] < 1.0
     assert "field_accuracy" not in payload["metrics"]
+
+
+# --------------------------------------------------------------------------- #
+# extract_rung_counts (design §6)
+# --------------------------------------------------------------------------- #
+
+
+def test_the_rung_counts_default_to_none_when_unobservable(tmp_path):
+    """``run_eval`` cannot see which rung ran, so it must not invent a number.
+
+    Same rule as ``cost_per_receipt`` and the latency percentiles, and for the
+    same stated reason: the injected ``pipeline_fn`` returns only an extraction
+    and a confidence, so a caller that measures the real pipeline fills these
+    in (design §6.1). ``None``, never ``{}`` -- an empty dict would read as
+    "measured, and no rung ran", which is a different fact.
+
+    The report is built the way this file builds them, through ``run_eval``
+    with a stub ``pipeline_fn``, and never by calling the constructor: a
+    hand-built ``EvalReport`` pins the constructor rather than the rule.
+    """
+    golden = tmp_path / "golden"
+    labels = golden / "labels"
+    labels.mkdir(parents=True)
+    (labels / "r1.json").write_text(
+        _extraction().model_dump_json(), encoding="utf-8"
+    )
+
+    def pipeline_fn(path):
+        return _extraction(), D("0.95")
+
+    report = run_eval(golden, pipeline_fn, results_dir=tmp_path / "results")
+
+    assert report.extract_rung_counts is None

@@ -354,6 +354,9 @@ def build_eval_pipeline(
     *,
     image_suffixes: tuple[str, ...] = DEFAULT_IMAGE_SUFFIXES,
     default_currency: str | None = None,
+    triage_client: VLMClient | None = None,
+    extract_fallback_client: VLMClient | None = None,
+    attribution_sink: list[PassAttempt] | None = None,
 ) -> Callable[[Path], tuple[ReceiptExtraction, Decimal]]:
     """Adapt the runner to :func:`eval.harness.run_eval`'s ``PipelineFn``.
 
@@ -368,6 +371,21 @@ def build_eval_pipeline(
     resolves the currency the same way a production run does -- otherwise a
     corpus whose receipts print no ISO code scores a currency miss on every
     single one.
+
+    ``triage_client`` and ``extract_fallback_client`` are forwarded to
+    :func:`run_receipt` unchanged, and this is the **only** route from a built
+    ladder into a run: ``make_pass_clients`` constructs the rungs and
+    ``run_receipt`` consumes them, and nothing joins the two anywhere else.
+    Left ``None`` -- the default, and what every caller that has not opted in
+    passes -- ``client`` serves both passes and the extract ladder has one rung.
+
+    ``attribution_sink``, when given, is extended with every
+    :class:`PassAttempt` each run produces. A caller-owned collector rather than
+    a widened return type, because ``run_eval``'s ``PipelineFn`` contract is
+    ``(extraction, confidence)`` and changing it would touch every fake pipeline
+    in the suite; ``cost_per_receipt`` and the latency percentiles take the same
+    route out for the same reason (design §6.1). It is appended to, never
+    cleared, so one sink accumulates a whole golden-set run.
 
     Self-consistency is not run in the straight-line M1 path, so ``consistency``
     is ``None`` here; when self-consistency lands (M6) its result should be
@@ -384,8 +402,15 @@ def build_eval_pipeline(
                 f"(tried suffixes: {', '.join(image_suffixes)})"
             )
         run = run_receipt(
-            image_path, client, ctx, default_currency=default_currency
+            image_path,
+            client,
+            ctx,
+            default_currency=default_currency,
+            triage_client=triage_client,
+            extract_fallback_client=extract_fallback_client,
         )
+        if attribution_sink is not None:
+            attribution_sink.extend(run.attribution)
         confidence = score_confidence(run.extraction, run.report, run.triage, consistency=None)
         return run.extraction, confidence
 

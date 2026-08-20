@@ -165,6 +165,17 @@ def _report_to_dict(report: EvalReport) -> dict[str, Any]:
             "p50_latency_s": report.p50_latency_s,
             "p95_latency_s": report.p95_latency_s,
         },
+        # ``EvalReport.extract_rung_counts`` is deliberately NOT written here.
+        # ``run_baseline`` folds it in *after* ``run_eval`` returns, and this
+        # file is written before that returns -- so the key would be ``null`` in
+        # every file this function has ever produced, whatever the run measured
+        # (probed 2026-08-21: a run whose report carried ``{'cloud': 1}`` wrote
+        # ``null``). A permanently-null key is not a record of provenance, and
+        # ``tests/test_cli_reports.py::test_the_producer_writes_the_shape_this_module_hand_writes``
+        # pins this shape against a hand-written fixture, so adding one is not
+        # free either. The counts reach the printed report and the return value;
+        # putting them in the artifact needs the write to happen after the fold,
+        # which is a change to who owns the results file.
         # Verbatim error text, not just a count: a run that silently reports
         # "2 failed" is not debuggable four minutes per receipt later.
         "failures": [[receipt_id, detail] for receipt_id, detail in report.failures],
