@@ -29,7 +29,16 @@ from decimal import Decimal
 from typing import Any
 
 from receipts.extract.lineitem_align import align_line_items
+
+# Aliased back to the private names this module already used, so the move of
+# the grouping into ``receipts.extract.paths`` changes no call site here.
+# ``_SELF_REPORT_LEAVES`` has no code reader left in this module -- it is read
+# by the ``FieldBreakdown`` docstring and imported by ``tests/test_eval_metrics``
+# -- hence the noqa rather than a deletion.
+from receipts.extract.paths import SELF_REPORT_LEAVES as _SELF_REPORT_LEAVES  # noqa: F401
 from receipts.extract.paths import flatten
+from receipts.extract.paths import group_of as _group
+from receipts.extract.paths import is_filled as _is_filled
 from receipts.extract.schema import LineItem, ReceiptExtraction
 
 # Default auto-approve cut-off (§17 AUTO_APPROVE_THRESHOLD). Used only to
@@ -51,69 +60,6 @@ def _norm_text(value: str) -> str:
     — merchant legal suffixes ("CO.", "INC.") carry meaning.
     """
     return _WS.sub(" ", value.strip()).casefold()
-
-
-#: Path prefixes that decide a leaf's family. Structural on purpose: a prefix
-#: test classifies a schema field added next year without anybody deciding it
-#: should be, where a list of field names would silently let it through
-#: (review standard 19 — an enumerated defence never converges). A leaf that no
-#: prefix can reach is declared just below, together with the rule that admits
-#: one.
-_META_PREFIX = "meta."
-_LINE_ITEMS = "line_items"
-
-#: The self-report leaves that do **not** live under ``meta.``. One declaration,
-#: read by :func:`_group` and by nothing else.
-#:
-#: The admission rule, and the whole of it: a leaf belongs here when it records
-#: the model's **claim about the paper** — the state of the document, or of the
-#: model's own reading of it — rather than a transcription of content printed
-#: on it. ``is_template_row`` says "this pre-printed row was left blank"; the
-#: paper nowhere reads "false", and a model that looks at nothing is right on
-#: every row that is not blank, which is a free point per line item inside a
-#: group that averages.
-#:
-#: ``receipt.decimal_convention`` is the near miss on the other side of that
-#: line and is deliberately **not** here: it also rests at a usually-correct
-#: default, but it names a convention the document prints, so it is something
-#: the model had to read.
-_SELF_REPORT_LEAVES = frozenset({"is_template_row"})
-
-
-def _group(path: str) -> str:
-    """Which family a dotted path belongs to: ``self_report``, ``line_items`` or ``core``.
-
-    Read from the path string alone — never from either side's value.
-
-    ``self_report`` is reached two ways, and there are exactly these two:
-    everything under the ``meta.`` prefix, and the leaves declared in
-    :data:`_SELF_REPORT_LEAVES`. The set is checked **first**, because the
-    leaves in it live under prefixes that would otherwise claim them.
-    """
-    if path.rsplit(".", 1)[-1] in _SELF_REPORT_LEAVES:
-        return "self_report"
-    if path.startswith(_META_PREFIX):
-        return "self_report"
-    if path == _LINE_ITEMS or path.startswith(f"{_LINE_ITEMS}["):
-        return "line_items"
-    return "core"
-
-
-def _is_filled(value: object) -> bool:
-    """True when a leaf carries information the model could have read.
-
-    ``None`` is not filled, and neither is an empty container. ``flatten``
-    emits ``[]``/``{}`` as leaves deliberately, so that "had none" is visible
-    rather than absent — but a receipt whose ``totals.tax_breakdown`` is empty
-    has no tax breakdown to transcribe, so it is not a point anyone can earn.
-
-    Written with ``isinstance``/``len`` rather than ``value in (None, [], {})``:
-    that form compares with ``==``, and equality against a container is not a
-    test this rule should rest on.
-    """
-    if value is None:
-        return False
-    return not (isinstance(value, (list, dict)) and len(value) == 0)
 
 
 def ratio(correct: int, total: int) -> float | None:
