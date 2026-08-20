@@ -989,15 +989,28 @@ git commit -m "test(pipeline): the escalation is unreachable from the production
 - [ ] **Step 1: Write the failing test**
 
 ```python
-from eval.metrics import EvalReport
+def test_the_rung_counts_default_to_none_when_unobservable(tmp_path) -> None:
+    """`run_eval` cannot see which rung ran, so it must not invent a number.
 
-
-def test_the_rung_counts_default_to_none_when_unobservable() -> None:
-    # Same rule as `cost_per_receipt`: a fact the injected pipeline_fn cannot
-    # see stays None rather than defaulting to a number nobody measured.
-    report = _minimal_report()
+    Same rule as `cost_per_receipt` and the latency percentiles, and for the
+    same stated reason: the injected `pipeline_fn` returns only an extraction
+    and a confidence, so a caller that measures the real pipeline fills these
+    in. `None`, never `{}` -- an empty dict would read as "measured, and no
+    rung ran", which is a different fact.
+    """
+    # Build the report the way this file already does: through `run_eval` with
+    # a fake pipeline_fn. Do NOT construct an EvalReport by hand -- it has
+    # fourteen fields and a hand-built one pins the constructor, not the rule.
+    ...  # follow the existing pattern at tests/test_eval_metrics.py:440-460
     assert report.extract_rung_counts is None
 ```
+
+**`_minimal_report()` does not exist** — an earlier version of this step called
+it, which is a reference to a helper defined in no task and forbidden by this
+plan's own rules. `tests/test_eval_metrics.py` builds reports by calling
+`run_eval` with a fake `pipeline_fn` (see the test at `:440-460`); follow that,
+and read the real helpers (`_extraction`, and how it writes label files) rather
+than inventing new ones.
 
 ```python
 def test_build_eval_pipeline_records_which_rung_was_kept(tmp_path):
