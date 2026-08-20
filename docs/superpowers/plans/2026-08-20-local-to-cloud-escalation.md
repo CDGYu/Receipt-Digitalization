@@ -278,10 +278,24 @@ def read_nothing(extraction: Any) -> bool:
     Covers the no-parse case without a clause of its own -- ``_evaluate``
     resolves a failed parse to exactly ``ReceiptExtraction()``.
     """
-    from .schema import ReceiptExtraction  # local: avoids an import cycle
-
     return _content_paths(extraction) == _content_paths(ReceiptExtraction())
 ```
+
+with `from .schema import ReceiptExtraction` added to the **module-level**
+imports at the top of `paths.py`.
+
+**There is no import cycle, so do not write a local import.** An earlier version
+of this step had `from .schema import ReceiptExtraction  # local: avoids an
+import cycle` inside the function. That comment was false and is exactly the
+defect species Task 1 caught — a correct-looking instruction carrying an invented
+reason. Verified before dispatch: `schema.py` imports only stdlib and pydantic,
+and `src/receipts/extract/__init__.py` is empty, so no route from `schema` back
+to `paths` exists.
+
+**Consider caching the baseline.** `_content_paths(ReceiptExtraction())` is
+recomputed on every call and is a constant. A module-level constant is the
+obvious form; whether it is worth it is the implementer's call, and either
+answer is fine provided the tests pass. Say which you chose and why.
 
 - [ ] **Step 4: Run the test to verify it passes**
 
@@ -1236,6 +1250,21 @@ would have caused real damage is the one where the plan explained *why* a thing
 mattered and got the reason wrong — a correct instruction with a false rationale
 is more dangerous than a missing one, because it invites an implementer to
 "simplify" on the strength of it.
+
+### Task 2, before dispatch — the same defect species, one task later
+
+**Task 2's Step 3 carried `from .schema import ReceiptExtraction  # local:
+avoids an import cycle`. There is no cycle.** Verified structurally:
+`src/receipts/extract/schema.py` imports only stdlib and pydantic, and
+`src/receipts/extract/__init__.py` is empty, so no route runs from `schema` back
+to `paths`.
+
+This was written **into the next task after Task 1 caught the identical
+species** — an instruction whose *reason* is invented. It is worth stating
+plainly: the author who recorded that lesson then repeated it within the hour,
+which is why the defence is a check by whoever runs the code, not the author's
+resolve to be careful. Step 3 now specifies a module-level import and says why
+there is no cycle.
 - **2026-08-20, self-review, three findings:**
   1. **`make_pass_clients` was built in Task 4 and consumed by nothing.** The ladder would have been implemented, tested and never reached by an eval run — the shape this repo carries *deliberately* for `few_shots_for` and would have acquired here by accident. Fixed by giving `build_eval_pipeline` the two rung parameters and switching `run_baseline` from `make_client` to `make_pass_clients`.
   2. **Task 7 Step 4 contained a literal `...` standing in for the `build_eval_pipeline` call.** A placeholder that a keyword scan for "TBD"/"TODO" does not catch. Replaced with the real call, plus an instruction to read the surrounding argument names rather than trust this plan's.
