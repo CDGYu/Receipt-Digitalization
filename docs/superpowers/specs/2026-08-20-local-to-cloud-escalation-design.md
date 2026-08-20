@@ -357,16 +357,34 @@ its stated limit, and the provenance route.
 
 Recorded because they are not derivable from the tree and they gate the work.
 
-- **`~/.ollama` had been reset.** The model store was empty (0 files) and the
-  `id_ed25519` identity was regenerated when the daemon was next started, so the
-  account registration from 2026-08-18 was gone with it.
-- **`gemma4:cloud` returned `Unauthorized`** on an inference call while its
-  manifest pulled successfully — a direct instance of ISSUE-001's own warning
-  that *pull success is not access*. Cleared by the user running `ollama signin`;
-  re-probed and confirmed working.
-- **Ollama is installed at `%LOCALAPPDATA%\Programs\Ollama\ollama.exe`**, which is
-  on PowerShell's `PATH` but not on Git Bash's — the same shape as §1.6's
-  `receipts.exe` wrapper.
+- **There are TWO Ollama installations on this machine, and the project uses the
+  one that is easy to miss.** `VLM_BASE_URL` points at **`localhost:11435`**,
+  which is `wslrelay.exe` forwarding to an Ollama running **inside WSL**. A
+  second, separate Ollama is installed on Windows at
+  `%LOCALAPPDATA%\Programs\Ollama\ollama.exe` and serves **11434**. They have
+  different model stores, different identities and different model lists.
+
+  **Anything measured about "the local Ollama" must name its port**, or it is a
+  claim about whichever installation the author happened to reach. Measured
+  2026-08-20: `:11435` (WSL, the one that matters) served
+  `granite3.2-vision:2b`, `gemma4:cloud`, `kimi-k2.6:cloud` and `qwen3.5:cloud`;
+  `:11434` (Windows) served an empty store until it was pulled into.
+
+  *(Written after getting this wrong: the Windows store was inspected, found
+  empty, and reported as "the model store is empty". It was empty — and it was
+  not the store the project reads.)*
+
+- **Cloud inference is authorised per installation, not per machine.**
+  `gemma4:cloud` returned `Unauthorized` on `:11434` while its manifest pulled
+  successfully — a direct instance of ISSUE-001's own warning that *pull success
+  is not access*, since a manifest is public and inference authenticates with
+  the daemon's `id_ed25519` identity. `:11435` answers, so **both endpoints are
+  now usable**, but they were signed in separately.
+
+- **Two cloud models nobody has evaluated are already pulled** on `:11435`:
+  `kimi-k2.6:cloud` and `qwen3.5:cloud`. ISSUE-001's measurements are on
+  `gemma4:cloud` alone, so those two are candidates rather than options — the
+  check for any candidate is an inference call, not a pull.
 - **There is no cloud build of granite.** Measured against the registry:
   `granite3.2-vision:2b` resolves, `granite3.2-vision:2b-cloud` and
   `granite3.2-vision:cloud` both 404, with `gemma4:cloud` resolving as the control
