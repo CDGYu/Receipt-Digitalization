@@ -12,7 +12,12 @@ from __future__ import annotations
 import pytest
 
 from config.settings import Settings
-from receipts.extract.clients.factory import make_client, resolve_use_tools
+from receipts.extract.clients.factory import (
+    PassClients,
+    make_client,
+    make_pass_clients,
+    resolve_use_tools,
+)
 from receipts.extract.clients.fake import FakeVLMClient
 from receipts.extract.clients.openai_compat import OpenAICompatClient
 
@@ -169,3 +174,81 @@ def test_anthropic_provider_honors_configured_timeout(monkeypatch):
         )
     )
     assert captured["timeout_s"] == 900.0
+
+
+# --------------------------------------------------------------------------- #
+# make_pass_clients: one client per pass, and a rung ladder for extract
+# --------------------------------------------------------------------------- #
+
+
+def _pass_clients(**overrides) -> PassClients:
+    """Per-pass clients built from an isolated Settings.
+
+    ``_env_file=None`` for the same reason ``_client`` above uses it, and it is
+    load-bearing here rather than tidy: this repository's own ``.env`` sets
+    VLM_MODEL_EXTRACT, VLM_MODEL_TRIAGE, VLM_USE_TOOLS, VLM_BASE_URL and
+    VLM_TIMEOUT_S, so a Settings built without it is not "nothing configured" --
+    it is whatever the deployment on this machine happens to say.
+    """
+    return make_pass_clients(Settings(_env_file=None, **overrides))
+
+
+def test_with_nothing_configured_there_is_exactly_one_rung() -> None:
+    # The whole-behaviour guarantee: an unconfigured deployment gets what it
+    # got before this milestone existed.
+    assert len(_pass_clients(vlm_provider="fake").extract_rungs) == 1
+
+    # ...and "what it got" is the client `make_client` builds, not merely one of
+    # something. `fake` cannot show that -- it ignores every setting -- so the
+    # equivalence is asserted on an OpenAI-family deployment with none of the
+    # three settings this milestone adds.
+    settings = Settings(
+        _env_file=None, vlm_provider="ollama", vlm_api_key="k", vlm_model_extract="m"
+    )
+    rungs = make_pass_clients(settings).extract_rungs
+    reference = make_client(settings)
+    assert len(rungs) == 1
+    assert rungs[0].model_id == reference.model_id
+    assert rungs[0].use_tools == reference.use_tools
+    assert str(rungs[0]._client.base_url) == str(reference._client.base_url)
+    assert float(rungs[0]._client.timeout) == float(reference._client.timeout)
+
+
+def test_a_fallback_model_adds_a_second_rung() -> None:
+    tiers = _pass_clients(
+        vlm_provider="ollama",
+        vlm_api_key="k",
+        vlm_model_extract="local-a",
+        vlm_model_extract_fallback="cloud-b",
+        vlm_use_tools=False,
+        vlm_use_tools_fallback=True,
+    )
+    # Asserted on the resolved model ids rather than on the count alone: a
+    # length of two also holds when both rungs were built from the same model,
+    # which is exactly what a `model_copy` that ignored its update would give.
+    assert [rung.model_id for rung in tiers.extract_rungs] == ["local-a", "cloud-b"]
+    # The second rung answers the tools question for itself; the first keeps the
+    # process-wide default.
+    assert [rung.use_tools for rung in tiers.extract_rungs] == [False, True]
+
+
+def test_the_triage_rung_can_name_its_own_model() -> None:
+    # Asserted on `model_id` rather than on `tiers.triage is not
+    # tiers.extract_rungs[0]`: `make_client` hands back a fresh FakeVLMClient on
+    # every call, so an identity check on the `fake` provider is true whether or
+    # not VLM_MODEL_TRIAGE was honoured, and cannot fail. An OpenAI-family
+    # client records the model it was wired to, so this one can.
+    tiers = _pass_clients(
+        vlm_provider="ollama",
+        vlm_api_key="k",
+        vlm_model_extract="extract-model",
+        vlm_model_triage="triage-model",
+        vlm_use_tools=True,
+        vlm_use_tools_triage=False,
+    )
+    assert tiers.triage.model_id == "triage-model"
+    assert tiers.extract_rungs[0].model_id == "extract-model"
+    # The other half of what a triage rung names for itself (design 7.2): tools
+    # held off for a local triage model while the extract rung keeps them on.
+    assert tiers.triage.use_tools is False
+    assert tiers.extract_rungs[0].use_tools is True

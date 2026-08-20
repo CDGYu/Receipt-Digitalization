@@ -19,6 +19,8 @@ default aborts the very first one with a transient timeout.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from config.settings import Settings
 
 from .base import VLMClient
@@ -39,8 +41,13 @@ _OPENAI_BASE_URLS: dict[str, str] = {
 # they default to JSON mode. Ollama returns a hard 400 for a `tools` payload
 # sent to a model that does not declare the capability, and that 400 kills the
 # very first (triage) call. vLLM, by contrast, supports tool-calling across its
-# served models, so only Ollama is listed. VLM_USE_TOOLS overrides this either
-# way, which is what a VLM_PROVIDER=openai id pointed at a local Ollama needs.
+# served models, so only Ollama is listed.
+#
+# This is the LAST step of the chain, not the whole of it. VLM_USE_TOOLS
+# overrides it either way, which is what a VLM_PROVIDER=openai id pointed at a
+# local Ollama needs -- and a per-rung VLM_USE_TOOLS_TRIAGE/_FALLBACK overrides
+# that in turn, since `make_pass_clients` passes one. `resolve_use_tools` states
+# the full precedence and is the only place that does.
 #
 # This named granite3.2-vision as an example of a model lacking the capability
 # until 2026-08-18, when `/api/tags` reported it declaring `tools`. The example
@@ -139,3 +146,86 @@ def _require(value: str | None, provider: str, env_var: str) -> str:
             f"The {provider!r} provider requires {env_var} to be set."
         )
     return value
+
+
+@dataclass(frozen=True)
+class PassClients:
+    """One client per pass, with the extract pass carrying a rung ladder.
+
+    Built **only** by the eval path. ``make_client`` still returns exactly one
+    client and is what every production entry point uses, which is what keeps
+    the ladder off that path (design §5).
+
+    ``extract_rungs`` is a tuple so the shape generalises, but this milestone
+    builds **at most two** rungs. A third is a new decision and is not earned by
+    anything measured.
+    """
+
+    triage: VLMClient
+    extract_rungs: tuple[VLMClient, ...]
+
+
+def _client_for(settings: Settings, *, model: str | None, use_tools: bool) -> VLMClient:
+    """One rung, built through ``make_client`` rather than beside it.
+
+    Reusing the factory means the provider dispatch, the lazy SDK imports and
+    the missing-configuration errors have exactly one implementation. Only the
+    model and the tools flag differ between rungs — on Ollama both rungs share
+    the endpoint, because the local daemon proxies ``:cloud`` models.
+
+    The rung's tools answer is already resolved by the caller, so it arrives
+    here as a plain ``bool``. ``make_client`` re-runs the chain over it with
+    ``explicit=None``, and a non-``None`` ``global_default`` short-circuits the
+    provider default — so the value set here is the value the client gets.
+    """
+    return make_client(
+        settings.model_copy(
+            update={"vlm_model_extract": model, "vlm_use_tools": use_tools}
+        )
+    )
+
+
+def make_pass_clients(settings: Settings) -> PassClients:
+    """Build the per-pass clients for an eval run.
+
+    With no new settings configured this returns one triage client and one
+    extract rung, both equivalent to ``make_client(settings)``: the fallback
+    rung exists only when ``VLM_MODEL_EXTRACT_FALLBACK`` names a model, and the
+    triage rung falls back to ``VLM_MODEL_EXTRACT`` when ``VLM_MODEL_TRIAGE``
+    is unset.
+    """
+    provider = settings.vlm_provider.strip().lower()
+
+    triage = _client_for(
+        settings,
+        model=settings.vlm_model_triage or settings.vlm_model_extract,
+        use_tools=resolve_use_tools(
+            provider,
+            explicit=settings.vlm_use_tools_triage,
+            global_default=settings.vlm_use_tools,
+        ),
+    )
+
+    rungs = [
+        _client_for(
+            settings,
+            model=settings.vlm_model_extract,
+            use_tools=resolve_use_tools(
+                provider, explicit=None, global_default=settings.vlm_use_tools
+            ),
+        )
+    ]
+    if settings.vlm_model_extract_fallback:
+        rungs.append(
+            _client_for(
+                settings,
+                model=settings.vlm_model_extract_fallback,
+                use_tools=resolve_use_tools(
+                    provider,
+                    explicit=settings.vlm_use_tools_fallback,
+                    global_default=settings.vlm_use_tools,
+                ),
+            )
+        )
+
+    return PassClients(triage=triage, extract_rungs=tuple(rungs))
