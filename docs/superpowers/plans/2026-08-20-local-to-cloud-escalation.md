@@ -1291,6 +1291,50 @@ emptiness form. The first two were proven red before the fix.
 `extractor.py:278`. Worth recording — the lesson is to check rationales, not to
 assume they are all false.
 
+### Task 5, as executed — two lines that were deletable with every gate green
+
+Task 5 shipped green (`114b769`, 1269 -> 1276, five gates PASS). Its implementer
+ran **three mutations the plan did not ask for**, and two of them found the
+plan's tests leaving real code unpinned.
+
+- **Dropping the failed rung's `PassAttempt`** left the whole suite green with a
+  discarded rung erased from the record.
+- **Dropping the triage `PassAttempt`** did the same. **Reproduced by the
+  controller**: with `attribution` seeded empty the tree still imports and
+  exactly one test fails — the one the implementer *strengthened*. Under the
+  plan as written, nothing would have caught it. Task 7 folds the eval report's
+  per-rung counts out of `attribution`, so this would have shipped a silently
+  empty provenance record: the exact figure ISSUE-001 asked for, and the exact
+  failure it warned about.
+
+**The repair-budget pin was real but could not print its own message.** Under the
+plan's two-response script it reddened on `FakeVLMClient exhausted: call 3 but
+only 2 response(s) scripted` rather than on its own assertion. A pin that fails
+for the wrong reason is review standard 15's case. Fixed with a deliberately
+surplus scripted response that correct behaviour never consumes.
+
+**`assert outcome is not None` cannot fire** — confirmed and left in place with a
+comment. `rungs` always holds at least one client, so the loop always runs and
+the final rung either raises or assigns. Mutation B proves it from the other
+side: removing `is_last or` from the keep condition is what makes it fire.
+
+**Discrepancies (5):** the append-tests species for the **fifth** time, exactly
+as predicted, again with `F811`; Step 7's second mutation stated as one failing
+test when eleven do, and failing on a different assertion than named; the
+repair-budget fixture above; `:287-290` being one line short of the unpack; and
+"the three call sites at `:109`, `:133`, `:145`" naming `def` lines rather than
+call sites.
+
+**Rationales checked that held: eleven**, including one the plan never states but
+both repair tests rest on — that R001 is `Severity.ERROR` (`rules.py:299`),
+which is what makes a parse failure buy a repair round at all.
+
+**Open, reported not fixed, for the whole-branch review:** `frozen=True` on
+`PassAttempt`, `RunOutcome` **and** `PassClients` is pinned by nothing; and
+`PassAttempt.rung` is unpinned for extract rungs — a ladder recording `rung=0`
+for every rung would still be green, because Task 7 reads only `pass_name`,
+`model_id` and `kept`.
+
 ### Task 4, as executed — an assertion that could not fail, and a test that read `.env`
 
 Task 4 shipped green (`f0051d2`, 1266 -> 1269, five gates PASS). Both headline
