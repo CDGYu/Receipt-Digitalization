@@ -1304,6 +1304,71 @@ emptiness form. The first two were proven red before the fix.
 `extractor.py:278`. Worth recording — the lesson is to check rationales, not to
 assume they are all false.
 
+### Task 7, as executed — the implementer refused an instruction, and was right
+
+Task 7 shipped green (`139801b`, 1279 -> 1287, five gates PASS). **Nine
+mutations** were run where the brief asked for two.
+
+**D1 — the plan's `_report_to_dict` instruction was wrong twice, and the
+implementer did not follow it.** `run_eval` calls `_write_report` and *then*
+returns; `run_baseline` folds the counts in *after* `run_eval` returns. Adding
+the key as the plan said would have written **`null` in every artifact, forever**
+— probed, not reasoned: a run whose report carried `{'cloud': 1}` wrote `null`.
+It would also have reddened the existing
+`tests/test_cli_reports.py::test_the_producer_writes_the_shape_this_module_hand_writes`,
+which pins the artifact's key sets against a hand-written fixture. **Controller
+verified the ordering**: `_write_report(...)` then `return report`, at the end of
+`run_eval`. The reason is now recorded at the site instead.
+
+**D2 — the plan's `format_report` snippet contradicts its own stated
+requirement.** The prose says "immediately after the accuracy block, not in a
+trailing section"; the code appends *after* the list literal, landing below the
+p95 latency row. Mutation F proves the plan's own form fails the placement pin.
+
+**D6 — a prediction that failed in the good direction.** This log predicted the
+E402/append-tests species for Tasks 5-7. It did not recur in Task 7, because
+Task 7's snippets carry no import lines at all. Worth recording: the pattern was
+real for five tasks and stopped, and a defect log that only ever accumulates
+would have mis-stated that.
+
+Also: D3 a lowercase label where the renderer capitalises; D4 a fixture file
+nothing reads; D5 "fourteen fields" where `EvalReport` has 18 before / 19 after;
+D7 a module docstring naming `make_client` after the composition changed.
+
+**Rationales checked that held: ten**, including that `_minimal_report()`
+genuinely does not exist (the pre-flight fix was right), that `EvalReport` is not
+frozen, and that `cmd_eval` always leaves `client=None` so production reaches the
+ladder builder transitively.
+
+**The implementer caught a false claim of their own** — a docstring saying
+`var/smoke_run.py` uses the `client` seam, when it calls `run_baseline` with
+`client=None`. Corrected before commit.
+
+**Mutation E repeated Task 5's lesson exactly:** it first reddened on
+`FakeVLMClient exhausted` rather than its own assertion. Fixtures gained a
+surplus scripted response, plus a call count pinning that it is never consumed.
+
+### Open for the whole-branch review — the specification, not the code
+
+1. **The escalation counts never reach the committed results file.** They reach
+   the printed report and the return value. ISSUE-001 step 6 says to commit the
+   results file; an artifact that omits which model produced what does not record
+   what that step exists to record. Fixing it moves who owns the write.
+2. **`extract_rung_counts` is keyed by `model_id`.** Nothing forbids
+   `VLM_MODEL_EXTRACT_FALLBACK == VLM_MODEL_EXTRACT`, and in that configuration
+   two rungs collapse into one count — the escalation becomes invisible **in the
+   figure ISSUE-001 asked for precisely so a good number could not hide it.**
+   Both the plan and spec §6 specify this key, so changing it is a decision.
+3. **`frozen=True` on `PassAttempt`, `RunOutcome` and `PassClients` is pinned by
+   nothing** (open since Task 4).
+4. **`PassAttempt.rung` is unpinned for extract rungs** (open since Task 5) — a
+   ladder recording `rung=0` everywhere stays green, because Task 7 reads only
+   `pass_name`, `model_id` and `kept`.
+5. **`receipts eval` reaches a ladder transitively** via
+   `cmd_eval -> run_baseline(client=None) -> make_pass_clients`. Correct by
+   design — §5's boundary is `process_receipt` — but the text guard greps
+   `cli.py` for one name and stays green, which is the bound Task 6 stated.
+
 ### Task 6, as executed — the ruling was enforced by prose, and now is not
 
 Task 6 shipped green (`851ef63`, 1276 -> 1278) and its two tests pin what they
