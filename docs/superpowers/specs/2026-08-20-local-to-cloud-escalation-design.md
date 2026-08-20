@@ -226,6 +226,9 @@ Production has no argument to pass and no code path to reach. `make_client` is
 untouched and keeps returning exactly one client; a separate builder constructs
 the ladder and only the eval adapter calls it.
 
+Those two bullets are separate claims and are not enforced by the same thing.
+Which is pinned by what is §5.2 — read it before relying on either.
+
 ### 5.1 The limit of that guarantee, stated
 
 This does **not** prevent someone configuring production's single client to point
@@ -233,6 +236,37 @@ at a cloud model. That was possible before this milestone and remains possible
 after it. The guarantee is that *this mechanism* is unreachable from the
 production path — nothing wider. Claiming more would be a false claim of the
 kind ADR-0032 is about.
+
+### 5.2 What pins each of the two claims
+
+| Claim | Pinned by |
+| --- | --- |
+| the ladder is a parameter on `run_receipt` and **never** on `process_receipt` | `tests/test_pipeline.py::test_process_receipt_has_no_ladder_parameter` — reads the built signature, and also rejects `**kwargs`, which would let a rung be passed by name again |
+| the only non-test caller of `run_receipt` is `build_eval_pipeline` | `tests/test_pipeline.py::test_run_receipt_is_called_only_by_build_eval_pipeline` — enumerates the call sites from the **AST** of every `.py` under `src/`, `eval/`, `scripts/`, `config/` and `alembic/` |
+
+The second claim was pinned by nothing until 2026-08-21, and the gap was not
+theoretical: a function added to `src/receipts/worker.py` calling
+`run_receipt(..., extract_fallback_client=...)` left the **whole suite** green —
+measured 2026-08-21 with that function present and the new test deselected, all
+1278 tests passed, the signature pin included. That pin cannot see such a
+function, because it leaves `process_receipt` untouched. A reader of the two
+bullets above would have believed both were enforced. Only the first was.
+
+`tests/test_pipeline.py::test_the_production_modules_do_not_build_a_ladder` is a
+third and weaker guard beside these. It greps `cli.py` and `worker.py` as text
+for one name, `make_pass_clients`, and on its own pins neither bullet: a text
+search for a single name is defeated by any other spelling, and adding the
+missing spellings to it is the enumerated defence review standard 19 names. It
+stays as it is; the call-graph property above is the answer to that shape,
+stated once over the whole surface rather than name by name.
+
+What that enumeration **cannot** see is stated in its own docstring rather than
+here, so the bound cannot drift from the code enforcing it. In short: any route
+that does not name `run_receipt` statically — `getattr(pipeline, "run_" +
+"receipt")` and its relatives — is beyond static reach and passes. That is a
+*different* limit from §5.1's, not a wider or narrower one: §5.1 is about what
+configuration can still do to the single production client, this is about what a
+static walk cannot see. Neither subsumes the other, and both are live.
 
 ---
 
