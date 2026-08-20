@@ -1298,79 +1298,181 @@ set it names is no longer the set `_RECEIPT_FIELDS` holds.
 
 ---
 
-## ISSUE-010 - The results list has never been opened in a browser
+## ISSUE-010 - The results list, opened in a browser
 
-**Opened 2026-08-20**, at the close of the results-list milestone (`b563242` ->
-`f0dc7b6`). Not a defect: a stated gap in what this repository can check.
+**Status:** OPEN, and narrowed to one item nobody has decided. The browser pass
+ran on 2026-08-20 across Chromium, Firefox and WebKit. Of the four things this
+issue was opened for, one was **refuted**, one was **confirmed correct**, one was
+**a real finding and is fixed**, and one is **confirmed and is a repository-wide
+question**. What is left is item 4 and the surfaces nobody has still looked at.
 
-### What is unseen
+**Opened 2026-08-20** at the close of the results-list milestone (`b563242` ->
+`f0dc7b6`) as a stated gap in what this repository can check, and answered the
+same day against the real API on SQLite.
 
-`/app/receipts` shipped with a new table, a new stylesheet, 21 new census
-entries and 22 tests. **No person has looked at it.** Four things follow from
-that, in descending order of risk:
+### 1. The download works. The predicted defect is not there
 
-1. **The download has never run in a real browser.** `downloadExportWorkbook`
-   (`frontend/src/api/receipts.ts`) builds a **detached** anchor, clicks it, and
-   revokes the object URL **synchronously** in a `finally`. Both are the
-   documented cross-browser failure modes for blob downloads. jsdom stubs
-   `click`, so every test here passes either way. This is the milestone's
-   headline user-visible effect and it is the least verified thing in it.
-2. **Two stacked negative margins** under the heading
-   (`frontend/src/receipts/ReceiptsScreen.module.css`). The arithmetic is right
-   -- gap `2xl` plus margin `-2xl + xs` leaves `xs` at both joints -- but
-   `AdminScreen` does this once and nothing in this repository has done it twice
-   in a row.
-3. **Whether the not-extracted em dash reads as "missing"** inside a
-   right-aligned cell, rather than as a stray hairline.
-4. **A `border-radius` on a `border-collapse: collapse` table**, which browsers
-   ignore. Pre-existing as a pattern: `admin/TaskTable.module.css` and
-   `review/LineItemsTable.module.css` both already do it, so this is a
-   repository-wide question rather than this milestone's.
+`downloadExportWorkbook` (`frontend/src/api/receipts.ts`) still builds a
+**detached** anchor and still revokes the object URL **synchronously** in a
+`finally`. Both remain the documented cross-browser failure modes for blob
+downloads. Neither loses the file.
 
-### Why no gate sees any of it
+Measured in all three engines: the server answered `200` with
+`Content-Disposition: attachment; filename="receipts-export.xlsx"`, the file
+reached the filesystem in every engine at roughly 11 KB with `PK` magic, and all
+three opened in `openpyxl` with four sheets and the same rows the screen showed,
+in the same order. **The two fix shapes this issue used to recommend --
+`appendChild`/`remove`, and revoking on a later tick -- are not needed.**
+
+**The green means something, because the instrument was proven red first.**
+Replacing `anchor.click()` with a no-op, confirming the mutated tree still
+typechecked and built and that the bundle hash changed, then re-running: all
+three engines failed, and failed on the discriminating pair rather than on a
+timeout of unknown cause -- `200` from the server, no `download` event, nothing
+on disk. A probe that cannot see the failure it reports the absence of is worth
+nothing, and this one can see it.
+
+**What this does not license:** headless, one operating system, these engine
+builds, and no real Save dialog. It is not a claim about every browser forever.
+
+### 2. The two stacked negative margins are correct
+
+`.who` and `.scope` each carry `margin-top: calc(var(--space-2xl) * -1 +
+var(--space-xs))`, measured as `-22px`, against the screen's `24px` flex gap:
+**2px at both joints**, which is `--space-xs` exactly. Verified at 1440, 1024 and
+375, in both themes, in all three engines. No overlap and no margin collapse; the
+three lines read as one block. The arithmetic this issue described was right.
+
+### 3. The not-extracted mark in a right-aligned cell -- a real finding, fixed
+
+The question was whether the mark reads as "missing" or as a stray hairline. **In
+a left-aligned column it reads as missing; in the right-aligned money column it
+read as a stray hairline**, and the mechanism was not the one this issue guessed.
+
+The stroke is deliberate. `Value.module.css` gives `.notExtracted` a
+`border-left` plus `padding-left`, and `Value.tsx`'s docstring names it as design
+section 4's scannability device. It is a **gutter**: it works because a stack of
+left-aligned form fields shares a left edge for the rules to line up on. A
+right-aligned cell has no such edge -- the span shrink-wraps and is pushed right,
+so the rule lands at a different x in every row. The sharpest instance was a
+receipt carrying a currency but no total, where the rule fell between the
+currency code and the mark and read as a broken glyph.
+
+**Fixed by mirroring rather than by removing.** `Value` gained an `align` prop
+defaulting to `start`, and `.notExtractedEnd` carries the same rule on
+`border-right`/`padding-right`. The three right-aligned call sites pass `end`:
+the results list's Total and Confidence, and the admin task table's age.
+
+`kind` was rejected as the axis on a measurement: two of the five numeric-kind
+call sites are left-aligned (`admin/StatTiles.tsx` and `review/ConfidenceRail.tsx`,
+neither stylesheet declaring `text-align` at all), so keying the edge off `kind`
+would have moved the rule to the wrong side on two surfaces to fix a third.
+
+Accepted in a browser, not only in a test: after the change the marks in the
+Total column share a right edge at the same x, right-aligned marks paint a right
+rule and no left one, and the left-aligned Date and Merchant marks are unchanged
+-- in all three engines and both themes.
+
+### 4. The `border-radius` on a collapsed table is confirmed ignored -- STILL OPEN
+
+`.table` sets `border-collapse: collapse` and `border-radius: var(--radius-lg)`
+on the same rule; the corners render square in all three engines, so the radius
+declares an intent the browser discards. **Pre-existing as a pattern:**
+`admin/TaskTable.module.css` and `review/LineItemsTable.module.css` both do the
+same, so it is a repository-wide question and not this screen's. Nobody has ruled
+on it.
+
+### What looking produced that nothing had asked for
+
+- **Money renders at four decimal places** in the list (`USD 1000.0000`).
+  Consistent with the app's convention rather than a regression -- `money()`
+  returns `str()` off a scale-4 column and the review form's inputs show 4dp too
+  -- but a read-only register aimed at accounting is where 2dp and a thousands
+  separator would be expected. Undecided.
+- **The list is ordered by ingestion, not by transaction date.**
+  `query_export_receipts` ends `.order_by(Receipt.created_at, Receipt.id)`,
+  deliberately, so the list and the workbook can never disagree about paging
+  order -- and the downloaded file's rows came back in exactly the screen's
+  order, which is ADR-0046's projection property holding in practice. A reader
+  scanning the Date column will still read it as unsorted. **Not a defect**, and
+  it was written up as one before the query was read.
+- **At 375 the table clips to two columns with no affordance that it scrolls.**
+  The page itself correctly never scrolls sideways (asserted:
+  `document.documentElement.scrollWidth` equals `clientWidth`), and the scroller
+  works, but nothing signals that Total, Status and Confidence exist.
+- **The reviewer view is handled well**: rather than the button vanishing
+  silently, the screen states that only an admin can download the workbook. A
+  reviewer sees every row.
+- **`--color-null` does not reach its risky background here.** The table declares
+  no zebra striping and no row hover fill, so the mark paints on
+  `--color-surface`, never on `--color-surface-active`.
+
+### Why no gate saw any of it, and still cannot
 
 `css: false` in the Vitest config means a `.module.css` import returns a proxy,
 so class names are unpinnable by rendering tests; jsdom lays nothing out and
 renders no colour; `click` is stubbed; and `e2e/**` is excluded from the Vitest
-run, so Playwright is the only instrument that could reach items 1 and 2 and it
-is not a gate.
+run, so Playwright is the only instrument that could reach any of this and it is
+not a gate. **All five gates were green throughout, including while item 3 was
+live.**
 
 **A claim that this had been checked was written and deleted.**
 `frontend/tests/stylesheets.test.ts` carried a sentence saying every census
 entry below it was looked at through a browser; the whole-branch review found it
 false the moment Task 5 added 21 entries. Deleting it removed the claim, not the
-gap. This issue is the gap.
+gap.
 
-### How to resume
+### Two defects in this issue's own resume steps, found by following them
 
-1. `python scripts/seed_review_e2e.py --reset`, then
-   `cd frontend && npx playwright test visual` -- the `visual` filter re-seeds,
-   and a full run consumes its one queued task by design.
-2. Open `/app/receipts` as an admin and as a reviewer, and **click Export**.
-   Watch whether the file actually arrives. If it does not, the fix shapes are
-   `document.body.appendChild(anchor)` / `anchor.remove()` and revoking on a
-   later tick.
-3. Look at both themes. **Dark theme at any width remains unseen at every
-   surface in this app**, not only here.
+Recorded because they cost the first attempt, and because they are the reason a
+brief is a claim about the tree (ADR-0045):
+
+1. **There is no admin to be.** `scripts/seed_review_e2e.py` creates exactly one
+   account, a reviewer, while `GET /export/xlsx` is guarded by
+   `require_role(ROLE_ADMIN)`. Signing in and clicking Export as the seeded user
+   returns 403 and teaches nothing about the anchor. The pass added an admin to
+   the database out of band; **seeding one is still not done**, and anyone
+   repeating this will need it again.
+2. **`npx playwright test visual` never navigates to `/app/receipts`.** Every
+   `goto` in `frontend/e2e/visual.spec.ts` targets `/app/login`, `/app/review` or
+   `/app/admin`, so that step re-seeds and re-captures the older surfaces only.
+
+### What remains unseen
+
+Item 4's ruling, and 768 at every surface. **Dark theme is no longer unseen
+everywhere** -- this screen was looked at in it, at 1440, and renders correctly
+-- but no other surface in this app has been.
 
 ### Related
 
 - ADR-0029 - what the gates certify and what they cannot.
+- ADR-0046 - the list is a projection of the export's query.
 - `docs/superpowers/specs/2026-08-05-review-ui-browser-pass.md` - the
   *SUPERSEDED IN PART* block is the record of which surfaces have been seen, at
   which widths, in which theme.
 
 ---
 
-## ISSUE-011 - A measured-false spelling survives in four test files
+## ISSUE-011 - A measured-false spelling survives in three test files
 
-**Opened 2026-08-20.** Pre-existing; recorded now because the results-list
-milestone removed one instance and deliberately did not touch the rest.
+**Status:** OPEN. Pre-existing and cosmetic; the guards it sits beside are all
+correct.
+
+**Opened 2026-08-20.** Recorded then because the results-list milestone removed
+one instance and deliberately did not touch the rest.
+
+*(Corrected 2026-08-20: this said **four test files** in its heading and again
+below, while its own list named three. It is **four sentences across three
+files**. The four is not arbitrary -- `grep -l` over `frontend/tests/` does
+return four paths -- but the fourth is `value.test.tsx`, which this issue's own
+"Why it was not fixed" paragraph already identifies as the record rather than
+the error. A file count and a sentence count that happen to coincide are exactly
+the shape review standard 23 warns about: state the anchor beside the number.)*
 
 ### What is wrong
 
-Four files state that a mistyped CSS-module key renders `class="undefined"`:
-`frontend/tests/admin-screen.test.tsx`,
+Four sentences, in three files, state that a mistyped CSS-module key renders
+`class="undefined"`: `frontend/tests/admin-screen.test.tsx`,
 `frontend/tests/review-null-rule.test.tsx` (twice), and
 `frontend/tests/theme-control.test.tsx`.
 
@@ -1386,7 +1488,7 @@ it is -- a reader expecting `class="undefined"` in the DOM will not find it.
 
 ### Why it was not fixed with the milestone that found it
 
-A fix wave editing four files it never otherwise touched is the over-reach
+A fix wave editing three files it never otherwise touched is the over-reach
 ADR-0032 and ADR-0042 both name, and this project has watched consecutive waves
 introduce a false claim while closing one. The anchor is
 `grep -rn 'class="undefined"' frontend/tests/`, which also returns
