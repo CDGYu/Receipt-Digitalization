@@ -24,6 +24,7 @@ from PIL import Image  # noqa: E402
 
 from eval.harness import run_eval  # noqa: E402
 from eval.metrics import EvalReport  # noqa: E402
+from receipts.extract.clients.base import VLMClient, VLMResponse, VLMTransientError  # noqa: E402
 from receipts.extract.clients.fake import FakeVLMClient  # noqa: E402
 from receipts.extract.schema import (  # noqa: E402
     DocumentType,
@@ -83,6 +84,28 @@ def _write_png(path: Path) -> None:
     Image.new("RGB", (900, 1400), (240, 240, 240)).save(path)
 
 
+class _RaisingClient(VLMClient):
+    """A client whose every call is a transport failure."""
+
+    def __init__(self, model_id: str = "raiser") -> None:
+        self.model_id = model_id
+        self.calls: list[dict] = []
+
+    def complete_json(self, **kwargs: object) -> VLMResponse:
+        self.calls.append(dict(kwargs))
+        raise VLMTransientError("the endpoint is unreachable")
+
+
+def _unparseable() -> str:
+    """A scripted response body that will not coerce to ReceiptExtraction.
+
+    ``FakeVLMClient`` treats a string entry as a ``parse_error``, and
+    ``_evaluate`` resolves a failed parse to a default ``ReceiptExtraction()``,
+    which is exactly what ``read_nothing`` calls "read nothing".
+    """
+    return "not json at all"
+
+
 # --------------------------------------------------------------------------- #
 # prepare_image
 # --------------------------------------------------------------------------- #
@@ -111,7 +134,8 @@ def test_run_receipt_returns_normalized_extraction_and_report(tmp_path):
     _write_png(png)
     client = FakeVLMClient([_triage(), _good()])
 
-    extraction, report, triage_result = run_receipt(png, client, CTX)
+    outcome = run_receipt(png, client, CTX)
+    extraction, report, triage_result = outcome.extraction, outcome.report, outcome.triage
 
     assert isinstance(extraction, ReceiptExtraction)
     assert isinstance(report, ValidationReport)
@@ -135,9 +159,9 @@ def test_run_receipt_applies_configured_default_currency(tmp_path):
     _write_png(png)
     client = FakeVLMClient([_triage(), _no_currency()])
 
-    extraction, _report, _triage_result = run_receipt(
+    extraction = run_receipt(
         png, client, CTX, default_currency="PHP"
-    )
+    ).extraction
 
     assert extraction.receipt.currency == "PHP"
 
@@ -148,9 +172,126 @@ def test_run_receipt_without_default_currency_leaves_it_null(tmp_path):
     _write_png(png)
     client = FakeVLMClient([_triage(), _no_currency()])
 
-    extraction, _report, _triage_result = run_receipt(png, client, CTX)
+    extraction = run_receipt(png, client, CTX).extraction
 
     assert extraction.receipt.currency is None
+
+
+# --------------------------------------------------------------------------- #
+# run_receipt: the extract ladder
+# --------------------------------------------------------------------------- #
+
+
+def test_the_fallback_is_not_called_when_the_first_rung_reads_something(tmp_path):
+    png = tmp_path / "receipt.png"
+    _write_png(png)
+    first = FakeVLMClient([_triage(), _good()], model_id="local")
+    fallback = FakeVLMClient([_good()], model_id="cloud")
+
+    outcome = run_receipt(png, first, CTX, extract_fallback_client=fallback)
+
+    assert fallback.calls == []
+    assert outcome.extraction.merchant.name == "SUPERMART INC."
+    kept = [a for a in outcome.attribution if a.pass_name == "extract" and a.kept]
+    assert [a.model_id for a in kept] == ["local"]
+
+
+def test_the_fallback_runs_when_the_first_rung_reads_nothing(tmp_path):
+    png = tmp_path / "receipt.png"
+    _write_png(png)
+    # An unparseable extract response leaves `ReceiptExtraction()`, which is
+    # exactly what "read nothing" means.
+    first = FakeVLMClient([_triage(), _unparseable()], model_id="local")
+    fallback = FakeVLMClient([_good()], model_id="cloud")
+
+    outcome = run_receipt(png, first, CTX, extract_fallback_client=fallback)
+
+    assert len(fallback.calls) == 1
+    assert outcome.extraction.merchant.name == "SUPERMART INC."
+    kept = [a for a in outcome.attribution if a.pass_name == "extract" and a.kept]
+    assert [a.model_id for a in kept] == ["cloud"]
+    # ...and the discarded rung is still recorded, so an eval can see it ran.
+    discarded = [a for a in outcome.attribution if a.pass_name == "extract" and not a.kept]
+    assert [a.model_id for a in discarded] == ["local"]
+
+
+def test_triage_runs_on_its_own_client_when_one_is_given(tmp_path):
+    png = tmp_path / "receipt.png"
+    _write_png(png)
+    triage_client = FakeVLMClient([_triage()], model_id="triage-model")
+    extract_client = FakeVLMClient([_good()], model_id="extract-model")
+
+    outcome = run_receipt(png, extract_client, CTX, triage_client=triage_client)
+
+    assert len(triage_client.calls) == 1
+    assert triage_client.calls[0]["schema"] == "TriageResult"
+    assert len(extract_client.calls) == 1
+    assert extract_client.calls[0]["schema"] == "ReceiptExtraction"
+    # Beyond the plan: without this the triage attribution entry is pinned by
+    # nothing and could be deleted with every gate green.
+    triage_entries = [a for a in outcome.attribution if a.pass_name == "triage"]
+    assert [(a.model_id, a.rung, a.kept) for a in triage_entries] == [
+        ("triage-model", 0, True)
+    ]
+
+
+def test_a_raising_first_rung_falls_back_rather_than_propagating(tmp_path):
+    png = tmp_path / "receipt.png"
+    _write_png(png)
+    first = _RaisingClient(model_id="local")
+    fallback = FakeVLMClient([_good()], model_id="cloud")
+
+    outcome = run_receipt(png, first, CTX, triage_client=FakeVLMClient([_triage()]),
+                          extract_fallback_client=fallback)
+
+    assert outcome.extraction.merchant.name == "SUPERMART INC."
+    # Beyond the plan: without this the raise branch's own attribution entry is
+    # pinned by nothing -- a rung that failed would vanish from the record.
+    discarded = [a for a in outcome.attribution if a.pass_name == "extract" and not a.kept]
+    assert [a.model_id for a in discarded] == ["local"]
+
+
+def test_a_raising_last_rung_still_propagates(tmp_path):
+    png = tmp_path / "receipt.png"
+    _write_png(png)
+    with pytest.raises(VLMTransientError):
+        run_receipt(png, _RaisingClient(model_id="only"), CTX,
+                    triage_client=FakeVLMClient([_triage()]))
+
+
+def test_only_the_final_rung_spends_its_repair_budget(tmp_path):
+    # Spec §2.1. The first rung reads nothing, so it is discarded -- and it must
+    # not have spent a repair round getting there. One extract call, no repair.
+    png = tmp_path / "receipt.png"
+    _write_png(png)
+    # The third scripted response is deliberately surplus: with the budget
+    # correctly withheld it is never reached, and its presence is what makes a
+    # ladder that spends the budget fail on *this* test's assertion rather than
+    # on `FakeVLMClient exhausted` from inside the runner.
+    first = FakeVLMClient([_triage(), _unparseable(), _good()], model_id="local")
+    fallback = FakeVLMClient([_good()], model_id="cloud")
+
+    run_receipt(png, first, CTX, extract_fallback_client=fallback, max_attempts=3)
+
+    # Two calls on the first client: the triage and exactly one extract. A
+    # repair round (or a re-extract) would make it three.
+    assert len(first.calls) == 2, (
+        "the discarded rung spent a repair budget it was never going to use"
+    )
+
+
+def test_with_no_fallback_the_only_rung_still_repairs(tmp_path):
+    # The other half of the same rule, reverted separately: one rung is the
+    # final rung, so `max_attempts` still buys repair rounds. This is the
+    # "nothing configured means today's behaviour" guarantee at the repair level.
+    png = tmp_path / "receipt.png"
+    _write_png(png)
+    client = FakeVLMClient([_triage(), _unparseable(), _good()], model_id="only")
+
+    outcome = run_receipt(png, client, CTX, max_attempts=2)
+
+    assert len(client.calls) == 3, "the sole rung did not get its repair round"
+    assert outcome.extraction.merchant.name == "SUPERMART INC."
 
 
 # --------------------------------------------------------------------------- #

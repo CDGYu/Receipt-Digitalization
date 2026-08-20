@@ -46,7 +46,7 @@ from sqlalchemy.orm import Session
 from config.settings import Settings
 
 from .extract import prompts as P
-from .extract.clients.base import VLMClient, VLMResponse
+from .extract.clients.base import VLMClient, VLMError, VLMResponse
 from .extract.clients.limits import CostGuard, GuardedVLMClient, VLMGate, get_vlm_gate
 from .extract.extractor import (
     Attempt,
@@ -55,6 +55,7 @@ from .extract.extractor import (
     extract_with_repair,
     triage,
 )
+from .extract.paths import read_nothing
 from .extract.schema import ReceiptExtraction, TriageResult
 from .ingest.dedupe import compute_phash
 from .ingest.ingest import ReceiptJob, ingest_file
@@ -181,6 +182,36 @@ def _encode_for_model(rgb: Image.Image, max_edge: int) -> PreparedImage:
     return PreparedImage(b64=b64, media_type="image/jpeg", image_hash=image_hash)
 
 
+@dataclass(frozen=True)
+class PassAttempt:
+    """One model call's provenance: which pass, which rung, which model, kept or not.
+
+    ``extraction_runs.model_id`` already records the model for every call the
+    *service* path makes. The eval path touches no database, so attribution
+    travels out through the return value instead.
+    """
+
+    pass_name: str
+    model_id: str
+    rung: int
+    kept: bool
+
+
+@dataclass(frozen=True)
+class RunOutcome:
+    """What one eval-path run produced, plus who produced it.
+
+    Replaces the ``(extraction, report, triage)`` triple: a fourth positional
+    element is where a tuple stops being readable, and this module already uses
+    result dataclasses (``ProcessResult``, ``BatchResult``) for the same reason.
+    """
+
+    extraction: ReceiptExtraction
+    report: ValidationReport
+    triage: TriageResult
+    attribution: tuple[PassAttempt, ...]
+
+
 def run_receipt(
     image_path: Path,
     client: VLMClient,
@@ -188,13 +219,23 @@ def run_receipt(
     *,
     max_attempts: int = 1,
     default_currency: str | None = None,
-) -> tuple[ReceiptExtraction, ValidationReport, TriageResult]:
+    triage_client: VLMClient | None = None,
+    extract_fallback_client: VLMClient | None = None,
+) -> RunOutcome:
     """Run one receipt end to end: preprocess -> triage -> extract(+repair) ->
     normalize.
 
     ``max_attempts`` is the total number of extraction attempts the model is
     given: the initial extract plus up to ``max_attempts - 1`` repair rounds, so
-    the default of 1 is a single extract with no repair.
+    the default of 1 is a single extract with no repair. It is spent by the
+    **final** rung only; see the ladder note below.
+
+    ``triage_client`` and ``extract_fallback_client`` are the eval path's rung
+    ladder (design §2). Left ``None`` -- which is every production caller, and
+    the default -- ``client`` serves both passes and the extract ladder has
+    exactly one rung, so this function behaves exactly as it did before the
+    ladder existed. ``process_receipt`` deliberately has no such parameter:
+    design §5 keeps the escalation off the production path.
 
     ``default_currency`` is the configured system default (``DEFAULT_CURRENCY``)
     handed to :func:`~receipts.normalize.normalize` as the last link of the §9
@@ -204,12 +245,14 @@ def run_receipt(
     it and is applied by :func:`process_receipt`; this path has no database, so
     there is no merchant here to ask.
 
-    Returns a triple of the normalized winning extraction, the validation report
-    for that attempt, and the triage result. The report reflects what the model
-    produced and the repair loop reasoned about (normalization is safe
-    canonicalization applied on top); the triage result is returned so callers
-    can fold its legibility and issue signals into confidence scoring without
-    re-running triage.
+    Returns a :class:`RunOutcome`: the normalized winning extraction, the
+    validation report for that attempt, the triage result, and the per-rung
+    attribution. The report reflects what the model produced and the repair loop
+    reasoned about (normalization is safe canonicalization applied on top); the
+    triage result is returned so callers can fold its legibility and issue
+    signals into confidence scoring without re-running triage; the attribution
+    is how the eval path learns which model produced the kept extraction, since
+    it writes no ``extraction_runs`` row to read it back from (design §6).
 
     **The report here describes the pre-normalization extraction**, which is a
     deliberate difference from :func:`process_receipt`. Nothing is persisted on
@@ -223,20 +266,76 @@ def run_receipt(
     offline ``FakeVLMClient``.
     """
     image = prepare_image(image_path)
-    triage_result, _triage_response = triage(image, client)
-    outcome = extract_with_repair(
-        image,
-        client,
-        triage_result=triage_result,
-        ctx=ctx,
-        max_repairs=max(0, max_attempts - 1),
-    )
+
+    triage_source = triage_client or client
+    triage_result, _triage_response = triage(image, triage_source)
+    attribution = [PassAttempt("triage", triage_source.model_id, rung=0, kept=True)]
+
+    rungs: list[VLMClient] = [client]
+    if extract_fallback_client is not None:
+        rungs.append(extract_fallback_client)
+
+    outcome: ExtractionOutcome | None = None
+    for index, rung in enumerate(rungs):
+        is_last = index == len(rungs) - 1
+        try:
+            candidate = extract_with_repair(
+                image,
+                rung,
+                triage_result=triage_result,
+                ctx=ctx,
+                # Design §2.1: a non-final rung is a probe. `extract_with_repair`
+                # bundles the extract and its repair rounds into one call, so
+                # there is no way to keep a rung first and repair it after --
+                # and repairs on a rung that may be discarded are spent
+                # re-asking a model that already failed. With no fallback
+                # configured there is one rung, it is final, and it gets the
+                # configured budget: today's behaviour, unchanged.
+                max_repairs=max(0, max_attempts - 1) if is_last else 0,
+            )
+        except VLMError:
+            # The last rung's failure is the run's failure: there is nothing
+            # left to fall back to, and swallowing it would report a success
+            # nobody achieved.
+            if is_last:
+                raise
+            attribution.append(
+                PassAttempt("extract", rung.model_id, rung=index, kept=False)
+            )
+            continue
+
+        # `read_nothing` runs on the pre-normalization extraction (design §3.2):
+        # `normalize` fills `currency` from DEFAULT_CURRENCY, and granite's
+        # measured output was every field null with `currency: PHP` supplied
+        # that way -- judged after normalization that PHP reads as content the
+        # model produced, and the fallback would never fire.
+        if is_last or not read_nothing(candidate.extraction):
+            outcome = candidate
+            attribution.append(
+                PassAttempt("extract", rung.model_id, rung=index, kept=True)
+            )
+            break
+
+        attribution.append(
+            PassAttempt("extract", rung.model_id, rung=index, kept=False)
+        )
+
+    # Not reachable as a failure: `rungs` is never empty, and the final rung
+    # either returns (taking the `is_last` branch above) or re-raises. It is
+    # here to narrow the type for a reader and for a checker.
+    assert outcome is not None
+
     # merchant_default_currency stays unset: this path takes no session, so the
     # registry cannot be reached from here. process_receipt supplies it.
     normalized = normalize(
         outcome.extraction, system_default_currency=default_currency
     )
-    return normalized, outcome.report, triage_result
+    return RunOutcome(
+        extraction=normalized,
+        report=outcome.report,
+        triage=triage_result,
+        attribution=tuple(attribution),
+    )
 
 
 def _find_image(images_dir: Path, stem: str, suffixes: tuple[str, ...]) -> Path | None:
@@ -284,11 +383,11 @@ def build_eval_pipeline(
                 f"No image for label {stem!r} under {images_dir} "
                 f"(tried suffixes: {', '.join(image_suffixes)})"
             )
-        extraction, report, triage_result = run_receipt(
+        run = run_receipt(
             image_path, client, ctx, default_currency=default_currency
         )
-        confidence = score_confidence(extraction, report, triage_result, consistency=None)
-        return extraction, confidence
+        confidence = score_confidence(run.extraction, run.report, run.triage, consistency=None)
+        return run.extraction, confidence
 
     return pipeline_fn
 
