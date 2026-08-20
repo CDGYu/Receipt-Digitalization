@@ -1291,6 +1291,63 @@ emptiness form. The first two were proven red before the fix.
 `extractor.py:278`. Worth recording — the lesson is to check rationales, not to
 assume they are all false.
 
+### Task 6, as executed — the ruling was enforced by prose, and now is not
+
+Task 6 shipped green (`851ef63`, 1276 -> 1278) and its two tests pin what they
+say. They pinned **less than the spec claimed.** §5 makes two claims; only the
+first was enforced:
+
+| claim | pinned? |
+|---|---|
+| the ladder is a parameter on `run_receipt`, never on `process_receipt` | yes, test 1 |
+| the only non-test caller of `run_receipt` is `build_eval_pipeline` | **nothing** |
+
+**Reproduced by the controller**: a function in `worker.py` calling
+`run_receipt(..., extract_fallback_client=...)` left **all sixteen tests green**
+and, with the whole suite run, all 1278. Production could reach the ladder.
+
+The implementer **declined to patch it** by adding `"run_receipt"` to the text
+guard's string list, correctly: that closes the shape found and re-claims the
+class. Closed instead by a follow-up task (`8d88340`) stating one bounded
+property — *the non-test call sites of `run_receipt` are exactly
+`{build_eval_pipeline}`* — enumerated from the AST. **Controller-verified both
+ways**: a real call reddens it naming file, line and enclosing function; a
+**comment mentioning `run_receipt` leaves it green**, which is the whole
+distinction from the text guard beside it.
+
+**That follow-up found a defect in its own first draft**, via a mutation nobody
+asked for: pinning the *inner closure* name meant renaming `pipeline_fn` would
+fail with a message accusing the developer of breaking the user's ruling — a
+false claim of the ADR-0032 kind, sitting in a failure message where it reads as
+authoritative. The tightness protected nothing (anything nested inside
+`build_eval_pipeline` is reachable only through it). Reverted to the outermost
+enclosing def, and every mutation re-run afterwards.
+
+**Other findings from Task 6:**
+
+- **`**kwargs` defeats a three-name check.** `signature.bind(...)` accepts
+  `extract_fallback_client=4` while the plan's assertion passes. Closed with a
+  bounded property — the signature stays closed — rather than a longer list.
+- **`process_receipt` has four non-test callers, not three.** `process_batch` is
+  a fourth. The plan and spec both said three.
+- **`scripts/try_one_receipt.py` reaches a model without either function**
+  (`make_client` -> `triage` -> `extract_with_repair`). It cannot build a ladder,
+  so the ruling holds, but "every production entry calls `process_receipt`" is
+  not a complete account of how model calls are made here.
+- **The whole Python surface is provably 114 tracked files** — 70 in the five
+  source roots, 44 in `tests/`, none elsewhere. Stated with its query, per
+  ADR-0028.
+
+**Bound, stated and deliberately not chased:** static reach ends at a name, so
+`getattr`, `globals()` and importlib routes pass. The implementer measured
+**zero** false positives for a string-literal check across all 70 modules — so
+cost was not the reason to decline it; it closes one spelling of a route with
+unboundedly many.
+
+**Closed transitively, worth a reviewer's eye:** the `PassClients(...)` route is
+not flagged, but is now inert — using a ladder requires `run_receipt` (pinned)
+or a `process_receipt` parameter (pinned, no `**kwargs`).
+
 ### Task 5, as executed — two lines that were deletable with every gate green
 
 Task 5 shipped green (`114b769`, 1269 -> 1276, five gates PASS). Its implementer
