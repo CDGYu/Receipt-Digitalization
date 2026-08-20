@@ -51,6 +51,29 @@ _OPENAI_BASE_URLS: dict[str, str] = {
 _TOOLS_OFF_BY_DEFAULT: frozenset[str] = frozenset({"ollama"})
 
 
+def resolve_use_tools(
+    provider: str, *, explicit: bool | None, global_default: bool | None
+) -> bool:
+    """Whether one rung sends a ``tools`` payload.
+
+    Precedence, and the only precedence: the rung's own explicit value, then the
+    process-wide ``VLM_USE_TOOLS``, then the provider default. ``make_client``
+    calls this with ``explicit=None``, which is exactly the two-level chain it
+    applied inline before; one level is added in front so a per-model exception
+    can be expressed -- ``granite3.2-vision:2b`` and ``gemma4:cloud`` are both
+    provider ``ollama`` and want opposite answers (ADR-0002's 2026-08-18
+    correction, which left the fix for this milestone).
+
+    ``provider`` is the normalized id -- ``vlm_provider.strip().lower()`` --
+    because ``_TOOLS_OFF_BY_DEFAULT`` is keyed that way.
+    """
+    if explicit is not None:
+        return explicit
+    if global_default is not None:
+        return global_default
+    return provider not in _TOOLS_OFF_BY_DEFAULT
+
+
 def make_client(settings: Settings) -> VLMClient:
     """Build the client named by ``settings.vlm_provider``.
 
@@ -84,11 +107,10 @@ def make_client(settings: Settings) -> VLMClient:
         # provider's default endpoint.
         base_url = settings.vlm_base_url or _OPENAI_BASE_URLS[provider]
         # Same precedence for tool use: an explicit VLM_USE_TOOLS wins, else the
-        # provider id decides.
-        use_tools = (
-            settings.vlm_use_tools
-            if settings.vlm_use_tools is not None
-            else provider not in _TOOLS_OFF_BY_DEFAULT
+        # provider id decides. One client is one rung with nothing per-rung to
+        # say, so `explicit` is None here.
+        use_tools = resolve_use_tools(
+            provider, explicit=None, global_default=settings.vlm_use_tools
         )
         return OpenAICompatClient(
             model_id=model,

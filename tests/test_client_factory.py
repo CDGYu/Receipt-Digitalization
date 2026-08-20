@@ -12,7 +12,7 @@ from __future__ import annotations
 import pytest
 
 from config.settings import Settings
-from receipts.extract.clients.factory import make_client
+from receipts.extract.clients.factory import make_client, resolve_use_tools
 from receipts.extract.clients.fake import FakeVLMClient
 from receipts.extract.clients.openai_compat import OpenAICompatClient
 
@@ -99,6 +99,28 @@ def test_explicit_use_tools_overrides_provider_default():
     # VLM_PROVIDER=openai pointed at a local Ollama via VLM_BASE_URL.
     assert _client(vlm_provider="openai", vlm_use_tools=False).use_tools is False
     assert _client(vlm_provider="ollama", vlm_use_tools=True).use_tools is True
+
+
+# --------------------------------------------------------------------------- #
+# resolve_use_tools: the one precedence chain, stated once
+# --------------------------------------------------------------------------- #
+
+
+def test_an_explicit_per_rung_value_wins_over_everything() -> None:
+    assert resolve_use_tools("ollama", explicit=True, global_default=False) is True
+    assert resolve_use_tools("vllm", explicit=False, global_default=True) is False
+
+
+def test_the_global_default_wins_when_the_rung_says_nothing() -> None:
+    assert resolve_use_tools("ollama", explicit=None, global_default=True) is True
+    assert resolve_use_tools("vllm", explicit=None, global_default=False) is False
+
+
+def test_the_provider_decides_when_nothing_is_configured() -> None:
+    # Ollama is the one provider whose servers cannot be assumed to accept a
+    # tools payload, so it alone defaults off.
+    assert resolve_use_tools("ollama", explicit=None, global_default=None) is False
+    assert resolve_use_tools("vllm", explicit=None, global_default=None) is True
 
 
 # --------------------------------------------------------------------------- #

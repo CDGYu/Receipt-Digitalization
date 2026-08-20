@@ -51,6 +51,18 @@ class Settings(BaseSettings):
     # VLM_PROVIDER=openai pointed at a local Ollama via VLM_BASE_URL. Servers
     # that reject a ``tools`` payload outright need this false.
     vlm_use_tools: bool | None = None
+    # Maps VLM_MODEL_EXTRACT_FALLBACK. The second extract rung. Unset means
+    # there is no fallback and the ladder has exactly one rung, which is
+    # today's behaviour.
+    vlm_model_extract_fallback: str | None = None
+    # Maps VLM_USE_TOOLS_TRIAGE. Tool use for the triage rung. Not optional
+    # convenience: ISSUE-001 tells a reader to set VLM_USE_TOOLS=true for the
+    # cloud tier, and that is a process-wide default -- it would turn tools on
+    # for triage too, where granite is measured to lose `merchant_name_guess`
+    # entirely, which is the field ADR-0043 decision 1's hint path keys off.
+    vlm_use_tools_triage: bool | None = None
+    # Maps VLM_USE_TOOLS_FALLBACK. Tool use for the fallback rung.
+    vlm_use_tools_fallback: bool | None = None
     # Maps VLM_MAX_CONCURRENCY. The ceiling on model calls in flight at once
     # *for this process*, shared by every receipt it is working — not a cap per
     # receipt, which would be no cap at all once a batch or a worker pool is
