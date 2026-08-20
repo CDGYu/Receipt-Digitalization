@@ -1291,6 +1291,53 @@ emptiness form. The first two were proven red before the fix.
 `extractor.py:278`. Worth recording — the lesson is to check rationales, not to
 assume they are all false.
 
+### Task 3, as executed — two defects, and five rationales that held
+
+Task 3 shipped green (`a9bc61c`, 1263 -> 1266, five gates PASS). The
+"is the refactor cosmetic?" mutation was reproduced by the controller: with
+`resolve_use_tools` forced to `True` the tree still imports and **two
+pre-existing tests fail** — `test_ollama_provider_disables_tools_by_default` and
+`test_explicit_use_tools_overrides_provider_default` — both of which build a
+real client through `make_client`. The routing is real.
+
+The implementer went further than asked and established the no-behaviour-change
+claim **differentially**: the committed factory loaded side by side with the new
+one, compared across the full cross-product of nine provider spellings and three
+`vlm_use_tools` values, 27/27 identical including the error branches. That is a
+stronger form of proof than this plan asked for and is worth copying.
+
+**Defects (2):**
+
+1. **A test block that would fail the ruff gate if appended literally — the
+   third instance of this exact species**, after Task 1 #4 and Task 2 #1. The
+   plan writes new-file-style imports into a file that already has an import
+   block, giving `E402`. `tests/test_client_factory.py` has no `per-file-ignores`
+   entry. **This is now a pattern in the plan, not three accidents:** every task
+   that appends tests to an existing file has it, so Tasks 5-7 should be assumed
+   to have it too.
+2. **Step 3's settings block used Sphinx `#:` comment syntax**, which
+   `config/settings.py` uses nowhere — all ~20 of its field comments are plain
+   `#`.
+
+**Rationales checked that held (5):** ADR-0002's correction saying the
+granularity fix belongs to this milestone; ISSUE-001 telling a reader to set
+`VLM_USE_TOOLS=true`; granite losing `merchant_name_guess` with tools on; that
+field being ADR-0043 decision 1's key; and the precedence chain being unchanged.
+
+**Reported and correctly not fixed:** `_TOOLS_OFF_BY_DEFAULT`'s comment carries a
+pre-existing stale claim — "Ollama returns a hard 400 for a `tools` payload …
+that 400 kills the very first (triage) call" — which ADR-0002 and
+`docs/KNOWN_ISSUES.md` both now contradict ("does not reproduce"). The 2026-08-18
+edit removed the granite half and left this. The same claim also sits in a test
+comment. Out of Task 3's scope; belongs with the ADR.
+
+**Controller correction to the implementer's report:** they wrote that §7.2's
+trap "is already live on this box". It is not, not harmfully. `.env` here
+resolves `vlm_use_tools=True` **and** `vlm_model_triage=gemma4:cloud`, and tools
+on is *correct* for that model. The trap arms only when `VLM_MODEL_TRIAGE` moves
+to granite without `VLM_USE_TOOLS_TRIAGE=false`. A live flag is not a live
+defect.
+
 ### Task 2, before dispatch — the same defect species, one task later
 
 **Task 2's Step 3 carried `from .schema import ReceiptExtraction  # local:
