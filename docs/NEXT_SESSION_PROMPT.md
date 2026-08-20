@@ -44,23 +44,33 @@ git log --oneline refs/remotes/origin/main..main  # what the pending push would 
 
 ## What last merged, and how to check what is pushed.
 
-**The results list and the admin export button merged by true fast-forward on
-2026-08-20** — `b563242` -> `f0dc7b6`, **23 commits**, single parent each, zero
-merge commits. Decision: **ADR-0046** — the list is a projection of the export's
-query, and a screen nothing mounts is not delivered. It left **ISSUE-010 and
-ISSUE-011**. `docs/MEMORY.md`'s section is the record.
+**The `/app/receipts` browser pass and the gutter fix merged by true
+fast-forward on 2026-08-20** — `19a0911` -> `d692cc3`, **2 commits**, single
+parent each, zero merge commits. **No ADR**: the change decides nothing new, and
+§4's gutter keeps the meaning it had. `docs/KNOWN_ISSUES.md`'s **ISSUE-010** is
+the record and is not to be re-derived; `docs/MEMORY.md`'s Snapshot bullet is the
+summary.
 
-*(The milestone closed with **no** ADR: the whole-branch review judged the
-behavioural pin enough. One was written the next day at the user's request,
-which is why ADR-0046 cites no branch commits and post-dates the merge.)*
+**The thing to know before touching it:** the not-extracted mark's hairline is a
+**gutter**, not decoration — it works because a column of values shares an edge.
+`Value` takes `align` (default `start`), and the three right-aligned call sites
+pass `end`. **Do not re-key that off `kind`**: two of the five numeric-kind call
+sites are left-aligned, so `kind` would move the rule to the wrong edge on
+`StatTiles` and `ConfidenceRail`.
 
-**The thing to know before touching it:** the list is a projection of the
-export's own query. `GET /export/receipts` pages `query_export_receipts`, the
-same function the workbook uses, so the two cannot disagree about scope.
-Rebuilding it on `GET /receipts` would reopen the defect it exists to close.
+**And the thing it leaves undone:** the `border-radius` on a
+`border-collapse: collapse` table, which is a repo-wide pattern question; and two
+fixture gaps that make ISSUE-010 expensive to repeat — **no admin in the seed**
+while the export route is admin-only, and a `visual` spec that **never visits the
+screen**.
 
-**And the thing it leaves undone: nobody has opened the screen in a browser.**
-ISSUE-010. The download has never run in one, and no gate here can reach it.
+*(The previous last-merge was the **results list and the admin export button**,
+2026-08-20 — `b563242` -> `f0dc7b6`, 23 commits, single parent each, zero merge
+commits. Decision **ADR-0046** — the list is a projection of the export's query,
+and a screen nothing mounts is not delivered. **Read it before touching
+`/app/receipts`, either export route, or any new screen.** It closed with no ADR;
+one was written the next day at the user's request, which is why ADR-0046 cites
+no branch commits and post-dates the merge.)*
 
 *(The previous last-merge was **Buyer / Sold-To capture and blank-row
 transcription**, 2026-08-19 — `a26d6c1` -> `27f765e`, 45 commits, single parent
@@ -174,15 +184,22 @@ detail lives, and where a row and its source disagree, **the source wins**
 (ADR-0030: a finding is a claim, and so is a summary of one).
 
 Rewritten 2026-08-20 to carry **every** open issue rather than the current
-milestone's. The register below is complete as of that date: eleven issues, of
-which nine are open.
+milestone's. The register below is complete as of that date: **eleven issues,
+all eleven open.**
+
+*(It said "nine are open" for half a day. Nine was the count of `**Status:**`
+lines in `docs/KNOWN_ISSUES.md`, and ISSUE-010 and ISSUE-011 opened with
+`**Opened …**` instead, so a status-anchored grep dropped the two newest entries
+— while the table three rows below marked both OPEN. Both entries now carry the
+Status line every other one has, so the anchor and the answer finally agree.
+Review standard 23: state the anchor beside the number.)*
 
 ### The tracks
 
 | # | track | state | where the detail is |
 |---|---|---|---|
 | **T2** | **Make accuracy measurable** | **BLOCKED, and it is the thing gating the project.** Untouched by the last three milestones. | §1 below, `docs/KNOWN_ISSUES.md` ISSUE-001 |
-| T5 | Look at what shipped | **OPEN and cheap.** Nobody has opened `/app/receipts`. | §2 below, ISSUE-010 |
+| ~~T5~~ | ~~Look at `/app/receipts`~~ | **DONE 2026-08-20.** Opened in three engines; the download works, one defect found and fixed. **No ADR.** | `docs/MEMORY.md`, ISSUE-010, §2 |
 | T6 | Correctness issues left recorded | **OPEN.** ISSUE-005, 006, 007, 008, 009. | §3 below |
 | T7 | Phases 7 and 8 | Partly blocked on T2. | §4 below |
 | T8 | Earlier-phase leftovers | Open, unblocked, low priority. | §5 below |
@@ -190,9 +207,10 @@ which nine are open.
 | ~~T3~~ | ~~Buyer and blank rows~~ | **CLOSED 2026-08-19.** ADR-0044, ADR-0045. | `docs/MEMORY.md` |
 | ~~T4~~ | ~~The results list ("A1")~~ | **CLOSED 2026-08-20.** ADR-0046. | `docs/MEMORY.md`, §7 |
 
-**If you want one sentence:** the cheapest valuable thing is **T5** (open the
-screen, click Export); the most important thing is **T2** (a model that can read
-a receipt), and it has been blocked since 2026-07-28.
+**If you want one sentence:** **T5 is done**, so the most important thing and
+the next real build are now the same thing — **T2**, a model that can read a
+receipt, blocked since 2026-07-28. The cheapest remaining valuable thing is
+**ISSUE-006**, the only issue where a user gets a confidently wrong answer.
 
 ---
 
@@ -213,8 +231,8 @@ what was already fixed, and the exact steps to resume.
 | ISSUE-007 | `PROMPT_VERSION` is unenforced; reverting it passes the whole suite. **Its easiest green is the defect.** | OPEN — needs a contract decision |
 | ISSUE-008 | `xlsx._purchases` and `rules._purchased` are identical predicates with nothing binding them. | OPEN — drift risk, not wrong today |
 | ISSUE-009 | `CorrectionPatch`'s docstring no longer describes the contract it validates; OpenAPI omits `buyer.*` and `is_template_row`. | OPEN — harmless, misleading |
-| **ISSUE-010** | **Nobody has opened `/app/receipts` in a browser, and the download has never run in one.** | **OPEN — cheapest high value** |
-| ISSUE-011 | A measured-false `class="undefined"` spelling survives in four test files. | OPEN — pre-existing, cosmetic |
+| ISSUE-010 | `/app/receipts` **has now been opened**, in three engines. The download **works**; the predicted defect was refuted. One real finding (the gutter) is fixed. | **OPEN, narrowed** — only the collapsed-table `border-radius`, a repo-wide question |
+| ISSUE-011 | A measured-false `class="undefined"` spelling survives in **three** test files (four sentences). | OPEN — pre-existing, cosmetic |
 
 ---
 
@@ -260,34 +278,44 @@ check only, and its §16 table means nothing about accuracy).
 cloud egress is authorised for the **golden set only** — routing production
 uploads to the cloud is a separate decision and has **not** been made.
 
-### §2. T5 — look at what shipped (ISSUE-010). CHEAPEST HIGH VALUE.
+### §2. T5 — DONE 2026-08-20. `/app/receipts` has been opened.
 
-**Nobody has opened `/app/receipts`.** Four things need a person, in descending
-order of risk:
+**Merged by true fast-forward `19a0911` -> `d692cc3`, 2 commits, no ADR.**
+`docs/KNOWN_ISSUES.md`'s ISSUE-010 is the record and carries every measurement;
+**do not re-derive it.** In brief, item by item as this section used to list
+them:
 
-1. **The download has never run in a browser.** `downloadExportWorkbook`
-   (`frontend/src/api/receipts.ts`) builds a **detached** anchor, clicks it, and
-   revokes the object URL **synchronously** in a `finally`. Both are the
-   documented cross-browser failure modes for blob downloads. jsdom stubs
-   `click`, so every test passes either way. **This is the milestone's entire
-   user-visible effect.**
-2. **Two stacked negative margins** under the heading. The arithmetic is right;
-   `AdminScreen` does this once and nothing here has done it twice in a row.
-3. **Whether the not-extracted em dash reads as "missing"** in a right-aligned
-   cell rather than as a stray hairline.
-4. A `border-radius` on a `border-collapse: collapse` table, which browsers
-   ignore. **Pre-existing as a pattern** — `TaskTable` and `LineItemsTable` both
-   already do it, so it is a repo-wide question, not this screen's.
+1. **The download WORKS**, in Chromium, Firefox and WebKit — `200`, a valid
+   workbook on disk, four sheets, the same rows the screen showed. The detached
+   anchor and the synchronous revoke lose nothing. **The two fix shapes this
+   section used to recommend are struck as unnecessary.** The green is worth
+   believing because the probe was **proven red first**: with `anchor.click()`
+   removed, all three engines returned `200` and produced no download.
+2. **The two stacked negative margins are correct** — `-22px` against a `24px`
+   gap leaves `--space-xs` at both joints, at three widths in both themes.
+3. **This one was real, and it is fixed.** The mark's hairline is a *gutter*, and
+   a left-edge gutter in a right-aligned column aligns with nothing; a currency
+   with no total put the rule between the code and the mark. `Value` gained
+   `align` (default `start`) and `.notExtractedEnd`. **`kind` is not the axis** —
+   `StatTiles` and `ConfidenceRail` both render numeric kinds left-aligned.
+4. **Confirmed ignored, and STILL OPEN.** The `border-radius` on a
+   `border-collapse: collapse` table renders square. Pre-existing as a pattern —
+   `TaskTable` and `LineItemsTable` both do it — so it is a repo-wide question
+   nobody has ruled on. **This is all that is left of ISSUE-010.**
 
-**How:** `python scripts/seed_review_e2e.py --reset`, then
-`cd frontend && npx playwright test visual` (**the `visual` filter re-seeds**; a
-full run consumes its one queued task by design). Then open the screen as an
-admin *and* as a reviewer, and **click Export**.
+**Two things this pass found by following this section's own instructions, both
+still true and both unfixed:** there is **no admin in the seed**
+(`scripts/seed_review_e2e.py` creates one reviewer) while `GET /export/xlsx`
+requires admin, so clicking Export as the seeded user 403s; and **`npx playwright
+test visual` never navigates to `/app/receipts`** — every `goto` in that spec
+targets `/app/login`, `/app/review` or `/app/admin`. Anyone repeating this needs
+both.
 
-**Also still unseen, repo-wide: dark theme at any width, and 768.** The scope of
-what has ever been looked at is the *SUPERSEDED IN PART* block of
-`docs/superpowers/specs/2026-08-05-review-ui-browser-pass.md` — that block is
-the source; do not restate it.
+**Still unseen, repo-wide: 768 at every surface, and dark theme everywhere
+except this screen** — which was looked at in dark at 1440 and renders
+correctly. The scope of what has ever been looked at is the *SUPERSEDED IN PART*
+block of `docs/superpowers/specs/2026-08-05-review-ui-browser-pass.md` — that
+block is the source; do not restate it.
 
 ### §3. T6 — the recorded correctness issues
 
@@ -333,8 +361,14 @@ rulings.
    my own name: it was **never** in this repo's git history — I claimed it was,
    verified four ways, and was wrong. The real exposure is that it was echoed to
    a terminal on 2026-07-28.)*
-2. **A browser pass on `/app/receipts`** (ISSUE-010) — cheapest while the
-   surface is fresh, and the only way to learn whether the download works.
+2. ~~**A browser pass on `/app/receipts`** (ISSUE-010).~~ **DONE 2026-08-20**,
+   and it earned its cost twice over: the download **works** in three engines
+   (the predicted defect was refuted), and looking found a real defect the issue
+   had only guessed at, now fixed. **What it leaves you** is the collapsed-table
+   `border-radius` — a repo-wide pattern question — and two gaps in the fixtures
+   that are worth a ruling: **the seed creates no admin** while the export route
+   is admin-only, and **the `visual` spec never visits the screen**. Neither was
+   fixed, because both change tracked files that were outside this work.
 3. **Do the public golden labels need scrubbing?** Real third-party names, TINs
    and addresses. **Not a tidy-up:** the TIN is in **11 commits** of a public
    repo, so it is a rewrite-history / go-private / accept-it decision.
@@ -367,7 +401,7 @@ never one.
 ## Reading order
 
 1. **`docs/MEMORY.md`** — state, decisions already made, environment, blockers,
-   deferred items, and **review standards 1–26**.
+   deferred items, and **review standards 1–27**.
 2. **The ledgers** — `.superpowers/sdd/*/progress.md`, one per milestone.
    **`.superpowers/sdd/2026-08-10-corrections-read-route/progress.md` is the one
    that matters now**: it holds the nine fix rounds, the nine controller
@@ -1839,17 +1873,15 @@ and was measured not to need it.)*
 
 ## Today's goal
 
-# NOTHING IS IN FLIGHT. The results list merged on 2026-08-20.
+# NOTHING IS IN FLIGHT. The `/app/receipts` browser pass merged on 2026-08-20.
 
 **`git branch --no-merged main` must name nothing.** Run it rather than
 believing this sentence — it has been wrong in **both** directions, announcing
 no branch while one existed for three days, and announcing one after it landed.
 
-**You are starting, not finishing.** The close ran in full: six tasks each with
-a task review and a scoped re-review, a whole-branch review on the strongest
-model returning MERGE AFTER FIXES, one fix wave, one scoped re-review of that
-wave, one controller adjudication of the two findings the re-review raised, then
-a true fast-forward.
+**You are starting, not finishing.** The work was small and the close was
+proportionate: two commits, no ADR, no plan and no ledger — one browser pass and
+the one defect it found. Gates re-run at the merged tip.
 
 **Run these first, and believe them over this document:**
 
@@ -1876,43 +1908,44 @@ reintroduced anyway. Read the command.)*
 merged tip, all five gates PASS.** Everything committed after it is this handoff
 pair. Re-run it rather than reasoning from that sentence.
 
-**What this milestone proves, and it is not a new lesson — it is the same one
-again, in a place that had already been closed once.** The entire results-list
-screen was **deletable with all five gates green**: 22 tests, its own
-stylesheet, the export button, the backend route behind it, all unreachable by
-any user, because nothing pinned that `main.tsx` ever mounted it.
-`frontend/tests/app-admin-route.test.tsx` **exists because the identical
-measurement was made for `/app/admin`** — and the class recurred anyway, in the
-very next screen anyone built.
+**What this milestone proves, and it is new — review standard 27 is what came
+out of it.** ISSUE-010 predicted the export download would fail, and reasoned
+from the code: a **detached** anchor, and a **synchronous** `revokeObjectURL`.
+Both readings were exactly right. Both genuinely are documented cross-browser
+failure modes. **The conclusion was still wrong** — the file arrives in
+Chromium, Firefox and WebKit, and the two fixes the issue recommended would have
+changed working code to settle a question nobody had asked a browser.
+**A defect derived from reading has the shape of a measurement and none of the
+standing.**
 
-**The second thing it proves is about proofs.** Two of this milestone's
-mutation "proofs" were themselves wrong, one of them the controller's own: a
-malformed edit left dangling JSX, the suite went red, and it would have
-confirmed a real finding on the strength of a **syntax error**. The corrective
-that worked every time: **run the mutation, and check the mutated tree still
-compiles.** A red that comes from a parse failure proves nothing about the
-property. `noUnusedLocals: true` makes this sharper than it sounds — deleting a
-branch but not its import fails the build, not the test.
+**The second thing it proves is about instruments.** A probe's green is worth
+nothing until the probe has been proven red — standard 14, applied to what you
+are measuring *with* rather than to the pin. Removing `anchor.click()` sent all
+three engines red on the discriminating pair (server `200`, no download), and
+that is the only reason the green was written down. **A probe that cannot see
+the failure whose absence it reports has reported nothing.**
 
-**Nine plan defects, every one the controller's, none in shipped behaviour.**
-Three were assertions that could not fail. The plan's dated defect log has all
-nine with their measurements, and **ADR-0045 — newly cited in the reading order
-above, having been cited nowhere in this file until today — is the ADR that
-addresses exactly this.**
+**And the reproduction steps are a claim about the tree too** (ADR-0045).
+ISSUE-010's own two resume steps were both wrong — no admin exists in the seed
+while the export route is admin-only, and the `visual` filter never navigates to
+the screen. Following them is how that was found, at the cost of one run.
+
+**What looking produced that reading had not:** a real defect, in the item the
+issue ranked third of four. The hairline is a **gutter**, and a left-edge gutter
+in a right-aligned column aligns with nothing.
 
 **Then** pick from the START HERE index — which as of 2026-08-20 carries **every
 open issue**, not just the current milestone's — or answer the questions under
 "Blocked on the user" and let that pick for you.
 
-**If you want the shortest honest answer to "what next":** either **ISSUE-010**
-— open `/app/receipts` in a browser and click Export, which is the cheapest
-high-value thing on the board and the only way to learn whether the download
-works at all — or **ISSUE-001 step 5**, the local-to-Cloud escalation, which is
-the thing that has gated this project since 2026-07-28 and is the next real
-build.
+**If you want the shortest honest answer to "what next":** **ISSUE-001 step 5**,
+the local-to-Cloud escalation. It has gated this project since 2026-07-28, it is
+the next real build, and T5 — which was the cheap alternative — is now done. If
+you want something smaller first, **ISSUE-006** is the only issue on the board
+where a user gets a confidently wrong answer.
 
 **Read these before you touch anything**, in this order: `docs/MEMORY.md` (state
-plus **review standards 1–26**) → `docs/adr/README.md` → the ADRs its rows send
+plus **review standards 1–27**) → `docs/adr/README.md` → the ADRs its rows send
 you to, of which **ADR-0046 and ADR-0045 are the two written most recently and
 the two most likely to change what you do**. `docs/KNOWN_ISSUES.md` is the
 source for all eleven issues and **is not to be re-derived**. Your own memory

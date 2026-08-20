@@ -6,20 +6,20 @@ continuity protocol itself — what lives where, and why this snapshot must be
 verified rather than trusted — is **ADR-0019**, extended by **ADR-0021** (whose
 2026-08-02 dated correction widened the freshness check after a docs-only task
 proved invisible to it).
-Last updated: **2026-08-18**, by the session that **finished** Phase 6 merchant
-fingerprinting — reviewed the branch's one unreviewed task, ran the whole-branch
-review, closed one fix wave and one scoped re-review, corrected **ADR-0043**,
-merged by true fast-forward and pushed — and then **answered T2 steps 2, 3 and 4
-by running them.** Steps 2 and 4 are "no" (2048 does not help; do not enable
-tool-use locally). **Step 3 is YES on both counts, and it unblocks the project**:
-`gemma4:cloud` is vision-capable, free-tier and tool-capable. Many claims in
-`docs/KNOWN_ISSUES.md` and in this pair were falsified by measurement along the
-way, including seven places asking for a provider class the user had ruled out,
-and **one of my own** — the Gemini key was never in git history.
+Last updated: **2026-08-20**, by the session that **opened `/app/receipts` in a
+browser** — the first time any person has looked at that screen, and the first
+time any surface in this app has been seen in dark theme. **ISSUE-010's headline
+prediction was refuted**: the detached anchor and the synchronous
+`revokeObjectURL` lose nothing, in Chromium, Firefox and WebKit alike, and the
+workbook opens with the rows the screen showed. Looking found a defect the issue
+had only guessed at, and it is **fixed and merged**: §4's hairline is a *gutter*,
+and a left-edge gutter in a right-aligned column aligns with nothing. Two counts
+in `docs/KNOWN_ISSUES.md` were wrong and are corrected, along with the formatting
+that made one of them wrong.
 **No count of refreshes is written here** — it is a number that moves without its
 sentence changing, which is review standard 5.
 
-**Freshness anchor `4c24970`** — the last commit that is not this handoff pair.
+**Freshness anchor `d692cc3`** — the last commit that is not this handoff pair.
 **It is written twice below — here and inside the command.** Moving one and not
 the other is what happened on this file's previous refresh, and the gate caught
 it because it parses the anchor out of the *command*.
@@ -34,7 +34,7 @@ else: a stamp cannot name the commit that writes it. The test is a command,
 not a commit and not a count:
 
 ```
-git log --oneline 4c24970..main -- ":(top,exclude)docs/MEMORY.md" ":(top,exclude)docs/NEXT_SESSION_PROMPT.md"
+git log --oneline d692cc3..main -- ":(top,exclude)docs/MEMORY.md" ":(top,exclude)docs/NEXT_SESSION_PROMPT.md"
 git log --oneline refs/remotes/origin/main..main   # what a push would send
 git ls-remote --heads origin main                  # authoritative on what is pushed
 git branch --no-merged main                        # must name NOTHING
@@ -88,12 +88,15 @@ bundling them with an ADR or an index row lists itself as stale. That happened
 three times in the session that wrote ADR-0033. Everything substantive was
 committed first.
 
-*(The previous stamp was 2026-08-14 at `main @ f92b497`. It went stale within
-five hours: a browser pass committed `cd42e4f` and that session ended without
-refreshing this pair — **the failure this stamp names as the one no gate can
-observe, occurring one refresh after the sentence saying so was written.** It was
-caught the next morning, by a session running the command instead of reading the
-answer.)*
+*(The stamp before this one was written earlier the same day and was **current
+when this session began** — the command came back empty, which is the first time
+in this file's recorded history that a session opened on a pair nobody had to
+repair. The one before that went stale within five hours, because a browser pass
+landed and its session ended without refreshing the pair: the failure this stamp
+names as the one no gate can observe, occurring one refresh after the sentence
+saying so was written. **No SHA is quoted for either**, because a stamp's
+predecessors are history and a closed anchor is durable only while its commit
+stays reachable — ADR-0042. `git log --oneline -- docs/MEMORY.md` is the list.)*
 
 ## Snapshot
 
@@ -103,6 +106,36 @@ answer.)*
   "NO BRANCH IN FLIGHT" for three days while one existed, in 2026-08, and then
   announced one for three days after it landed would have been the same defect
   in the other direction.
+- **The `/app/receipts` browser pass and the gutter fix are COMPLETE AND MERGED**
+  (2026-08-20, true fast-forward `19a0911` -> `d692cc3`, **2 commits, single
+  parent each, zero merge commits**). `feat/value-gutter-alignment` is kept at
+  its merge point and pushed. **No ADR** — the change narrows nothing and decides
+  nothing new; §4's gutter keeps the meaning it had and moves to the edge the
+  cell aligns to. **ISSUE-010 is the record**, rewritten from what a browser
+  showed rather than from what the issue predicted.
+  **What it settled.** The download **works** — `200`, a valid workbook on disk,
+  four sheets, the same rows the screen showed, in Chromium, Firefox and WebKit.
+  The two fix shapes ISSUE-010 recommended (`appendChild`/`remove`, revoking on a
+  later tick) are **struck as unnecessary**. The two stacked negative margins are
+  **correct**: `-22px` against a `24px` gap leaves `--space-xs` at both joints, at
+  three widths in both themes. The `border-radius` on a collapsed table is
+  **confirmed ignored** and stays open as a repo-wide question.
+  **The defect looking found**, which no gate could: `.notExtracted` carries a
+  `border-left`, and `Value.tsx` calls it §4's scannability device. It is a
+  **gutter** — it works because left-aligned form fields share a left edge. A
+  right-aligned cell has none: the span shrink-wraps and is pushed right, so the
+  rule lands at a different x every row. Worst instance, a currency with no
+  total, put the rule *between* the code and the mark. Fixed by **mirroring**, not
+  removing: `align` on `Value`, default `start`, and `.notExtractedEnd`.
+  **`kind` was rejected as the axis on a measurement** — two of five numeric-kind
+  call sites are left-aligned (`StatTiles`, `ConfidenceRail`), so keying on it
+  would break two surfaces to fix a third.
+  **What it cost, and the shape worth carrying:** the probe was **proven red
+  before its green was believed** — with `anchor.click()` removed, all three
+  engines returned `200` and produced no download — and **ISSUE-010's own two
+  resume steps were both wrong**, which is how that was found. There is no admin
+  in the seed while the export route is admin-only, and the `visual` filter never
+  navigates to the screen. Neither is fixed; both are recorded in ISSUE-010.
 - **The results list and the admin export button is COMPLETE AND MERGED**
   (2026-08-20, true fast-forward `b563242` -> `f0dc7b6`, **23 commits, single
   parent each, zero merge commits**). `feat/results-list-and-export` is kept at
@@ -497,12 +530,19 @@ is pinned behaviourally rather than commented.
 
 ### What no gate here can see, and it is written down as ISSUE-010
 
-**Nobody has opened this screen in a browser.** The download in particular has
-never run in one: a detached anchor plus a synchronous `revokeObjectURL` are the
-documented cross-browser failure modes, `click` is stubbed under jsdom, and
-`e2e/**` is excluded from the Vitest run. A sentence claiming the census entries
-*had* been seen through a browser was found and deleted at the whole-branch
-review; deleting it removed the claim, not the gap.
+**What the gates cannot see has not changed. What was unseen has.** This section
+read *"Nobody has opened this screen in a browser"* until 2026-08-20, when
+somebody did — see the browser-pass bullet in the Snapshot, and ISSUE-010, which
+is now a record of measurements rather than of predictions.
+
+The blind spot itself stands exactly as written: `click` is stubbed under jsdom,
+`css: false` makes class names unpinnable by rendering tests, jsdom lays nothing
+out and renders no colour, and `e2e/**` is excluded from the Vitest run, so
+Playwright remains the only instrument that could reach any of it and it is not a
+gate. **All five gates were green throughout, including while the gutter defect
+was live.** A sentence claiming the census entries *had* been seen through a
+browser was found and deleted at the whole-branch review; deleting it removed the
+claim, not the gap. The gap is smaller now by exactly one screen.
 
 ### The lesson this milestone paid for
 
@@ -2709,6 +2749,36 @@ not treat any precision claim as measured.**
       — an identity over its own constructor, a substring satisfied by an
       unrelated percentage, and `0 == 0` — each caught by a reviewer, none by
       any gate.
+
+27. **A defect derived from reading is a hypothesis, and every premise can be
+    true while the conclusion is false.** Earned on 2026-08-20, on ISSUE-010's
+    headline prediction.
+
+    The issue said the export download would fail, and reasoned from the code:
+    `downloadExportWorkbook` builds a **detached** anchor, and revokes the object
+    URL **synchronously** in a `finally`. Both readings were exactly right. Both
+    genuinely are documented cross-browser failure modes for blob downloads. The
+    conclusion was still wrong — the file arrives in Chromium, Firefox and
+    WebKit, and the two fixes the issue recommended would have changed working
+    code to settle a question nobody had asked a browser.
+
+    * **ADR-0030 is about findings somebody measured. This is weaker than
+      that.** A derived finding has the shape of a measurement — a file, a line,
+      a named mechanism — and none of the standing. It reads as the strongest
+      kind of finding and is the weakest.
+    * **The instrument gets the same treatment as a pin: green means nothing
+      until it has been proven red.** Standard 14 for tests, and the same rule
+      for whatever you are measuring *with*. Removing `anchor.click()` sent all
+      three engines red on the discriminating pair — server `200`, no download —
+      which is the only reason the green was worth writing down. A probe that
+      cannot see the failure whose absence it reports has reported nothing.
+    * **Corollary, measured the same day: the instructions for reproducing a
+      finding are a claim about the tree too** (ADR-0045). ISSUE-010's two resume
+      steps were both wrong — no admin exists in the seed while the export route
+      is admin-only, and the `visual` filter never navigates to the screen — and
+      following them is how that was discovered.
+    * **What looking produced that reading had not:** a real defect the issue had
+      only guessed at, in the item it ranked third of four.
 
 And: **a green suite is not evidence that installed software works.** Anything
 with an entry point gets run from outside the repository.
