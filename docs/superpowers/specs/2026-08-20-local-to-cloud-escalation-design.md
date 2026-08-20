@@ -107,10 +107,45 @@ explains why it is `core` rather than a self-report leaf: the convention "names 
 convention the document prints, so it is something the model had to read." That
 is right for accuracy scoring and fatal for an emptiness test.
 
-### 3.1 "Read nothing", defined against the schema's own default
+### 3.1 "Read nothing", defined against a default of the same shape
 
 > The extraction read nothing ⟺ its filled `core` and `line_items` paths are
-> identical to those of a default-constructed `ReceiptExtraction()`.
+> identical to those of a default extraction **carrying the same line-item
+> rows**, each row mirroring its counterpart's `position`.
+
+#### Correction (2026-08-21, during Task 2) — the row baseline
+
+This read "identical to those of a default-constructed `ReceiptExtraction()`",
+and **that had a second never-fires hole**, found by Task 2's implementer and
+reproduced before it was accepted.
+
+`LineItem()` rests at `position=0` and `description_raw=""`, and `is_filled`
+accepts both — `0` is content by design, and `""` is a `str` rather than an
+empty *container*. So an extraction carrying one entirely blank row compared
+against a **zero-row** baseline came out as content:
+
+```
+baseline                : {'receipt.decimal_convention': 'point'}
+one blank LineItem      : {..., 'line_items[0].position': 0,
+                                'line_items[0].description_raw': ''}
+read_nothing(one blank) -> False
+```
+
+**Reachable, not theoretical.** R013's repair prompt tells a model "Triage
+estimated roughly 1 line items. Re-read the body", and triage returned
+`est_items=1` on r002. A model answering with a single empty row lands exactly
+here — and the cloud rung would never run, with every gate green.
+
+Mirroring `position` matters because position is **structural**: `normalize`
+fills missing ones by order and sorts, so the same two blank rows arrive
+numbered `0,0` or `0,1` depending on whether normalization has run. Neither
+spelling is read off the paper.
+
+**This is the second time this predicate's definition has been wrong in the
+never-fires direction**, and both times a measurement caught what reading did
+not. The pattern is worth naming: every wrong version was wrong because a field
+rests at a default that `is_filled` accepts, and the fix each time was to make
+the baseline more like the thing being judged rather than to enumerate fields.
 
 Comparing against the default rather than against emptiness is what makes it
 schema-derived in both directions: a field added later with a default is

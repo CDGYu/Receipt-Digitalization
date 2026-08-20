@@ -14,7 +14,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from .schema import ReceiptExtraction
+from .schema import LineItem, ReceiptExtraction
 
 _INDEXED = re.compile(r"^(.*?)\[(\d+)\]$")
 
@@ -190,5 +190,24 @@ def read_nothing(extraction: Any) -> bool:
     constant: one call per rung costs microseconds against a VLM call measured
     in minutes, and a cached copy is a second statement of the schema's defaults
     that can go stale — the drift this predicate's whole design avoids.
+
+    **The baseline is shaped like the extraction, not merely default.** A row
+    the model emitted but read nothing into is still nothing read, and a bare
+    ``ReceiptExtraction()`` baseline could not say so: ``LineItem()`` rests at
+    ``position=0`` and ``description_raw=""``, both of which :func:`is_filled`
+    accepts — ``0`` is content, and ``""`` is a ``str`` rather than an empty
+    *container*. So ``line_items: [{}]`` compared against a zero-row baseline
+    read as content, and the fallback it gates would not have fired. That is
+    reachable rather than theoretical: R013's repair prompt tells a model
+    "Triage estimated roughly 1 line items", and triage returned exactly that on
+    r002.
+
+    Each baseline row mirrors its counterpart's ``position`` because position is
+    **structural** — ``normalize`` fills missing ones by order and sorts, so the
+    same two blank rows can arrive numbered ``0,0`` or ``0,1``. Neither spelling
+    is something read off the paper, so neither may count as content.
     """
-    return _content_paths(extraction) == _content_paths(ReceiptExtraction())
+    baseline = ReceiptExtraction(
+        line_items=[LineItem(position=item.position) for item in extraction.line_items]
+    )
+    return _content_paths(extraction) == _content_paths(baseline)

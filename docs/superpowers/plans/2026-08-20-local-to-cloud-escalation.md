@@ -1251,6 +1251,46 @@ mattered and got the reason wrong — a correct instruction with a false rationa
 is more dangerous than a missing one, because it invites an implementer to
 "simplify" on the strength of it.
 
+### Task 2, as executed — a never-fires hole in the predicate itself
+
+Task 2 shipped green (`7b1dc3f`, 1255 -> 1259, five gates PASS, both mutations
+proven with the mutated tree confirmed importable). Its implementer then
+reported a hole **in the spec's definition**, not in their implementation of it,
+and it is the dangerous kind.
+
+**`line_items: [{}]` read as content.** `LineItem()` rests at `position=0` and
+`description_raw=""`, both of which `is_filled` accepts, so one blank row
+compared against a zero-row baseline came out `read_nothing -> False`. The
+fallback would not have fired, and no test would have noticed. Reproduced by the
+controller before acting on it.
+
+Closed by giving the baseline the same shape as the extraction — same rows, each
+mirroring its counterpart's `position`. Spec §3.1 carries the correction, and
+four tests were added: the single blank row, blank rows however numbered, the
+other direction (a row with one real value is still content), and a pin that the
+baseline is non-empty so the comparison cannot silently collapse into the
+emptiness form. The first two were proven red before the fix.
+
+**Three plan defects came with it**, all the same species as Task 1's:
+
+1. **Step 1's test block would fail this repo's ruff gate if appended
+   literally** — it presents its imports as though the file is new, but Task 1
+   created `tests/test_paths.py`, so appending puts imports mid-file and emits
+   `E402` three times. Proved by the implementer with `ruff --isolated`, not
+   asserted.
+2. **Step 4's test count.** The real number was 7. The sentence predicted 6 and
+   corrected itself mid-sentence.
+3. **Step 5 stated each mutation as if exactly one test fails, and neither
+   does.** Mutation A also fails the two Task 1 pins; Mutation B also fails the
+   self-report test, because both rest on the same baseline. The property holds;
+   the prose was false, and "must fail" read as "only this fails" sends an
+   implementer hunting.
+
+**Two rationales were checked and held**: the no-import-cycle claim, and that
+`_evaluate` resolves a failed parse to `ReceiptExtraction()` at
+`extractor.py:278`. Worth recording — the lesson is to check rationales, not to
+assume they are all false.
+
 ### Task 2, before dispatch — the same defect species, one task later
 
 **Task 2's Step 3 carried `from .schema import ReceiptExtraction  # local:
