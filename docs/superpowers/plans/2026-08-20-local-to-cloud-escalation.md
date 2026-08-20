@@ -691,7 +691,20 @@ def _unparseable() -> str:
     return "not json at all"
 ```
 
-**Before writing these, read `FakeVLMClient.__init__` and its `complete_json`** (`src/receipts/extract/clients/fake.py:27-70`) and confirm what a scripted item must look like for `parsed` to come back `None`. `_unparseable` above is a guess at that shape and **must be corrected to match the real one** — if a malformed script raises `AssertionError` instead of yielding a `parse_error`, the test proves the wrong thing.
+**Verified against `src/receipts/extract/clients/fake.py`, so `_unparseable` is
+correct as written.** That class's own docstring states the contract: "Each
+entry is either a model instance (returned as `parsed`), a **string** (treated
+as a `parse_error`), or a callable taking the call index." A plain string
+therefore yields `parsed=None` with `parse_error` set, which `_evaluate` turns
+into a default-constructed `ReceiptExtraction()` — exactly the read-nothing case
+Task 2 defines.
+
+**Two ways to get this wrong**, both worth knowing before editing these tests:
+scripting *fewer* responses than the run makes calls raises `AssertionError`
+("FakeVLMClient exhausted"), which is a test-authoring bug rather than a
+parse failure; and a *callable* entry is invoked with the call index, so a
+helper that returns a function behaves differently from one that returns a
+string.
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
@@ -1056,21 +1069,41 @@ updated the unpack, this one adds the forwarding. Apply this version.
 
 In `eval/harness.py`'s `_report_to_dict`, add `"extract_rung_counts": report.extract_rung_counts`.
 
-In `eval/run_baseline.py`, switch from `make_client` to `make_pass_clients`, own
-the sink, and fold the counts in. **This is the only place the ladder is
-constructed**, which is what keeps it on the eval path (design §5).
+In `eval/run_baseline.py`, build the ladder, own the sink, and fold the counts
+in. **This is the only place the ladder is constructed**, which is what keeps it
+on the eval path (design §5).
 
-Replace the `client = make_client(settings)` line at `eval/run_baseline.py:87`
-and the `build_eval_pipeline` call that follows it:
+**`run_baseline` takes an injectable `client`, and that contract must survive.**
+Its signature is `run_baseline(golden_dir=None, *, client=None, ctx=None,
+results_dir=None, default_currency=None)`, and callers that pass their own
+client — tests and scripts — are **not** opting into a ladder. Building the
+ladder unconditionally would override an injected client and break them.
+
+Replace the `if client is None:` block and the `build_eval_pipeline` call that
+follows it:
 
 ```python
-    tiers = make_pass_clients(settings)
+    if client is None:
+        if settings.vlm_provider.strip().lower() == "fake":
+            raise RuntimeError(_FAKE_PROVIDER_HINT)
+        tiers = make_pass_clients(settings)
+    else:
+        # An injected client is one rung, used for every pass -- exactly what
+        # this function did before the ladder existed.
+        tiers = PassClients(triage=client, extract_rungs=(client,))
+
+    if ctx is None:
+        ctx = ValidationContext()
+
+    if default_currency is None:
+        default_currency = settings.default_currency
+
     attribution: list[PassAttempt] = []
     pipeline_fn = build_eval_pipeline(
         tiers.extract_rungs[0],
         ctx,
-        images_dir,
-        default_currency=settings.default_currency,
+        golden_dir / "images",
+        default_currency=default_currency,
         triage_client=tiers.triage,
         extract_fallback_client=(
             tiers.extract_rungs[1] if len(tiers.extract_rungs) > 1 else None
@@ -1084,14 +1117,18 @@ and the `build_eval_pipeline` call that follows it:
         if entry.pass_name == "extract" and entry.kept:
             counts[entry.model_id] = counts.get(entry.model_id, 0) + 1
     report.extract_rung_counts = counts or None
+    return report
 ```
 
-**Read `eval/run_baseline.py:60-101` before writing this** and keep the
-surrounding argument names it already passes to `build_eval_pipeline` — `ctx`,
-`images_dir` and `default_currency` above are the names this plan expects, and
-if the real ones differ, the real ones win. Update the import at
-`eval/run_baseline.py:33` from `make_client` to `make_pass_clients`, and add
-`PassAttempt` to the `receipts.pipeline` import.
+Update the import at `eval/run_baseline.py:33` to bring in `make_pass_clients`
+and `PassClients` alongside (or instead of) `make_client`, and add `PassAttempt`
+to the `receipts.pipeline` import.
+
+**Verified against the tree, so these are not assumptions:** the third
+positional argument really is `golden_dir / "images"`; `EvalReport` is a plain
+`@dataclass` and **not** frozen, so the `report.extract_rung_counts = ...`
+assignment is legal; and the `fake` provider refusal is existing behaviour that
+must stay on the `client is None` branch only.
 
 In `format_report`, print the counts **immediately after the accuracy block**, not in a trailing section:
 
@@ -1102,7 +1139,9 @@ In `format_report`, print the counts **immediately after the accuracy block**, n
             lines.append(f"    {model_id:32s} {count}")
 ```
 
-**`EvalReport` must not be frozen for that assignment to work.** Check before writing it: if it is frozen, build the counts before `run_eval` returns is impossible, so use `dataclasses.replace` instead and say so in the commit.
+**`EvalReport` is a plain `@dataclass`, not frozen** — verified, so the
+assignment above is legal and no `dataclasses.replace` dance is needed. If a
+later change freezes it, this line is where that breaks.
 
 - [ ] **Step 5: Run the tests to verify they pass**
 
@@ -1144,7 +1183,12 @@ An ADR is required and is **not** a task above, because it should record what wa
 *(Append here as defects in this plan are found. Every milestone in this repository has found some, and every one was the plan author's.)*
 
 - **2026-08-20, before dispatch:** the spec's original trigger predicate could never have fired. Recorded in the spec's own §3 correction; this plan is written against the corrected version.
-- **2026-08-20, before dispatch:** `_unparseable()` in Task 5 Step 1 is a guess at `FakeVLMClient`'s scripted-response shape and is flagged in the step itself as needing correction against the real constructor.
+- **2026-08-20, before dispatch, RESOLVED:** `_unparseable()` in Task 5 Step 1 was a guess at `FakeVLMClient`'s scripted-response shape. Checked: a string entry *is* treated as a `parse_error`, so the guess was right and the step now states the contract instead of flagging it.
+- **2026-08-20, second pre-flight pass, three more:**
+  1. **`run_baseline` takes an injectable `client`, and Task 7 would have overridden it.** Its signature is `run_baseline(golden_dir=None, *, client=None, ctx=None, results_dir=None, default_currency=None)`, and tests and scripts pass their own client without opting into a ladder. Building the ladder unconditionally would have broken every one of them. The ladder is now built only on the `client is None` branch, with an injected client wrapped as a single rung.
+  2. **The third positional argument to `build_eval_pipeline` is `golden_dir / "images"`**, not a bare `images_dir` — the plan's earlier code named a variable that does not exist at that call site.
+  3. **`EvalReport` is not frozen** — checked rather than left as a caveat for the implementer to resolve mid-task.
+- **Coverage note, not a defect:** `tests/test_paths.py` does not exist yet; Task 1 creates it. The only existing coverage that touches `paths.py` is `tests/test_eval_floor.py`, which is where a duplicate would otherwise be written.
 - **2026-08-20, self-review, three findings:**
   1. **`make_pass_clients` was built in Task 4 and consumed by nothing.** The ladder would have been implemented, tested and never reached by an eval run — the shape this repo carries *deliberately* for `few_shots_for` and would have acquired here by accident. Fixed by giving `build_eval_pipeline` the two rung parameters and switching `run_baseline` from `make_client` to `make_pass_clients`.
   2. **Task 7 Step 4 contained a literal `...` standing in for the `build_eval_pipeline` call.** A placeholder that a keyword scan for "TBD"/"TODO" does not catch. Replaced with the real call, plus an instruction to read the surrounding argument names rather than trust this plan's.
