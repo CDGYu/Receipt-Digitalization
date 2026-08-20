@@ -1189,6 +1189,53 @@ An ADR is required and is **not** a task above, because it should record what wa
   2. **The third positional argument to `build_eval_pipeline` is `golden_dir / "images"`**, not a bare `images_dir` — the plan's earlier code named a variable that does not exist at that call site.
   3. **`EvalReport` is not frozen** — checked rather than left as a caveat for the implementer to resolve mid-task.
 - **Coverage note, not a defect:** `tests/test_paths.py` does not exist yet; Task 1 creates it. The only existing coverage that touches `paths.py` is `tests/test_eval_floor.py`, which is where a duplicate would otherwise be written.
+
+### Task 1, as executed — five more, all in the plan
+
+Found by the implementer, verified by the controller before acceptance. Task 1
+shipped green: `82c1351`, suite 1252 -> 1255, five gates PASS, no existing test
+edited.
+
+1. **Step 4's justification for the `_SELF_REPORT_LEAVES` alias named the wrong
+   dependency, and following it would have broken a test.** The step said the
+   alias matters because of `:data:` docstring references at `:90` and `:203`. A
+   docstring reference binds nothing at runtime. The real reader is
+   `tests/test_eval_metrics.py:146`, `from eval.metrics import
+   _SELF_REPORT_LEAVES, _group`, which the plan never mentions. An implementer
+   reasoning from the stated justification would have dropped the import as
+   cosmetic.
+   **Reproduced by the controller**: alias removed, mutated module confirmed to
+   still import, then `test_the_grouping_reads_the_declared_leaf_set_rather_than_names_of_its_own`
+   fails with `ImportError`. Restored.
+2. **Step 3 said "verbatim" and then supplied a block that was not.** It
+   substituted invented prose for the `#:` comment above `_META_PREFIX`. The
+   real one states the prefix test is structural *on purpose* — "a list of field
+   names would silently let it through (review standard 19 — an enumerated
+   defence never converges)" — and the replacement said only where the prefixes
+   live. In a task whose whole property is "a move, not a change", the plan
+   would have deleted the rationale. Also rendered every em dash as `--`.
+   **Verified** against `2de924c:eval/metrics.py`.
+3. **Step 4's deletion range orphaned a comment.** It named lines 62-117, but
+   the `#:` block documenting `_META_PREFIX`/`_LINE_ITEMS` sits at 56-61, above
+   that range. Taken literally it would have survived in `eval/metrics.py`
+   describing two constants no longer there. **Verified**: the comment is now in
+   `paths.py` and absent from `eval/metrics.py`.
+4. **Step 4's import block fails this repo's own ruff gate, two ways.** `I001`,
+   because isort here has `combine-as-imports = false` and an aliased member may
+   not share a parenthesised statement with a plain one; and `F401`, because
+   after the move `_SELF_REPORT_LEAVES` has no *code* reader left in
+   `eval/metrics.py`. Shipped as four single-line imports with a `noqa` and a
+   comment saying why. Consistent with the ruff gate passing.
+5. **Step 2's predicted failure named the wrong symbol** — `group_of`, where
+   Python reports the first name in the import list, `SELF_REPORT_LEAVES`.
+   Cosmetic, and still a plan claim that was false.
+
+**The shape worth carrying into the remaining tasks:** four of these five are
+the plan asserting something about code it had read and summarised. The one that
+would have caused real damage is the one where the plan explained *why* a thing
+mattered and got the reason wrong — a correct instruction with a false rationale
+is more dangerous than a missing one, because it invites an implementer to
+"simplify" on the strength of it.
 - **2026-08-20, self-review, three findings:**
   1. **`make_pass_clients` was built in Task 4 and consumed by nothing.** The ladder would have been implemented, tested and never reached by an eval run — the shape this repo carries *deliberately* for `few_shots_for` and would have acquired here by accident. Fixed by giving `build_eval_pipeline` the two rung parameters and switching `run_baseline` from `make_client` to `make_pass_clients`.
   2. **Task 7 Step 4 contained a literal `...` standing in for the `build_eval_pipeline` call.** A placeholder that a keyword scan for "TBD"/"TODO" does not catch. Replaced with the real call, plus an instruction to read the surrounding argument names rather than trust this plan's.
