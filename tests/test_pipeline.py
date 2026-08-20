@@ -9,6 +9,7 @@ extraction means no repair call fires, so two scripted responses are enough.
 
 from __future__ import annotations
 
+import inspect
 from datetime import date
 from decimal import Decimal as D
 from pathlib import Path
@@ -24,6 +25,7 @@ from PIL import Image  # noqa: E402
 
 from eval.harness import run_eval  # noqa: E402
 from eval.metrics import EvalReport  # noqa: E402
+from receipts import cli, pipeline, worker  # noqa: E402
 from receipts.extract.clients.base import VLMClient, VLMResponse, VLMTransientError  # noqa: E402
 from receipts.extract.clients.fake import FakeVLMClient  # noqa: E402
 from receipts.extract.schema import (  # noqa: E402
@@ -343,3 +345,76 @@ def test_build_eval_pipeline_missing_image_raises(tmp_path):
 
     with pytest.raises(FileNotFoundError):
         pipeline_fn(tmp_path / "labels" / "missing.json")
+
+
+# --------------------------------------------------------------------------- #
+# The egress boundary (design §5)
+# --------------------------------------------------------------------------- #
+
+
+def test_process_receipt_has_no_ladder_parameter() -> None:
+    """The egress boundary, stated over the built signature.
+
+    The user's 2026-08-20 ruling is that a production upload must not be able to
+    reach the cloud through the escalation. A universal claim is answered by an
+    enumeration, not an argument, and this is the enumeration -- re-derived
+    2026-08-21 by walking the AST of every module under ``src/``, ``eval/``,
+    ``scripts/`` and ``config/``, not by reading the design doc:
+
+      * the non-test callers of ``process_receipt`` are
+        ``worker.process_receipt_job``, ``cli.cmd_process``,
+        ``cli.cmd_reprocess`` and ``pipeline.process_batch``;
+      * the only non-test caller of ``run_receipt`` is ``build_eval_pipeline``.
+
+    So the boundary is that ``process_receipt`` has no parameter to pass a rung
+    through.
+
+    This does NOT claim production cannot reach a cloud model at all: pointing
+    the single client at one by configuration was possible before this milestone
+    and still is. The claim is only that *this mechanism* is unreachable --
+    design §5.1 states that limit deliberately, and claiming more would be the
+    kind of false claim ADR-0032 is about.
+    """
+    signature = inspect.signature(pipeline.process_receipt)
+    params = set(signature.parameters)
+    for forbidden in ("extract_fallback_client", "triage_client", "extract_rungs"):
+        assert forbidden not in params, (
+            f"process_receipt grew {forbidden!r}: the escalation is reachable "
+            f"from the production path, which the 2026-08-20 ruling forbids"
+        )
+    # A list of forbidden names is defeated by ``**kwargs``, which accepts every
+    # one of them without spelling any. Demonstrated rather than assumed: with
+    # ``**kwargs`` added to the signature the three assertions above still pass.
+    # The bound is that the signature stays closed -- one property, not a longer
+    # list of names.
+    kinds = {parameter.kind for parameter in signature.parameters.values()}
+    assert inspect.Parameter.VAR_KEYWORD not in kinds, (
+        "process_receipt grew **kwargs: a rung can be passed by name again and "
+        "the forbidden-name check above stops meaning anything"
+    )
+
+
+def test_the_production_modules_do_not_build_a_ladder() -> None:
+    """``make_pass_clients`` is the only way to get more than one rung, and no
+    production module may call it.
+
+    This reads the module source as **text**, so a mere comment naming the
+    builder trips it too. That bound is real (demonstrated by mutation) and is
+    accepted rather than tightened: an AST walk would be a new component that
+    can be wrong in new ways, while the cost of this one being wrong is a line
+    of prose somebody has to reword.
+
+    It reads for **one name**, and two routes past it were reached by mutation
+    on 2026-08-21 with both guards still green: ``worker.py`` constructing
+    ``PassClients(...)`` itself, and ``worker.py`` calling ``run_receipt`` with
+    ``extract_fallback_client=``. Adding those two spellings here is the
+    enumerated defence that never converges (review standard 19) -- closing
+    them wants one bounded property over the ladder's whole surface, which is a
+    decision for the whole-branch review rather than one more name checked
+    below.
+    """
+    for module in (cli, worker):
+        source = inspect.getsource(module)
+        assert "make_pass_clients" not in source, (
+            f"{module.__name__} constructs a tier ladder"
+        )
