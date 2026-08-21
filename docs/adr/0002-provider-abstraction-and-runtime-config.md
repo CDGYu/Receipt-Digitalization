@@ -68,3 +68,23 @@ defect in the knob's granularity rather than a preference.
 moving the decision into the tier that selects the client, is a design choice
 that belongs with the escalation ADR — which does not exist yet. Recorded so
 that work starts from a measured constraint instead of rediscovering it.
+
+## Correction (2026-08-21) — the granularity defect is closed, by ADR-0047
+
+**The escalation ADR now exists**, and the constraint recorded above is fixed
+rather than merely described. **ADR-0047** decides that a tier is a
+`(model, use_tools)` pair rather than a provider, and resolves tool use through
+one function used at both ends: the rung's own explicit value, then the
+process-wide `VLM_USE_TOOLS`, then the provider default.
+
+`make_client` calls that function with no explicit value, which is exactly the
+two-level chain it applied inline before — verified differentially across nine
+provider spellings times three flag values, identical on every one. So this
+ADR's own behaviour is unchanged; only where the decision is written moved.
+
+**One thing the paragraph above did not anticipate, and it is now a live trap.**
+`VLM_USE_TOOLS` is process-wide, so the advice "set it true for the cloud tier"
+turns tools on for the **triage** rung as well — the exact regression the
+correction above measures. `VLM_USE_TOOLS_TRIAGE` exists solely so triage can
+hold tools off while a cloud extract rung has them on, and `docs/KNOWN_ISSUES.md`
+ISSUE-001's resume steps now give the pairing rather than the bare flag.

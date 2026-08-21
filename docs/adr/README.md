@@ -52,6 +52,7 @@ Accepted; supersede it with a new ADR rather than editing history.
 | [0044](0044-the-model-facing-surface-is-two-channels.md) | The model-facing surface is two channels, and a prose guarantee is held lexically | Accepted |
 | [0045](0045-a-brief-is-a-claim-about-the-tree.md) | A brief is a claim about the tree, and relaying one makes it yours | Accepted |
 | [0046](0046-the-list-is-a-projection-of-the-export.md) | The list is a projection of the export's query, and a screen nothing mounts is not delivered | Accepted |
+| [0047](0047-a-tier-is-a-model-and-its-tools-flag.md) | A tier is a model and its tools flag, and the escalation is eval-only | Accepted |
 
 Read **0001** first: it is the invariant everything else defers to. **0007** is
 the one to read before touching anything that writes card data or money, and
