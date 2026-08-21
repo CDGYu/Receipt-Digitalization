@@ -97,10 +97,16 @@ dangle. Task 6 commits them together.
 Every task below refers to this shape. Values are illustrative; nothing pins
 them.
 
+`n_repeats` is how many entries the file carries; `n_repeats_requested` is how
+many the run asked for. The aggregate is rewritten after **every** repeat, so the
+two disagree exactly when a run was interrupted — which is what lets a reader
+tell a killed five-repeat run from a complete run of two.
+
 ```json
 {
   "run_id": "2026-08-22-cloud-only",
   "n_repeats": 5,
+  "n_repeats_requested": 5,
   "config": {
     "prompt_version": "1.1.0",
     "prompt_bundle_hash": "<hex>",
@@ -929,14 +935,19 @@ def test_the_runner_writes_nothing_latest_results_file_can_see(tmp_path, monkeyp
     assert latest_results_file(results_root) is None
 
 
-def test_a_repeat_that_fails_is_recorded_rather_than_averaged_away(
+def test_a_repeat_that_fails_a_receipt_says_so_in_the_aggregate(
     tmp_path, monkeypatch
 ):
-    """A partially failed repeat must be visible, not folded into the spread.
+    """A partially failed repeat must be visible in the aggregate.
 
-    ``run_eval`` catches per receipt so one bad receipt never takes the batch
-    down. The aggregate therefore carries failures per repeat: a repeat that
-    scored some receipts and failed others is not a whole observation.
+    ``run_eval`` catches per receipt, so one bad receipt never takes the batch
+    down; the aggregate carries ``failures`` per repeat, and that is what a
+    reader discounts by. Nothing holds such a repeat out of the numbers: every
+    repeat's metrics go into the spread unfiltered, and a failed receipt is
+    counted in ``n_receipts`` with ``critical_correct`` false
+    (``_Accumulator.add_failure``), so the repeat contributes a depressed figure
+    to ``min``, ``median`` and ``values``. Pinned by
+    ``test_a_failed_repeats_metrics_still_enter_the_spread``.
     """
     monkeypatch.setenv("VLM_PROVIDER", "ollama")
     golden = tmp_path / "golden"
@@ -982,14 +993,18 @@ Second, `test_a_repeat_that_fails...` predicts an "exhausted" error reaches
 
 - [ ] **Step 3: Write the implementation**
 
-Add to `eval/run_repeats.py` (extend `__all__`):
+Add to `eval/run_repeats.py` (extend `__all__`). **This listing is what
+shipped**, spliced from `eval/run_repeats.py` after fix round 1 rather than
+retyped: the version briefed here hand-enumerated the `counts` keys and set
+`"n_repeats": repeats`, both of which the review issued findings against, and a
+listing is what a reader copies.
 
 ```python
 import json
 
 import eval.run_baseline as _baseline
 from config.settings import get_settings
-from eval.harness import DEFAULT_RESULTS_DIR
+from eval.harness import DEFAULT_RESULTS_DIR, _report_to_dict
 
 
 def _report_metrics(report: Any) -> dict[str, Any]:
@@ -999,9 +1014,17 @@ def _report_metrics(report: Any) -> dict[str, Any]:
     metric names lives here. What reaches the spread is ``spread_over``'s rule,
     not this function's.
     """
-    from eval.harness import _report_to_dict
-
     return dict(_report_to_dict(report).get("metrics", {}))
+
+
+def _report_counts(report: Any) -> dict[str, Any]:
+    """The count block of one report, on ``_report_metrics``'s rule.
+
+    The keys are ``_report_to_dict``'s, read from it rather than re-listed
+    here, so this block and the file each repeat writes cannot fall out of step,
+    and no list of key names -- and no count of them -- lives here to age.
+    """
+    return dict(_report_to_dict(report).get("counts", {}))
 
 
 def run_repeats(
@@ -1015,35 +1038,47 @@ def run_repeats(
 
     Each repeat gets its own ``results_dir`` under ``<run_dir>/repeat-NN``,
     which is what stops ``{date}-{prompt_version}.json`` from colliding. The
-    aggregate is written last, so an interrupted sequence still leaves every
-    completed repeat's own results file on disk.
+    aggregate is rewritten after **every** repeat, not once at the end: the
+    per-rung counts and five of the config block's six keys are in no results
+    file, so a sequence killed part way through would otherwise lose exactly
+    what this artifact exists to carry.
 
-    **Those files do not add up to the aggregate.** The per-rung counts are in
-    no results file at all -- that is ISSUE-012, and it is the reason this
-    artifact exists -- and five of ``config``'s six keys appear nowhere else.
-    An interrupted run keeps its scores and loses its provenance.
+    ``n_repeats`` is the number of entries the file actually holds, never the
+    number asked for, so the artifact cannot claim a repeat it does not carry.
+    ``n_repeats_requested`` is the target; the two disagree exactly when a run
+    was interrupted, which is how a reader tells one apart from a complete run
+    of the smaller size.
 
     Both ``make_pass_clients`` and ``run_baseline`` are reached **through the
-    ``eval.run_baseline`` module** rather than imported by name here, so a
-    single ``monkeypatch`` of ``eval.run_baseline.make_pass_clients`` governs
-    both the clients this function describes and the clients each repeat
-    actually runs.
-
-    Importing either name into this module would give it a second binding, and
-    a test patching one would leave the other building real clients -- two
-    mechanisms that must agree, which is review standard 19. That is not
-    hypothetical: ``run_baseline`` calls ``make_pass_clients`` from its own
-    namespace, so patching a binding here would not reach it at all.
+    ``eval.run_baseline`` module** rather than imported by name here. That is
+    load-bearing for the first of them: ``run_baseline`` looks
+    ``make_pass_clients`` up in its own module globals, so a name imported into
+    *this* module would be a second binding that a
+    ``monkeypatch.setattr("eval.run_baseline.make_pass_clients", ...)`` never
+    reaches -- the config block below would call the real factory and describe a
+    ladder no repeat ran. ``run_baseline`` is reached the same way so there is
+    one rule here rather than two.
     """
     if repeats < 1:
+        # Before the run directory is created: `prepare_run_dir` refuses an id
+        # it has already seen, so claiming one for a run of nothing would burn
+        # the id the real run wanted.
         raise ValueError(f"repeats must be at least 1, got {repeats}")
 
     root = Path(results_root) if results_root is not None else DEFAULT_RESULTS_DIR
     run_dir = prepare_run_dir(root, run_id)
     settings = get_settings()
+    # For the config block only. `run_baseline` builds its own clients on every
+    # call, and must: its one client parameter is `client=`, whose branch is
+    # deliberately a single rung serving every pass
+    # (tests/test_run_baseline.py::test_an_injected_client_gets_no_ladder), so
+    # feeding these forward would disable the ladder silently.
     tiers = _baseline.make_pass_clients(settings)
 
+    config = config_identity(tiers, settings)
     entries: list[dict[str, Any]] = []
+    aggregate: dict[str, Any] = {}
+
     for index in range(1, repeats + 1):
         target = repeat_dir(run_dir, index)
         report = _baseline.run_baseline(golden_dir=golden_dir, results_dir=target)
@@ -1053,27 +1088,32 @@ def run_repeats(
             "results_file": (
                 written[0].relative_to(run_dir).as_posix() if written else None
             ),
-            "counts": {
-                "receipts": report.n_receipts,
-                "auto_approved": report.n_auto_approved,
-                "critical_correct": report.n_critical_correct,
-                "failed": report.n_failed,
-            },
+            "counts": _report_counts(report),
             "metrics": _report_metrics(report),
             "extract_rung_counts": report.extract_rung_counts,
             "failures": [list(f) for f in report.failures],
         })
 
-    aggregate = {
-        "run_id": run_id,
-        "n_repeats": repeats,
-        "config": config_identity(tiers, settings),
-        "repeats": entries,
-        "spread": spread_over([e["metrics"] for e in entries]),
-    }
-    (run_dir / "aggregate.json").write_text(
-        json.dumps(aggregate, indent=2, default=str), encoding="utf-8"
-    )
+        aggregate = {
+            "run_id": run_id,
+            "n_repeats": len(entries),
+            "n_repeats_requested": repeats,
+            "config": config,
+            "repeats": entries,
+            "spread": spread_over([e["metrics"] for e in entries]),
+        }
+        # Through a temp file and one rename, never in place: `write_text`
+        # truncates before it writes, so a kill inside that window would leave a
+        # torn aggregate -- and the window is now one per repeat rather than one
+        # per run. `Path.replace` puts the finished file over the old one in a
+        # single operation, so a reader sees one or the other and never a
+        # half-written file.
+        pending = run_dir / "aggregate.json.tmp"
+        pending.write_text(
+            json.dumps(aggregate, indent=2, default=str), encoding="utf-8"
+        )
+        pending.replace(run_dir / "aggregate.json")
+
     return aggregate
 ```
 
@@ -1649,11 +1689,15 @@ Task 4's prescribed docstring *and* in spec §7. The per-rung counts are in **no
 results file at all** — that is ISSUE-012, and closing it is the entire reason
 this artifact exists — and five of `config`'s six keys (`prompt_bundle_hash`,
 `default_currency`, `vlm_timeout_s`, `triage`, `extract_rungs`) appear nowhere
-else either. An interrupted run keeps its scores and **loses its provenance**.
-The implementer refused to write it; the controller verified it against the
-artifact's key set and corrected both copies. What survives is the true and
-more useful half: the aggregate is written last, so an interruption leaves every
-completed repeat's own results file on disk.
+else either. The implementer refused to write it; the controller verified it
+against the artifact's key set and corrected both copies.
+
+**Closed differently in fix round 1.** The correction rested on a consequence
+— that an interrupted run keeps its scores and loses its provenance — which
+was true of the design as briefed and is now true of nothing: the aggregate is
+rewritten after every repeat, so a killed run keeps the rung counts and the
+config block of every repeat it completed. That consequence is deleted from
+every copy rather than reworded.
 
 **Defect 11 — a citation that does not support the sentence it decorates.** The
 same docstring cited "review standard 19" for *two bindings that must agree*.
@@ -1677,9 +1721,12 @@ purpose is recording measured numbers. Fourth task, fourth hole; this one the
 worst.
 
 **Defect 13 — the `repeats < 1` guard was deletable.** Without it,
-`run_repeats(id, 0)` writes `n_repeats: 0, repeats: [], spread: {}` and burns
-the run id — which, since a run id is refused on reuse, is unrecoverable
-without renaming. Pinned by the implementer.
+`run_repeats(id, 0)` claims the run directory and burns the run id — which,
+since a run id is refused on reuse, is unrecoverable without renaming. Pinned by
+the implementer. (It wrote `n_repeats: 0, repeats: [], spread: {}` when this was
+recorded. Since fix round 1 the aggregate is written inside the loop, so a
+zero-repeat run never enters it and writes no file at all — re-measured, and
+the pin's docstring says so.)
 
 **Defect 14 — two more wrong predictions.** Step 4's "22 passed" is not
 derivable from anything (19 + 6 = 25). Step 5's stated mutation reddens the

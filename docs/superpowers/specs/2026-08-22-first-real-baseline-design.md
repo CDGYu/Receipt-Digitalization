@@ -98,7 +98,7 @@ match `python -m eval.run_baseline`:
 for i in 1..n:
     report = run_baseline(results_dir = eval/results/<run-id>/repeat-NN/)
     collect (metrics, extract_rung_counts, failures, that repeat's file path)
-write eval/results/<run-id>/aggregate.json
+    rewrite eval/results/<run-id>/aggregate.json over everything collected so far
 ```
 
 **Nothing under `src/` changes.** `run_eval`, `_write_report`,
@@ -348,7 +348,10 @@ therefore carries **failures per repeat**, not only metrics.
 
 **A repeat dies between runs.** Each repeat writes its own file before the next
 begins, so an interrupted sequence leaves every completed repeat's own results
-file on disk. The aggregate is written last.
+file on disk. The aggregate is rewritten after **every** repeat, so it also
+carries those repeats' rung counts and the config block — the things no results
+file holds. `n_repeats` counts the entries present and `n_repeats_requested` the
+target, so an interrupted run is legible as the two disagreeing.
 
 > **Corrected 2026-08-22, during Task 4.** This paragraph ended "and can be
 > rebuilt from the per-repeat files". **That is false, and it is false for the
@@ -356,8 +359,7 @@ file on disk. The aggregate is written last.
 > file at all — that is ISSUE-012, and closing that gap is why this artifact
 > exists — and five of `config`'s six keys (`prompt_bundle_hash`,
 > `default_currency`, `vlm_timeout_s`, `triage`, `extract_rungs`) appear
-> nowhere else either. An interrupted run keeps its scores and **loses its
-> provenance**. Task 4's implementer refused to write the claim into the
+> nowhere else either. Task 4's implementer refused to write the claim into the
 > shipped docstring and reported it; the controller verified it against the
 > artifact's key set before correcting both copies.
 

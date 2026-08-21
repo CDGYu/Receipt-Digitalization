@@ -480,6 +480,13 @@ def test_n_repeats_produce_n_directories_and_one_aggregate(tmp_path, monkeypatch
     assert aggregate["n_repeats"] == 3
     assert len(aggregate["repeats"]) == 3
 
+    # And nothing else at the top of the run dir. The aggregate is written
+    # through `aggregate.json.tmp` and renamed over the old one; a temp file
+    # left behind would be committed by the milestone's `git add eval/results/`.
+    assert sorted(p.name for p in run_dir.iterdir() if p.is_file()) == [
+        "aggregate.json"
+    ]
+
 
 def test_the_aggregate_points_at_each_repeats_own_results_file(tmp_path, monkeypatch):
     """Relative paths, so the artifact survives being cloned anywhere."""
@@ -571,7 +578,7 @@ def test_the_runner_writes_nothing_latest_results_file_can_see(tmp_path, monkeyp
     assert latest_results_file(results_root) is None
 
 
-def test_a_repeat_that_fails_is_recorded_rather_than_averaged_away(
+def test_a_repeat_that_fails_a_receipt_says_so_in_the_aggregate(
     tmp_path, monkeypatch
 ):
     """A partially failed repeat must be visible in the aggregate.

@@ -171,9 +171,9 @@ def _report_metrics(report: Any) -> dict[str, Any]:
 def _report_counts(report: Any) -> dict[str, Any]:
     """The count block of one report, on ``_report_metrics``'s rule.
 
-    The four keys are ``_report_to_dict``'s, read from it rather than re-listed
+    The keys are ``_report_to_dict``'s, read from it rather than re-listed
     here, so this block and the file each repeat writes cannot fall out of step,
-    and no list of key names lives here to age.
+    and no list of key names -- and no count of them -- lives here to age.
     """
     return dict(_report_to_dict(report).get("counts", {}))
 
@@ -253,8 +253,16 @@ def run_repeats(
             "repeats": entries,
             "spread": spread_over([e["metrics"] for e in entries]),
         }
-        (run_dir / "aggregate.json").write_text(
+        # Through a temp file and one rename, never in place: `write_text`
+        # truncates before it writes, so a kill inside that window would leave a
+        # torn aggregate -- and the window is now one per repeat rather than one
+        # per run. `Path.replace` puts the finished file over the old one in a
+        # single operation, so a reader sees one or the other and never a
+        # half-written file.
+        pending = run_dir / "aggregate.json.tmp"
+        pending.write_text(
             json.dumps(aggregate, indent=2, default=str), encoding="utf-8"
         )
+        pending.replace(run_dir / "aggregate.json")
 
     return aggregate
