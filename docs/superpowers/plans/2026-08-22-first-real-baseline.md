@@ -563,9 +563,11 @@ git commit -m "feat(eval): a tier is recorded as a pair, and null when unobserva
   measured. No mean, and no standard deviation — a stdev over five samples reads
   as a statistic and is not one.
 - **The key set is derived, not enumerated.** Metrics are read from the report
-  dictionaries themselves, so a metric added to `_report_to_dict` later appears
-  without anybody deciding. A list of metric names written here would be a claim
-  that ages (review standard 20).
+  dictionaries themselves, never from a list written here — such a list would be
+  a claim that ages (review standard 20). Which of those keys get an entry is the
+  Interfaces line above, and it is not "all of them". *(This bullet said a metric
+  added later "appears without anybody deciding". Inclusion is conditional, so
+  the promise is gone — corrected 2026-08-22, during Task 3's fix rounds.)*
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -625,7 +627,7 @@ def test_spread_of_an_all_null_metric_is_null_not_zero():
 
 
 def test_spread_derives_its_keys_and_does_not_enumerate_them():
-    """A metric added to the report later appears without anybody deciding."""
+    """The key set is read from the dicts; no list of metric names lives here."""
     out = spread_over([
         {"known": 1, "added_next_year": 5},
         {"known": 2, "added_next_year": 7},
@@ -675,9 +677,12 @@ def spread_over(metric_dicts: list[dict[str, Any]]) -> dict[str, dict]:
     read as more than it was. The raw values are in the file, so anyone who
     wants another summary can compute it and say so.
 
-    **Keys are derived from the inputs**, so a metric added to
-    ``_report_to_dict`` later is included without anybody deciding -- the same
-    schema-derived shape ``group_of`` uses, for the same reason.
+    **Keys are derived from the inputs**, never enumerated here. The key set
+    is the union over every input dict -- the shape ``field_accuracy`` already
+    takes with ``pred.keys() | tru.keys()``, and for the same reason: a key
+    only one side reported must not vanish. A key in that union is reported
+    when some repeat gave it a number, or when every repeat gave it ``None``,
+    and only then.
 
     Nulls are counted, never folded in as zero. ``auto_approval_precision`` is
     ``None`` when nothing was auto-approved, and a ratio over no paths is
@@ -990,8 +995,9 @@ from eval.harness import DEFAULT_RESULTS_DIR
 def _report_metrics(report: Any) -> dict[str, Any]:
     """The numeric surface of one report, derived from the report itself.
 
-    Reads the same dictionary the results file is built from, so a metric added
-    to ``_report_to_dict`` later reaches the spread without anybody deciding.
+    Reads the same dictionary the results file is built from, so no list of
+    metric names lives here. What reaches the spread is ``spread_over``'s rule,
+    not this function's.
     """
     from eval.harness import _report_to_dict
 

@@ -119,8 +119,8 @@ def spread_over(metric_dicts: list[dict[str, Any]]) -> dict[str, dict]:
     is the union over every input dict -- the shape ``field_accuracy`` already
     takes with ``pred.keys() | tru.keys()``, and for the same reason: a key
     only one side reported must not vanish. A key in that union is reported
-    when some repeat gave it a number, or when every repeat gave it ``None``;
-    a value of any other type is not a distribution, and its key is skipped.
+    when some repeat gave it a number, or when every repeat gave it ``None``,
+    and only then.
 
     Nulls are counted, never folded in as zero. ``auto_approval_precision`` is
     ``None`` when nothing was auto-approved, and a ratio over no paths is

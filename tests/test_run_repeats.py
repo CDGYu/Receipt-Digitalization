@@ -225,7 +225,7 @@ def test_spread_of_an_all_null_metric_is_null_not_zero():
 
 
 def test_spread_derives_its_keys_and_does_not_enumerate_them():
-    """A metric added to the report later appears without anybody deciding."""
+    """The key set is read from the dicts; no list of metric names lives here."""
     out = spread_over([
         {"known": 1, "added_next_year": 5},
         {"known": 2, "added_next_year": 7},
@@ -247,7 +247,7 @@ def test_spread_of_one_repeat_has_equal_min_and_max():
 
 
 def test_spread_includes_a_key_only_one_repeat_reported():
-    """Every key appearing in *any* input dict, not only the first one's.
+    """Keys come from *any* input dict, not only the first one's.
 
     Added because no test above can fail on it: keys read from
     ``metric_dicts[0]`` alone leave every one of them green (measured). The

@@ -197,12 +197,13 @@ it; review standard 21.)*
 
 **Derived from the artifact, not enumerated here.** The aggregate computes a
 spread over the per-repeat `metrics` block, read from the report dictionary
-itself, and the key set is the **union over every repeat**. A metric added to
-`_report_to_dict` later is therefore included without anybody deciding, and a
-key only one repeat reported does not vanish — the shape `field_accuracy`
-already takes with `pred.keys() | tru.keys()`, and for the same reason: a list
-written in prose is read as complete, so writing one is a claim that ages
-(review standard 20).
+itself, and the key set is the **union over every repeat**, so a key only one
+repeat reported does not vanish — the shape `field_accuracy` already takes with
+`pred.keys() | tru.keys()`, and for the same reason: a list written in prose is
+read as complete, so writing one is a claim that ages (review standard 20).
+
+**Derived is not unconditional.** A key in that union gets an entry when some
+repeat gave it a number, or when every repeat gave it `None`, and only then.
 
 > **Corrected 2026-08-22, during Task 3.** This paragraph cited `group_of` as
 > the precedent. That was false: `group_of`'s **first** check is membership of
@@ -212,6 +213,17 @@ written in prose is read as complete, so writing one is a claim that ages
 > species exactly — a wrong reason reads as evidence the author understood the
 > thing. Found by Task 3's implementer, which refused to write a docstring it
 > could not make true. `field_accuracy` was verified before being substituted.
+
+> **Corrected again 2026-08-22, later the same day.** That first correction
+> deleted this paragraph's only qualifier — it had read "a spread over **every
+> numeric entry** in the per-repeat `metrics` block" — while leaving "included
+> without anybody deciding" standing. The result promised inclusion that
+> `spread_over` does not give and that its shipped docstring explicitly denies,
+> in the one paragraph titled "which metrics get a spread". The condition is now
+> stated in full, as a biconditional. The rule is worth reading precisely: a
+> non-numeric *value* is not by itself a reason a key is dropped — measured,
+> `spread_over([{"x": 1}, {"x": "a"}])` reports `x` with `n: 1` — what drops a
+> key is having no number in any repeat while not being null in all of them.
 
 ---
 
