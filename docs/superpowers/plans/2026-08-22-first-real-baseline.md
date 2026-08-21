@@ -548,8 +548,12 @@ git commit -m "feat(eval): a tier is recorded as a pair, and null when unobserva
 - Consumes: Task 2's module.
 - Produces:
   - `spread_over(metric_dicts: list[dict[str, Any]]) -> dict[str, dict]` — for
-    every key appearing in any input dict whose values are numeric, an entry
-    `{"min", "max", "median", "n", "n_null", "values"}`.
+    every key appearing in **any** input dict, an entry
+    `{"min", "max", "median", "n", "n_null", "values"}`. A key whose values are
+    **all null** is reported, with null figures; a key with no numeric value
+    that is also not all-null is dropped. *(This line said "whose values are
+    numeric", which contradicted this task's own all-null test. Corrected
+    2026-08-22 — see defect 9.)*
 
 **Two properties this must have**, both from spec §4.1 and §4.2:
 
@@ -1588,6 +1592,43 @@ invoked by no gate** — verified, and both `scripts/verify.py` and
 longer does. Tightening to `PassClients` is recorded as a deferred minor for the
 final review. **Cost if wrong:** an annotation no checker reads is less
 informative than it could be.
+
+### 2026-08-22 — caught during Task 3, by its implementer
+
+**Defect 7 — the plan's Task 3 docstring carried a false rationale, and it
+reached two documents.** It cited `group_of` as the precedent for "keys derived,
+not enumerated". **That is false:** `group_of`'s *first* check is membership of
+the enumerated `SELF_REPORT_LEAVES` (`src/receipts/extract/paths.py`), so it is
+a prefix test **plus** an enumeration and is not an example of the property at
+all. Verified by the controller. The implementer refused to write a docstring it
+could not make true and substituted `field_accuracy`'s `pred.keys() | tru.keys()`
+— verified as a genuine union before being adopted. **This is ADR-0048's species
+exactly:** the instruction was right, the reason was invented, and a wrong reason
+reads as evidence the author understood the thing. The same sentence was in the
+**spec** (§4.2) and has been corrected there too, with a dated note — review
+standard 25, a correction goes to every copy.
+
+**Defect 8 — `spread_over`'s key set could be taken from the first repeat alone
+and every one of the brief's seven tests stayed green.** The Interfaces block
+said "any input dict" and no test made that true. **Reproduced by the
+controller:** `for d in metric_dicts:` → `for d in metric_dicts[:1]:` still
+parses and fails **exactly one** of nineteen tests — the one the implementer
+added. A metric only some repeats reported would have silently vanished from the
+spread. Third task running, third assertion in this plan that could not fail.
+Closed by the implementer with a proven-red test; no production change needed
+beyond the union it already had.
+
+**Defect 9 — the Interfaces line contradicted this task's own tests.** It
+promised an entry for "every key appearing in any input dict **whose values are
+numeric**", while the brief's own test requires an all-null metric to be
+reported. Corrected above before Task 4 reads it.
+
+**Also found and closed by the implementer:** Step 1's mid-file import fails ruff
+`E402` (measured, and the one-line top-level form is 101 characters against the
+100 limit, so it was folded into the parenthesized import); Step 4 predicted "16
+passed" when the brief's own set is 17; and the `bool` exclusion in `_numeric`
+was asserted in the docstring and pinned by nothing. All three are the same
+family as defects 2, 5 and 8 — plan prose that no one had executed.
 
 **Non-defects, verified rather than assumed while writing:** `PassClients` has
 exactly `triage` and `extract_rungs`; all eleven `FieldBreakdown` fields default

@@ -196,12 +196,22 @@ it; review standard 21.)*
 ### 4.2 Which metrics get a spread
 
 **Derived from the artifact, not enumerated here.** The aggregate computes a
-spread over every numeric entry in the per-repeat `metrics` block, read from
-the report dictionary itself. A metric added to `_report_to_dict` later is
-therefore included without anybody deciding — the same schema-derived shape
-`group_of` uses for field classification, and for the same reason: a list
+spread over the per-repeat `metrics` block, read from the report dictionary
+itself, and the key set is the **union over every repeat**. A metric added to
+`_report_to_dict` later is therefore included without anybody deciding, and a
+key only one repeat reported does not vanish — the shape `field_accuracy`
+already takes with `pred.keys() | tru.keys()`, and for the same reason: a list
 written in prose is read as complete, so writing one is a claim that ages
 (review standard 20).
+
+> **Corrected 2026-08-22, during Task 3.** This paragraph cited `group_of` as
+> the precedent. That was false: `group_of`'s **first** check is membership of
+> the enumerated `SELF_REPORT_LEAVES`, so it is a prefix test *plus* an
+> enumeration and is not an example of "derived, not enumerated" at all. The
+> decision is unchanged; only its supporting fact was wrong, which is ADR-0048's
+> species exactly — a wrong reason reads as evidence the author understood the
+> thing. Found by Task 3's implementer, which refused to write a docstring it
+> could not make true. `field_accuracy` was verified before being substituted.
 
 ---
 
