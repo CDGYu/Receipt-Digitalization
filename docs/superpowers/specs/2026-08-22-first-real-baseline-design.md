@@ -368,10 +368,19 @@ another handle holds open raises `PermissionError` on Windows — measured on
 this machine, from nothing more than a reader with the file open, and an editor,
 an indexer, or a scanner reading the file just written is enough. The rewrite
 therefore retries a bounded number of times and then **degrades to writing in
-place**, which was measured to succeed under that same open handle. It never
-raises: an aborted run would also burn the run id, which `prepare_run_dir`
-refuses to reuse, so a durability improvement would have cost the whole run. The
-degradation is announced on stderr, and the staging file survives neither path.
+place**, which was measured to succeed under that same open handle. No `OSError`
+from the staging write, the rename or the in-place write escapes it: an aborted
+run would also burn the run id, which `prepare_run_dir` refuses to reuse, so a
+durability improvement would have cost the whole run. The degradation is
+announced on stderr.
+
+**On every path the rewrite completes, the staging file is removed.** A process
+killed between the staging write and the rename can leave one — the two other
+copies of this sentence, in `eval/run_repeats.py` and in the plan, both carry
+that carve-out and this one did not, while
+`tests/test_run_repeats.py::test_the_aggregate_is_staged_beside_its_destination_and_renamed_over_it`
+*asserts* the surviving file. A killed process cleans nothing up in any design;
+what it leaves behind here is a destination that still parses.
 
 **`prompt_bundle_hash()` has no production caller (ISSUE-007).** Reading it into
 the aggregate is a read. It does **not** close ISSUE-007 and does not give the

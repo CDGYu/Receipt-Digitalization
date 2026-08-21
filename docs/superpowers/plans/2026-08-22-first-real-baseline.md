@@ -12,8 +12,11 @@ against a real model, and commit both as durable artifacts carrying provenance.
 per-repeat metrics, per-repeat rung counts, and a spread. **Nothing under
 `src/` changes**, and `run_eval`'s contract is untouched.
 
-**Tech Stack:** Python 3.13 (3.11 also gated in CI), stdlib only for the new
-module (`json`, `pathlib`, `statistics`, `argparse`, `dataclasses`), pytest.
+**Tech Stack:** Python 3.14.4 is the development interpreter on this machine;
+CI gates 3.11 (the floor `requires-python` declares) and 3.13 (what ADR-0036's
+image ships), and deliberately not 3.14 — read off `.github/workflows/ci.yml`,
+not recalled. Stdlib only for the new module (`argparse`, `json`, `pathlib`,
+`statistics`, `sys`, `time`), plus pytest.
 
 **Spec:** `docs/superpowers/specs/2026-08-22-first-real-baseline-design.md` —
 read it before Task 1. This plan argues from it and does not restate it.
@@ -642,7 +645,13 @@ def test_spread_derives_its_keys_and_does_not_enumerate_them():
 
 
 def test_spread_skips_non_numeric_entries():
-    """Counts and metrics are numeric; a stray string is not a distribution."""
+    """A key is dropped when **no** repeat gave it a number and not all gave null.
+
+    Not "a non-numeric value drops the key": that is false as a sufficient
+    condition, and spec §4.2 states the rule as a biconditional for this
+    reason. Measured: `spread_over([{"x": 1}, {"x": "a"}])` reports `x` with
+    `n: 1`.
+    """
     out = spread_over([{"label": "cloud", "n": 1}, {"label": "cloud", "n": 3}])
     assert set(out) == {"n"}
 
@@ -777,8 +786,7 @@ undefined, this note is why.
 Append to `tests/test_run_repeats.py`. **This is the set as briefed, and it is
 not what shipped** — the docstrings below name pins that live in
 `tests/test_run_repeats.py`, which is the authority for what this module is
-actually held to; the tests added beyond this listing are recorded in the defect
-log below.
+actually held to.
 
 ```python
 import json
@@ -1818,3 +1826,106 @@ to `0`; `Settings.default_currency` and `Settings.vlm_timeout_s` both resolve;
 `EvalReport.failures` is `list[tuple[str, str]]`; `FakeVLMClient` carries
 `model_id` and **not** `use_tools`, which is why Task 2 exists in the shape it
 does.
+
+### 2026-08-22 — caught during Task 5, by its implementer
+
+**Defect 16 — another assertion that could not fail, and it was the line an
+operator reads.** Task 5's Step 1 listing pins the success path with
+`assert "aggregate.json" in out`, a substring that is a literal inside the
+`print` it is checking. **Re-derived by the fix wave on the committed tree:**
+`print(f"Wrote {written}")` → `print(f"Wrote {written}.missing")` still parses,
+announces a path that does not exist, and reddens **exactly one** test — the one
+the implementer added, which parses the printed path, asserts `is_file()` on it,
+and reads the aggregate back out of it (1 failed, 47 passed). The brief's own
+version stays green over a file that is not there. Tasks 2, 3, 4 and 5 have each
+now produced at least one of these.
+
+**Defect 17 — the plan's Task 5 never asked what a run over zero receipts
+should do**, and the answer it shipped with was "exit 0". `glob` on an absent
+directory yields `[]` and raises nothing, so a mistyped `--golden-dir` produced
+zero labels, zero pipeline calls, a results file per repeat and a complete
+aggregate. Measured before the guard: `--golden-dir <absent> --repeats 2`
+printed `Wrote ...` and exited 0 with three JSON files on disk. **The artifact
+is not empty-looking, it is zero-looking** — `spread.critical_field_accuracy`
+came back `{"min": 0.0, "median": 0.0, "n": 2, "n_null": 0}`, a headline
+accuracy of 0.00% reported as observed. Closed in a fix round (`92df6bc`) whose
+predicate is *every* repeat rather than *any*: a mixed run is the worse artifact
+of the two, because one real repeat at 0.55 beside one empty repeat reports
+`median: 0.0` with nothing in the file saying why.
+
+**Defect 18 — a third wrong pass-count prediction.** Step 4 predicts "25
+passed". The tree entering Task 5 already carried 32 tests (`47065be`), so even
+the brief's own three-test listing gives 35; 39 shipped. Same species as defects
+14 and the Task 3 note, in the same plan, after both were recorded.
+
+**Also found and closed by the implementer:** `prepare_run_dir(root, "")`
+resolves to `root` itself, so `aggregate.json` landed at the top of the results
+root where `latest_results_file` sees it — the input `receipts calibrate`
+resolves when the operator names no `--results`; measured, `--run-id ""` exited
+0 and printed `Wrote <root>/aggregate.json`. Carried into the task as a measured
+minor and closed as **one property** (the run directory is a direct child of the
+results root) rather than as a list of rejected spellings. And
+`test_both_arguments_are_required` gained a `--results-root` neither call
+reaches, so that a future regression in argparse's `required=` cannot make a
+test write into the tracked `eval/results/`.
+
+### 2026-08-22 — caught by the whole-branch review, before Task 6
+
+Recorded here rather than left to the review document, because this log is the
+calibration device and its silence about a task reads as "that task was clean".
+Closed in one fix wave; its code and pins are at `04a0936`.
+
+**Defect 19 — an assertion that could not fail, on the milestone's headline
+deliverable.** `"extract_rung_counts": report.extract_rung_counts` replaced by a
+hardcoded `{"cloud": 1}` still parses and left **all 41** tests green; so did
+reusing repeat 1's counts for every later entry. Both tests that read the field
+used fixtures where every repeat produced the *identical* count, so neither
+could tell a per-repeat read from a constant. This is the field ISSUE-012 is
+about, and spec §6 hangs an obligation on it — "if the counts show granite kept
+any receipt, that extraction is inspected and the finding recorded before any
+number is published" — which is unenforceable if repeat 3's counts can silently
+be repeat 1's. Spec §8 guarantee 3 already applies exactly this standard to the
+spread; guarantee 2 did not inherit it. Closed with a builder whose consecutive
+calls are kept by **different** rungs, proven red under both mutations. This is
+the fifth section of this log to record one (Tasks 2, 3, 4, 5, then this
+review).
+
+**Defect 20 — an inverted attribution, in two shipped locations.**
+`eval/run_repeats.py`'s zero-receipt comment and its test's docstring both said
+the `0.0` accuracy figures come from `ratio`, "and only the ones with no
+denominator at all resolve to `None`". **Backwards.** `eval/metrics.py`'s
+`ratio` returns `None` and never `0.0` by its own docstring, `eval/harness.py`
+does not import it, and the `0.0`s come from `_build_report`'s inline
+`(x / n) if n else 0.0`. Re-derived by probing a zero-receipt report: the
+`None`s are `auto_approval_precision` and the four transcription metrics; every
+`0.0` is an inline expression. The **conclusion** was correct — an empty repeat
+does contribute a numeric `0.0` — and only the reason was inverted, which is
+ADR-0048's species: this one licenses "widen the guard to whatever `ratio`
+touches". Corrected in both copies.
+
+**Defect 21 — this log promised a record it did not keep, and stopped one task
+short.** Task 4's Step 1 preamble ended "the tests added beyond this listing are
+recorded in the defect log below". They were not: the log records two, and five
+more added in Task 4's fix rounds appear nowhere. The trailing clause is
+deleted rather than reworded — the sentence already names
+`tests/test_run_repeats.py` as the authority, which is the true and sufficient
+half. The Task 5 section above is the other half of this fix.
+
+**Also found and closed by the fix wave, each measured first:** an all-failed
+run was invisible in the block a reader quotes (exit 0, `Repeats: 2`, and a
+spread of `0.0` with no failure signal above `repeats[i].counts.failed`) —
+closed with a top-level `n_failed` and a printed roll-up, without changing the
+decision not to refuse such a run; an interrupted run's partial aggregate was
+never announced although its run id was already burnt; `cost_per_receipt` would
+have left the spread with no `n`, no `n_null` and no `values` the day a cost is
+measured, now named in `spread_omitted`; the `_Settings` stub carried the two
+values `get_settings()` actually resolves here, so a `config_identity` that
+ignored its argument passed all 41 tests; `assert "2" in captured.err` was
+satisfied by the literal `of 2` in the same sentence; the results-file loop was
+vacuous over an empty list; "a stray string is not a distribution" is false as a
+sufficient condition; `_rewrite_aggregate`'s "no path here raises" is false for
+`KeyboardInterrupt` and for a `BrokenPipeError` out of its own diagnostic
+prints; the comment above `json.dumps` said an unencodable value "must raise"
+over a line passing `default=str`; `main`'s docstring documented two of its
+three refusals; a `SS10` against three correct uses of `§` in the same file; and
+this plan's Tech Stack named Python 3.13 on a box running 3.14.4.
