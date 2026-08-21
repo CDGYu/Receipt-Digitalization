@@ -327,9 +327,24 @@ rather than reporting "the escalation works".
 **The cloud tier throttles or fails mid-run.** A raise on the final rung has no
 further rung. `run_eval` catches per receipt, records it in `failures`, and
 continues — so a partially failed repeat still produces a file. The aggregate
-therefore carries **failures per repeat**, not only metrics: a repeat that
-scored two receipts and failed one must not average into the spread as though
-it were whole.
+therefore carries **failures per repeat**, not only metrics.
+
+> **Corrected 2026-08-22, during Task 4.** This paragraph ended "a repeat that
+> scored two receipts and failed one must not average into the spread as though
+> it were whole". **The shipped code does not do that, and on reflection it
+> should not.** Every repeat's metrics enter the spread unfiltered, and a failed
+> receipt is a whole observation downstream — `_Accumulator.add_failure` calls
+> `self.add(False, FieldBreakdown(), (0.0, 0.0, 0.0))`, so it lands in
+> `n_receipts` and contributes zero to `n_critical_correct`. Verified in the
+> tree. **Excluding failed repeats was rejected as the fix**: an all-failed run
+> would then produce an empty spread, which is worse than a depressed one. What
+> the artifact owes the reader instead is visibility, and `failures` per repeat
+> is it. **The real defect was that nothing said what the code does** — so the
+> behaviour is now pinned by a test rather than left accidental.
+>
+> This bites hardest on `min`, which is the figure a reader quotes as the worst
+> case: one timed-out receipt makes `min` an artifact of the failure rather than
+> of the model. Read `failures` before quoting `min`.
 
 **A repeat dies between runs.** Each repeat writes its own file before the next
 begins, so an interrupted sequence leaves every completed repeat's own results
