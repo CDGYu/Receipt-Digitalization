@@ -915,13 +915,21 @@ def test_a_rename_the_platform_refuses_costs_the_aggregate_not_the_run(
 # --------------------------------------------------------------------------- #
 
 
-def test_both_arguments_are_required(capsys):
+def test_both_arguments_are_required(tmp_path, capsys):
     """No default can silently collide, and no default can produce a
-    single-run artifact that reads as a baseline."""
+    single-run artifact that reads as a baseline.
+
+    ``--results-root`` is passed on both calls although neither reaches it: if
+    ``--repeats`` ever stopped being required, ``main(["--run-id", "x"])``
+    would run against ``DEFAULT_RESULTS_DIR`` and create ``eval/results/x/`` in
+    the repository, which is not gitignored. A test's failure mode must not
+    write into the tracked tree.
+    """
+    root = str(tmp_path / "results")
     with pytest.raises(SystemExit):
-        main(["--repeats", "3"])
+        main(["--repeats", "3", "--results-root", root])
     with pytest.raises(SystemExit):
-        main(["--run-id", "x"])
+        main(["--run-id", "x", "--results-root", root])
 
 
 def test_main_refuses_a_reused_run_id_with_a_message_not_a_traceback(
@@ -1018,10 +1026,13 @@ def test_main_refuses_a_run_id_that_would_put_the_aggregate_where_calibrate_look
 
     assert code != 0
     assert "Cannot run repeats" in capsys.readouterr().err
-    # Refused before ``mkdir``, so the root itself was never claimed -- and
-    # nothing a `receipts calibrate` with no --results could pick up.
+    # Refused before ``mkdir``, so the root itself was never claimed -- which
+    # is also why there is no `latest_results_file` assertion here: `glob` on
+    # an absent directory returns `[]`, so that call returns `None` by
+    # construction whenever the line above holds, and could never fail.
+    # `test_the_runner_writes_nothing_latest_results_file_can_see` pins the
+    # guarantee where it can fail: after a full run, with the root present.
     assert not results_root.exists()
-    assert latest_results_file(results_root) is None
 
 
 def test_main_names_the_file_it_actually_wrote_and_counts_what_it_carries(
@@ -1106,3 +1117,103 @@ def test_main_does_not_report_an_aggregate_the_file_system_refused(
     # The repeat's own results file survived, which is what makes the aggregate
     # the only casualty.
     assert sorted((run_dir / "repeat-01").glob("*.json"))
+
+
+def _empties_the_golden_set_after_the_first_repeat(golden, run_dir):
+    """A builder that removes every label once repeat 1 has written its file.
+
+    Keyed on observable state -- repeat 1's own results file being on disk --
+    rather than on a call count. ``run_repeats`` builds one extra set for the
+    config block, so a test that counted builder calls would be pinning an
+    implementation detail, which is the trap ``_disagreeing_tiers_factory``
+    already names.
+    """
+    def build(settings=None):
+        if any((run_dir / "repeat-01").glob("*.json")):
+            for label in (golden / "labels").glob("*.json"):
+                label.unlink()
+        return PassClients(
+            triage=FakeVLMClient([_triage()], model_id="triage-model"),
+            extract_rungs=(FakeVLMClient([_good()], model_id="cloud"),),
+        )
+
+    return build
+
+
+def test_main_refuses_an_aggregate_that_scored_no_receipts(
+    tmp_path, monkeypatch, capsys
+):
+    """A mistyped ``--golden-dir`` must not exit 0 over a well-formed nothing.
+
+    ``glob`` on an absent directory yields ``[]`` and raises nothing, so a typo
+    produces zero labels, zero pipeline calls, a results file per repeat and a
+    complete aggregate. Measured on the committed tree before this guard:
+    ``--golden-dir <absent> --repeats 2`` printed ``Wrote ...`` and exited 0
+    with three JSON files on disk, all over zero receipts.
+
+    **The artifact is not empty-looking, it is zero-looking.** Measured from
+    that same run: ``spread.critical_field_accuracy`` came back
+    ``{"min": 0.0, "median": 0.0, "n": 2, "n_null": 0}`` -- a headline accuracy
+    of 0.00%, reported as observed rather than as "not measured", because
+    ``ratio`` resolves those metrics to ``0.0`` and only the ones with no
+    denominator at all resolve to ``None``.
+    """
+    monkeypatch.setenv("VLM_PROVIDER", "ollama")
+    monkeypatch.setattr(
+        "eval.run_baseline.make_pass_clients", _fresh_tiers_factory(1)
+    )
+
+    code = main([
+        "--run-id", "typo",
+        "--repeats", "2",
+        "--golden-dir", str(tmp_path / "no-such-golden-dir"),
+        "--results-root", str(tmp_path / "results"),
+    ])
+
+    assert code != 0
+    captured = capsys.readouterr()
+    assert "Wrote" not in captured.out
+    # The message names the directory that produced nothing, because the path
+    # is the thing the operator mistyped.
+    assert "no-such-golden-dir" in captured.err
+
+
+def test_main_refuses_when_only_some_repeats_scored_nothing(
+    tmp_path, monkeypatch, capsys
+):
+    """The predicate is *every* repeat, not *any* repeat.
+
+    "No repeat scored a receipt" would pass this run, and the aggregate it let
+    through would be worse than the all-empty one: measured on this module,
+    ``spread_over([{"critical_field_accuracy": 0.55}, {...: 0.0}])`` returns
+    ``{"min": 0.0, "max": 0.55, "median": 0.0, "n": 2, "n_null": 0}``. The
+    empty repeat contributes a numeric ``0.0``, not a null, so it enters the
+    distribution and drags the headline median to zero -- from a run whose one
+    real measurement was 0.55, with nothing in the file saying why.
+    """
+    monkeypatch.setenv("VLM_PROVIDER", "ollama")
+    golden = tmp_path / "golden"
+    _write_golden(golden)
+    run_dir = tmp_path / "results" / "half"
+    monkeypatch.setattr(
+        "eval.run_baseline.make_pass_clients",
+        _empties_the_golden_set_after_the_first_repeat(golden, run_dir),
+    )
+
+    code = main([
+        "--run-id", "half",
+        "--repeats", "2",
+        "--golden-dir", str(golden),
+        "--results-root", str(tmp_path / "results"),
+    ])
+
+    # The precondition this test rests on: one repeat scored, one did not.
+    aggregate = json.loads((run_dir / "aggregate.json").read_text(encoding="utf-8"))
+    scored = [e["counts"]["receipts"] for e in aggregate["repeats"]]
+    assert scored == [1, 0], f"fixture did not produce a mixed run: {scored}"
+
+    assert code != 0
+    captured = capsys.readouterr()
+    assert "Wrote" not in captured.out
+    # Named by index, so an operator knows which repeat to discount.
+    assert "2" in captured.err

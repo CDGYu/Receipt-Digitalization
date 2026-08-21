@@ -428,6 +428,31 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 1
 
+    # Every repeat, not merely one of them. A repeat that scored nothing does
+    # not report null metrics -- `ratio` resolves the accuracy figures to a
+    # numeric `0.0` and only the ones with no denominator at all resolve to
+    # `None` -- so an empty repeat enters the spread as an observed zero and
+    # drags `min` and `median` down. Measured: one real repeat at 0.55 beside
+    # one empty repeat gives `median: 0.0`. Refusing only when *no* repeat
+    # scored would let exactly that artifact through.
+    empty = [e["index"] for e in aggregate["repeats"] if not e["counts"].get("receipts")]
+    if empty:
+        # Read through `_baseline` rather than imported here, on this module's
+        # existing rule for that module: `run_baseline` resolves a `None`
+        # golden dir against its own global, so this names the directory that
+        # actually ran instead of a second binding that could differ from it.
+        golden = args.golden_dir if args.golden_dir is not None else _baseline.GOLDEN_DIR
+        print(
+            f"Repeat(s) {', '.join(str(i) for i in empty)} of "
+            f"{aggregate['n_repeats']} scored no receipts against {golden}. "
+            f"An aggregate over zero receipts is well formed and worthless -- "
+            f"its accuracy figures are 0.0, not null, so it reads as a "
+            f"measured zero. Check --golden-dir. {written} was written and is "
+            f"not a baseline.",
+            file=sys.stderr,
+        )
+        return 1
+
     print(f"Wrote {written}")
     print(f"Repeats: {aggregate['n_repeats']}")
     return 0
