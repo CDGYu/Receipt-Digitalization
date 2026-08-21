@@ -434,20 +434,34 @@ Recorded because they are not derivable from the tree and they gate the work.
 
 - **There are TWO Ollama installations on this machine, and the project uses the
   one that is easy to miss.** `VLM_BASE_URL` points at **`localhost:11435`**,
-  which is `wslrelay.exe` forwarding to an Ollama running **inside WSL**. A
-  second, separate Ollama is installed on Windows at
-  `%LOCALAPPDATA%\Programs\Ollama\ollama.exe` and serves **11434**. They have
-  different model stores, different identities and different model lists.
+  which is a **Docker container** — `docker ps` shows `ollama` / `ollama/ollama`
+  with `0.0.0.0:11435->11434/tcp`. A second, separate Ollama is installed
+  natively on Windows at `%LOCALAPPDATA%\Programs\Ollama\ollama.exe` and serves
+  **11434**. They have different model stores, different identities and
+  different model lists.
 
   **Anything measured about "the local Ollama" must name its port**, or it is a
   claim about whichever installation the author happened to reach. Measured
-  2026-08-20: `:11435` (WSL, the one that matters) served
+  2026-08-20: `:11435` (the container, the one that matters) served
   `granite3.2-vision:2b`, `gemma4:cloud`, `kimi-k2.6:cloud` and `qwen3.5:cloud`;
-  `:11434` (Windows) served an empty store until it was pulled into.
+  `:11434` (Windows-native) served an empty store until it was pulled into.
 
-  *(Written after getting this wrong: the Windows store was inspected, found
-  empty, and reported as "the model store is empty". It was empty — and it was
-  not the store the project reads.)*
+  #### Correction (2026-08-21) — this said "inside WSL", and that was mine
+
+  The first version of this bullet said `:11435` was "`wslrelay.exe` forwarding
+  to an Ollama running **inside WSL**". The listener genuinely is `wslrelay.exe`
+  — but that is **Docker Desktop's port-forwarding plumbing**, because its
+  engine runs in WSL2. The thing serving the port is a container.
+
+  It was derived from `Get-NetTCPConnection` alone, without running `docker ps`
+  — and **`docs/MEMORY.md` already recorded the container correctly**, so this
+  contradicted a standing record on weaker evidence and then reported the
+  contradiction as a correction *to the user*. The two-installation finding
+  survives intact; only the label on one of them was wrong.
+
+  *(Also written after getting something else wrong: the Windows store was
+  inspected, found empty, and reported as "the model store is empty". It was
+  empty — and it was not the store the project reads.)*
 
 - **Cloud inference is authorised per installation, not per machine.**
   `gemma4:cloud` returned `Unauthorized` on `:11434` while its manifest pulled
