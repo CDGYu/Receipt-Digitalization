@@ -1350,6 +1350,16 @@ surplus scripted response, plus a call count pinning that it is never consumed.
 
 ### Open for the whole-branch review — the specification, not the code
 
+**Where these live now (2026-08-21):** items 1-4 were promoted to
+`docs/KNOWN_ISSUES.md` as **ISSUE-012, ISSUE-013, ISSUE-014 and ISSUE-015**, and
+the review's M1 — `read_nothing` counting a vacuous value as content — became
+**ISSUE-016**. This list is the account of when they were found; the issue
+entries are where they are worked, and each carries the measurement re-taken at
+promotion. Item 5 was **not** promoted: it is a bound, not a decision, and it is
+already stated in the tracked tree, in
+`tests/test_pipeline.py::test_the_production_modules_do_not_build_a_ladder`'s
+own docstring.
+
 1. **The escalation counts never reach the committed results file.** They reach
    the printed report and the return value. ISSUE-001 step 6 says to commit the
    results file; an artifact that omits which model produced what does not record
@@ -1358,7 +1368,10 @@ surplus scripted response, plus a call count pinning that it is never consumed.
    `VLM_MODEL_EXTRACT_FALLBACK == VLM_MODEL_EXTRACT`, and in that configuration
    two rungs collapse into one count — the escalation becomes invisible **in the
    figure ISSUE-001 asked for precisely so a good number could not hide it.**
-   Both the plan and spec §6 specify this key, so changing it is a decision.
+   *(Corrected 2026-08-21: this said "Both the plan and spec §6 specify this
+   key". Spec §6 does not name it — it says only that the report "gains per-rung
+   counts". The plan does, and so does the field's own comment in
+   `eval/metrics.py`.)*
 3. **`frozen=True` on `PassAttempt`, `RunOutcome` and `PassClients` is pinned by
    nothing** (open since Task 4).
 4. **`PassAttempt.rung` is unpinned for extract rungs** (open since Task 5) — a
@@ -1415,6 +1428,15 @@ enclosing def, and every mutation re-run afterwards.
 - **The whole Python surface is provably 114 tracked files** — 70 in the five
   source roots, 44 in `tests/`, none elsewhere. Stated with its query, per
   ADR-0028.
+- **Task 6 Step 1's docstring contradicted itself, and the plan is where it came
+  from** (found 2026-08-21, in the whole-branch review). It opens
+  "`make_pass_clients` is the only way to get more than one rung", and the
+  shipped version of that same docstring goes on to name a route past it —
+  `worker.py` constructing `PassClients(...)` itself, which Task 6 reached by
+  mutation with both guards green. The opening claim is deleted from
+  `tests/test_pipeline.py`; **the copy in Step 1's code block above is left as
+  the record of what was dispatched**, so a reader who follows this plan
+  literally will re-write it. Read the shipped docstring, not this one.
 
 **Bound, stated and deliberately not chased:** static reach ends at a name, so
 `getattr`, `globals()` and importlib routes pass. The implementer measured
