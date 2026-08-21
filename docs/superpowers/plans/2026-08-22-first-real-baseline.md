@@ -1258,7 +1258,31 @@ Expected: the help text, exit 0. If it fails on imports, that is the finding —
 `eval` is not an installed package, so record how it must be invoked rather than
 changing `src/`.
 
-- [ ] **Step 6: Full suite, lint, then commit**
+- [ ] **Step 6: Make the module docstring's claims true, and prove it**
+
+`eval/run_repeats.py`'s module docstring has advertised this command and "the
+aggregate this module writes" since Task 1, when neither existed. Measured at
+that commit: `python -m eval.run_repeats --run-id probe --repeats 5` **exited 0,
+printed nothing and wrote nothing** — a documented command reporting success
+while producing no artifact, which is the failure shape this module exists to
+remove. It was allowed to stand only because this step retires it.
+
+Run the command the docstring actually advertises, against a scratch results
+root so nothing lands in `eval/results/`:
+
+```bash
+python -m eval.run_repeats --run-id docstring-check --repeats 1 \
+  --results-root "$(mktemp -d)"
+```
+
+Then read the module docstring line by line and confirm every claim in it is now
+true of the module. **Any claim that is still not true gets deleted, not
+reworded** — that is this repository's standing rule for prose that over-reaches
+(ADR-0032, and five milestones of it being closed by deletion).
+
+Report what the command did, and which docstring claims you checked.
+
+- [ ] **Step 7: Full suite, lint, then commit**
 
 ```bash
 python -m pytest
@@ -1507,6 +1531,27 @@ import block, where it is first used, with a note saying why.
 Both are the same root cause — an import written where it looked tidy rather
 than where it is used — and neither would have been caught by reading the plan,
 only by running it.
+
+**Finding 1 (not a defect, but recorded with its ruling) — the module docstring
+advertises a command that exits 0 doing nothing.** Task 1's reviewer found, and
+the controller independently confirmed, that at commit `bd593c0`
+`python -m eval.run_repeats --run-id probe --repeats 5` **exits 0, prints
+nothing and writes nothing**: `eval/__init__.py` makes the module runnable, its
+body is two `def`s, and argparse never runs, so unrecognised arguments are
+ignored. The docstring also claims "the aggregate this module writes", which
+Task 4 lands.
+
+**Ruling: it stands until Task 5, and Task 5's Step 6 retires it.** Deleting the
+two lines now and re-adding them four tasks later costs a fix round and produces
+a diff that adds and removes the same text; and reaching the failure requires
+checking out a mid-branch commit of an unmerged branch and running a module that
+does not exist on `main`. The obligation is made checkable rather than promised:
+Task 5 Step 6 runs the advertised command and reads the docstring claim by
+claim, deleting anything still untrue. **If Task 5 does not land, these lines
+are deleted before the branch merges** — that is the condition, not a
+preference. **Cost if wrong:** a merged branch whose module docstring advertises
+a command that does not work, guarded by Task 5's step and by the final
+whole-branch review.
 
 **Non-defects, verified rather than assumed while writing:** `PassClients` has
 exactly `triage` and `extract_rungs`; all eleven `FieldBreakdown` fields default
