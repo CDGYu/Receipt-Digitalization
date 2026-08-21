@@ -16,6 +16,7 @@ only place a *spread* and the per-rung provenance appear together.
 
 from __future__ import annotations
 
+import argparse
 import json
 import statistics
 import sys
@@ -29,6 +30,7 @@ from eval.harness import DEFAULT_RESULTS_DIR, _report_to_dict
 
 __all__ = [
     "config_identity",
+    "main",
     "prepare_run_dir",
     "repeat_dir",
     "run_repeats",
@@ -49,8 +51,32 @@ def prepare_run_dir(results_root: Path, run_id: str) -> Path:
     Auto-suffixing was considered and rejected: it produces a second artifact
     indistinguishable from the first, and "nothing silently dropped" is a
     project non-negotiable.
+
+    **The run directory must be a direct child of the results root**, and that
+    is checked rather than assumed. ``Path(root) / ""`` is ``root`` itself, so
+    an empty run id put ``aggregate.json`` at the top of the results root --
+    measured against this module, ``--run-id ""`` exited 0 and
+    ``latest_results_file(root)`` then returned that aggregate, which is the
+    input ``receipts calibrate`` resolves when the operator names no
+    ``--results``. The check is stated as that one property rather than as a
+    list of rejected spellings, because a list closes the shapes it names and
+    re-opens on the next one; ``""``, ``"."``, ``".."``, a separator and an
+    absolute path all fail it for the same reason.
+
+    The refusal is a :class:`ValueError` and happens before ``mkdir``, so a
+    rejected id creates nothing -- including the results root itself, which a
+    clean checkout does not have.
     """
-    run_dir = Path(results_root) / run_id
+    root = Path(results_root)
+    run_dir = root / run_id
+    if run_dir.resolve().parent != root.resolve():
+        raise ValueError(
+            f"run id {run_id!r} must be a plain directory name directly under "
+            f"{root}, and resolves to {run_dir.resolve()} instead. An "
+            f"aggregate written anywhere but one level down is one "
+            f"latest_results_file can see, and that is what receipts "
+            f"calibrate reads when no --results is given."
+        )
     run_dir.mkdir(parents=True, exist_ok=False)
     return run_dir
 
@@ -335,3 +361,77 @@ def run_repeats(
         _rewrite_aggregate(run_dir, json.dumps(aggregate, indent=2, default=str))
 
     return aggregate
+
+
+def main(argv: list[str] | None = None) -> int:
+    """CLI entry point. Both identifying arguments are required.
+
+    A reused ``--run-id`` is a clean message and a non-zero exit, not a
+    ``FileExistsError`` traceback -- the shape ``eval.run_baseline.main``
+    already gives a refusal. Returning the code rather than raising
+    ``SystemExit`` is ``receipts.cli.main``'s shape and is for its stated
+    reason: a test can then assert on the code, and the ``__main__`` guard
+    below is what actually exits.
+
+    **Nothing is announced that was not found on disk.** The success line names
+    a path assembled here from the same results root, run id and file name that
+    :func:`run_repeats` and :func:`_rewrite_aggregate` assemble it from between
+    them, so it is a second statement of that layout; it is checked against the
+    file system before it is printed, which is what stops the second statement
+    from drifting into a false one. :func:`_rewrite_aggregate` deliberately does
+    not raise when the file system refuses the write, so "the call returned" is
+    not evidence that the artifact exists -- and a command that reports success
+    while producing no artifact is the failure this module was written to
+    remove.
+    """
+    # Raw, because the description *is* the module docstring and its last line
+    # is the command this module advertises. The default formatter reflows the
+    # whole thing into one paragraph and wraps that command mid-line, so what
+    # ``--help`` shows an operator cannot be copied and run -- measured.
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument("--run-id", required=True,
+                        help="names this run's directory; must not already exist")
+    parser.add_argument("--repeats", type=int, required=True,
+                        help="how many times to run the golden set")
+    parser.add_argument("--golden-dir", type=Path, default=None)
+    parser.add_argument("--results-root", type=Path, default=None)
+    args = parser.parse_args(argv)
+
+    try:
+        aggregate = run_repeats(
+            args.run_id,
+            args.repeats,
+            golden_dir=args.golden_dir,
+            results_root=args.results_root,
+        )
+    except FileExistsError:
+        print(
+            f"Run id {args.run_id!r} already has a directory. Runs are never "
+            f"overwritten -- choose another --run-id.",
+            file=sys.stderr,
+        )
+        return 1
+    except (RuntimeError, ValueError) as exc:
+        print(f"Cannot run repeats: {exc}", file=sys.stderr)
+        return 1
+
+    root = args.results_root if args.results_root is not None else DEFAULT_RESULTS_DIR
+    written = Path(root) / args.run_id / "aggregate.json"
+    if not written.is_file():
+        print(
+            f"Ran {aggregate['n_repeats']} repeat(s), but {written} is not "
+            f"there. Each repeat's own results file is unaffected; the "
+            f"aggregate is what is missing.",
+            file=sys.stderr,
+        )
+        return 1
+
+    print(f"Wrote {written}")
+    print(f"Repeats: {aggregate['n_repeats']}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -20,6 +20,7 @@ import pytest
 from eval.run_baseline import latest_results_file
 from eval.run_repeats import (
     config_identity,
+    main,
     prepare_run_dir,
     repeat_dir,
     run_repeats,
@@ -907,3 +908,201 @@ def test_a_rename_the_platform_refuses_costs_the_aggregate_not_the_run(
     printed = capsys.readouterr().err
     assert "aggregate.json" in printed
     assert "not atomic" in printed
+
+
+# --------------------------------------------------------------------------- #
+# The command an operator types.
+# --------------------------------------------------------------------------- #
+
+
+def test_both_arguments_are_required(capsys):
+    """No default can silently collide, and no default can produce a
+    single-run artifact that reads as a baseline."""
+    with pytest.raises(SystemExit):
+        main(["--repeats", "3"])
+    with pytest.raises(SystemExit):
+        main(["--run-id", "x"])
+
+
+def test_main_refuses_a_reused_run_id_with_a_message_not_a_traceback(
+    tmp_path, monkeypatch, capsys
+):
+    monkeypatch.setenv("VLM_PROVIDER", "ollama")
+    golden = tmp_path / "golden"
+    _write_golden(golden)
+    monkeypatch.setattr(
+        "eval.run_baseline.make_pass_clients", _fresh_tiers_factory(1)
+    )
+    (tmp_path / "results" / "taken").mkdir(parents=True)
+
+    code = main([
+        "--run-id", "taken",
+        "--repeats", "1",
+        "--golden-dir", str(golden),
+        "--results-root", str(tmp_path / "results"),
+    ])
+
+    assert code != 0
+    assert "taken" in capsys.readouterr().err
+
+
+def test_main_writes_the_aggregate_and_reports_where(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("VLM_PROVIDER", "ollama")
+    golden = tmp_path / "golden"
+    _write_golden(golden)
+    monkeypatch.setattr(
+        "eval.run_baseline.make_pass_clients", _fresh_tiers_factory(1)
+    )
+
+    code = main([
+        "--run-id", "run-g",
+        "--repeats", "2",
+        "--golden-dir", str(golden),
+        "--results-root", str(tmp_path / "results"),
+    ])
+
+    assert code == 0
+    out = capsys.readouterr().out
+    assert "aggregate.json" in out
+    assert (tmp_path / "results" / "run-g" / "aggregate.json").is_file()
+
+
+def test_prepare_run_dir_refuses_a_run_id_that_is_not_a_directory_under_the_root(
+    tmp_path,
+):
+    """One property: the run directory is a **direct child** of the results root.
+
+    Carried into this task as a measured minor: ``prepare_run_dir(root, "")``
+    resolves to ``root`` itself, so ``aggregate.json`` lands at the top of the
+    results root. Measured against this module before the guard existed:
+    ``--run-id ""`` exited 0, printed ``Wrote <root>/aggregate.json``, and
+    ``latest_results_file(root)`` then returned that aggregate -- the input
+    ``receipts calibrate`` resolves when the operator names no ``--results``.
+
+    Stated as one property rather than as a list of rejected spellings: an
+    enumerated defence closes the shapes it lists and re-opens on the next one.
+    The values below are examples of the property, not the property.
+    """
+    root = tmp_path / "results"  # absent, as eval/results/ is on a clean checkout
+    for run_id in ["", ".", "..", "a/b", str(root.parent / "elsewhere")]:
+        with pytest.raises(ValueError):
+            prepare_run_dir(root, run_id)
+    # Refused before ``mkdir``: a rejected id creates nothing, root included.
+    assert not root.exists()
+
+
+def test_main_refuses_a_run_id_that_would_put_the_aggregate_where_calibrate_looks(
+    tmp_path, monkeypatch, capsys
+):
+    """The §3.2 guarantee, stated over the command an operator actually types.
+
+    The results root deliberately does **not** exist when this runs, which is
+    the state ``eval/results/`` is in on a clean checkout -- with it absent,
+    ``mkdir(parents=True, exist_ok=False)`` succeeds on the root itself and the
+    reuse refusal never fires.
+    """
+    monkeypatch.setenv("VLM_PROVIDER", "ollama")
+    golden = tmp_path / "golden"
+    _write_golden(golden)
+    monkeypatch.setattr(
+        "eval.run_baseline.make_pass_clients", _fresh_tiers_factory(1)
+    )
+    results_root = tmp_path / "results"
+
+    code = main([
+        "--run-id", "",
+        "--repeats", "1",
+        "--golden-dir", str(golden),
+        "--results-root", str(results_root),
+    ])
+
+    assert code != 0
+    assert "Cannot run repeats" in capsys.readouterr().err
+    # Refused before ``mkdir``, so the root itself was never claimed -- and
+    # nothing a `receipts calibrate` with no --results could pick up.
+    assert not results_root.exists()
+    assert latest_results_file(results_root) is None
+
+
+def test_main_names_the_file_it_actually_wrote_and_counts_what_it_carries(
+    tmp_path, monkeypatch, capsys
+):
+    """The printed path and count are pinned to the artifact, not to a literal.
+
+    ``assert "aggregate.json" in out`` passes against a message naming a path
+    that does not exist, because the substring is a literal in the ``print``.
+    What an operator needs from that line is the file they can open, so the
+    assertion is over the parsed path and the aggregate the run returned.
+    """
+    monkeypatch.setenv("VLM_PROVIDER", "ollama")
+    golden = tmp_path / "golden"
+    _write_golden(golden)
+    monkeypatch.setattr(
+        "eval.run_baseline.make_pass_clients", _fresh_tiers_factory(1)
+    )
+
+    code = main([
+        "--run-id", "run-n",
+        "--repeats", "2",
+        "--golden-dir", str(golden),
+        "--results-root", str(tmp_path / "results"),
+    ])
+
+    assert code == 0
+    out = capsys.readouterr().out
+    reported = Path(out.splitlines()[0].removeprefix("Wrote "))
+    assert reported.is_file(), f"{reported} was announced and is not there"
+    on_disk = json.loads(reported.read_text(encoding="utf-8"))
+    assert on_disk["n_repeats"] == 2
+    assert f"Repeats: {on_disk['n_repeats']}" in out
+
+
+def test_main_does_not_report_an_aggregate_the_file_system_refused(
+    tmp_path, monkeypatch, capsys
+):
+    """A write that degraded to nothing must not be announced as a success.
+
+    ``_rewrite_aggregate`` deliberately does not raise when the file system
+    refuses the write -- every completed repeat's own results file is already
+    on disk and the remaining repeats are still worth running -- so
+    ``run_repeats`` returning is not evidence that the artifact exists. A
+    command that exits 0 saying ``Wrote <path>`` over an absent file is the
+    exact shape this module was written to remove.
+    """
+    monkeypatch.setenv("VLM_PROVIDER", "ollama")
+    golden = tmp_path / "golden"
+    _write_golden(golden)
+    monkeypatch.setattr(
+        "eval.run_baseline.make_pass_clients", _fresh_tiers_factory(1)
+    )
+
+    real_write_text = Path.write_text
+
+    def _refuse_the_aggregate(self, *args, **kwargs):
+        # Only the aggregate and its staging file: each repeat's own results
+        # file must still be written, because that is the case being described.
+        if self.name.startswith("aggregate.json"):
+            raise OSError(28, "No space left on device")
+        return real_write_text(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "write_text", _refuse_the_aggregate)
+
+    code = main([
+        "--run-id", "run-o",
+        "--repeats", "1",
+        "--golden-dir", str(golden),
+        "--results-root", str(tmp_path / "results"),
+    ])
+
+    run_dir = tmp_path / "results" / "run-o"
+    assert not (run_dir / "aggregate.json").exists()
+    assert code != 0
+    captured = capsys.readouterr()
+    assert "Wrote" not in captured.out
+    # ``_rewrite_aggregate`` puts "aggregate" on stderr by itself, so a
+    # substring that loose would pass without ``main`` saying anything at all.
+    # This is ``main``'s own sentence, and only ``main`` writes it.
+    assert "Ran 1 repeat(s)" in captured.err
+    # The repeat's own results file survived, which is what makes the aggregate
+    # the only casualty.
+    assert sorted((run_dir / "repeat-01").glob("*.json"))
