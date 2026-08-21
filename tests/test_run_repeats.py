@@ -1,23 +1,43 @@
 """The repeat runner: N runs, N directories, one aggregate.
 
-Offline like the rest of the suite. Nothing here touches a provider, a network
-or an image; the seam is ``run_baseline``'s injectable client and the
-monkeypatchable ``make_pass_clients``.
+Offline like the rest of the suite: no provider and no network. The seam is
+``run_baseline``'s monkeypatchable ``make_pass_clients``, which every test that
+drives a run replaces with scripted fakes. Those tests also write a synthetic
+PNG beside each label -- ``build_eval_pipeline`` resolves an image file per
+label and cannot run without one -- exactly as ``tests/test_run_baseline.py``
+does.
 """
 
 from __future__ import annotations
 
+import itertools
+import json
+from decimal import Decimal as D
+from pathlib import Path
+
 import pytest
 
+from eval.run_baseline import latest_results_file
 from eval.run_repeats import (
     config_identity,
     prepare_run_dir,
     repeat_dir,
+    run_repeats,
     rung_identity,
     spread_over,
 )
 from receipts.extract.clients.factory import PassClients
 from receipts.extract.clients.fake import FakeVLMClient
+from receipts.extract.schema import (
+    DocumentType,
+    Legibility,
+    LineItem,
+    Merchant,
+    ReceiptExtraction,
+    ReceiptMeta,
+    Totals,
+    TriageResult,
+)
 
 
 def test_prepare_run_dir_creates_the_directory(tmp_path):
@@ -272,3 +292,337 @@ def test_spread_does_not_treat_a_boolean_as_a_measurement():
     out = spread_over([{"use_tools": True, "acc": 0.5}, {"use_tools": False, "acc": 0.6}])
 
     assert set(out) == {"acc"}
+
+
+# --------------------------------------------------------------------------- #
+# run_repeats: the loop, the per-repeat directories, and the aggregate
+#
+# The fixture helpers below mirror ``tests/test_run_baseline.py``'s, which owns
+# the originals. Copied rather than imported: ``tests/`` has no ``__init__.py``,
+# so one test module reaching into another would rest on pytest's sys.path
+# insertion rather than on a package, and would put this module's collection at
+# the mercy of that one's import graph.
+# --------------------------------------------------------------------------- #
+
+
+def _good() -> ReceiptExtraction:
+    """A clean, self-consistent extraction (mirrors test_run_baseline._good)."""
+    return ReceiptExtraction(
+        merchant=Merchant(name="SUPERMART INC."),
+        receipt=ReceiptMeta(date="2026-07-20", currency="PHP"),
+        line_items=[
+            LineItem(position=0, description_raw="RICE 5KG", qty=D("1"),
+                     unit_price=D("100.00"), line_total=D("100.00")),
+            LineItem(position=1, description_raw="OIL 1L", qty=D("2"),
+                     unit_price=D("50.00"), line_total=D("100.00")),
+        ],
+        totals=Totals(subtotal=D("200.00"), tax=D("24.00"), discount=D("0.00"),
+                      total=D("224.00")),
+    )
+
+
+def _wrong_merchant() -> ReceiptExtraction:
+    """The clean extraction with the merchant misread.
+
+    ``critical_field_accuracy`` is merchant name AND date AND total, so this
+    scores 0.0 on the golden receipt where ``_good`` scores 1.0 -- which is
+    what gives two repeats something to disagree about.
+    """
+    extraction = _good()
+    extraction.merchant.name = "NOT THE MERCHANT ON THE LABEL"
+    return extraction
+
+
+def _triage() -> TriageResult:
+    # GOOD legibility keeps the clean receipt at a perfect confidence.
+    return TriageResult(document_type=DocumentType.POS_RECEIPT,
+                        legibility=Legibility.GOOD,
+                        estimated_line_item_count=2)
+
+
+def _unparseable() -> str:
+    """A scripted body that will not coerce to ReceiptExtraction.
+
+    ``FakeVLMClient`` treats a string entry as a ``parse_error``, which
+    ``_evaluate`` resolves to a default ``ReceiptExtraction()`` -- what
+    ``read_nothing`` calls "read nothing", and so what makes a rung escalate.
+    """
+    return "not json at all"
+
+
+def _write_png(path: Path) -> None:
+    """A synthetic RGB PNG, sized so resize_for_model logs no legibility warning."""
+    from PIL import Image
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    Image.new("RGB", (900, 1400), (240, 240, 240)).save(path)
+
+
+def _write_golden(golden: Path) -> None:
+    """One labelled receipt (label + matching image) under a tmp golden dir.
+
+    The ``pipeline`` extra guards sit on the fixture that needs them, as they do
+    in ``tests/test_run_baseline.py``. They cannot fire while this module's own
+    top-level ``eval.run_baseline`` import reaches Pillow first; they are kept
+    so the fixture still says what it needs if that ever stops being true.
+    """
+    pytest.importorskip("PIL")
+    pytest.importorskip("pillow_heif")
+
+    labels = golden / "labels"
+    images = golden / "images"
+    labels.mkdir(parents=True)
+    images.mkdir(parents=True)
+    (labels / "r1.json").write_text(_good().model_dump_json(), encoding="utf-8")
+    _write_png(images / "r1.png")
+
+
+def _fresh_tiers_factory(n_rungs=1):
+    """A builder that mints FRESH fakes on every call.
+
+    ``FakeVLMClient`` replays a fixed list and records calls, so returning one
+    set of clients from a closure hands repeat 2 an exhausted object. A builder
+    that reuses them fails with "FakeVLMClient exhausted", which looks like a
+    product bug and is not one.
+    """
+    def build(settings=None):
+        triage = FakeVLMClient([_triage()], model_id="triage-model")
+        if n_rungs == 1:
+            only = FakeVLMClient([_good()], model_id="cloud")
+            return PassClients(triage=triage, extract_rungs=(only,))
+        local = FakeVLMClient([_unparseable()], model_id="local")
+        cloud = FakeVLMClient([_good()], model_id="cloud")
+        return PassClients(triage=triage, extract_rungs=(local, cloud))
+
+    return build
+
+
+def _disagreeing_tiers_factory():
+    """A builder whose consecutive calls read the merchant differently.
+
+    Fresh fakes per call for the reason ``_fresh_tiers_factory`` gives, plus a
+    call counter. Any two *consecutive* builds disagree, so the repeats disagree
+    wherever in the sequence they fall: ``run_repeats`` also builds one set for
+    the config block, and a test that had to know how many times the builder is
+    called would be pinning an implementation detail.
+    """
+    calls = itertools.count()
+
+    def build(settings=None):
+        index = next(calls)
+        body = _good() if index % 2 == 0 else _wrong_merchant()
+        return PassClients(
+            triage=FakeVLMClient([_triage()], model_id="triage-model"),
+            extract_rungs=(FakeVLMClient([body], model_id="cloud"),),
+        )
+
+    return build
+
+
+def test_n_repeats_produce_n_directories_and_one_aggregate(tmp_path, monkeypatch):
+    """The collision, closed by construction.
+
+    ``_write_report`` names its file ``{date}-{prompt_version}.json``, both
+    constant within a day, so repeats sharing a directory overwrite each other.
+    Measured by making ``repeat_dir`` return the run directory itself: three
+    repeats, one surviving file. Giving each repeat its own directory removes
+    that -- and this test is the pin, proven red against exactly that mutation.
+    """
+    monkeypatch.setenv("VLM_PROVIDER", "ollama")
+    golden = tmp_path / "golden"
+    _write_golden(golden)
+    monkeypatch.setattr(
+        "eval.run_baseline.make_pass_clients", _fresh_tiers_factory(1)
+    )
+
+    aggregate = run_repeats(
+        "run-a", 3, golden_dir=golden, results_root=tmp_path / "results"
+    )
+
+    run_dir = tmp_path / "results" / "run-a"
+    dirs = sorted(p.name for p in run_dir.iterdir() if p.is_dir())
+    assert dirs == ["repeat-01", "repeat-02", "repeat-03"]
+
+    # One results file per repeat, all three surviving.
+    files = sorted(run_dir.rglob("repeat-*/*.json"))
+    assert len(files) == 3
+
+    assert (run_dir / "aggregate.json").is_file()
+    assert aggregate["n_repeats"] == 3
+    assert len(aggregate["repeats"]) == 3
+
+
+def test_the_aggregate_points_at_each_repeats_own_results_file(tmp_path, monkeypatch):
+    """Relative paths, so the artifact survives being cloned anywhere."""
+    monkeypatch.setenv("VLM_PROVIDER", "ollama")
+    golden = tmp_path / "golden"
+    _write_golden(golden)
+    monkeypatch.setattr(
+        "eval.run_baseline.make_pass_clients", _fresh_tiers_factory(1)
+    )
+
+    run_repeats("run-b", 2, golden_dir=golden, results_root=tmp_path / "results")
+
+    run_dir = tmp_path / "results" / "run-b"
+    aggregate = json.loads((run_dir / "aggregate.json").read_text(encoding="utf-8"))
+    for entry in aggregate["repeats"]:
+        rel = entry["results_file"]
+        assert not Path(rel).is_absolute()
+        assert (run_dir / rel).is_file()
+
+
+def test_the_aggregate_carries_the_rung_counts_the_results_file_does_not(
+    tmp_path, monkeypatch
+):
+    """ISSUE-012, discharged for this artifact.
+
+    The ladder escalates: rung 0 returns an unparseable body, so it reads
+    nothing and is discarded, and ``cloud`` produces the kept extraction. The
+    count must therefore be ``{"cloud": 1}`` and not ``{"local": 1}`` -- an
+    assertion that a single key exists would pass either way.
+    """
+    monkeypatch.setenv("VLM_PROVIDER", "ollama")
+    golden = tmp_path / "golden"
+    _write_golden(golden)
+    monkeypatch.setattr(
+        "eval.run_baseline.make_pass_clients", _fresh_tiers_factory(2)
+    )
+
+    aggregate = run_repeats(
+        "run-c", 2, golden_dir=golden, results_root=tmp_path / "results"
+    )
+
+    for entry in aggregate["repeats"]:
+        assert entry["extract_rung_counts"] == {"cloud": 1}
+        assert entry["failures"] == []
+
+    # And the per-run results file still does not carry them: this milestone
+    # took no position on who owns that write.
+    run_dir = tmp_path / "results" / "run-c"
+    one = json.loads(
+        (run_dir / aggregate["repeats"][0]["results_file"]).read_text(encoding="utf-8")
+    )
+    assert "extract_rung_counts" not in one
+
+
+def test_the_aggregate_records_a_two_rung_ladder_as_two_tiers(tmp_path, monkeypatch):
+    monkeypatch.setenv("VLM_PROVIDER", "ollama")
+    golden = tmp_path / "golden"
+    _write_golden(golden)
+    monkeypatch.setattr(
+        "eval.run_baseline.make_pass_clients", _fresh_tiers_factory(2)
+    )
+
+    aggregate = run_repeats(
+        "run-d", 1, golden_dir=golden, results_root=tmp_path / "results"
+    )
+
+    rungs = aggregate["config"]["extract_rungs"]
+    assert [r["model_id"] for r in rungs] == ["local", "cloud"]
+
+
+def test_the_runner_writes_nothing_latest_results_file_can_see(tmp_path, monkeypatch):
+    """The guarantee spec §3.2 rests on, stated over the real function.
+
+    ``receipts calibrate`` with no ``--results`` resolves its input through
+    ``latest_results_file``, which globs ``*.json`` non-recursively. An
+    aggregate at the top of ``eval/results/`` would become the newest file and
+    be handed to a command that cannot read it.
+    """
+    monkeypatch.setenv("VLM_PROVIDER", "ollama")
+    golden = tmp_path / "golden"
+    _write_golden(golden)
+    monkeypatch.setattr(
+        "eval.run_baseline.make_pass_clients", _fresh_tiers_factory(1)
+    )
+    results_root = tmp_path / "results"
+
+    run_repeats("run-e", 2, golden_dir=golden, results_root=results_root)
+
+    assert latest_results_file(results_root) is None
+
+
+def test_a_repeat_that_fails_is_recorded_rather_than_averaged_away(
+    tmp_path, monkeypatch
+):
+    """A partially failed repeat must be visible, not folded into the spread.
+
+    ``run_eval`` catches per receipt so one bad receipt never takes the batch
+    down. The aggregate therefore carries failures per repeat: a repeat that
+    scored some receipts and failed others is not a whole observation.
+    """
+    monkeypatch.setenv("VLM_PROVIDER", "ollama")
+    golden = tmp_path / "golden"
+    _write_golden(golden)
+
+    def _explodes(settings=None):
+        triage = FakeVLMClient([_triage()], model_id="triage-model")
+        # No scripted extract response: the extract call raises "exhausted",
+        # which run_eval records as a failure for that receipt.
+        return PassClients(
+            triage=triage, extract_rungs=(FakeVLMClient([], model_id="empty"),)
+        )
+
+    monkeypatch.setattr("eval.run_baseline.make_pass_clients", _explodes)
+
+    aggregate = run_repeats(
+        "run-f", 1, golden_dir=golden, results_root=tmp_path / "results"
+    )
+
+    entry = aggregate["repeats"][0]
+    assert entry["counts"]["failed"] >= 1
+    assert entry["failures"], "a failed receipt must reach the aggregate"
+
+
+def test_the_spread_is_computed_over_repeats_that_disagree(tmp_path, monkeypatch):
+    """Spec §8 guarantee 3, and the only test here that reads a metric out of a run.
+
+    Added because no test above can fail on it, measured both ways: dropping
+    ``"spread"`` from the aggregate leaves every other test in this module
+    green, and so does returning ``{}`` from ``_report_metrics``. The per-repeat
+    numbers are what this milestone exists to produce, and until this test
+    nothing asserted that one of them arrives.
+
+    Repeats that agreed would not close it either: over identical repeats
+    ``min`` and ``max`` are the same number, so an implementation returning
+    either one for both would still pass.
+    """
+    monkeypatch.setenv("VLM_PROVIDER", "ollama")
+    golden = tmp_path / "golden"
+    _write_golden(golden)
+    monkeypatch.setattr(
+        "eval.run_baseline.make_pass_clients", _disagreeing_tiers_factory()
+    )
+
+    aggregate = run_repeats(
+        "run-g", 2, golden_dir=golden, results_root=tmp_path / "results"
+    )
+
+    observed = sorted(
+        entry["metrics"]["critical_field_accuracy"] for entry in aggregate["repeats"]
+    )
+    assert observed == [0.0, 1.0]
+
+    spread = aggregate["spread"]["critical_field_accuracy"]
+    assert spread["min"] == 0.0
+    assert spread["max"] == 1.0
+    assert spread["n"] == 2
+    assert spread["n_null"] == 0
+    assert sorted(spread["values"]) == [0.0, 1.0]
+
+
+def test_a_run_of_no_repeats_is_refused_before_the_run_id_is_claimed(tmp_path):
+    """Zero repeats is not a run, and must not consume the run id.
+
+    Added because no test above can fail on it: deleting the guard leaves them
+    all green while ``run_repeats(id, 0)`` writes an aggregate over nothing.
+    The directory assertion is half the point -- ``prepare_run_dir`` refuses an
+    id it has already seen, so a guard that fired after creating one would
+    leave the id unusable for the real run.
+    """
+    results_root = tmp_path / "results"
+
+    with pytest.raises(ValueError):
+        run_repeats("run-h", 0, results_root=results_root)
+
+    assert not (results_root / "run-h").exists()
