@@ -115,11 +115,12 @@ def spread_over(metric_dicts: list[dict[str, Any]]) -> dict[str, dict]:
     read as more than it was. The raw values are in the file, so anyone who
     wants another summary can compute it and say so.
 
-    **Keys are derived from the inputs**, so a metric added to
-    ``_report_to_dict`` later is included without anybody deciding. The key set
+    **Keys are derived from the inputs**, never enumerated here. The key set
     is the union over every input dict -- the shape ``field_accuracy`` already
     takes with ``pred.keys() | tru.keys()``, and for the same reason: a key
-    only one side reported must not vanish.
+    only one side reported must not vanish. A key in that union is reported
+    when some repeat gave it a number, or when every repeat gave it ``None``;
+    a value of any other type is not a distribution, and its key is skipped.
 
     Nulls are counted, never folded in as zero. ``auto_approval_precision`` is
     ``None`` when nothing was auto-approved, and a ratio over no paths is
