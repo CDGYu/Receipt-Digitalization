@@ -9,7 +9,13 @@ from __future__ import annotations
 
 import pytest
 
-from eval.run_repeats import config_identity, prepare_run_dir, repeat_dir, rung_identity
+from eval.run_repeats import (
+    config_identity,
+    prepare_run_dir,
+    repeat_dir,
+    rung_identity,
+    spread_over,
+)
 from receipts.extract.clients.factory import PassClients
 from receipts.extract.clients.fake import FakeVLMClient
 
@@ -167,3 +173,102 @@ def test_config_identity_records_the_prompt_identity_it_did_not_invent():
 
     assert config["prompt_version"] == PROMPT_VERSION
     assert config["prompt_bundle_hash"] == prompt_bundle_hash()
+
+
+def test_spread_reports_only_values_that_were_observed():
+    """min, max and median are all real observations; no mean, no stdev.
+
+    ``statistics.median`` averages the two middle values on an even count,
+    which invents a figure nobody measured. ``median_low`` cannot.
+    """
+    out = spread_over([{"acc": 0.10}, {"acc": 0.20}, {"acc": 0.40}, {"acc": 0.80}])
+
+    assert out["acc"]["min"] == 0.10
+    assert out["acc"]["max"] == 0.80
+    assert out["acc"]["median"] in (0.20, 0.40)
+    assert out["acc"]["median"] in out["acc"]["values"]
+    assert "mean" not in out["acc"]
+    assert "stdev" not in out["acc"]
+
+
+def test_spread_keeps_the_raw_values_in_repeat_order():
+    """The file carries the observations, so any other summary is derivable."""
+    out = spread_over([{"acc": 0.3}, {"acc": 0.1}, {"acc": 0.2}])
+    assert out["acc"]["values"] == [0.3, 0.1, 0.2]
+    assert out["acc"]["n"] == 3
+    assert out["acc"]["n_null"] == 0
+
+
+def test_spread_counts_nulls_separately_rather_than_averaging_over_them():
+    """``auto_approval_precision`` is null when nothing was auto-approved.
+
+    A ratio over no paths is undefined, not zero -- the rule ``format_report``
+    already follows. Folding a null in as 0 would report a precision collapse
+    that did not happen.
+    """
+    out = spread_over([{"p": 0.9}, {"p": None}, {"p": 0.7}])
+
+    assert out["p"]["n"] == 2
+    assert out["p"]["n_null"] == 1
+    assert out["p"]["min"] == 0.7
+    assert out["p"]["max"] == 0.9
+    assert out["p"]["values"] == [0.9, None, 0.7]
+
+
+def test_spread_of_an_all_null_metric_is_null_not_zero():
+    out = spread_over([{"p": None}, {"p": None}])
+    assert out["p"]["min"] is None
+    assert out["p"]["max"] is None
+    assert out["p"]["median"] is None
+    assert out["p"]["n"] == 0
+    assert out["p"]["n_null"] == 2
+
+
+def test_spread_derives_its_keys_and_does_not_enumerate_them():
+    """A metric added to the report later appears without anybody deciding."""
+    out = spread_over([
+        {"known": 1, "added_next_year": 5},
+        {"known": 2, "added_next_year": 7},
+    ])
+    assert set(out) == {"known", "added_next_year"}
+
+
+def test_spread_skips_non_numeric_entries():
+    """Counts and metrics are numeric; a stray string is not a distribution."""
+    out = spread_over([{"label": "cloud", "n": 1}, {"label": "cloud", "n": 3}])
+    assert set(out) == {"n"}
+
+
+def test_spread_of_one_repeat_has_equal_min_and_max():
+    """n=1 is the ladder run. It is a valid spread of one, not an error."""
+    out = spread_over([{"acc": 0.5}])
+    assert out["acc"]["min"] == out["acc"]["max"] == 0.5
+    assert out["acc"]["n"] == 1
+
+
+def test_spread_includes_a_key_only_one_repeat_reported():
+    """Every key appearing in *any* input dict, not only the first one's.
+
+    Added because no test above can fail on it: keys read from
+    ``metric_dicts[0]`` alone leave every one of them green (measured). The
+    union is the shape ``field_accuracy`` already takes over ``pred.keys() |
+    tru.keys()``, for the same reason -- the key that appears on one side only
+    is the one worth seeing.
+    """
+    out = spread_over([{"known": 1}, {"known": 2, "added_next_year": 7}])
+
+    assert set(out) == {"known", "added_next_year"}
+    assert out["added_next_year"]["n"] == 1
+
+
+def test_spread_does_not_treat_a_boolean_as_a_measurement():
+    """``bool`` is a subclass of ``int``, and a flag is not a distribution.
+
+    Added because no test above can fail on it: drop the ``bool`` guard from
+    ``_numeric`` and every one of them stays green (measured), while a run
+    whose ``use_tools`` differed between repeats would report ``min`` False and
+    ``max`` True as though the flag had been measured.
+    """
+    out = spread_over([{"use_tools": True, "acc": 0.5}, {"use_tools": False, "acc": 0.6}])
+
+    assert set(out) == {"acc"}

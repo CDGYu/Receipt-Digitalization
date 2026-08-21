@@ -16,6 +16,7 @@ only place a *spread* and the per-rung provenance appear together.
 
 from __future__ import annotations
 
+import statistics
 from pathlib import Path
 from typing import Any
 
@@ -24,6 +25,7 @@ __all__ = [
     "prepare_run_dir",
     "repeat_dir",
     "rung_identity",
+    "spread_over",
 ]
 
 
@@ -95,3 +97,55 @@ def config_identity(tiers: Any, settings: Any) -> dict[str, Any]:
         "triage": rung_identity(tiers.triage),
         "extract_rungs": [rung_identity(c) for c in tiers.extract_rungs],
     }
+
+
+def _numeric(value: Any) -> bool:
+    """True for a real number. ``bool`` is excluded: it is not a distribution."""
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def spread_over(metric_dicts: list[dict[str, Any]]) -> dict[str, dict]:
+    """Per metric, the shape of what N repeats actually produced.
+
+    **Every figure here was observed.** ``median_low`` rather than ``median``,
+    because ``median`` averages the two middle values on an even count and so
+    reports a number no repeat produced. No mean and no standard deviation: a
+    stdev over five samples reads as a statistic without being one, and the
+    whole reason step 6 demands repeats is that a single figure was going to be
+    read as more than it was. The raw values are in the file, so anyone who
+    wants another summary can compute it and say so.
+
+    **Keys are derived from the inputs**, so a metric added to
+    ``_report_to_dict`` later is included without anybody deciding. The key set
+    is the union over every input dict -- the shape ``field_accuracy`` already
+    takes with ``pred.keys() | tru.keys()``, and for the same reason: a key
+    only one side reported must not vanish.
+
+    Nulls are counted, never folded in as zero. ``auto_approval_precision`` is
+    ``None`` when nothing was auto-approved, and a ratio over no paths is
+    undefined rather than bad.
+    """
+    keys: list[str] = []
+    for d in metric_dicts:
+        for k in d:
+            if k not in keys:
+                keys.append(k)
+
+    out: dict[str, dict] = {}
+    for key in keys:
+        raw = [d.get(key) for d in metric_dicts]
+        observed = [v for v in raw if _numeric(v)]
+        if not observed and not all(v is None for v in raw):
+            # Nothing numeric, and not every value null: not a distribution at
+            # all, so the key is dropped. An all-null metric is the *other*
+            # case and is reported -- with null figures, never with zeroes.
+            continue
+        out[key] = {
+            "min": min(observed) if observed else None,
+            "max": max(observed) if observed else None,
+            "median": statistics.median_low(observed) if observed else None,
+            "n": len(observed),
+            "n_null": sum(1 for v in raw if v is None),
+            "values": raw,
+        }
+    return out
