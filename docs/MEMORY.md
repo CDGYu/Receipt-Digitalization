@@ -6,20 +6,31 @@ continuity protocol itself — what lives where, and why this snapshot must be
 verified rather than trusted — is **ADR-0019**, extended by **ADR-0021** (whose
 2026-08-02 dated correction widened the freshness check after a docs-only task
 proved invisible to it).
-Last updated: **2026-08-20**, by the session that **opened `/app/receipts` in a
-browser** — the first time any person has looked at that screen, and the first
-time any surface in this app has been seen in dark theme. **ISSUE-010's headline
-prediction was refuted**: the detached anchor and the synchronous
-`revokeObjectURL` lose nothing, in Chromium, Firefox and WebKit alike, and the
-workbook opens with the rows the screen showed. Looking found a defect the issue
-had only guessed at, and it is **fixed and merged**: §4's hairline is a *gutter*,
-and a left-edge gutter in a right-aligned column aligns with nothing. Two counts
-in `docs/KNOWN_ISSUES.md` were wrong and are corrected, along with the formatting
-that made one of them wrong.
+Last updated: **2026-08-21**, by the session that built **ISSUE-001 step 5**,
+the local-to-Cloud escalation — the thing that has gated this project since
+2026-07-28. **ADR-0047** is the decision; it **corrects ADR-0002**, whose
+2026-08-18 correction deferred the granularity fix to "the escalation ADR, which
+does not exist yet".
+
+**The ladder is per pass, not confidence-triggered**, because ISSUE-001's own
+measurements falsify the premise a confidence trigger rests on. **And the
+empirical decider it had been asking for since 2026-08-18 ran**: granite at
+`max_edge=2048` produced 590 s of triage and 6563 s of extract to read nothing.
+A legible image did not buy a reading; it bought a longer wait.
+
+The same session opened `/app/receipts` in a browser first — the first time any
+person had looked at that screen, and the first time any surface here was seen
+in dark theme. **ISSUE-010's headline prediction was refuted** (the detached
+anchor and synchronous `revokeObjectURL` lose nothing in Chromium, Firefox or
+WebKit); looking found a different defect, the §4 gutter, which is fixed and
+merged.
+
+**No count of defects, rounds or issues is written here** — every one of those
+moves, and this file has carried a wrong issue count before.
 **No count of refreshes is written here** — it is a number that moves without its
 sentence changing, which is review standard 5.
 
-**Freshness anchor `d692cc3`** — the last commit that is not this handoff pair.
+**Freshness anchor `080a123`** — the last commit that is not this handoff pair.
 **It is written twice below — here and inside the command.** Moving one and not
 the other is what happened on this file's previous refresh, and the gate caught
 it because it parses the anchor out of the *command*.
@@ -34,7 +45,7 @@ else: a stamp cannot name the commit that writes it. The test is a command,
 not a commit and not a count:
 
 ```
-git log --oneline d692cc3..main -- ":(top,exclude)docs/MEMORY.md" ":(top,exclude)docs/NEXT_SESSION_PROMPT.md"
+git log --oneline 080a123..main -- ":(top,exclude)docs/MEMORY.md" ":(top,exclude)docs/NEXT_SESSION_PROMPT.md"
 git log --oneline refs/remotes/origin/main..main   # what a push would send
 git ls-remote --heads origin main                  # authoritative on what is pushed
 git branch --no-merged main                        # must name NOTHING
@@ -106,6 +117,37 @@ stays reachable — ADR-0042. `git log --oneline -- docs/MEMORY.md` is the list.
   "NO BRANCH IN FLIGHT" for three days while one existed, in 2026-08, and then
   announced one for three days after it landed would have been the same defect
   in the other direction.
+- **ISSUE-001 step 5, the local-to-Cloud escalation, is COMPLETE AND MERGED**
+  (2026-08-21, true fast-forward `de90c8a` -> `1f245d9`, **30 commits, single
+  parent each, zero merge commits**). `feat/local-to-cloud-escalation` is kept
+  at its merge point and pushed. Decision: **ADR-0047**, which **corrects
+  ADR-0002**. Design:
+  `docs/superpowers/specs/2026-08-20-local-to-cloud-escalation-design.md` —
+  **read its four dated corrections; three of them correct the spec's own body.**
+  Plan: `docs/superpowers/plans/2026-08-20-local-to-cloud-escalation.md` —
+  **read its dated defect log first.**
+  **What it delivers:** an eval run can use a model that reads receipts. Triage
+  gets one rung, extract gets two, and the rungs are **roles filled by
+  configuration** — today's `.env` runs both passes on `gemma4:cloud` with no
+  fallback set, which is one rung.
+  **The five things that will bite you** are ADR-0047's decisions 2, 3, 5, 6 and
+  8. Shortest forms: a tier is `(model, use_tools)`, not a provider; the trigger
+  runs **before** `normalize`; the escalation is eval-only and
+  `run_receipt`'s caller set is AST-pinned; non-final rungs get
+  `max_repairs=0`; and **`VLM_TIMEOUT_S` bounds one HTTP attempt, not one call**
+  — the SDK retries twice, so any elapsed timing covers an unknown number of
+  attempts.
+  **What it does NOT do:** produce an accuracy number. That is step 6. It also
+  leaves **ISSUE-012 through ISSUE-016**, two of which (how the per-rung counts
+  are keyed, and that they never reach the committed results file) are
+  decisions ADR-0047 deliberately does not take.
+  **What the close cost, and it is the argument for running it:** the
+  whole-branch review found **three stated guarantees deletable with all five
+  gates green** — including the rule that makes the final rung final, and the
+  trigger's placement, which was protected only by an untracked `.env`. The fix
+  wave closing them then wrote four false claims of its own, one into a test
+  file, and the scoped re-review caught those. **Every stage found real defects
+  in the stage before it.**
 - **The `/app/receipts` browser pass and the gutter fix are COMPLETE AND MERGED**
   (2026-08-20, true fast-forward `19a0911` -> `d692cc3`, **2 commits, single
   parent each, zero merge commits**). `feat/value-gutter-alignment` is kept at
@@ -2149,19 +2191,38 @@ the "Write routes (P4.T5)" banner was wrong once a read route consumed it.
 
 ## Environment / provider (user's `.env`, gitignored)
 
-- Active config: `VLM_PROVIDER=ollama`, `VLM_BASE_URL=http://localhost:11435/v1`,
-  model `granite3.2-vision:2b` (both passes), `DEFAULT_CURRENCY=PHP`,
-  `VLM_TIMEOUT_S=900`. `openai` SDK installed; `anthropic` is not.
+- Active config, **re-derived 2026-08-21 by printing `Settings()`** rather than
+  by reading `.env`: `VLM_PROVIDER=ollama`,
+  `VLM_BASE_URL=http://localhost:11435/v1`, **`VLM_MODEL_EXTRACT` and
+  `VLM_MODEL_TRIAGE` both `gemma4:cloud`**, `VLM_USE_TOOLS=true`,
+  `VLM_TIMEOUT_S=600`, `DEFAULT_CURRENCY=PHP`. `openai` SDK installed;
+  `anthropic` is not. The three settings ADR-0047 added
+  (`VLM_MODEL_EXTRACT_FALLBACK`, `VLM_USE_TOOLS_TRIAGE`,
+  `VLM_USE_TOOLS_FALLBACK`) are **unset**, so the extract ladder has one rung.
+  *(This line said `granite3.2-vision:2b` for both passes at `VLM_TIMEOUT_S=900`
+  until 2026-08-21. Print the settings; do not trust this sentence.)*
 - **Golden set is LIVE** — `eval/golden/labels|images/{r001,r002,r003}` on disk.
   `eval/golden/images/` is gitignored (the parent is not — do not move real
   receipts up a level).
 - Ollama runs in Docker (service `ollama`, host port **11435** → container
   11434). The native Windows Ollama CLI points at 11434 — use
   `docker exec ollama ollama …` or set `OLLAMA_HOST`.
-- **Local CPU inference is not viable for real numbers.** No GPU passthrough;
-  measured 262 s–1205 s per call. Ollama rejects a `tools` payload for models
-  without the capability, so the local path runs JSON mode (ADR-0002). Offline
-  spot checks only.
+- **Local CPU inference is not viable for real numbers.** No GPU passthrough.
+  **Granite cannot read a receipt at any resolution this box can run**: measured
+  2026-08-21 at `max_edge=2048` — the pipeline default it had never completed at
+  — 590 s triage, 6563 s extract, every *real* field null, confidence 0.000, the
+  same two fields correct as at 768. ISSUE-001's hypothesis that a legible image
+  would move it off zero is **refuted**. Offline spot checks only.
+
+  **Elapsed timings through this client are not per-call figures.**
+  `VLM_TIMEOUT_S` bounds one HTTP attempt and the SDK retries twice, so any
+  measurement covers an unknown number of attempts (ADR-0047 decision 8).
+
+  *(A sentence here said "Ollama rejects a `tools` payload for models without
+  the capability". **Deleted, not reworded** — ADR-0002's 2026-08-18 correction
+  and ISSUE-001 both record that it does not reproduce. The local path defaults
+  to JSON mode for a different, measured reason: tools on costs granite's triage
+  the `merchant_name_guess` that ADR-0043 decision 1 keys off.)*
 - **Security:** a commented-out Gemini key was once echoed in output → **rotate
   it before use.** Never echo `.env` secret values.
 - **Git:** default branch `main`; `origin` → `CDGYu/Receipt-Digitalization`,
@@ -2779,6 +2840,34 @@ not treat any precision claim as measured.**
       following them is how that was discovered.
     * **What looking produced that reading had not:** a real defect the issue had
       only guessed at, in the item it ranked third of four.
+
+28. **A correct instruction carrying a false reason is more dangerous than a
+    missing one.** Earned on 2026-08-21, four times in one milestone, and it is
+    the species that nearly did damage every time.
+
+    A wrong line number announces itself — the file does not say what the plan
+    said. A *reason* does not: it reads as the author having understood
+    something, and it licenses an implementer to simplify on the strength of it.
+
+    * The plan justified keeping an aliased import by pointing at **docstring**
+      references, which bind nothing at runtime. The real reader was a test. An
+      implementer following the stated reason would have deleted it as cosmetic.
+    * A function-level import was annotated "local: avoids an import cycle".
+      There is no cycle — the module imports only stdlib and pydantic, and the
+      package `__init__` is empty. **Written into the very next task after the
+      lesson above was recorded.**
+    * A module docstring said the egress boundary holds "because nothing else
+      builds one", when the builder is under `src/`. The conclusion was true;
+      the reason was invented.
+    * A fix wave cited an ADR's granularity defect as evidence that "one model
+      at two tool settings is a real ladder". That defect is a different shape —
+      *two models* sharing one provider id.
+
+    **The corollary is about writing, not reading:** when you explain *why*, you
+    are making a second claim, and it is the one nobody checks. Prefer stating
+    what is true over stating why — or measure the why the way you measured the
+    what. Where a reason is load-bearing, name the thing that would fail if it
+    were false, and confirm that thing exists.
 
 And: **a green suite is not evidence that installed software works.** Anything
 with an entry point gets run from outside the repository.

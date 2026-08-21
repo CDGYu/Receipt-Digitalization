@@ -44,25 +44,32 @@ git log --oneline refs/remotes/origin/main..main  # what the pending push would 
 
 ## What last merged, and how to check what is pushed.
 
-**The `/app/receipts` browser pass and the gutter fix merged by true
-fast-forward on 2026-08-20** — `19a0911` -> `d692cc3`, **2 commits**, single
-parent each, zero merge commits. **No ADR**: the change decides nothing new, and
-§4's gutter keeps the meaning it had. `docs/KNOWN_ISSUES.md`'s **ISSUE-010** is
-the record and is not to be re-derived; `docs/MEMORY.md`'s Snapshot bullet is the
-summary.
+**ISSUE-001 step 5 — the local-to-Cloud escalation — merged by true
+fast-forward on 2026-08-21** — `de90c8a` -> `1f245d9`, **30 commits**, single
+parent each, zero merge commits. Decision: **ADR-0047**, which **corrects
+ADR-0002**. `docs/KNOWN_ISSUES.md` ISSUE-012 through ISSUE-016 are what it
+leaves; `docs/MEMORY.md`'s Snapshot bullet is the summary.
 
-**The thing to know before touching it:** the not-extracted mark's hairline is a
-**gutter**, not decoration — it works because a column of values shares an edge.
-`Value` takes `align` (default `start`), and the three right-aligned call sites
-pass `end`. **Do not re-key that off `kind`**: two of the five numeric-kind call
-sites are left-aligned, so `kind` would move the rule to the wrong edge on
-`StatTiles` and `ConfidenceRail`.
+**The five things to know before touching it** are ADR-0047's decisions 2, 3, 5,
+6 and 8, and every one of them is a trap in a different direction:
 
-**And the thing it leaves undone:** the `border-radius` on a
-`border-collapse: collapse` table, which is a repo-wide pattern question; and two
-fixture gaps that make ISSUE-010 expensive to repeat — **no admin in the seed**
-while the export route is admin-only, and a `visual` spec that **never visits the
-screen**.
+- **a tier is `(model, use_tools)`, not a provider.** Both models here are
+  provider `ollama` and want opposite answers about tool use;
+- **the trigger runs BEFORE `normalize`.** After it, `DEFAULT_CURRENCY` fills
+  `currency` and that reads as content the model produced — the fallback would
+  never fire. This predicate has been wrong twice in that direction already;
+- **the escalation is eval-only**, and `run_receipt`'s caller set is pinned by
+  an **AST enumeration**, not a grep. Adding a caller is a deliberate act;
+- **non-final rungs run with `max_repairs=0`**;
+- **`VLM_TIMEOUT_S` bounds one HTTP attempt, not one call.** The SDK retries
+  twice, so any elapsed timing is wall clock over an unknown number of attempts.
+  **There is no per-call measurement in this repository** — do not quote one.
+
+**And the thing it leaves undone: no accuracy number.** That is step 6, and
+**nothing blocks it now**. Two of its open issues bite there specifically —
+ISSUE-012 (the per-rung counts never reach the committed results file) and
+ISSUE-013 (they are keyed by `model_id`, so two tiers on one model collapse into
+one count).
 
 *(The previous last-merge was the **results list and the admin export button**,
 2026-08-20 — `b563242` -> `f0dc7b6`, 23 commits, single parent each, zero merge
@@ -184,21 +191,25 @@ detail lives, and where a row and its source disagree, **the source wins**
 (ADR-0030: a finding is a claim, and so is a summary of one).
 
 Rewritten 2026-08-20 to carry **every** open issue rather than the current
-milestone's. The register below is complete as of that date: **eleven issues,
-all eleven open.**
+milestone's. **No count is written here any more.** `docs/KNOWN_ISSUES.md` is
+the register; count its `^## ISSUE-` headings, and note that its `**Status:**`
+lines are one per heading by design, so the two answers must agree.
 
-*(It said "nine are open" for half a day. Nine was the count of `**Status:**`
-lines in `docs/KNOWN_ISSUES.md`, and ISSUE-010 and ISSUE-011 opened with
-`**Opened …**` instead, so a status-anchored grep dropped the two newest entries
-— while the table three rows below marked both OPEN. Both entries now carry the
-Status line every other one has, so the anchor and the answer finally agree.
-Review standard 23: state the anchor beside the number.)*
+*(A count stood here and rotted twice in two days — first "nine are open" when
+eleven were, then "eleven issues, all eleven open" when ISSUE-012 through 016
+had been added by the escalation milestone's close. A number in a pointer to a
+source is a second source, which is what ADR-0030 says a summary is.)*
+
+*(The first of those two rotted counts was an anchor problem: "nine" counted
+`**Status:**` lines while two entries opened with `**Opened …**` instead. Every
+entry carries the Status line now, so a heading count and a Status count agree —
+which is the check to run, not a number to read. Review standard 23.)*
 
 ### The tracks
 
 | # | track | state | where the detail is |
 |---|---|---|---|
-| **T2** | **Make accuracy measurable** | **BLOCKED, and it is the thing gating the project.** Untouched by the last three milestones. | §1 below, `docs/KNOWN_ISSUES.md` ISSUE-001 |
+| **T2** | **Make accuracy measurable** | **Step 5 is DONE (ADR-0047).** Steps 2-5 are answered; **step 6 — the first real baseline — is the next thing, and nothing blocks it.** | §1 below, `docs/KNOWN_ISSUES.md` ISSUE-001 |
 | ~~T5~~ | ~~Look at `/app/receipts`~~ | **DONE 2026-08-20.** Opened in three engines; the download works, one defect found and fixed. **No ADR.** | `docs/MEMORY.md`, ISSUE-010, §2 |
 | T6 | Correctness issues left recorded | **OPEN.** ISSUE-005, 006, 007, 008, 009. | §3 below |
 | T7 | Phases 7 and 8 | Partly blocked on T2. | §4 below |
@@ -216,9 +227,10 @@ receipt, blocked since 2026-07-28. The cheapest remaining valuable thing is
 
 ## THE COMPLETE ISSUE REGISTER
 
-**All eleven, as of 2026-08-20.** `docs/KNOWN_ISSUES.md` is the source for every
-row and **is not to be re-derived** — each entry there records the diagnosis,
-what was already fixed, and the exact steps to resume.
+**Every issue, as of 2026-08-21.** `docs/KNOWN_ISSUES.md` is the source for
+every row and **is not to be re-derived** — each entry there records the
+diagnosis, what was already fixed, and the exact steps to resume. **This table
+is a pointer; where it and an entry disagree, the entry wins.**
 
 | issue | one line | state |
 |---|---|---|
@@ -233,6 +245,11 @@ what was already fixed, and the exact steps to resume.
 | ISSUE-009 | `CorrectionPatch`'s docstring no longer describes the contract it validates; OpenAPI omits `buyer.*` and `is_template_row`. | OPEN — harmless, misleading |
 | ISSUE-010 | `/app/receipts` **has now been opened**, in three engines. The download **works**; the predicted defect was refuted. One real finding (the gutter) is fixed. | **OPEN, narrowed** — only the collapsed-table `border-radius`, a repo-wide question |
 | ISSUE-011 | A measured-false `class="undefined"` spelling survives in **three** test files (four sentences). | OPEN — pre-existing, cosmetic |
+| **ISSUE-012** | **The per-rung counts never reach the committed results JSON.** They reach the printed report and the return value; `run_eval` writes the file before it returns and `run_baseline` folds them in after. | **OPEN — must close before step 6 commits a number** |
+| **ISSUE-013** | **`extract_rung_counts` is keyed by `model_id`, but ADR-0047 defines a tier as `(model, use_tools)`** — so two rungs on one model with opposed tools flags are two tiers and one count, and the escalation goes invisible in the figure that exists to expose it. | **OPEN — a decision ADR-0047 does not take** |
+| ISSUE-014 | `frozen=True` on `PassAttempt`, `RunOutcome` and `PassClients` is pinned by nothing; dropping any one leaves the suite green. Tree-wide there are 10 frozen dataclasses and 0 `FrozenInstanceError` assertions. | OPEN — stated interface property, unenforced |
+| ISSUE-015 | `PassAttempt.rung` is **write-only in production** — four write sites, no reader in `src/` or `eval/`. | OPEN — either give it a reader (see ISSUE-013) or drop it |
+| ISSUE-016 | `read_nothing` still counts vacuous values as content: `merchant.name=""`, `totals.total=0`, `prices_include_tax=False`. The **third** never-fires shape in this predicate's history. | OPEN — **report-don't-fix**; do not enumerate fields, do not change `is_filled` |
 
 ---
 
@@ -401,7 +418,7 @@ never one.
 ## Reading order
 
 1. **`docs/MEMORY.md`** — state, decisions already made, environment, blockers,
-   deferred items, and **review standards 1–27**.
+   deferred items, and **review standards 1–28**.
 2. **The ledgers** — `.superpowers/sdd/*/progress.md`, one per milestone.
    **`.superpowers/sdd/2026-08-10-corrections-read-route/progress.md` is the one
    that matters now**: it holds the nine fix rounds, the nine controller
@@ -415,6 +432,19 @@ never one.
    in this file: `ls docs/adr/*.md | grep -v README | wc -l` (how many ADRs) and
    `grep -cE "^\| *\[?0[0-9]{3}" docs/adr/README.md` (how many index rows).
    Mandatory before touching the matching area:
+   - **0047** — *a tier is a model and its tools flag, and the escalation is
+     eval-only.* **Read before touching the client factory, `run_receipt`, the
+     eval harness, or anything that decides which model runs.** It **corrects
+     ADR-0002**. Decision 2 is why tool use is resolved by one function and not
+     two; decision 3 is the fallback trigger, whose definition was **wrong twice
+     in the never-fires direction** — and 3a names the pattern, because a third
+     is expected and ISSUE-016 is it; decision 5 is the user's eval-only ruling,
+     pinned by an **AST enumeration** rather than a grep, with §5a stating what
+     the guarantee does *not* cover; decision 6 is why a discarded rung gets no
+     repair budget; and decision 8 is that **`VLM_TIMEOUT_S` bounds one HTTP
+     attempt, not one call** — so no elapsed timing here is a per-call figure.
+     Its closing section says what no gate can see: **the escalation has never
+     run against a real model.**
    - **0046** — *the list is a projection of the export's query, and a screen
      nothing mounts is not delivered.* **Read before touching `/app/receipts`,
      either export route, or any new screen or entry point.** Decision 1 is why
@@ -1873,15 +1903,29 @@ and was measured not to need it.)*
 
 ## Today's goal
 
-# NOTHING IS IN FLIGHT. The `/app/receipts` browser pass merged on 2026-08-20.
+# NOTHING IS IN FLIGHT. ISSUE-001 step 5 merged on 2026-08-21.
 
 **`git branch --no-merged main` must name nothing.** Run it rather than
 believing this sentence — it has been wrong in **both** directions, announcing
 no branch while one existed for three days, and announcing one after it landed.
 
-**You are starting, not finishing.** The work was small and the close was
-proportionate: two commits, no ADR, no plan and no ledger — one browser pass and
-the one defect it found. Gates re-run at the merged tip.
+**You are starting, not finishing.** The close ran in full: seven tasks each
+with a fresh implementer, a whole-branch review on the strongest model returning
+MERGE AFTER FIXES, one fix wave, one scoped re-review **which found the wave had
+written four false claims of its own**, one controller fix for those, ADR-0047,
+then a true fast-forward.
+
+**The next thing is step 6, and nothing blocks it.** For the first time since
+2026-07-28 there is a mechanism that can put a model which reads receipts in
+front of the golden set. What that costs you before you start it: **read
+ISSUE-012 and ISSUE-013 first** — the per-rung counts do not reach the committed
+results file, and they are keyed in a way that can hide an escalation. Step 6
+commits a number; both of those decide what that number is worth.
+
+**And the standing warning on step 6 has not moved:** cloud inference is **not
+deterministic at `temperature=0`** — two identical runs on r002 scored 55.56%
+and 61.11%. Repeats and a spread, or the figure is a sample wearing a number's
+clothes.
 
 **Run these first, and believe them over this document:**
 
@@ -1908,8 +1952,8 @@ reintroduced anyway. Read the command.)*
 merged tip, all five gates PASS.** Everything committed after it is this handoff
 pair. Re-run it rather than reasoning from that sentence.
 
-**What this milestone proves, and it is new — review standard 27 is what came
-out of it.** ISSUE-010 predicted the export download would fail, and reasoned
+**What the PREVIOUS milestone proved — review standard 27 — and it still
+reads first because it is the shape most likely to bite you.** ISSUE-010 predicted the export download would fail, and reasoned
 from the code: a **detached** anchor, and a **synchronous** `revokeObjectURL`.
 Both readings were exactly right. Both genuinely are documented cross-browser
 failure modes. **The conclusion was still wrong** — the file arrives in
@@ -1934,21 +1978,29 @@ the screen. Following them is how that was found, at the cost of one run.
 issue ranked third of four. The hairline is a **gutter**, and a left-edge gutter
 in a right-aligned column aligns with nothing.
 
-**Then** pick from the START HERE index — which as of 2026-08-20 carries **every
-open issue**, not just the current milestone's — or answer the questions under
-"Blocked on the user" and let that pick for you.
+**And what the LATEST milestone proved is review standard 28**, which it earned
+four times over: **a correct instruction carrying a false reason is more
+dangerous than a missing one.** A wrong line number announces itself; an
+invented *rationale* reads as understanding and licenses an implementer to
+simplify something load-bearing. Every near-miss in that milestone was one.
 
-**If you want the shortest honest answer to "what next":** **ISSUE-001 step 5**,
-the local-to-Cloud escalation. It has gated this project since 2026-07-28, it is
-the next real build, and T5 — which was the cheap alternative — is now done. If
-you want something smaller first, **ISSUE-006** is the only issue on the board
-where a user gets a confidently wrong answer.
+**Then** pick from the START HERE index, which carries every open issue — or
+answer the questions under "Blocked on the user" and let that pick for you.
+
+**If you want the shortest honest answer to "what next":** **ISSUE-001 step 6**,
+the first real baseline. Step 5 built the mechanism and nothing blocks step 6 now
+— it is the first time a model that can read a receipt meets the golden set, and
+it is what the project has been blocked on since 2026-07-28. **Read ISSUE-012 and
+ISSUE-013 before starting it**, because both decide what the committed number is
+worth. If you want something smaller first, **ISSUE-006** is the only issue on
+the board where a user gets a confidently wrong answer.
 
 **Read these before you touch anything**, in this order: `docs/MEMORY.md` (state
-plus **review standards 1–27**) → `docs/adr/README.md` → the ADRs its rows send
-you to, of which **ADR-0046 and ADR-0045 are the two written most recently and
-the two most likely to change what you do**. `docs/KNOWN_ISSUES.md` is the
-source for all eleven issues and **is not to be re-derived**. Your own memory
+plus **review standards 1–28**) → `docs/adr/README.md` → the ADRs its rows send
+you to, of which **ADR-0047 is the newest and the one that changes what you do**
+if you touch extraction at all — and **ADR-0045** remains the highest-yield one
+for anybody running the subagent workflow. `docs/KNOWN_ISSUES.md` is the
+source for every issue and **is not to be re-derived**. Your own memory
 index carries the cross-session lessons that are not in this repo at all.
 
 **If anything in this document disagrees with the repo, the repo wins.** This
