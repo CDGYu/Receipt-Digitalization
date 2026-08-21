@@ -747,12 +747,21 @@ mint **fresh** fakes per call. A test that does not will fail with
 "FakeVLMClient exhausted", which is a test-authoring failure wearing a pin's
 clothes.
 
+**`from pathlib import Path` is added by this task, not Task 1.** Task 1's test
+block declared it and never used it, which is an `F401` — and
+`python -m ruff check .` is one of the five blocking gates. Task 1's implementer
+removed the dead import rather than transcribing it, and was right to. This task
+is the first that actually calls `Path(...)` in the test module, so the import
+appears here. If you find it already present, leave it; if `Path` is
+undefined, this note is why.
+
 - [ ] **Step 1: Write the failing tests**
 
 Append to `tests/test_run_repeats.py`:
 
 ```python
 import json
+from pathlib import Path
 
 from eval.run_baseline import latest_results_file
 from eval.run_repeats import run_repeats
@@ -1478,6 +1487,26 @@ moving the tests onto `eval.run_baseline.make_pass_clients`, which is the target
 Found by checking the plan's symbols against the tree instead of against the
 draft — the pre-flight ADR-0045 decision 1 makes mandatory. It is also review
 standard 19 in miniature: two bindings that must agree.
+
+### 2026-08-22 — caught during Task 1, by its implementer
+
+**Defect 2 — Task 1's test block imported `pathlib.Path` and never used it.**
+An `F401`, and `python -m ruff check .` is one of the five blocking gates and is
+green on `main` — so transcribing the block verbatim would have put the
+repository's only lint error in this milestone's first commit. The implementer
+removed the import instead of transcribing it and said so, which is the
+behaviour this workflow exists to produce.
+
+**Defect 3 — and the same slip left `Path` undefined in Task 4.** Task 4's tests
+call `Path(rel).is_absolute()` but its import block never declared `Path`; with
+Task 1's dead import correctly removed, Task 4 would have failed on `NameError`.
+Predicted by Task 1's implementer from its own finding, then confirmed against
+the brief. **Fixed above:** `from pathlib import Path` now appears in Task 4's
+import block, where it is first used, with a note saying why.
+
+Both are the same root cause — an import written where it looked tidy rather
+than where it is used — and neither would have been caught by reading the plan,
+only by running it.
 
 **Non-defects, verified rather than assumed while writing:** `PassClients` has
 exactly `triage` and `extract_rungs`; all eleven `FieldBreakdown` fields default
