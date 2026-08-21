@@ -212,16 +212,18 @@ which is the check to run, not a number to read. Review standard 23.)*
 | **T2** | **Make accuracy measurable** | **Step 5 is DONE (ADR-0047).** Steps 2-5 are answered; **step 6 — the first real baseline — is the next thing, and nothing blocks it.** | §1 below, `docs/KNOWN_ISSUES.md` ISSUE-001 |
 | ~~T5~~ | ~~Look at `/app/receipts`~~ | **DONE 2026-08-20.** Opened in three engines; the download works, one defect found and fixed. **No ADR.** | `docs/MEMORY.md`, ISSUE-010, §2 |
 | T6 | Correctness issues left recorded | **OPEN.** ISSUE-005, 006, 007, 008, 009. | §3 below |
+| **T9** | **What the escalation left** | **OPEN.** ISSUE-012 and 013 gate step 6's number; 014, 015, 016 do not. | **§6b below**, ADR-0047 |
 | T7 | Phases 7 and 8 | Partly blocked on T2. | §4 below |
 | T8 | Earlier-phase leftovers | Open, unblocked, low priority. | §5 below |
 | ~~T1~~ | ~~Phase 6 merchants~~ | **CLOSED 2026-08-18.** ADR-0043. | `docs/MEMORY.md` |
 | ~~T3~~ | ~~Buyer and blank rows~~ | **CLOSED 2026-08-19.** ADR-0044, ADR-0045. | `docs/MEMORY.md` |
 | ~~T4~~ | ~~The results list ("A1")~~ | **CLOSED 2026-08-20.** ADR-0046. | `docs/MEMORY.md`, §7 |
 
-**If you want one sentence:** **T5 is done**, so the most important thing and
-the next real build are now the same thing — **T2**, a model that can read a
-receipt, blocked since 2026-07-28. The cheapest remaining valuable thing is
-**ISSUE-006**, the only issue where a user gets a confidently wrong answer.
+**If you want one sentence:** **run step 6 — the first real baseline.** The
+mechanism landed 2026-08-21 (ADR-0047) and nothing blocks it; read **ISSUE-012**
+and **ISSUE-013** first, because they decide what the committed number is worth.
+If you want something smaller, **ISSUE-006** is still the only issue on the board
+where a user gets a confidently wrong answer.
 
 ---
 
@@ -255,36 +257,58 @@ is a pointer; where it and an entry disagree, the entry wins.**
 
 ## THE WORK, IN PRIORITY ORDER
 
-### §1. T2 — make accuracy measurable (ISSUE-001). THE BLOCKER.
+### §1. T2 — make accuracy measurable (ISSUE-001). **STEP 6 IS THE NEXT WORK.**
 
 **Nothing in this project has a measured accuracy number.** Phase 6's merchant
 matching and the buyer capture are both **built and unvalidated** because of it.
-Three milestones have shipped around this without touching it.
+
+**What changed on 2026-08-21: the mechanism now exists.** Step 5 is done
+(ADR-0047), so for the first time since 2026-07-28 a model that can read a
+receipt can be put in front of the golden set. **Step 6 is no longer waiting on
+anything.**
 
 Steps 2, 3 and 4 were **answered by running them** on 2026-08-18 — read them in
 ISSUE-001 rather than re-running (**ADR-0039**: the local path is a liveness
 check only, and its §16 table means nothing about accuracy).
 
-- **Step 5 — build the local→Cloud escalation. THIS IS THE NEXT REAL BUILD.**
-  `make_client` returns one client, and **nothing records which model produced a
-  kept extraction** — without that no eval can attribute accuracy to a model,
-  and a good number could be hiding the fact that everything escalated. Report
-  the escalation **rate** beside the accuracy figure. Probably an ADR.
-  **Start from the measured constraint:** `_TOOLS_OFF_BY_DEFAULT` is keyed on
-  the **provider**, and the exception is per **model** — `granite3.2-vision:2b`
-  and `gemma4:cloud` are both provider `ollama`, so one `VLM_USE_TOOLS` cannot
-  be off for the local model and on for the cloud one. Widening the key to
-  `(provider, model)`, or moving the choice into whatever selects the tier, is
-  this milestone's decision. **ADR-0002**'s 2026-08-18 correction records the
-  constraint and deliberately does not fix it.
-- **Step 6 — run the first real baseline**, detached, and commit the results
-  file. **`gemma4:cloud` DOES read the receipt** (2026-08-18, r002: merchant,
-  TIN, invoice, line item, both totals and payment all exact, 0 validation
-  errors, in 25 seconds). **User ruling: golden set only.**
+- ~~**Step 5 — build the local→Cloud escalation.**~~ **DONE 2026-08-21,
+  ADR-0047.** Merged `de90c8a` -> `1f245d9`, 30 commits. The ladder is **per
+  pass**, not confidence-triggered, because ISSUE-001's own measurements falsify
+  the premise a confidence trigger rests on. Read **ADR-0047 before touching the
+  client factory, `run_receipt`, or the eval harness**; its decisions 2, 3, 5, 6
+  and 8 are five traps in five different directions.
+  *(Its docstring-level claim that "nothing records which model produced a kept
+  extraction" was **overstated**: `extraction_runs.model_id` records every call.
+  What was missing was the link from a receipt to the run it kept — and on the
+  eval path that is not a database problem at all.)*
+
+- **Step 6 — run the first real baseline. THIS IS NOW THE NEXT REAL WORK, AND
+  NOTHING BLOCKS IT.** Detached, and commit the results file.
+  **`gemma4:cloud` DOES read the receipt** (2026-08-18, r002: merchant, TIN,
+  invoice, line item, both totals and payment all exact, 0 validation errors, in
+  25 seconds). **User ruling: golden set only.**
+
+  **Read ISSUE-012 and ISSUE-013 before you start**, because both decide what
+  the committed number is worth: the per-rung counts **do not reach the results
+  JSON**, and they are **keyed by `model_id`** when a tier is
+  `(model, use_tools)`, so two tiers on one model collapse into one count.
+
+  **Configuration.** Today's `.env` runs both passes on `gemma4:cloud` with no
+  fallback, which is one rung — a valid cloud-only baseline. If you point triage
+  at granite, **set `VLM_USE_TOOLS_TRIAGE=false`**: `VLM_USE_TOOLS` is
+  process-wide and tools-on costs granite the `merchant_name_guess` ADR-0043
+  decision 1 keys off.
+
   **⚠ DO NOT REPORT A SINGLE RUN AS THE BASELINE.** Cloud inference is **not
   deterministic at `temperature=0`** — two identical runs scored 55.56% and
   61.11%. Repeats and a spread, or the figure is a sample wearing a number's
   clothes.
+
+  **⚠ AND DO NOT QUOTE A PER-CALL TIMING.** `VLM_TIMEOUT_S` bounds one HTTP
+  attempt and the SDK retries twice (ADR-0047 decision 8), so every elapsed
+  figure in this repository covers an unknown number of attempts. There is no
+  per-call measurement here; one was invented during the last milestone and
+  deleted.
 - **Step 7 — grow the golden set.** Three receipts cannot validate any accuracy
   claim; one receipt is 33 percentage points. This gates the goal more
   fundamentally than the model does.
@@ -369,6 +393,41 @@ R060/R061 grounding decision (also gates bbox highlighting); score
 hard-reject on it**). §6 below has the full list, §7 what is deferred with
 rulings.
 
+### §6b. T9 — what the escalation left (ISSUE-012 … 016)
+
+All five are recorded in `docs/KNOWN_ISSUES.md` with their measurements, and
+**ADR-0047's "What this ADR does not decide"** is why two of them are open
+decisions rather than bugs. **Do not re-derive them.**
+
+**These two gate step 6's number, and should be settled before it commits one:**
+
+- **ISSUE-012 — the per-rung counts never reach the committed results JSON.**
+  They reach the printed report and the return value. `run_eval` writes the file
+  before returning; `run_baseline` folds counts in after. ISSUE-001 step 6
+  commits that file as the durable record, so a baseline landed today records
+  the accuracy but not which model produced it. **Fixing it moves who owns the
+  write** — a design change, not a line.
+- **ISSUE-013 — the counts are keyed by `model_id`.** ADR-0047 decision 2
+  defines a tier as `(model, use_tools)`, so two rungs naming one model with
+  opposed tools flags are two tiers and one count key, and the escalation goes
+  invisible in the figure built to expose it. Both the plan and the field's own
+  comment specify this key, so **changing it is a decision.**
+
+**These three do not gate anything:**
+
+- **ISSUE-014** — `frozen=True` on `PassAttempt`, `RunOutcome` and `PassClients`
+  is pinned by nothing; dropping any one leaves the suite green. Tree-wide: 10
+  frozen dataclasses, 0 `FrozenInstanceError` assertions.
+- **ISSUE-015** — `PassAttempt.rung` is **write-only in production**: four write
+  sites, no reader in `src/` or `eval/`. Either give it a reader (it is the
+  natural fix for ISSUE-013) or drop it.
+- **ISSUE-016** — `read_nothing` still counts vacuous values as content
+  (`merchant.name=""`, `totals.total=0`, `prices_include_tax=False`). This is the
+  **third** never-fires shape in that predicate's history; ADR-0047 §3a names the
+  pattern. **Report-don't-fix** (review standard 19): do not enumerate fields,
+  and **do not change `is_filled`** — `field_accuracy` shares it by design, so
+  narrowing it moves a published metric.
+
 ---
 
 ## BLOCKED ON THE USER — surface these, do not guess
@@ -432,6 +491,16 @@ never one.
    in this file: `ls docs/adr/*.md | grep -v README | wc -l` (how many ADRs) and
    `grep -cE "^\| *\[?0[0-9]{3}" docs/adr/README.md` (how many index rows).
    Mandatory before touching the matching area:
+   - **0048** — *a rationale is a second claim, and it is the one nobody
+     checks.* **Read before writing a plan, a brief, a docstring or a fix wave's
+     prose.** Wrong facts announce themselves; wrong *reasons* license the wrong
+     action, because a reason reads as evidence the author understood the thing.
+     Four instances in one milestone, none of them a lie — including a "local
+     import avoids a cycle" comment for a cycle that does not exist, **written
+     one task after the identical species was recorded**. Its decision 2 is the
+     usable one: where a reason is load-bearing, **name the thing that would fail
+     if it were false**; if nothing would, the thing is unpinned and that is the
+     finding. It is review standard 28.
    - **0047** — *a tier is a model and its tools flag, and the escalation is
      eval-only.* **Read before touching the client factory, `run_receipt`, the
      eval harness, or anything that decides which model runs.** It **corrects
@@ -1948,9 +2017,10 @@ That is ADR-0032 §2 — a claim can rot inside the commit that carries it — a
 this file had already learned to delete push state once before. It got
 reintroduced anyway. Read the command.)*
 
-**Last full controller-run of `python scripts/verify.py`: 2026-08-20 at the
-merged tip, all five gates PASS.** Everything committed after it is this handoff
-pair. Re-run it rather than reasoning from that sentence.
+**Last full controller-run of `python scripts/verify.py`: 2026-08-21 at the
+merged tip, all five gates PASS.** Committed after it: ADR-0048 and this handoff
+pair, both documentation only. Re-run it rather than reasoning from that
+sentence.
 
 **What the PREVIOUS milestone proved — review standard 27 — and it still
 reads first because it is the shape most likely to bite you.** ISSUE-010 predicted the export download would fail, and reasoned
@@ -2000,8 +2070,21 @@ plus **review standards 1–28**) → `docs/adr/README.md` → the ADRs its rows
 you to, of which **ADR-0047 is the newest and the one that changes what you do**
 if you touch extraction at all — and **ADR-0045** remains the highest-yield one
 for anybody running the subagent workflow. `docs/KNOWN_ISSUES.md` is the
-source for every issue and **is not to be re-derived**. Your own memory
-index carries the cross-session lessons that are not in this repo at all.
+source for every issue and **is not to be re-derived**.
+
+**Your own memory index carries what this repository does not.** The entries
+that matter most before you start:
+
+- `escalation-merged-and-step-6-is-next` — the five ADR-0047 traps in short
+  form, and which two issues decide what a baseline number is worth;
+- `a-rationale-is-a-second-claim` — ADR-0048 as a habit rather than a record;
+- `ollama-hardware-ceiling-on-this-box` — **there are two Ollamas here**, and
+  the project reads the Docker one on `:11435`. Name the port, and run
+  `docker ps` before naming a runtime;
+- `a-defect-derived-from-reading-is-a-hypothesis` — prove a probe red before
+  believing its green;
+- `parallel-agents-share-one-worktree` and `sdd-dispatch-lane-discipline` —
+  before dispatching anything in parallel.
 
 **If anything in this document disagrees with the repo, the repo wins.** This
 file has been wrong at the start of several sessions, including one where the
