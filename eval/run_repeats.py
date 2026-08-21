@@ -168,6 +168,16 @@ def _report_metrics(report: Any) -> dict[str, Any]:
     return dict(_report_to_dict(report).get("metrics", {}))
 
 
+def _report_counts(report: Any) -> dict[str, Any]:
+    """The count block of one report, on ``_report_metrics``'s rule.
+
+    The four keys are ``_report_to_dict``'s, read from it rather than re-listed
+    here, so this block and the file each repeat writes cannot fall out of step,
+    and no list of key names lives here to age.
+    """
+    return dict(_report_to_dict(report).get("counts", {}))
+
+
 def run_repeats(
     run_id: str,
     repeats: int,
@@ -179,8 +189,16 @@ def run_repeats(
 
     Each repeat gets its own ``results_dir`` under ``<run_dir>/repeat-NN``,
     which is what stops ``{date}-{prompt_version}.json`` from colliding. The
-    aggregate is written last, so an interrupted sequence still leaves every
-    completed repeat's own results file on disk.
+    aggregate is rewritten after **every** repeat, not once at the end: the
+    per-rung counts and five of the config block's six keys are in no results
+    file, so a sequence killed part way through would otherwise lose exactly
+    what this artifact exists to carry.
+
+    ``n_repeats`` is the number of entries the file actually holds, never the
+    number asked for, so the artifact cannot claim a repeat it does not carry.
+    ``n_repeats_requested`` is the target; the two disagree exactly when a run
+    was interrupted, which is how a reader tells one apart from a complete run
+    of the smaller size.
 
     Both ``make_pass_clients`` and ``run_baseline`` are reached **through the
     ``eval.run_baseline`` module** rather than imported by name here. That is
@@ -208,7 +226,10 @@ def run_repeats(
     # feeding these forward would disable the ladder silently.
     tiers = _baseline.make_pass_clients(settings)
 
+    config = config_identity(tiers, settings)
     entries: list[dict[str, Any]] = []
+    aggregate: dict[str, Any] = {}
+
     for index in range(1, repeats + 1):
         target = repeat_dir(run_dir, index)
         report = _baseline.run_baseline(golden_dir=golden_dir, results_dir=target)
@@ -218,25 +239,22 @@ def run_repeats(
             "results_file": (
                 written[0].relative_to(run_dir).as_posix() if written else None
             ),
-            "counts": {
-                "receipts": report.n_receipts,
-                "auto_approved": report.n_auto_approved,
-                "critical_correct": report.n_critical_correct,
-                "failed": report.n_failed,
-            },
+            "counts": _report_counts(report),
             "metrics": _report_metrics(report),
             "extract_rung_counts": report.extract_rung_counts,
             "failures": [list(f) for f in report.failures],
         })
 
-    aggregate = {
-        "run_id": run_id,
-        "n_repeats": repeats,
-        "config": config_identity(tiers, settings),
-        "repeats": entries,
-        "spread": spread_over([e["metrics"] for e in entries]),
-    }
-    (run_dir / "aggregate.json").write_text(
-        json.dumps(aggregate, indent=2, default=str), encoding="utf-8"
-    )
+        aggregate = {
+            "run_id": run_id,
+            "n_repeats": len(entries),
+            "n_repeats_requested": repeats,
+            "config": config,
+            "repeats": entries,
+            "spread": spread_over([e["metrics"] for e in entries]),
+        }
+        (run_dir / "aggregate.json").write_text(
+            json.dumps(aggregate, indent=2, default=str), encoding="utf-8"
+        )
+
     return aggregate

@@ -419,6 +419,35 @@ def _disagreeing_tiers_factory():
     return build
 
 
+def _add_labelled_receipt(golden: Path, stem: str) -> None:
+    """A further labelled receipt in a golden dir ``_write_golden`` already made."""
+    (golden / "labels" / f"{stem}.json").write_text(
+        _good().model_dump_json(), encoding="utf-8"
+    )
+    _write_png(golden / "images" / f"{stem}.png")
+
+
+def _one_repeat_fails_factory():
+    """Consecutive builds alternate between a whole repeat and a partial one.
+
+    The odd build scripts one extraction for a two-receipt golden set, so the
+    second extract call raises "exhausted" and ``run_eval`` records it as that
+    receipt's failure. Offset-independent for the reason
+    ``_disagreeing_tiers_factory`` gives.
+    """
+    calls = itertools.count()
+
+    def build(settings=None):
+        index = next(calls)
+        bodies = [_good(), _good()] if index % 2 == 0 else [_good()]
+        return PassClients(
+            triage=FakeVLMClient([_triage(), _triage()], model_id="triage-model"),
+            extract_rungs=(FakeVLMClient(bodies, model_id="cloud"),),
+        )
+
+    return build
+
+
 def test_n_repeats_produce_n_directories_and_one_aggregate(tmp_path, monkeypatch):
     """The collision, closed by construction.
 
@@ -545,11 +574,16 @@ def test_the_runner_writes_nothing_latest_results_file_can_see(tmp_path, monkeyp
 def test_a_repeat_that_fails_is_recorded_rather_than_averaged_away(
     tmp_path, monkeypatch
 ):
-    """A partially failed repeat must be visible, not folded into the spread.
+    """A partially failed repeat must be visible in the aggregate.
 
-    ``run_eval`` catches per receipt so one bad receipt never takes the batch
-    down. The aggregate therefore carries failures per repeat: a repeat that
-    scored some receipts and failed others is not a whole observation.
+    ``run_eval`` catches per receipt, so one bad receipt never takes the batch
+    down; the aggregate carries ``failures`` per repeat, and that is what a
+    reader discounts by. Nothing holds such a repeat out of the numbers: every
+    repeat's metrics go into the spread unfiltered, and a failed receipt is
+    counted in ``n_receipts`` with ``critical_correct`` false
+    (``_Accumulator.add_failure``), so the repeat contributes a depressed figure
+    to ``min``, ``median`` and ``values``. Pinned by
+    ``test_a_failed_repeats_metrics_still_enter_the_spread``.
     """
     monkeypatch.setenv("VLM_PROVIDER", "ollama")
     golden = tmp_path / "golden"
@@ -575,13 +609,13 @@ def test_a_repeat_that_fails_is_recorded_rather_than_averaged_away(
 
 
 def test_the_spread_is_computed_over_repeats_that_disagree(tmp_path, monkeypatch):
-    """Spec §8 guarantee 3, and the only test here that reads a metric out of a run.
+    """Spec §8 guarantee 3: a spread over repeats that actually differ.
 
-    Added because no test above can fail on it, measured both ways: dropping
-    ``"spread"`` from the aggregate leaves every other test in this module
-    green, and so does returning ``{}`` from ``_report_metrics``. The per-repeat
-    numbers are what this milestone exists to produce, and until this test
-    nothing asserted that one of them arrives.
+    Added because nothing asserted that a metric a run produced reaches the
+    artifact at all -- measured 2026-08-22, when this was the only test here
+    that read one: dropping ``"spread"`` from the aggregate, or returning ``{}``
+    from ``_report_metrics``, left every other test in the module green. The
+    per-repeat numbers are what this milestone exists to produce.
 
     Repeats that agreed would not close it either: over identical repeats
     ``min`` and ``max`` are the same number, so an implementation returning
@@ -615,10 +649,11 @@ def test_a_run_of_no_repeats_is_refused_before_the_run_id_is_claimed(tmp_path):
     """Zero repeats is not a run, and must not consume the run id.
 
     Added because no test above can fail on it: deleting the guard leaves them
-    all green while ``run_repeats(id, 0)`` writes an aggregate over nothing.
-    The directory assertion is half the point -- ``prepare_run_dir`` refuses an
-    id it has already seen, so a guard that fired after creating one would
-    leave the id unusable for the real run.
+    all green while ``run_repeats(id, 0)`` claims the run directory, writes no
+    aggregate at all and returns ``{}`` (measured). The directory assertion is
+    half the point -- ``prepare_run_dir`` refuses an id it has already seen, so
+    a guard that fired after creating one would leave the id unusable for the
+    real run.
     """
     results_root = tmp_path / "results"
 
@@ -626,3 +661,143 @@ def test_a_run_of_no_repeats_is_refused_before_the_run_id_is_claimed(tmp_path):
         run_repeats("run-h", 0, results_root=results_root)
 
     assert not (results_root / "run-h").exists()
+
+
+def test_each_repeats_counts_are_the_counts_its_own_results_file_records(
+    tmp_path, monkeypatch
+):
+    """The counts block is the report's own, not a second copy that can drift.
+
+    Checked against the file ``run_eval`` wrote for that same repeat rather than
+    against a list of key names: ``_report_to_dict`` builds both, so the equality
+    holds however that block grows.
+
+    Added because three of its four keys were asserted nowhere -- measured on the
+    committed tree, hard-coding ``receipts``, ``auto_approved`` and
+    ``critical_correct`` to 0 left all 27 tests green, and those three are the
+    denominator and the numerators of every accuracy figure this artifact
+    reports. The repeats deliberately disagree, so a block read once and reused
+    for every entry fails here too.
+    """
+    monkeypatch.setenv("VLM_PROVIDER", "ollama")
+    golden = tmp_path / "golden"
+    _write_golden(golden)
+    monkeypatch.setattr(
+        "eval.run_baseline.make_pass_clients", _disagreeing_tiers_factory()
+    )
+
+    aggregate = run_repeats(
+        "run-i", 2, golden_dir=golden, results_root=tmp_path / "results"
+    )
+
+    run_dir = tmp_path / "results" / "run-i"
+    for entry in aggregate["repeats"]:
+        on_disk = json.loads(
+            (run_dir / entry["results_file"]).read_text(encoding="utf-8")
+        )
+        assert entry["counts"] == on_disk["counts"]
+
+    counts = [e["counts"] for e in aggregate["repeats"]]
+    assert sorted(c["critical_correct"] for c in counts) == [0, 1]
+    assert [c["receipts"] for c in counts] == [1, 1]
+    assert [c["failed"] for c in counts] == [0, 0]
+
+
+def test_a_failed_repeats_metrics_still_enter_the_spread(tmp_path, monkeypatch):
+    """What a repeat with a failure does to the numbers, stated and pinned.
+
+    ``run_eval`` counts a failed receipt in ``n_receipts`` with
+    ``critical_correct`` false, and ``run_repeats`` folds every repeat's metrics
+    into the spread unfiltered. So a repeat that lost one receipt of two reports
+    0.5, and 0.5 is what ``min`` reports -- a depressed figure that reads like a
+    measurement.
+
+    Nothing here argues that is the wrong behaviour: holding failed repeats out
+    would leave an all-failed run with an empty spread, which says less than a
+    low number beside a failure list. What was wrong is that nothing stated or
+    tested it, so a reader quoting ``min`` as the worst case had nothing telling
+    them what is in it.
+    """
+    monkeypatch.setenv("VLM_PROVIDER", "ollama")
+    golden = tmp_path / "golden"
+    _write_golden(golden)
+    _add_labelled_receipt(golden, "r2")
+    monkeypatch.setattr(
+        "eval.run_baseline.make_pass_clients", _one_repeat_fails_factory()
+    )
+
+    aggregate = run_repeats(
+        "run-j", 2, golden_dir=golden, results_root=tmp_path / "results"
+    )
+
+    partial = [e for e in aggregate["repeats"] if e["failures"]]
+    whole = [e for e in aggregate["repeats"] if not e["failures"]]
+    assert len(partial) == 1 and len(whole) == 1
+
+    assert partial[0]["counts"]["receipts"] == 2
+    assert partial[0]["counts"]["failed"] == 1
+    assert partial[0]["counts"]["critical_correct"] == 1
+    assert partial[0]["metrics"]["critical_field_accuracy"] == 0.5
+    assert whole[0]["metrics"]["critical_field_accuracy"] == 1.0
+
+    spread = aggregate["spread"]["critical_field_accuracy"]
+    assert spread["n"] == 2, "the repeat that failed a receipt is in the spread"
+    assert spread["min"] == 0.5
+    assert sorted(spread["values"]) == [0.5, 1.0]
+
+
+def test_an_interrupted_run_keeps_the_repeats_it_completed(tmp_path, monkeypatch):
+    """A killed run leaves an aggregate, and one that claims only what it holds.
+
+    The rung counts and five of the config block's six keys are in no results
+    file, so an aggregate written once at the end loses both when a five-repeat
+    run dies at repeat three -- the two things this artifact exists to carry.
+
+    ``run_baseline`` is patched through ``eval.run_baseline``, the same reach
+    ``run_repeats`` takes: a module that had imported the name would keep
+    calling the real one and this run would not stop at all.
+    """
+    import eval.run_baseline as run_baseline_module
+
+    monkeypatch.setenv("VLM_PROVIDER", "ollama")
+    golden = tmp_path / "golden"
+    _write_golden(golden)
+    monkeypatch.setattr(
+        "eval.run_baseline.make_pass_clients", _fresh_tiers_factory(1)
+    )
+
+    real = run_baseline_module.run_baseline
+    calls = itertools.count(1)
+
+    def _dies_on_the_third(*args, **kwargs):
+        if next(calls) == 3:
+            raise RuntimeError("the provider went away")
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr("eval.run_baseline.run_baseline", _dies_on_the_third)
+
+    results_root = tmp_path / "results"
+    with pytest.raises(RuntimeError, match="went away"):
+        run_repeats("run-k", 5, golden_dir=golden, results_root=results_root)
+
+    run_dir = results_root / "run-k"
+    written = json.loads((run_dir / "aggregate.json").read_text(encoding="utf-8"))
+
+    # It never claims a repeat it does not carry ...
+    assert written["n_repeats"] == len(written["repeats"]) == 2
+    # ... and the interruption is legible as the two figures disagreeing.
+    assert written["n_repeats_requested"] == 5
+    assert sorted(p.name for p in run_dir.iterdir() if p.is_dir()) == [
+        "repeat-01",
+        "repeat-02",
+    ]
+
+    # The two things no results file carries survived the kill.
+    assert [e["extract_rung_counts"] for e in written["repeats"]] == [
+        {"cloud": 1},
+        {"cloud": 1},
+    ]
+    assert written["config"]["extract_rungs"] == [
+        {"model_id": "cloud", "use_tools": None}
+    ]
+    assert written["spread"]["critical_field_accuracy"]["n"] == 2
