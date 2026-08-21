@@ -302,6 +302,89 @@ def test_with_no_fallback_the_only_rung_still_repairs(tmp_path):
     assert outcome.extraction.merchant.name == "SUPERMART INC."
 
 
+def test_the_final_rung_is_kept_even_when_it_read_nothing(tmp_path):
+    """A receipt neither rung can read comes back empty, not as a raise.
+
+    ``is_last`` is the first half of the keep condition and every other ladder
+    test hands the last rung a *good* response, so until this test nothing
+    exercised a final rung that read nothing. Deleting ``is_last or`` from
+    ``run_receipt`` left the whole suite green: the loop then falls out with
+    nothing kept and trips the ``assert outcome is not None`` below it, so an
+    unreadable receipt raises a bare ``AssertionError`` where it used to return
+    the model's empty answer.
+
+    The empty answer is the one the eval path needs. It scores as a receipt
+    nothing was read from, which is a measurement; a raise is a failed run,
+    which is a different number in a different column.
+    """
+    png = tmp_path / "receipt.png"
+    _write_png(png)
+    first = FakeVLMClient([_triage(), _unparseable()], model_id="local")
+    fallback = FakeVLMClient([_unparseable()], model_id="cloud")
+
+    outcome = run_receipt(png, first, CTX, extract_fallback_client=fallback)
+
+    assert len(fallback.calls) == 1
+    assert outcome.extraction.merchant.name is None
+    assert outcome.extraction.line_items == []
+    # The last rung is kept although it read nothing, and the first is still
+    # recorded as discarded, so the record says the escalation happened.
+    extract_entries = [a for a in outcome.attribution if a.pass_name == "extract"]
+    assert [(a.model_id, a.kept) for a in extract_entries] == [
+        ("local", False),
+        ("cloud", True),
+    ]
+
+
+def test_a_sole_rung_that_read_nothing_is_still_kept(tmp_path):
+    """The same guarantee where there is no fallback to escalate to.
+
+    One rung is the final rung, so its empty extraction is the run's answer.
+    This is the shape an unconfigured deployment runs in -- the "nothing set
+    means today's behaviour" requirement -- and before this test that behaviour
+    was a raise away with every gate green.
+    """
+    png = tmp_path / "receipt.png"
+    _write_png(png)
+    client = FakeVLMClient([_triage(), _unparseable()], model_id="only")
+
+    outcome = run_receipt(png, client, CTX)
+
+    assert outcome.extraction.merchant.name is None
+    extract_entries = [a for a in outcome.attribution if a.pass_name == "extract"]
+    assert [(a.model_id, a.kept) for a in extract_entries] == [("only", True)]
+
+
+def test_the_first_rung_is_judged_before_normalization_fills_the_currency(tmp_path):
+    """Design §3.2: the trigger reads the extraction, not the normalized copy.
+
+    ``normalize`` fills ``receipt.currency`` from the configured default, and
+    granite's measured output was every field null with ``currency: PHP``
+    supplied exactly that way. Judged after normalization that ``PHP`` reads as
+    content the model produced: the rung that read nothing is kept, the fallback
+    never runs, and the escalation is dead in the one configuration it was built
+    for.
+
+    ``default_currency`` is passed here rather than left to the environment. A
+    pin that only reddens on a machine whose untracked ``.env`` happens to set
+    ``DEFAULT_CURRENCY`` is not a pin -- no ``.env`` is tracked, and this test
+    supplies the value that arms the mutation itself.
+    """
+    png = tmp_path / "receipt.png"
+    _write_png(png)
+    first = FakeVLMClient([_triage(), _unparseable()], model_id="local")
+    fallback = FakeVLMClient([_good()], model_id="cloud")
+
+    outcome = run_receipt(
+        png, first, CTX, extract_fallback_client=fallback, default_currency="PHP"
+    )
+
+    assert len(fallback.calls) == 1
+    assert outcome.extraction.merchant.name == "SUPERMART INC."
+    kept = [a for a in outcome.attribution if a.pass_name == "extract" and a.kept]
+    assert [a.model_id for a in kept] == ["cloud"]
+
+
 # --------------------------------------------------------------------------- #
 # build_eval_pipeline + eval.harness.run_eval
 # --------------------------------------------------------------------------- #

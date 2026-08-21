@@ -294,6 +294,61 @@ def test_an_injected_client_gets_no_ladder(monkeypatch, tmp_path):
     assert report.extract_rung_counts == {"only": 1}
 
 
+def test_a_one_rung_ladder_does_not_hand_its_only_rung_back_as_its_own_fallback(
+    monkeypatch, tmp_path
+):
+    """One rung means no fallback, and the rung that read nothing is not re-run.
+
+    ``run_baseline`` chooses the fallback with ``extract_rungs[1] if
+    len(extract_rungs) > 1 else None``. Written as ``extract_rungs[-1]`` it
+    reads the same on a two-rung ladder and hands a one-rung ladder its own only
+    rung back as the fallback -- which the test above cannot see, because its
+    rung reads *something* and a fallback is never reached. Here the rung reads
+    nothing, so a wired fallback runs, and the run costs two extract calls
+    instead of one. On the hardware this milestone was built for, one extract
+    call measured between 2121 s and 6563 s.
+
+    The third scripted response is deliberately surplus: correct behaviour never
+    reaches it, and its presence is what makes the re-run redden on the count
+    below rather than on ``FakeVLMClient exhausted`` from inside the runner.
+
+    ``make_pass_clients`` is made to explode for the same reason the test above
+    does it -- an injected client must not reach the builder at all.
+    """
+    monkeypatch.setenv("VLM_PROVIDER", "fake")
+    golden = tmp_path / "golden"
+    _write_golden(golden)
+
+    def _must_not_run(settings):
+        raise AssertionError(
+            "run_baseline built a ladder for an injected client, overriding it"
+        )
+
+    monkeypatch.setattr("eval.run_baseline.make_pass_clients", _must_not_run)
+
+    client = FakeVLMClient(
+        [_triage(), _unparseable(), _good()], model_id="only"
+    )
+    report = run_baseline(
+        golden_dir=golden,
+        client=client,
+        ctx=CTX,
+        results_dir=tmp_path / "results",
+    )
+
+    assert report.n_failed == 0, report.failures
+    assert len(client.calls) == 2, (
+        "the sole rung was called twice for one receipt: a one-rung ladder was "
+        "wired as its own fallback"
+    )
+    # It read nothing and is the final rung, so its empty extraction is what the
+    # report scored -- counted, because it is what was kept, and scored at zero,
+    # which is the measurement. A second call would have scored the *good*
+    # response instead and hidden the whole thing.
+    assert report.extract_rung_counts == {"only": 1}
+    assert report.results[0].field_acc["merchant.name"] is False
+
+
 def test_a_run_that_scored_nothing_reports_no_counts_rather_than_empty_ones(
     monkeypatch, tmp_path
 ):
