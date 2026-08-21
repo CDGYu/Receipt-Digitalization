@@ -78,10 +78,19 @@ def test_repeat_dir_zero_pads_so_ten_repeats_sort(tmp_path):
 
 
 class _Settings:
-    """The two settings the config block reads, and nothing else."""
+    """The two settings the config block reads, and nothing else.
 
-    default_currency = "PHP"
-    vlm_timeout_s = 600
+    **Values the environment cannot produce.** ``"PHP"`` and ``600`` are what
+    ``get_settings()`` resolves on the machine this runs on -- measured -- so
+    a stub carrying them cannot tell a block that read *this* object from one
+    that ignored its argument and read a process-global ``Settings()``.
+    Measured with exactly that mutation on the committed tree: all 41 tests
+    stayed green. ``"XTS"`` is the ISO 4217 code reserved for testing and no
+    configuration resolves to it; ``999`` is not the timeout default.
+    """
+
+    default_currency = "XTS"
+    vlm_timeout_s = 999
 
 
 class _Realish(FakeVLMClient):
@@ -116,7 +125,7 @@ def test_rung_identity_records_null_when_use_tools_is_unobservable():
 
 
 def test_config_identity_gives_a_one_rung_run_a_one_element_list():
-    """The spec's SS10 Q1: no null-shaped hole for a run with one rung.
+    """The spec's §10 Q1: no null-shaped hole for a run with one rung.
 
     A one-rung and a two-rung run must diff against each other directly, so the
     difference between them is a list length and never a null that reads as
@@ -131,8 +140,8 @@ def test_config_identity_gives_a_one_rung_run_a_one_element_list():
         {"model_id": "gemma4:cloud", "use_tools": True}
     ]
     assert config["triage"] == {"model_id": "gemma4:cloud", "use_tools": True}
-    assert config["default_currency"] == "PHP"
-    assert config["vlm_timeout_s"] == 600
+    assert config["default_currency"] == "XTS"
+    assert config["vlm_timeout_s"] == 999
 
 
 def test_config_identity_gives_a_two_rung_run_the_same_shape():
@@ -255,9 +264,19 @@ def test_spread_derives_its_keys_and_does_not_enumerate_them():
 
 
 def test_spread_skips_non_numeric_entries():
-    """Counts and metrics are numeric; a stray string is not a distribution."""
+    """A key is dropped when **no** repeat gave it a number and not all gave null.
+
+    Not "a non-numeric value drops the key": that is false as a sufficient
+    condition, and spec §4.2 states the rule as a biconditional for this
+    reason. The mixed arm below is the counter-example, measured -- one number
+    and one string reports the key, with the string uncounted.
+    """
     out = spread_over([{"label": "cloud", "n": 1}, {"label": "cloud", "n": 3}])
     assert set(out) == {"n"}
+
+    mixed = spread_over([{"x": 1}, {"x": "a"}])
+    assert mixed["x"]["n"] == 1
+    assert mixed["x"]["values"] == [1, "a"]
 
 
 def test_spread_of_one_repeat_has_equal_min_and_max():
@@ -420,6 +439,48 @@ def _disagreeing_tiers_factory():
     return build
 
 
+def _differently_escalating_tiers_factory():
+    """A builder whose consecutive calls are kept by *different* rungs.
+
+    The even build's rung 0 reads the receipt and is kept, so the count is
+    ``{"local": 1}``. The odd build's rung 0 returns an unparseable body, reads
+    nothing, is discarded, and the cloud rung's extraction is kept --
+    ``{"cloud": 1}``. Fresh fakes per call, and offset-independent, both for the
+    reasons ``_disagreeing_tiers_factory`` gives.
+    """
+    calls = itertools.count()
+
+    def build(settings=None):
+        index = next(calls)
+        rung_zero = _good() if index % 2 == 0 else _unparseable()
+        return PassClients(
+            triage=FakeVLMClient([_triage()], model_id="triage-model"),
+            extract_rungs=(
+                FakeVLMClient([rung_zero], model_id="local"),
+                FakeVLMClient([_good()], model_id="cloud"),
+            ),
+        )
+
+    return build
+
+
+def _every_receipt_fails_factory():
+    """A builder whose extract rung carries no scripted response at all.
+
+    Every extract call raises "exhausted", which ``run_eval`` records as that
+    receipt's failure -- the shape a cloud throttle takes on the final rung,
+    where there is no rung after it to escalate to. Two triage responses,
+    because the golden set this drives carries two labels.
+    """
+    def build(settings=None):
+        return PassClients(
+            triage=FakeVLMClient([_triage(), _triage()], model_id="triage-model"),
+            extract_rungs=(FakeVLMClient([], model_id="empty"),),
+        )
+
+    return build
+
+
 def _add_labelled_receipt(golden: Path, stem: str) -> None:
     """A further labelled receipt in a golden dir ``_write_golden`` already made."""
     (golden / "labels" / f"{stem}.json").write_text(
@@ -502,6 +563,9 @@ def test_the_aggregate_points_at_each_repeats_own_results_file(tmp_path, monkeyp
 
     run_dir = tmp_path / "results" / "run-b"
     aggregate = json.loads((run_dir / "aggregate.json").read_text(encoding="utf-8"))
+    # The loop below is vacuous over an empty list, and an aggregate carrying
+    # no entries at all passes it -- measured, with ``"repeats": entries[:0]``.
+    assert len(aggregate["repeats"]) == 2
     for entry in aggregate["repeats"]:
         rel = entry["results_file"]
         assert not Path(rel).is_absolute()
@@ -540,6 +604,45 @@ def test_the_aggregate_carries_the_rung_counts_the_results_file_does_not(
         (run_dir / aggregate["repeats"][0]["results_file"]).read_text(encoding="utf-8")
     )
     assert "extract_rung_counts" not in one
+
+
+def test_each_repeats_rung_counts_are_that_repeats_own(tmp_path, monkeypatch):
+    """Every entry carries its **own** counts, not a constant and not repeat 1's.
+
+    Added because nothing here could fail on it. Measured on the committed
+    tree, each mutation still parsing: replacing
+    ``report.extract_rung_counts`` with a hardcoded ``{"cloud": 1}``, and
+    reusing repeat 1's counts for every later entry, each left **all 41** tests
+    green. The two tests that read the field both used fixtures where every
+    repeat produced the identical count, so neither could tell a per-repeat
+    read from a constant.
+
+    This is the field ISSUE-012 is about and the one spec §6 hangs an
+    obligation on -- "if the counts show granite kept any receipt, that
+    extraction is inspected and the finding recorded before any number is
+    published". That obligation is unenforceable if repeat 3's counts can
+    silently be repeat 1's. Spec §8 guarantee 3 applies exactly this standard
+    to the spread; this is guarantee 2 held to it.
+    """
+    monkeypatch.setenv("VLM_PROVIDER", "ollama")
+    golden = tmp_path / "golden"
+    _write_golden(golden)
+    monkeypatch.setattr(
+        "eval.run_baseline.make_pass_clients", _differently_escalating_tiers_factory()
+    )
+
+    aggregate = run_repeats(
+        "run-p", 2, golden_dir=golden, results_root=tmp_path / "results"
+    )
+
+    first, second = (e["extract_rung_counts"] for e in aggregate["repeats"])
+    assert first != second, (
+        "consecutive builds are kept by different rungs, so equal counts mean "
+        "the entries are not reading their own repeat's report"
+    )
+    # And each names the rung that actually produced the kept extraction, so a
+    # pair that merely differed would not pass either.
+    assert sorted([first, second], key=sorted) == [{"cloud": 1}, {"local": 1}]
 
 
 def test_the_aggregate_records_a_two_rung_ladder_as_two_tiers(tmp_path, monkeypatch):
@@ -752,6 +855,98 @@ def test_a_failed_repeats_metrics_still_enter_the_spread(tmp_path, monkeypatch):
     assert spread["n"] == 2, "the repeat that failed a receipt is in the spread"
     assert spread["min"] == 0.5
     assert sorted(spread["values"]) == [0.5, 1.0]
+
+
+def test_the_aggregate_counts_every_failed_receipt_at_the_top_level(
+    tmp_path, monkeypatch
+):
+    """An all-failed run is legible from the top of the file, not two levels down.
+
+    Not refusing such a run is correct and unchanged -- an all-failed run *is*
+    an observation, and spec §7 plans for it. What was missing is that the
+    failure signal lived only at ``repeats[i].counts.failed`` and
+    ``repeats[i].failures``: ``spread``, which is where a headline is read,
+    carried none of it. Reproduced end to end on the committed tree -- three
+    receipts, every extract call raising, two repeats -- exit code 0,
+    ``Repeats: 2``, and ``spread.critical_field_accuracy = {"min": 0.0, "max":
+    0.0, "median": 0.0, "n": 2, "n_null": 0}``. A cloud throttle is exactly how
+    this arises.
+
+    The total is over **every** repeat: one repeat's ``failed`` is 2 here and
+    the run's is 4, so a roll-up that read a single entry fails.
+    """
+    monkeypatch.setenv("VLM_PROVIDER", "ollama")
+    golden = tmp_path / "golden"
+    _write_golden(golden)
+    _add_labelled_receipt(golden, "r2")
+    monkeypatch.setattr(
+        "eval.run_baseline.make_pass_clients", _every_receipt_fails_factory()
+    )
+
+    aggregate = run_repeats(
+        "run-q", 2, golden_dir=golden, results_root=tmp_path / "results"
+    )
+
+    assert [e["counts"]["failed"] for e in aggregate["repeats"]] == [2, 2]
+    assert aggregate["n_failed"] == 4
+    # It is in the artifact, not only in the return value: the file is what a
+    # reader quotes from.
+    run_dir = tmp_path / "results" / "run-q"
+    on_disk = json.loads((run_dir / "aggregate.json").read_text(encoding="utf-8"))
+    assert on_disk["n_failed"] == 4
+    # And the run was not refused, which is the decision this pins in place.
+    assert on_disk["n_repeats"] == 2
+
+
+def test_a_metric_that_reaches_no_spread_is_named_rather_than_dropped(
+    tmp_path, monkeypatch
+):
+    """A metric with no spread entry is named, not silently absent.
+
+    ``_report_to_dict`` writes ``cost_per_receipt`` as
+    ``str(report.cost_per_receipt)`` (``eval/harness.py``) and ``_numeric``
+    rejects strings, so a key non-numeric in **every** repeat gets no spread
+    entry at all: no ``n``, no ``n_null``, no ``values``, nothing saying it was
+    there. Measured: ``spread_over([{"cost_per_receipt": "0.0123"},
+    {"cost_per_receipt": "0.0456"}])`` returns ``{}``.
+
+    Latent today, which is why the string is injected at the seam that produces
+    it rather than waited for: an offline run leaves the cost unset, and an
+    all-``None`` metric *is* reported. That is the control arm below -- the
+    same key, same run, present in ``spread`` and absent from
+    ``spread_omitted`` -- so neither list is a constant.
+    """
+    import eval.run_repeats as run_repeats_module
+
+    monkeypatch.setenv("VLM_PROVIDER", "ollama")
+    golden = tmp_path / "golden"
+    _write_golden(golden)
+    monkeypatch.setattr(
+        "eval.run_baseline.make_pass_clients", _fresh_tiers_factory(1)
+    )
+    results_root = tmp_path / "results"
+
+    # Control, unpatched: the cost is null in every repeat, so it is reported.
+    clean = run_repeats("run-r-clean", 2, golden_dir=golden, results_root=results_root)
+    assert clean["spread_omitted"] == []
+    assert clean["spread"]["cost_per_receipt"]["n_null"] == 2
+
+    real_metrics = run_repeats_module._report_metrics
+
+    def _with_a_measured_cost(report):
+        metrics = dict(real_metrics(report))
+        # Exactly what `_report_to_dict` writes the day a cost is measured.
+        metrics["cost_per_receipt"] = str(D("0.0123"))
+        return metrics
+
+    monkeypatch.setattr("eval.run_repeats._report_metrics", _with_a_measured_cost)
+
+    measured = run_repeats("run-r-cost", 2, golden_dir=golden, results_root=results_root)
+
+    assert "cost_per_receipt" not in measured["spread"]
+    assert measured["spread_omitted"] == ["cost_per_receipt"]
+    # The value is not lost, only its spread: it is in every repeat's own block.
+    assert measured["repeats"][0]["metrics"]["cost_per_receipt"] == "0.0123"
 
 
 def test_an_interrupted_run_keeps_the_repeats_it_completed(tmp_path, monkeypatch):
@@ -1068,6 +1263,143 @@ def test_main_names_the_file_it_actually_wrote_and_counts_what_it_carries(
     assert f"Repeats: {on_disk['n_repeats']}" in out
 
 
+def test_main_says_how_many_receipts_failed(tmp_path, monkeypatch, capsys):
+    """The failure roll-up, in the three-line block a reader quotes.
+
+    Measured on the committed tree, three receipts with every extract call
+    raising over two repeats: the command printed ``Wrote <path>`` and
+    ``Repeats: 2``, exited 0, and said nothing whatever about the six failed
+    receipts. Spec §7's "Read ``failures`` before quoting ``min``" lived in the
+    spec, not in the terminal and not in the artifact.
+
+    ``code == 0`` is asserted deliberately: **not** refusing an all-failed run
+    is the standing decision, and this pin holds it in place while making the
+    run visible.
+    """
+    monkeypatch.setenv("VLM_PROVIDER", "ollama")
+    golden = tmp_path / "golden"
+    _write_golden(golden)
+    _add_labelled_receipt(golden, "r2")
+    monkeypatch.setattr(
+        "eval.run_baseline.make_pass_clients", _every_receipt_fails_factory()
+    )
+
+    code = main([
+        "--run-id", "allfail",
+        "--repeats", "2",
+        "--golden-dir", str(golden),
+        "--results-root", str(tmp_path / "results"),
+    ])
+
+    assert code == 0
+    out = capsys.readouterr().out
+    assert "Failed receipts: 4 of 4 across 2 repeat(s)" in out
+
+
+def test_main_says_so_explicitly_when_no_receipt_failed(tmp_path, monkeypatch, capsys):
+    """The clean case is stated, not left to the absence of a line.
+
+    A roll-up printed only when something failed is one a reader cannot
+    distinguish from a roll-up that was never wired up. This is the control arm
+    for ``test_main_says_how_many_receipts_failed``, at the same interface.
+    """
+    monkeypatch.setenv("VLM_PROVIDER", "ollama")
+    golden = tmp_path / "golden"
+    _write_golden(golden)
+    monkeypatch.setattr(
+        "eval.run_baseline.make_pass_clients", _fresh_tiers_factory(1)
+    )
+
+    code = main([
+        "--run-id", "clean",
+        "--repeats", "2",
+        "--golden-dir", str(golden),
+        "--results-root", str(tmp_path / "results"),
+    ])
+
+    assert code == 0
+    out = capsys.readouterr().out
+    assert "Failed receipts: none, over 2 receipt(s) in 2 repeat(s)" in out
+
+
+def test_main_names_the_partial_aggregate_a_killed_run_left_behind(
+    tmp_path, monkeypatch, capsys
+):
+    """A provider failure mid-run names the artifact it did not take with it.
+
+    ``main`` catches ``RuntimeError``, which is the common provider-failure
+    path -- a cloud throttle arrives as one. Measured on the committed tree, a
+    ``RuntimeError`` at repeat 3 of 5: stderr carried ``Cannot run repeats:
+    ...``, exit code 1, and nothing else, while ``aggregate.json`` sat on disk
+    with ``n_repeats = 2``.
+
+    That artifact is the entire reason ``_rewrite_aggregate`` runs inside the
+    loop -- a killed sequence keeps the rung counts and the config block no
+    results file holds -- and ``prepare_run_dir`` had already made the run id
+    unusable, so the operator could not have found it by re-running either.
+    """
+    import eval.run_baseline as run_baseline_module
+
+    monkeypatch.setenv("VLM_PROVIDER", "ollama")
+    golden = tmp_path / "golden"
+    _write_golden(golden)
+    monkeypatch.setattr(
+        "eval.run_baseline.make_pass_clients", _fresh_tiers_factory(1)
+    )
+
+    real = run_baseline_module.run_baseline
+    calls = itertools.count(1)
+
+    def _dies_on_the_third(*args, **kwargs):
+        if next(calls) == 3:
+            raise RuntimeError("cloud throttled: 429 after 5 retries")
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr("eval.run_baseline.run_baseline", _dies_on_the_third)
+
+    results_root = tmp_path / "results"
+    code = main([
+        "--run-id", "killed",
+        "--repeats", "5",
+        "--golden-dir", str(golden),
+        "--results-root", str(results_root),
+    ])
+
+    assert code == 1
+    err = capsys.readouterr().err
+    assert "cloud throttled" in err
+    # The path, so it can be opened, and both figures, so its incompleteness is
+    # legible from the message rather than only from the file.
+    assert str(results_root / "killed" / "aggregate.json") in err
+    assert "2 of 5 repeat(s)" in err
+
+
+def test_main_announces_no_partial_aggregate_when_there_is_none(
+    tmp_path, monkeypatch, capsys
+):
+    """Silent when nothing survived: the refusal fired before any repeat ran.
+
+    The control arm for the test above. ``run_repeats`` refuses ``--repeats 0``
+    before ``prepare_run_dir`` claims the id, so no aggregate exists, and a
+    handler that announced one unconditionally would name a file that is not
+    there -- the exact failure ``main``'s "nothing is announced that was not
+    found on disk" paragraph exists to prevent.
+    """
+    monkeypatch.setenv("VLM_PROVIDER", "ollama")
+    results_root = tmp_path / "results"
+
+    code = main([
+        "--run-id", "nothing",
+        "--repeats", "0",
+        "--results-root", str(results_root),
+    ])
+
+    assert code == 1
+    err = capsys.readouterr().err
+    assert "Cannot run repeats" in err
+    assert "partial aggregate" not in err
+
+
 def test_main_does_not_report_an_aggregate_the_file_system_refused(
     tmp_path, monkeypatch, capsys
 ):
@@ -1215,5 +1547,8 @@ def test_main_refuses_when_only_some_repeats_scored_nothing(
     assert code != 0
     captured = capsys.readouterr()
     assert "Wrote" not in captured.out
-    # Named by index, so an operator knows which repeat to discount.
-    assert "2" in captured.err
+    # The rendered index list, not the bare digit. ``"2" in err`` is satisfied
+    # by the literal ``of 2`` in the same sentence whatever the indices say --
+    # measured: pinning ``entries[i]["index"]`` to the constant 1, and shifting
+    # every index by 100, each leave all 41 tests green.
+    assert "Repeat(s) 2 of 2" in captured.err

@@ -232,7 +232,16 @@ def _rewrite_aggregate(run_dir: Path, payload: str) -> None:
     same handle, succeeds. Raised out of the loop that failure would abort the
     run *and* burn the run id, which :func:`prepare_run_dir` refuses to reuse,
     for the sake of a window a kill has to land inside. So a rename that will
-    not go through degrades to writing in place, and **no path here raises**.
+    not go through degrades to writing in place, and **no ``OSError`` from the
+    staging write, the rename or the in-place write escapes**.
+
+    That is the whole of the claim, and it is deliberately narrower than "no
+    path here raises". ``KeyboardInterrupt`` is not an ``OSError`` and escapes
+    from anywhere --
+    ``test_the_aggregate_is_staged_beside_its_destination_and_renamed_over_it``
+    stops the process between the staging write and the rename and relies on it
+    doing so -- and a ``BrokenPipeError`` from one of the diagnostic prints in
+    the handlers below is an ``OSError`` no handler here covers.
 
     The staging file does not survive either path. A process killed between the
     staging write and the rename can leave one, and a killed process cleans
@@ -301,6 +310,23 @@ def run_repeats(
     was interrupted, which is how a reader tells one apart from a complete run
     of the smaller size.
 
+    ``n_failed`` counts failed **receipts**, summed over the repeats the file
+    holds -- the same thing ``repeats[i].counts.failed`` counts, on the same
+    rule, hoisted to the top level because that is where a headline is read.
+    Measured on the committed tree before it existed: a run whose every extract
+    call raised wrote ``spread.critical_field_accuracy = {"min": 0.0, "max":
+    0.0, ...}``, and the command printed only ``Wrote <path>`` and
+    ``Repeats: 2``. The failure signal was real and two levels down.
+
+    ``spread_omitted`` names the metric keys the repeats carried that the
+    spread has no entry for. It is derived by subtracting one from the other,
+    never by restating :func:`spread_over`'s rule -- a second copy of that rule
+    is one that can drift. It is empty today and is not decoration: a metric
+    whose value is non-numeric in every repeat gets no entry at all, with no
+    ``n``, no ``n_null`` and no ``values`` to say it was ever there, and
+    ``cost_per_receipt`` reaches this block as ``str(Decimal)`` -- measured,
+    ``_report_to_dict`` stringifies it -- the day a run measures a cost.
+
     Both ``make_pass_clients`` and ``run_baseline`` are reached **through the
     ``eval.run_baseline`` module** rather than imported by name here. That is
     load-bearing for the first of them: ``run_baseline`` looks
@@ -346,21 +372,67 @@ def run_repeats(
             "failures": [list(f) for f in report.failures],
         })
 
+        spread = spread_over([e["metrics"] for e in entries])
         aggregate = {
             "run_id": run_id,
             "n_repeats": len(entries),
             "n_repeats_requested": repeats,
+            "n_failed": sum(e["counts"].get("failed", 0) for e in entries),
             "config": config,
             "repeats": entries,
-            "spread": spread_over([e["metrics"] for e in entries]),
+            "spread": spread,
+            "spread_omitted": sorted(
+                {k for e in entries for k in e["metrics"]} - set(spread)
+            ),
         }
-        # Serialized here and persisted there: a value this module cannot
-        # encode is a defect in this module and must raise, while a file system
-        # that will not take the write is a condition of the machine the run is
-        # on and must not cost the run.
+        # Serialized here and persisted there: a file system that will not take
+        # the write is a condition of the machine the run is on and must not
+        # cost the run. ``default=str`` makes the same trade one step earlier --
+        # a value this module cannot encode is stringified rather than raised
+        # over, so no multi-hour run is lost to one unserializable field. It is
+        # not free, and ``spread_omitted`` above is what keeps it from being
+        # silent: a stringified number is not numeric, so ``spread_over`` gives
+        # that key no entry.
         _rewrite_aggregate(run_dir, json.dumps(aggregate, indent=2, default=str))
 
     return aggregate
+
+
+def _announce_partial(aggregate_path: Path) -> None:
+    """Name the aggregate a killed run left behind, when there is one.
+
+    :func:`run_repeats` rewrites the aggregate **inside** the repeat loop for
+    exactly this case: an interrupted sequence keeps the per-rung counts and
+    the config block, which no results file holds. That artifact is invisible
+    from the terminal otherwise, and it cannot be reached by re-running --
+    :func:`prepare_run_dir` refuses a run id it has already seen, so the id is
+    burnt the moment the run started.
+
+    Silent when the file is absent, because every refusal that fires before a
+    repeat completes reaches this too, and there is nothing to name.
+    """
+    if not aggregate_path.is_file():
+        return
+    try:
+        partial = json.loads(aggregate_path.read_text(encoding="utf-8"))
+        held, asked = partial["n_repeats"], partial["n_repeats_requested"]
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        # Named anyway. A file this function cannot parse is still the only
+        # copy of that run's provenance, and "there is something here I could
+        # not read" beats saying nothing at all.
+        print(
+            f"A partial aggregate is at {aggregate_path}, and how much it "
+            f"holds could not be read back ({type(exc).__name__}: {exc}).",
+            file=sys.stderr,
+        )
+        return
+    print(
+        f"A partial aggregate is at {aggregate_path}: {held} of {asked} "
+        f"repeat(s), carrying each completed repeat's rung counts and the "
+        f"config block, which no results file holds. The run id cannot be "
+        f"reused -- name the next run something else.",
+        file=sys.stderr,
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -383,6 +455,20 @@ def main(argv: list[str] | None = None) -> int:
     not evidence that the artifact exists -- and a command that reports success
     while producing no artifact is the failure this module was written to
     remove.
+
+    **A run that scored no receipt is refused too**, and that is a third
+    refusal rather than a variant of the second: the run completed and the
+    aggregate is on disk and well formed. What makes it worthless is that a
+    zero-receipt repeat reports its accuracy figures as `0.0` rather than null,
+    so the file reads as a measured zero. The predicate is *every* repeat, not
+    *any*, because a mixed run is the worse artifact of the two.
+
+    **A run that died part way through names what it left behind.** The
+    aggregate is rewritten inside the repeat loop precisely so a killed
+    sequence keeps the rung counts and the config block no results file holds,
+    and the operator cannot re-run into that run id --
+    :func:`prepare_run_dir` refuses to reuse one -- so a handler that said only
+    "the run failed" would strand the artifact it exists to protect.
     """
     # Raw, because the description *is* the module docstring and its last line
     # is the command this module advertises. The default formatter reflows the
@@ -399,6 +485,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--results-root", type=Path, default=None)
     args = parser.parse_args(argv)
 
+    root = args.results_root if args.results_root is not None else DEFAULT_RESULTS_DIR
+    written = Path(root) / args.run_id / "aggregate.json"
+
     try:
         aggregate = run_repeats(
             args.run_id,
@@ -414,11 +503,13 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 1
     except (RuntimeError, ValueError) as exc:
+        # The common provider-failure path: a throttle or a dropped connection
+        # reaches here as a `RuntimeError`. Naming the partial artifact is the
+        # whole difference between an interrupted run and a lost one.
         print(f"Cannot run repeats: {exc}", file=sys.stderr)
+        _announce_partial(written)
         return 1
 
-    root = args.results_root if args.results_root is not None else DEFAULT_RESULTS_DIR
-    written = Path(root) / args.run_id / "aggregate.json"
     if not written.is_file():
         print(
             f"Ran {aggregate['n_repeats']} repeat(s), but {written} is not "
@@ -429,12 +520,12 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     # Every repeat, not merely one of them. A repeat that scored nothing does
-    # not report null metrics -- `ratio` resolves the accuracy figures to a
-    # numeric `0.0` and only the ones with no denominator at all resolve to
-    # `None` -- so an empty repeat enters the spread as an observed zero and
-    # drags `min` and `median` down. Measured: one real repeat at 0.55 beside
-    # one empty repeat gives `median: 0.0`. Refusing only when *no* repeat
-    # scored would let exactly that artifact through.
+    # not report null metrics: `_build_report` computes the accuracy figures
+    # inline as `(x / n) if n else 0.0` (`eval/harness.py`), so a zero-receipt
+    # repeat contributes a numeric `0.0`. It enters the spread as an observed
+    # zero and drags `min` and `median` down. Measured: one real repeat at 0.55
+    # beside one empty repeat gives `median: 0.0`. Refusing only when *no*
+    # repeat scored would let exactly that artifact through.
     empty = [e["index"] for e in aggregate["repeats"] if not e["counts"].get("receipts")]
     if empty:
         # Read through `_baseline` rather than imported here, on this module's
@@ -455,6 +546,26 @@ def main(argv: list[str] | None = None) -> int:
 
     print(f"Wrote {written}")
     print(f"Repeats: {aggregate['n_repeats']}")
+    # Derived from what was written, not recomputed from the run: this is the
+    # block a reader quotes, and until now an every-receipt-failed run printed
+    # exactly the two lines above and nothing else -- measured end to end, with
+    # `spread.critical_field_accuracy` at 0.0 and exit code 0. Not refusing
+    # such a run stays correct; an all-failed run is an observation. Being
+    # unable to see it from here was the defect.
+    scored = sum(e["counts"].get("receipts", 0) for e in aggregate["repeats"])
+    if aggregate["n_failed"]:
+        print(
+            f"Failed receipts: {aggregate['n_failed']} of {scored} across "
+            f"{aggregate['n_repeats']} repeat(s). A failed receipt is counted "
+            f"in n_receipts and scores zero, so it is already inside every "
+            f"figure in `spread` -- read repeats[i].failures before quoting "
+            f"one."
+        )
+    else:
+        print(
+            f"Failed receipts: none, over {scored} receipt(s) in "
+            f"{aggregate['n_repeats']} repeat(s)."
+        )
     return 0
 
 
