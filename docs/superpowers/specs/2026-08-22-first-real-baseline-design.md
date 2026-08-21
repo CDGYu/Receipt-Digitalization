@@ -332,8 +332,19 @@ scored two receipts and failed one must not average into the spread as though
 it were whole.
 
 **A repeat dies between runs.** Each repeat writes its own file before the next
-begins, so an interrupted sequence leaves every completed repeat on disk. The
-aggregate is written last and can be rebuilt from the per-repeat files.
+begins, so an interrupted sequence leaves every completed repeat's own results
+file on disk. The aggregate is written last.
+
+> **Corrected 2026-08-22, during Task 4.** This paragraph ended "and can be
+> rebuilt from the per-repeat files". **That is false, and it is false for the
+> one reason that matters most here:** the per-rung counts are in no results
+> file at all — that is ISSUE-012, and closing that gap is why this artifact
+> exists — and five of `config`'s six keys (`prompt_bundle_hash`,
+> `default_currency`, `vlm_timeout_s`, `triage`, `extract_rungs`) appear
+> nowhere else either. An interrupted run keeps its scores and **loses its
+> provenance**. Task 4's implementer refused to write the claim into the
+> shipped docstring and reported it; the controller verified it against the
+> artifact's key set before correcting both copies.
 
 **`prompt_bundle_hash()` has no production caller (ISSUE-007).** Reading it into
 the aggregate is a read. It does **not** close ISSUE-007 and does not give the

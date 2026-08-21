@@ -1015,8 +1015,13 @@ def run_repeats(
 
     Each repeat gets its own ``results_dir`` under ``<run_dir>/repeat-NN``,
     which is what stops ``{date}-{prompt_version}.json`` from colliding. The
-    aggregate is written last and is rebuildable from the per-repeat files, so
-    an interrupted sequence still leaves every completed repeat on disk.
+    aggregate is written last, so an interrupted sequence still leaves every
+    completed repeat's own results file on disk.
+
+    **Those files do not add up to the aggregate.** The per-rung counts are in
+    no results file at all -- that is ISSUE-012, and it is the reason this
+    artifact exists -- and five of ``config``'s six keys appear nowhere else.
+    An interrupted run keeps its scores and loses its provenance.
 
     Both ``make_pass_clients`` and ``run_baseline`` are reached **through the
     ``eval.run_baseline`` module** rather than imported by name here, so a
@@ -1635,6 +1640,57 @@ reported. Corrected above before Task 4 reads it.
 passed" when the brief's own set is 17; and the `bool` exclusion in `_numeric`
 was asserted in the docstring and pinned by nothing. All three are the same
 family as defects 2, 5 and 8 — plan prose that no one had executed.
+
+### 2026-08-22 — caught during Task 4, by its implementer
+
+**Defect 10 — "the aggregate is rebuildable from the per-repeat files" is
+false, and it is false for the one reason that matters most.** The claim was in
+Task 4's prescribed docstring *and* in spec §7. The per-rung counts are in **no
+results file at all** — that is ISSUE-012, and closing it is the entire reason
+this artifact exists — and five of `config`'s six keys (`prompt_bundle_hash`,
+`default_currency`, `vlm_timeout_s`, `triage`, `extract_rungs`) appear nowhere
+else either. An interrupted run keeps its scores and **loses its provenance**.
+The implementer refused to write it; the controller verified it against the
+artifact's key set and corrected both copies. What survives is the true and
+more useful half: the aggregate is written last, so an interruption leaves every
+completed repeat's own results file on disk.
+
+**Defect 11 — a citation that does not support the sentence it decorates.** The
+same docstring cited "review standard 19" for *two bindings that must agree*.
+Standard 19 is **"an enumerated defence never converges"**; its remedy clause is
+"state one bounded, checkable property, enforce it at both ends", which is
+adjacent but not the same claim. **Recorded honestly in both directions:** the
+association is not invented here — `2026-08-20-local-to-cloud-escalation-design.md`
+§7.1 ends "Not two mechanisms that must agree — review standard 19" — so it was
+inherited from the tree. The implementer substituted **no** replacement
+citation, which is the right outcome either way: the sentence stands on its own
+measurement and needed no authority.
+
+**Defect 12 — two assertions that could not fail, and they were the ones that
+mattered.** Reproduced by the controller on the committed tree, each still
+parsing: dropping `"spread"` from the aggregate entirely, **and** making
+`_report_metrics` return `{}` so no metric ever reaches the artifact, each fail
+**exactly one of twenty-seven** tests — the one the implementer added. All six
+of the brief's own Task 4 tests stay green under both. **A runner that recorded
+zero measured numbers would have passed this brief**, in the milestone whose
+purpose is recording measured numbers. Fourth task, fourth hole; this one the
+worst.
+
+**Defect 13 — the `repeats < 1` guard was deletable.** Without it,
+`run_repeats(id, 0)` writes `n_repeats: 0, repeats: [], spread: {}` and burns
+the run id — which, since a run id is refused on reuse, is unrecoverable
+without renaming. Pinned by the implementer.
+
+**Defect 14 — two more wrong predictions.** Step 4's "22 passed" is not
+derivable from anything (19 + 6 = 25). Step 5's stated mutation reddens the
+*directory* assertion rather than the file count, so the implementer measured
+the collision directly instead, with a control arm: mutated → 1 surviving file
+of 3; reverted → 3 files, one per `repeat-NN`.
+
+**Defect 15 — the Interfaces block again promised parameters its own code block
+omits.** It declared `run_baseline_fn` and `make_tiers_fn` seams that Step 3's
+signature does not have. The implementer built Step 3's signature. Same species
+as defect 6, in the same plan, after that one was recorded.
 
 **Non-defects, verified rather than assumed while writing:** `PassClients` has
 exactly `triage` and `extract_rungs`; all eleven `FieldBreakdown` fields default
