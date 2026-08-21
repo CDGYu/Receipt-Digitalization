@@ -14,7 +14,7 @@
 
 - **Ollama only, no hosted APIs.** Standing user ruling (2026-08-14). No new provider id is added.
 - **Egress is eval-path only.** `process_receipt` gains no ladder parameter. Spec §5.
-- **Nothing set means today's behaviour, exactly.** With no new settings, exactly one client is built and `run_receipt` behaves as it does now. Pinned in Task 4 and Task 5.
+- **Nothing set means today's behaviour, exactly.** With no new settings, the extract ladder has exactly one rung and `run_receipt` behaves as it does now. Pinned in Task 4 and Task 5. *(Corrected 2026-08-21: this said "exactly one client is built". `make_pass_clients` always builds a triage client beside the extract rungs, so the count is two even with nothing set; the rung count is what Task 4 pins.)*
 - **`pyproject.toml` sets `addopts = "-q"`.** So `python -m pytest -q` is `-qq` and prints no pass count, and `-v` nets to dot output. **Use bare `python -m pytest <path>`.**
 - **`pytest -k` matches substrings, not words.** Every `-k` in this plan is a claim about the test names in this same plan; run the exact node ids given instead where one is supplied.
 - **Stage by explicit path, never `git add -A`.** Verify with `git diff --cached --stat` before committing.
@@ -1199,7 +1199,7 @@ git commit -m "feat(eval): report which rung produced each kept extraction"
 - **It produces no accuracy number.** That is step 6, and it needs repeats and a spread — cloud inference is not deterministic at `temperature=0`.
 - **It adds no FK from `receipts` to `extraction_runs`.** The eval path has no database; production provenance is a separate decision.
 - **It does not wire `few_shots_for`.** ADR-0043 recorded that deliberately.
-- **It does not decide the default ladder.** Whether granite is a real first rung depends on the `max_edge=2048` experiment ISSUE-001 calls the empirical decider, which is outstanding.
+- **It does not decide the default ladder.** Whether granite is a real first rung depends on the `max_edge=2048` experiment ISSUE-001 calls the empirical decider. *(Corrected 2026-08-21: this said the experiment "is outstanding". It ran during this milestone — the run is in the spec's §11.1 and in ISSUE-001's `Measurement (2026-08-21)` — and it refuted the hypothesis: every field still null at 2048.)*
 
 ## The ADR
 
@@ -1450,8 +1450,20 @@ surplus scripted response that correct behaviour never consumes.
 
 **`assert outcome is not None` cannot fire** — confirmed and left in place with a
 comment. `rungs` always holds at least one client, so the loop always runs and
-the final rung either raises or assigns. Mutation B proves it from the other
-side: removing `is_last or` from the keep condition is what makes it fire.
+the final rung either raises or assigns.
+
+*(Corrected 2026-08-21.)* This paragraph continued "Mutation B proves it from the
+other side: removing `is_last or` from the keep condition is what makes it fire",
+which is true of the code, is not a suite-level result, and reads as though the
+`is_last` half were covered by a test. It was not. **Measured**: with `is_last
+or ` deleted the tree still imports, and the whole suite reports `1 failed, 1288
+passed, 2 deselected` — the two deselected are the pins added for this, and the
+single failure is a third pin added by the same fix wave. No test that existed
+before the wave sees it. A receipt neither rung could read raised a bare
+`AssertionError` with all five gates green.
+`test_the_final_rung_is_kept_even_when_it_read_nothing` and
+`test_a_sole_rung_that_read_nothing_is_still_kept` were added for it, and both
+were proven red under that same mutation before they were written into the file.
 
 **Discrepancies (5):** the append-tests species for the **fifth** time, exactly
 as predicted, again with `F811`; Step 7's second mutation stated as one failing

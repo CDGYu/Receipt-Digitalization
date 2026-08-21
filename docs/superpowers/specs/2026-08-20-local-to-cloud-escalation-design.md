@@ -222,9 +222,9 @@ This is structural rather than a default, and the enumeration that makes it so:
 - the only non-test caller of **`run_receipt`** is `build_eval_pipeline`.
 
 So the ladder is a parameter on `run_receipt` and **never** on `process_receipt`.
-Production has no argument to pass and no code path to reach. `make_client` is
-untouched and keeps returning exactly one client; a separate builder constructs
-the ladder and only the eval adapter calls it.
+Production has no argument to pass and no code path to reach. `make_client`
+keeps returning exactly one client; a separate builder constructs the ladder and
+only the eval adapter calls it.
 
 Those two bullets are separate claims and are not enforced by the same thing.
 Which is pinned by what is §5.2 — read it before relying on either.
@@ -395,13 +395,19 @@ Each pin is proven red before the fix, and each guarantee is reverted separately
    correction).
 2. The cloud rung is not called when local returns something usable, and is
    called when it does not.
-3. Repair runs on the rung whose extraction was kept.
+3. Non-final rungs run with `max_repairs=0` and the final rung gets the
+   configured budget — §2.1's rule, which is what `run_receipt` implements.
+   This item read "repair runs on the rung whose extraction was kept" until
+   2026-08-21, which §2.1 explicitly retracts; replaced, not softened.
 4. Attribution names the kept rung; the report's counts move when the ladder does.
 5. Moving `_group`/`_is_filled` is behaviour-preserving — `field_accuracy`
    unchanged on a fixture.
 6. An enumeration over production entry points showing none constructs a ladder
    (a universal claim is answered by an enumeration, not an argument).
-7. With no new settings set, the client set is exactly one client.
+7. With no new settings set, the extract ladder has exactly one rung — which is
+   what `test_with_nothing_configured_there_is_exactly_one_rung` asserts. Not
+   "one client": `make_pass_clients` always builds a triage client beside the
+   extract rungs, so the client set is never smaller than two.
 
 ### 9.1 What no test here can establish
 
