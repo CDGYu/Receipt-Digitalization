@@ -808,3 +808,102 @@ def test_an_interrupted_run_keeps_the_repeats_it_completed(tmp_path, monkeypatch
         {"model_id": "cloud", "use_tools": None}
     ]
     assert written["spread"]["critical_field_accuracy"]["n"] == 2
+
+
+def test_the_aggregate_is_staged_beside_its_destination_and_renamed_over_it(
+    tmp_path, monkeypatch
+):
+    """The atomic route is taken, not merely available.
+
+    Added because nothing could see it: with the staging write redirected
+    straight onto ``aggregate.json`` and the rename made a no-op -- byte for
+    byte the truncating in-place write this replaced -- the module's other
+    tests all pass. They can only see what is left on disk *afterwards*, and
+    both routes leave the same thing.
+
+    So the process is stopped at the one instant the two differ: between the
+    staging write and the rename. ``KeyboardInterrupt`` rather than an
+    ``OSError``, because an ``OSError`` there is a condition
+    ``_rewrite_aggregate`` deliberately degrades past, and what is being pinned
+    here is where the *new* bytes sit when everything stops -- beside the
+    destination, never on top of it.
+    """
+    monkeypatch.setenv("VLM_PROVIDER", "ollama")
+    golden = tmp_path / "golden"
+    _write_golden(golden)
+    monkeypatch.setattr(
+        "eval.run_baseline.make_pass_clients", _fresh_tiers_factory(1)
+    )
+
+    real_replace = Path.replace
+    renames = itertools.count(1)
+
+    def _killed_at_the_rename(self, target):
+        if next(renames) == 2:
+            raise KeyboardInterrupt("killed between the staging write and the rename")
+        return real_replace(self, target)
+
+    monkeypatch.setattr(Path, "replace", _killed_at_the_rename)
+
+    with pytest.raises(KeyboardInterrupt):
+        run_repeats("run-l", 3, golden_dir=golden, results_root=tmp_path / "results")
+
+    run_dir = tmp_path / "results" / "run-l"
+
+    # The destination was never opened for writing, so it still parses -- and it
+    # still holds the repeat before the one that was interrupted.
+    survived = json.loads((run_dir / "aggregate.json").read_text(encoding="utf-8"))
+    assert survived["n_repeats"] == 1
+    assert len(survived["repeats"]) == 1
+
+    # And repeat 2's aggregate is in the staging file: exactly where a write
+    # straight onto the destination would not have put it.
+    staged = json.loads((run_dir / "aggregate.json.tmp").read_text(encoding="utf-8"))
+    assert staged["n_repeats"] == 2
+
+
+def test_a_rename_the_platform_refuses_costs_the_aggregate_not_the_run(
+    tmp_path, monkeypatch, capsys
+):
+    """The durability improvement must never cost the run.
+
+    Measured on this machine: ``Path.replace`` onto a destination another handle
+    holds **open for reading** raises ``PermissionError`` [WinError 5] and
+    strands the staging file, while ``write_text`` onto that same destination,
+    under that same handle, succeeds. An editor, an indexer or a scanner reading
+    the file just written is enough, and this is the platform the multi-hour
+    runs happen on.
+
+    Raised out of the loop it would abort the run and burn the run id --
+    ``prepare_run_dir`` refuses to reuse one -- so the property is that a rename
+    which will not go through degrades to a non-atomic write and the run
+    continues. Degraded, never silent: the fallback says so on stderr.
+    """
+    monkeypatch.setenv("VLM_PROVIDER", "ollama")
+    golden = tmp_path / "golden"
+    _write_golden(golden)
+    monkeypatch.setattr(
+        "eval.run_baseline.make_pass_clients", _fresh_tiers_factory(1)
+    )
+
+    def _always_refused(self, target):
+        raise PermissionError(5, "Access is denied")
+
+    monkeypatch.setattr(Path, "replace", _always_refused)
+
+    aggregate = run_repeats(
+        "run-m", 2, golden_dir=golden, results_root=tmp_path / "results"
+    )
+
+    run_dir = tmp_path / "results" / "run-m"
+    on_disk = json.loads((run_dir / "aggregate.json").read_text(encoding="utf-8"))
+
+    # The run finished, and the artifact is the real one, not a stale rump.
+    assert on_disk["n_repeats"] == 2
+    assert on_disk == aggregate
+    # Nothing stranded, on this path either.
+    assert not (run_dir / "aggregate.json.tmp").exists()
+
+    printed = capsys.readouterr().err
+    assert "aggregate.json" in printed
+    assert "not atomic" in printed

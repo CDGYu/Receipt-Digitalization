@@ -774,7 +774,11 @@ undefined, this note is why.
 
 - [ ] **Step 1: Write the failing tests**
 
-Append to `tests/test_run_repeats.py`:
+Append to `tests/test_run_repeats.py`. **This is the set as briefed, and it is
+not what shipped** — the docstrings below name pins that live in
+`tests/test_run_repeats.py`, which is the authority for what this module is
+actually held to; the tests added beyond this listing are recorded in the defect
+log below.
 
 ```python
 import json
@@ -994,13 +998,15 @@ Second, `test_a_repeat_that_fails...` predicts an "exhausted" error reaches
 - [ ] **Step 3: Write the implementation**
 
 Add to `eval/run_repeats.py` (extend `__all__`). **This listing is what
-shipped**, spliced from `eval/run_repeats.py` after fix round 1 rather than
-retyped: the version briefed here hand-enumerated the `counts` keys and set
+shipped**, spliced from `eval/run_repeats.py` rather than retyped, and
+re-spliced whenever that module changes: the version briefed here hand-enumerated the `counts` keys and set
 `"n_repeats": repeats`, both of which the review issued findings against, and a
 listing is what a reader copies.
 
 ```python
 import json
+import sys
+import time
 
 import eval.run_baseline as _baseline
 from config.settings import get_settings
@@ -1025,6 +1031,79 @@ def _report_counts(report: Any) -> dict[str, Any]:
     and no list of key names -- and no count of them -- lives here to age.
     """
     return dict(_report_to_dict(report).get("counts", {}))
+
+
+#: How many times the rewrite tries the atomic route before giving up on it.
+#: The holders that refuse a rename on Windows -- a scanner reading the file
+#: just written, an indexer, an editor -- let go in milliseconds, so a couple of
+#: retries converts most of them into a normal atomic write; a run that waits
+#: longer than that is paying for durability with time it does not have.
+_RENAME_ATTEMPTS = 3
+
+#: Seconds before the second attempt; the third waits twice this.
+_RENAME_BACKOFF_S = 0.05
+
+
+def _rewrite_aggregate(run_dir: Path, payload: str) -> None:
+    """Put ``payload`` in ``<run_dir>/aggregate.json``, atomically where it can.
+
+    The file is written beside its destination and renamed over it, so a reader
+    sees the previous aggregate or the new one and never a half-written file --
+    ``write_text`` truncates before it writes, and this rewrite happens once per
+    repeat rather than once per run.
+
+    **The atomicity is the bonus and must never be the cost.** ``Path.replace``
+    onto a destination another handle holds open raises ``PermissionError`` on
+    Windows -- measured on this machine, from nothing more than a reader with
+    the file open -- while ``write_text`` onto that same destination, under that
+    same handle, succeeds. Raised out of the loop that failure would abort the
+    run *and* burn the run id, which :func:`prepare_run_dir` refuses to reuse,
+    for the sake of a window a kill has to land inside. So a rename that will
+    not go through degrades to writing in place, and **no path here raises**.
+
+    The staging file does not survive either path. A process killed between the
+    staging write and the rename can leave one, and a killed process cleans
+    nothing up in any design; what it does leave behind is a destination that
+    still parses.
+    """
+    target = run_dir / "aggregate.json"
+    pending = run_dir / "aggregate.json.tmp"
+    try:
+        pending.write_text(payload, encoding="utf-8")
+        for attempt in range(1, _RENAME_ATTEMPTS + 1):
+            try:
+                pending.replace(target)
+                return
+            except OSError as exc:
+                if attempt == _RENAME_ATTEMPTS:
+                    print(
+                        f"Could not rename {pending.name} over {target.name} "
+                        f"({type(exc).__name__}: {exc}). Writing the aggregate "
+                        f"in place instead, which is not atomic.",
+                        file=sys.stderr,
+                    )
+                    break
+                time.sleep(_RENAME_BACKOFF_S * attempt)
+        target.write_text(payload, encoding="utf-8")
+    except OSError as exc:
+        # Not a raise: every completed repeat's own results file is already on
+        # disk and the remaining repeats are still worth running. The aggregate
+        # is the thing that degraded, and saying so is what keeps that from
+        # being a silent drop.
+        print(
+            f"Could not write {target} ({type(exc).__name__}: {exc}). This "
+            f"run's aggregate is missing or stale; each repeat's own results "
+            f"file is unaffected.",
+            file=sys.stderr,
+        )
+
+    try:
+        pending.unlink(missing_ok=True)
+    except OSError as exc:
+        print(
+            f"Could not remove {pending} ({type(exc).__name__}: {exc}).",
+            file=sys.stderr,
+        )
 
 
 def run_repeats(
@@ -1102,17 +1181,11 @@ def run_repeats(
             "repeats": entries,
             "spread": spread_over([e["metrics"] for e in entries]),
         }
-        # Through a temp file and one rename, never in place: `write_text`
-        # truncates before it writes, so a kill inside that window would leave a
-        # torn aggregate -- and the window is now one per repeat rather than one
-        # per run. `Path.replace` puts the finished file over the old one in a
-        # single operation, so a reader sees one or the other and never a
-        # half-written file.
-        pending = run_dir / "aggregate.json.tmp"
-        pending.write_text(
-            json.dumps(aggregate, indent=2, default=str), encoding="utf-8"
-        )
-        pending.replace(run_dir / "aggregate.json")
+        # Serialized here and persisted there: a value this module cannot
+        # encode is a defect in this module and must raise, while a file system
+        # that will not take the write is a condition of the machine the run is
+        # on and must not cost the run.
+        _rewrite_aggregate(run_dir, json.dumps(aggregate, indent=2, default=str))
 
     return aggregate
 ```
@@ -1566,8 +1639,7 @@ moving the tests onto `eval.run_baseline.make_pass_clients`, which is the target
 `tests/test_run_baseline.py` already uses and has proven.
 
 Found by checking the plan's symbols against the tree instead of against the
-draft — the pre-flight ADR-0045 decision 1 makes mandatory. It is also review
-standard 19 in miniature: two bindings that must agree.
+draft — the pre-flight ADR-0045 decision 1 makes mandatory.
 
 ### 2026-08-22 — caught during Task 1, by its implementer
 

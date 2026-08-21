@@ -363,6 +363,16 @@ target, so an interrupted run is legible as the two disagreeing.
 > shipped docstring and reported it; the controller verified it against the
 > artifact's key set before correcting both copies.
 
+**The rewrite is refused by the platform.** `Path.replace` onto a destination
+another handle holds open raises `PermissionError` on Windows — measured on
+this machine, from nothing more than a reader with the file open, and an editor,
+an indexer, or a scanner reading the file just written is enough. The rewrite
+therefore retries a bounded number of times and then **degrades to writing in
+place**, which was measured to succeed under that same open handle. It never
+raises: an aborted run would also burn the run id, which `prepare_run_dir`
+refuses to reuse, so a durability improvement would have cost the whole run. The
+degradation is announced on stderr, and the staging file survives neither path.
+
 **`prompt_bundle_hash()` has no production caller (ISSUE-007).** Reading it into
 the aggregate is a read. It does **not** close ISSUE-007 and does not give the
 function the production caller that issue asks for.
