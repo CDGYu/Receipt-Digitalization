@@ -1199,7 +1199,7 @@ git commit -m "feat(eval): report which rung produced each kept extraction"
 - **It produces no accuracy number.** That is step 6, and it needs repeats and a spread — cloud inference is not deterministic at `temperature=0`.
 - **It adds no FK from `receipts` to `extraction_runs`.** The eval path has no database; production provenance is a separate decision.
 - **It does not wire `few_shots_for`.** ADR-0043 recorded that deliberately.
-- **It does not decide the default ladder.** Whether granite is a real first rung depends on the `max_edge=2048` experiment ISSUE-001 calls the empirical decider. *(Corrected 2026-08-21: this said the experiment "is outstanding". It ran during this milestone — the run is in the spec's §11.1 and in ISSUE-001's `Measurement (2026-08-21)` — and it refuted the hypothesis: every field still null at 2048.)*
+- **It does not decide the default ladder.** Whether granite is a real first rung depends on the `max_edge=2048` experiment ISSUE-001 calls the empirical decider. *(Corrected 2026-08-21: this said the experiment "is outstanding". It ran during this milestone — the run is in the spec's §11.1 and in ISSUE-001's `Measurement (2026-08-21)` — and it refuted the hypothesis: every **real** field still null at 2048, two fields transcribed correctly, and the one populated value supplied by `DEFAULT_CURRENCY` rather than read.)*
 
 ## The ADR
 

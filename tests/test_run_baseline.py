@@ -305,8 +305,7 @@ def test_a_one_rung_ladder_does_not_hand_its_only_rung_back_as_its_own_fallback(
     rung back as the fallback -- which the test above cannot see, because its
     rung reads *something* and a fallback is never reached. Here the rung reads
     nothing, so a wired fallback runs, and the run costs two extract calls
-    instead of one. On the hardware this milestone was built for, one extract
-    call measured between 2121 s and 6563 s.
+    instead of one.
 
     The third scripted response is deliberately surplus: correct behaviour never
     reaches it, and its presence is what makes the re-run redden on the count

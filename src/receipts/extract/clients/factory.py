@@ -37,28 +37,26 @@ _OPENAI_BASE_URLS: dict[str, str] = {
     "ollama": "http://localhost:11434/v1",
 }
 
-# Providers whose servers cannot be assumed to accept a tool-use request, so
-# they default to JSON mode. vLLM, by contrast, supports tool-calling across its
-# served models, so only Ollama is listed.
+# Ollama defaults to JSON mode. vLLM, by contrast, supports tool-calling across
+# its served models, so only Ollama is listed.
 #
-# This carried a second reason until 2026-08-21 -- that Ollama answers a `tools`
-# payload with a hard 400 for a model that does not declare the capability, and
-# that the 400 kills the first (triage) call. ADR-0002's 2026-08-18 correction
-# and docs/KNOWN_ISSUES.md ISSUE-001 both record that it does not reproduce:
-# the endpoint honoured the payload. Deleted rather than reworded.
+# The reason is MEASURED OUTPUT, and it is the only one that has survived.
+# ADR-0002's 2026-08-18 correction and docs/KNOWN_ISSUES.md ISSUE-001: on
+# `granite3.2-vision:2b` the endpoint accepts the payload and the extraction
+# comes back identical either way, but triage loses `merchant_name_guess`, which
+# `merchants.registry.lookup` keys off -- so enabling tool-use silently disables
+# ADR-0043 decision 1's hint-retrieval path.
+#
+# Two earlier reasons stood here and are deleted rather than reworded, because
+# both are recorded as false: that Ollama answers a `tools` payload with a hard
+# 400 (it does not reproduce), and that the shim's behaviour "has not been
+# measured here for any model" (it has, on two).
 #
 # This is the LAST step of the chain, not the whole of it. VLM_USE_TOOLS
 # overrides it either way, which is what a VLM_PROVIDER=openai id pointed at a
 # local Ollama needs -- and a per-rung VLM_USE_TOOLS_TRIAGE/_FALLBACK overrides
 # that in turn, since `make_pass_clients` passes one. `resolve_use_tools` states
 # the full precedence and is the only place that does.
-#
-# This named granite3.2-vision as an example of a model lacking the capability
-# until 2026-08-18, when `/api/tags` reported it declaring `tools`. The example
-# is deleted rather than replaced: whether the `/v1` shim honours a tools
-# payload has not been measured here for any model, and that -- not any single
-# model's metadata -- is what this default is being cautious about.
-# docs/KNOWN_ISSUES.md ISSUE-001 carries the measurement.
 _TOOLS_OFF_BY_DEFAULT: frozenset[str] = frozenset({"ollama"})
 
 

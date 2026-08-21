@@ -674,7 +674,7 @@ offered and whether it accepts a `tools` payload are both unverified.
    and the steering rule, and this step said exactly "Set `VLM_USE_TOOLS=true`"
    until 2026-08-21. Under the per-pass ladder that advice is **actively harmful
    taken alone**: `VLM_USE_TOOLS` is the whole-process default, so it turns tools
-   on for the *triage* rung too, where `granite3.2-vision:2b` is measured below
+   on for the *triage* rung too, where `granite3.2-vision:2b` is measured above
    to lose `merchant_name_guess` entirely — the field ADR-0043 decision 1's hint
    path keys off. Pair it with the per-rung settings the local→Cloud escalation
    milestone added:
@@ -1657,8 +1657,11 @@ False), ('m', True)]`, and one distinct `model_id`. Both rungs would land in one
 count and the escalation would be invisible — **in the figure ISSUE-001 asked
 for precisely so a good number could not hide one.**
 
-That configuration is not hypothetical: the tools-granularity defect design §7.1
-closes exists exactly because one model at two tool settings is a real ladder.
+That configuration is **constructible**, which is what the measurement above
+shows; nothing here shows anything wants it. The tools-granularity defect
+design §7.1 closes is a different shape — *two models* sharing one provider id
+(`granite3.2-vision:2b` and `gemma4:cloud`, both `ollama`) — so it is not
+evidence for this one.
 
 ### How to resume
 
@@ -1809,8 +1812,13 @@ for accuracy scoring, and that is correct there.
 What is left is a decision nobody has taken: whether "vacuous" is a third
 concept, distinct from both "filled" and "matches the default", and if so what
 it is defined against. Note the direction of the cost — a predicate that is too
-eager escalates a receipt the local rung actually read, and on the measured
-hardware one extract call is 2121–6563 s.
+eager escalates a receipt the local rung actually read, and an extract call on
+this hardware is measured in minutes. **No range is written here.** The two
+figures this sentence used to quote — 2121 s and 6563 s — are the extract pass
+of *two different runs*, at `max_edge` 768 and 2048, and this file says three
+lines below that table that the second **cannot be attributed to one
+inference**, because `VLM_TIMEOUT_S` bounds one attempt and the SDK retries
+twice. There is no per-call measurement in this repository.
 
 ### Related
 
