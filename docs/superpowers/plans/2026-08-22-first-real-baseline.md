@@ -110,6 +110,7 @@ tell a killed five-repeat run from a complete run of two.
   "run_id": "2026-08-22-cloud-only",
   "n_repeats": 5,
   "n_repeats_requested": 5,
+  "n_failed": 0,
   "config": {
     "prompt_version": "1.1.0",
     "prompt_bundle_hash": "<hex>",
@@ -134,7 +135,8 @@ tell a killed five-repeat run from a complete run of two.
       "n": 5, "n_null": 0,
       "values": [0.5556, 0.6111, 0.58, 0.58, 0.60]
     }
-  }
+  },
+  "spread_omitted": []
 }
 ```
 
@@ -401,7 +403,7 @@ def test_rung_identity_records_null_when_use_tools_is_unobservable():
 
 
 def test_config_identity_gives_a_one_rung_run_a_one_element_list():
-    """The spec's SS10 Q1: no null-shaped hole for a run with one rung.
+    """The spec's §10 Q1: no null-shaped hole for a run with one rung.
 
     A one-rung and a two-rung run must diff against each other directly, so the
     difference between them is a list length and never a null that reads as
@@ -927,7 +929,7 @@ def test_the_aggregate_records_a_two_rung_ladder_as_two_tiers(tmp_path, monkeypa
 
 
 def test_the_runner_writes_nothing_latest_results_file_can_see(tmp_path, monkeypatch):
-    """The guarantee spec SS3.2 rests on, stated over the real function.
+    """The guarantee spec §3.2 rests on, stated over the real function.
 
     ``receipts calibrate`` with no ``--results`` resolves its input through
     ``latest_results_file``, which globs ``*.json`` non-recursively. An
@@ -1067,7 +1069,11 @@ def _rewrite_aggregate(run_dir: Path, payload: str) -> None:
     same handle, succeeds. Raised out of the loop that failure would abort the
     run *and* burn the run id, which :func:`prepare_run_dir` refuses to reuse,
     for the sake of a window a kill has to land inside. So a rename that will
-    not go through degrades to writing in place, and **no path here raises**.
+    not go through degrades to writing in place, and **no ``OSError`` from the
+    staging write, the rename or the in-place write escapes**. That is narrower
+    than "no path here raises" on purpose: ``KeyboardInterrupt`` is not an
+    ``OSError`` and escapes from anywhere, which is what the staging pin relies
+    on.
 
     The staging file does not survive either path. A process killed between the
     staging write and the rename can leave one, and a killed process cleans
@@ -1190,7 +1196,7 @@ def run_repeats(
             "spread": spread_over([e["metrics"] for e in entries]),
         }
         # Serialized here and persisted there: a value this module cannot
-        # encode is a defect in this module and must raise, while a file system
+        # encode is stringified rather than raised over, while a file system
         # that will not take the write is a condition of the machine the run is
         # on and must not cost the run.
         _rewrite_aggregate(run_dir, json.dumps(aggregate, indent=2, default=str))
@@ -1511,6 +1517,19 @@ single figure.** Two identical runs on r002 have already scored 55.56% and
 Check `n_null` on every metric: a metric that was undefined in some repeats has
 a spread over fewer observations than the run had repeats.
 
+**Read `n_failed` before quoting anything, and it is the top-level key.** A
+failed receipt is counted as a whole observation — `_Accumulator.add_failure`
+calls `self.add(False, ...)`, so it lands in `n_receipts` and contributes zero
+to `n_critical_correct`. An all-failed run therefore reports a headline
+accuracy of `0.0` with `n_null: 0` — **as an observation, not as a gap** — and
+exits 0. A cloud throttle is exactly how that arises. The CLI prints a
+`Failed receipts:` roll-up; the artifact carries `n_failed` beside `n_repeats`.
+
+**And read `spread_omitted`.** It names any metric the repeats carried that the
+spread has no entry for. Empty is the expected answer; a name in it means that
+metric was dropped and no `n`, `n_null` or `values` records that it was ever
+there.
+
 - [ ] **Step 7: Commit the artifacts**
 
 ```bash
@@ -1547,6 +1566,13 @@ fail if it were reversed (ADR-0048 decision 2):
    unobservable.
 5. This milestone took **no position** on who owns `run_eval`'s write
    (ISSUE-012), and **did not touch** `read_nothing` (ISSUE-016).
+6. The aggregate carries **`n_failed`** and **`spread_omitted`** at top level.
+   The first exists because an all-failed run reports `0.0` as an observation
+   and exits 0, and the failure signal was otherwise two levels down in
+   `repeats[i].counts.failed`. The second is derived by subtracting the
+   spread's keys from the repeats' — never by restating `spread_over`'s rule,
+   because a second copy of that rule is one that can drift — and it is what
+   keeps a stringified metric from leaving the spread silently.
 
 Add its row to `docs/adr/README.md`. Verify the two counts agree afterwards:
 
@@ -1927,5 +1953,5 @@ sufficient condition; `_rewrite_aggregate`'s "no path here raises" is false for
 `KeyboardInterrupt` and for a `BrokenPipeError` out of its own diagnostic
 prints; the comment above `json.dumps` said an unencodable value "must raise"
 over a line passing `default=str`; `main`'s docstring documented two of its
-three refusals; a `SS10` against three correct uses of `§` in the same file; and
+three refusals; a `§10` against three correct uses of `§` in the same file; and
 this plan's Tech Stack named Python 3.13 on a box running 3.14.4.

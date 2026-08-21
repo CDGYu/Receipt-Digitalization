@@ -1486,9 +1486,10 @@ def test_main_refuses_an_aggregate_that_scored_no_receipts(
     **The artifact is not empty-looking, it is zero-looking.** Measured from
     that same run: ``spread.critical_field_accuracy`` came back
     ``{"min": 0.0, "median": 0.0, "n": 2, "n_null": 0}`` -- a headline accuracy
-    of 0.00%, reported as observed rather than as "not measured", because
-    ``ratio`` resolves those metrics to ``0.0`` and only the ones with no
-    denominator at all resolve to ``None``.
+    of 0.00%, reported as observed rather than as "not measured":
+    ``_build_report`` computes those figures inline as ``(x / n) if n else 0.0``
+    (``eval/harness.py``), so a zero-receipt repeat contributes a numeric
+    ``0.0``.
     """
     monkeypatch.setenv("VLM_PROVIDER", "ollama")
     monkeypatch.setattr(
