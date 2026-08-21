@@ -38,10 +38,14 @@ _OPENAI_BASE_URLS: dict[str, str] = {
 }
 
 # Providers whose servers cannot be assumed to accept a tool-use request, so
-# they default to JSON mode. Ollama returns a hard 400 for a `tools` payload
-# sent to a model that does not declare the capability, and that 400 kills the
-# very first (triage) call. vLLM, by contrast, supports tool-calling across its
+# they default to JSON mode. vLLM, by contrast, supports tool-calling across its
 # served models, so only Ollama is listed.
+#
+# This carried a second reason until 2026-08-21 -- that Ollama answers a `tools`
+# payload with a hard 400 for a model that does not declare the capability, and
+# that the 400 kills the first (triage) call. ADR-0002's 2026-08-18 correction
+# and docs/KNOWN_ISSUES.md ISSUE-001 both record that it does not reproduce:
+# the endpoint honoured the payload. Deleted rather than reworded.
 #
 # This is the LAST step of the chain, not the whole of it. VLM_USE_TOOLS
 # overrides it either way, which is what a VLM_PROVIDER=openai id pointed at a

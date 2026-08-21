@@ -87,14 +87,17 @@ def _client(**overrides) -> OpenAICompatClient:
 
 
 def test_ollama_provider_disables_tools_by_default():
-    # Ollama answers a `tools` payload with a hard 400 for any model that does
-    # not declare the capability, which kills the first call of the pipeline.
+    # Why Ollama alone defaults off is stated beside `_TOOLS_OFF_BY_DEFAULT` in
+    # factory.py, and ISSUE-001 carries the measurement. This comment used to
+    # give the reason as a hard 400 on the first call; that does not reproduce
+    # (ADR-0002's 2026-08-18 correction), and it is deleted rather than replaced
+    # with a second copy of a reason that lives next to the code.
     assert _client(vlm_provider="ollama").use_tools is False
 
 
 def test_hosted_openai_provider_keeps_tools_by_default():
     # The default must stay on everywhere else -- tool use is the reliable path
-    # for structured output, and only Ollama is known to reject it.
+    # for structured output.
     assert _client(vlm_provider="openai").use_tools is True
     assert _client(vlm_provider="vllm").use_tools is True
 

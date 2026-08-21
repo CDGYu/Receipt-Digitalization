@@ -552,8 +552,7 @@ def test_process_receipt_has_no_ladder_parameter() -> None:
 
 
 def test_the_production_modules_do_not_build_a_ladder() -> None:
-    """``make_pass_clients`` is the only way to get more than one rung, and no
-    production module may call it.
+    """No production module may name ``make_pass_clients``.
 
     This reads the module source as **text**, so a mere comment naming the
     builder trips it too. That bound is real (demonstrated by mutation) and is
@@ -693,7 +692,7 @@ def test_run_receipt_is_called_only_by_build_eval_pipeline() -> None:
     reads. Prose is invisible to it: a comment or a docstring naming the
     function is not a call, so it does not fail this test -- demonstrated by
     mutation, and by ``pipeline.py``'s own docstrings, which name
-    ``run_receipt`` six times while this stays green.
+    ``run_receipt`` repeatedly while this stays green.
 
     That is the difference an AST walk makes over a text search, and it is the
     cost ``test_the_production_modules_do_not_build_a_ladder`` accepts and

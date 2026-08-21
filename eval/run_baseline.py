@@ -9,8 +9,11 @@ baseline metrics over the golden set::
 
 **This is the only place the extract ladder is constructed**, which is what
 keeps the escalation on the eval path (design §5). Nothing under ``src/``
-outside :func:`~receipts.pipeline.run_receipt` can be handed a second rung,
-because nothing else builds one.
+outside :func:`~receipts.pipeline.run_receipt` can be handed a second rung --
+held by ``tests/test_pipeline.py``'s
+``test_process_receipt_has_no_ladder_parameter`` and
+``test_run_receipt_is_called_only_by_build_eval_pipeline``, one for each of
+design §5's two claims.
 
 This module owns no prompt text, no rules, and no provider details; it only
 *wires*. ``client`` and ``ctx`` are injectable, which is the same seam the
