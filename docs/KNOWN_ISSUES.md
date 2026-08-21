@@ -534,12 +534,17 @@ consequences:
 1. Each run is long enough that an interruption kills it before it finishes.
 2. Even when it works, the iteration loop is impractical.
 
-Secondary: Ollama rejects a `tools` payload for models that do not declare the
-capability, so the local path runs in JSON mode rather than schema-constrained
+Secondary: the local path runs in JSON mode rather than schema-constrained
 tool-use (handled by `VLM_USE_TOOLS` / the provider default in
 `factory.py`, but it means the local run is not exercising the intended
 structured-output path — see ADR-0002 and the steering rule "structured output via
 tool-use, not 'reply in JSON'").
+
+*(Corrected 2026-08-21.)* This sentence opened "Ollama rejects a `tools` payload
+for models that do not declare the capability". It does not — see
+**Measurement (2026-08-18) — step 4 is answered** above, finding 1, and
+ADR-0002's 2026-08-18 correction. The clause is deleted rather than reworded;
+the reason the provider default stays off is in that measurement's verdict.
 
 ### Recommended fix — SUPERSEDED 2026-08-14 by the ruling at the top
 
@@ -663,10 +668,21 @@ offered and whether it accepts a `tools` payload are both unverified.
    **SUPERSEDED 2026-08-14 — Ollama only.** Replace this step with: settle the
    runtime question in the ruling at the top, then pull a document-capable
    vision model to replace `granite3.2-vision:2b`, which is the single largest
-   cause of zero accuracy. **Set `VLM_USE_TOOLS=true`** once the chosen model
-   declares tool support — `factory.py`'s `_TOOLS_OFF_BY_DEFAULT` contains
-   `ollama`, so the local path has never exercised schema-constrained tool-use
-   and runs in JSON mode, against ADR-0002 and the steering rule.
+   cause of zero accuracy. **Never set `VLM_USE_TOOLS=true` on its own** —
+   `factory.py`'s `_TOOLS_OFF_BY_DEFAULT` contains `ollama`, so the local path
+   runs in JSON mode rather than schema-constrained tool-use, against ADR-0002
+   and the steering rule, and this step said exactly "Set `VLM_USE_TOOLS=true`"
+   until 2026-08-21. Under the per-pass ladder that advice is **actively harmful
+   taken alone**: `VLM_USE_TOOLS` is the whole-process default, so it turns tools
+   on for the *triage* rung too, where `granite3.2-vision:2b` is measured below
+   to lose `merchant_name_guess` entirely — the field ADR-0043 decision 1's hint
+   path keys off. Pair it with the per-rung settings the local→Cloud escalation
+   milestone added:
+   * `VLM_USE_TOOLS=true` **plus `VLM_USE_TOOLS_TRIAGE=false`** — tools on for
+     the extract rungs, held off for triage. There is no separate setting for
+     the *first* extract rung, so this pairing is how it is reached;
+   * `VLM_USE_TOOLS_FALLBACK=true` alone — tools on for the second extract rung
+     only, leaving triage and the first rung at the provider default.
    **Revoke the old Gemini key anyway** — it was echoed to a terminal and this
    repo is public.
    Keep `DEFAULT_CURRENCY="PHP"` — BIR invoices never print a currency, and
@@ -1563,3 +1579,242 @@ Delete the mechanism half of each sentence and say the class **ships
 unpainted**. That is the wording `value.test.tsx` records for the sites already
 corrected, and `frontend/tests/receipts-screen.test.tsx` is the worked example.
 Do not replace it with a more careful description of the proxy.
+
+---
+
+## ISSUE-012 — The escalation counts never reach the committed results file
+
+**Status:** OPEN — recorded, not fixed. Fixing it moves who owns the write,
+which is a decision rather than a patch.
+**Owner action required:** no.
+**Discovered:** 2026-08-20, during the local→Cloud escalation milestone;
+promoted here 2026-08-21 by that branch's whole-branch review.
+**Pre-existing:** no — the field arrived with this milestone.
+**Blocks:** ISSUE-001 step 6, partially.
+
+### What is wrong
+
+`EvalReport.extract_rung_counts` records how many receipts each extract rung
+produced the kept extraction for. It reaches the printed report and
+`run_baseline`'s return value. It does **not** reach
+`eval/results/{date}-{PROMPT_VERSION}.json`.
+
+The ordering is why: `run_eval`'s last two statements are `_write_report(...)`
+then `return report` (checked 2026-08-21), and `run_baseline` folds the counts
+in *after* `run_eval` returns. So a key added to `_report_to_dict` would be
+`null` in every file that function has ever produced, whatever the run measured.
+`eval/harness.py` carries that reason at the site, together with the probe that
+established it — a run whose report carried `{'cloud': 1}` wrote `null`.
+
+ISSUE-001 step 6 says to commit the results file so regressions show in a diff.
+An artifact that omits which model produced what does not record the thing that
+step exists to record — and ISSUE-001's own stated fear is a good accuracy
+number hiding the fact that everything escalated.
+
+### How to resume
+
+The fix is not "add the key". It is to decide who writes the results file: move
+the write out of `run_eval` to a caller that has the folded report, or give
+`run_eval` a way to receive the counts before it writes. Either changes
+`run_eval`'s contract, and
+`tests/test_cli_reports.py::test_the_producer_writes_the_shape_this_module_hand_writes`
+pins the artifact's key sets against a hand-written fixture, so the fixture
+moves with it.
+
+### Related
+
+- ISSUE-001 — step 6, and the escalation-rate requirement.
+- ISSUE-013 — the other half of the same figure: the key it is counted by.
+- `docs/superpowers/specs/2026-08-20-local-to-cloud-escalation-design.md` §6.1 —
+  the provenance route, and why it takes `cost_per_receipt`'s path.
+
+---
+
+## ISSUE-013 — `extract_rung_counts` is keyed by `model_id`, and a tier is not a model
+
+**Status:** OPEN — recorded, not fixed. The key is specified in the milestone
+plan and in `EvalReport.extract_rung_counts`' own field comment, and it is in
+the field's committed type, so changing it is a decision rather than a patch.
+(Design §6 does *not* name the key — checked 2026-08-21; it says only that the
+report "gains per-rung counts".)
+**Owner action required:** no.
+**Discovered:** 2026-08-20, during the local→Cloud escalation milestone;
+promoted here 2026-08-21 by that branch's whole-branch review.
+**Pre-existing:** no. **Blocks:** nothing today; it bounds what the figure can
+show.
+
+### What is wrong
+
+Design §2.2 defines a tier as a **`(model, use_tools)` pair**, not a model.
+`PassAttempt` records `model_id` and no tools flag, and `run_baseline` counts
+`counts[entry.model_id]`.
+
+Nothing forbids `VLM_MODEL_EXTRACT_FALLBACK` naming the same model as
+`VLM_MODEL_EXTRACT`. Measured 2026-08-21 with
+`vlm_model_extract=vlm_model_extract_fallback='m'`, `VLM_USE_TOOLS=false` and
+`VLM_USE_TOOLS_FALLBACK=true`: `make_pass_clients` builds two rungs, `[('m',
+False), ('m', True)]`, and one distinct `model_id`. Both rungs would land in one
+count and the escalation would be invisible — **in the figure ISSUE-001 asked
+for precisely so a good number could not hide one.**
+
+That configuration is not hypothetical: the tools-granularity defect design §7.1
+closes exists exactly because one model at two tool settings is a real ladder.
+
+### How to resume
+
+Key the counts by whatever a tier actually is. `PassAttempt` would carry the
+tools flag, `run_baseline`'s fold would key on the pair, and `format_report`'s
+one-line-per-model block would have to render it. The type
+(`dict[str, int] | None`) is part of the committed contract, and design §2.2 is
+the sentence that makes the change necessary rather than optional.
+
+### Related
+
+- ISSUE-012 — the same figure, and where it fails to arrive.
+- `docs/superpowers/specs/2026-08-20-local-to-cloud-escalation-design.md` §2.2,
+  §6, §7.1.
+
+---
+
+## ISSUE-014 — `frozen=True` is a stated interface property that nothing pins
+
+**Status:** OPEN — recorded, not fixed. Whether to pin it, and where, is a
+decision about how much of a dataclass's declaration is worth a test.
+**Owner action required:** no.
+**Discovered:** 2026-08-20 (Task 4) and again at Task 5, during the local→Cloud
+escalation milestone; promoted here 2026-08-21 by that branch's whole-branch
+review. **Pre-existing:** the class is; the three newest members are not.
+**Blocks:** nothing.
+
+### What is wrong
+
+This milestone declared three frozen dataclasses — `PassAttempt` and
+`RunOutcome` in `src/receipts/pipeline.py`, `PassClients` in
+`src/receipts/extract/clients/factory.py`. **Measured 2026-08-21, one mutation
+at a time, each anchored on its own class name and each with the tree confirmed
+importable first: dropping `frozen=True` from any one of the three leaves the
+whole suite green — `1291 passed` on all three runs.**
+
+The gap is wider than this milestone. Also measured 2026-08-21:
+`git grep -n "dataclass(frozen=True)" -- src eval` returns **10** declarations,
+and `git grep -n "FrozenInstanceError" -- tests` returns **0**. No test in this
+repository asserts that any dataclass is frozen. Immutability is a promise the
+declarations make and nothing checks.
+
+### How to resume
+
+Do not add ten near-identical `pytest.raises(FrozenInstanceError)` tests — that
+is the enumerated defence review standard 19 names, and it grows with the tenth
+dataclass anyone declares. If it is worth pinning, the shape that converges is
+one property over a set: assert that a named set of result types is frozen, and
+make the *set* the thing a new type has to be added to. Deciding which types
+belong in that set is the decision here.
+
+### Related
+
+- ADR-0046 decision 5 and the `_resolve_merchant` rollback — the same class: a
+  stated interface property with no test behind it.
+- Review standard 14 — a pin never proven red is not a pin; this is the case
+  before there is a pin at all.
+
+---
+
+## ISSUE-015 — `PassAttempt.rung` is written and never read
+
+**Status:** OPEN — recorded, not fixed. Deleting the field or pinning it are
+both defensible, and the choice belongs with the ADR.
+**Owner action required:** no.
+**Discovered:** 2026-08-20 (Task 5), during the local→Cloud escalation
+milestone; promoted here 2026-08-21 by that branch's whole-branch review.
+**Pre-existing:** no. **Blocks:** nothing.
+
+### What is wrong
+
+`PassAttempt.rung` records which rung of the ladder an attempt was. Measured
+2026-08-21: `git grep -n "\.rung\b" -- src eval` returns **nothing** — the field
+is read nowhere in production code. `git grep -n "rung=" -- src eval` returns
+its four write sites, all in `run_receipt`.
+
+`run_baseline` folds the counts out of `pass_name`, `model_id` and `kept` only,
+so **a ladder that recorded `rung=0` for every rung would leave every gate
+green.** One test reads it —
+`tests/test_pipeline.py::test_triage_runs_on_its_own_client_when_one_is_given`
+asserts the triage entry is `rung=0` — which pins the triage pass's value and
+nothing about the extract rungs, where the number is the one that carries
+information.
+
+### How to resume
+
+Two honest answers, and picking between them is the point:
+
+1. **Pin it.** Extend an existing ladder test to assert the extract entries'
+   `rung` values, so a ladder that numbers every rung 0 goes red. Cheap.
+2. **Delete it.** A field nothing reads is a field that can be wrong for as long
+   as it exists. `attribution` is a tuple in ladder order, so the index is
+   recoverable without storing it.
+
+Do not do both, and do not leave it as it is on the grounds that it is
+harmless — a write-only field in a provenance record is exactly the shape
+ISSUE-001 asked provenance to protect against.
+
+### Related
+
+- ISSUE-013 — the other unpinned property of the same record.
+- `docs/superpowers/specs/2026-08-20-local-to-cloud-escalation-design.md` §6.
+
+---
+
+## ISSUE-016 — `read_nothing` counts a vacuous value as something the model read
+
+**Status:** OPEN — recorded, not fixed, and deliberately so: the two obvious
+fixes are both worse than the gap.
+**Owner action required:** no.
+**Discovered:** 2026-08-20 during the local→Cloud escalation milestone (M1 of
+its whole-branch review); promoted here 2026-08-21. **Pre-existing:** no.
+**Blocks:** nothing measured; it narrows when the fallback fires.
+
+### What is wrong
+
+`read_nothing` compares an extraction's filled `core` and `line_items` paths
+against a default of the same shape, and `is_filled` accepts `0`, `False` and
+`""` as content — by design, because a read zero and a read false are content.
+The consequence is that a model answering with an empty-but-present value keeps
+its rung.
+
+Measured 2026-08-21, each on an otherwise default `ReceiptExtraction()`:
+
+| set | `read_nothing` |
+|---|---|
+| `merchant.name = ""` | `False` |
+| `totals.total = Decimal("0")` | `False` |
+| `totals.prices_include_tax = False` | `False` |
+
+`False` means "it read something", so the local rung is kept and the cloud rung
+never runs. This is the **third** time this predicate has been found wrong in
+the never-fires direction: design §3's correction records the first, §3.1's the
+second (a single blank `LineItem`), and this is the third.
+
+### How to resume
+
+**Do not close it by enumerating fields.** Every previous version of this
+predicate was wrong because a field rested at a default `is_filled` accepts, and
+the fix each time was to make the *baseline* more like the thing being judged —
+not to list fields. A list rots on the next schema change and is review standard
+19's enumerated defence.
+
+**Do not change `is_filled`.** It is shared with `field_accuracy` by design
+(design §3.3, §4): one definition of "content", not two. A read zero is content
+for accuracy scoring, and that is correct there.
+
+What is left is a decision nobody has taken: whether "vacuous" is a third
+concept, distinct from both "filled" and "matches the default", and if so what
+it is defined against. Note the direction of the cost — a predicate that is too
+eager escalates a receipt the local rung actually read, and on the measured
+hardware one extract call is 2121–6563 s.
+
+### Related
+
+- `docs/superpowers/specs/2026-08-20-local-to-cloud-escalation-design.md` §3,
+  §3.1, §3.3, §4 — the predicate, both earlier corrections, and why the grouping
+  is shared.
+- ISSUE-008 — why a second copy of the predicate is not the answer.

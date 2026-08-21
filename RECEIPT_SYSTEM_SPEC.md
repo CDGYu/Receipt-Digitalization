@@ -1617,11 +1617,14 @@ All via environment variables, loaded by `config/settings.py`. No secrets in cod
 # Model
 VLM_PROVIDER=              # provider id
 VLM_API_KEY=
-VLM_MODEL_EXTRACT=         # main extraction model
+VLM_MODEL_EXTRACT=         # main extraction model; the first extract rung
+VLM_MODEL_EXTRACT_FALLBACK= # second extract rung (eval path only); blank = no fallback
 VLM_MODEL_TRIAGE=          # cheaper model is fine here
 VLM_MAX_TOKENS=4096
 VLM_TIMEOUT_S=120
-VLM_USE_TOOLS=            # blank = decide from the provider id
+VLM_USE_TOOLS=            # blank = decide from the provider id; process-wide
+VLM_USE_TOOLS_TRIAGE=     # blank = fall back to VLM_USE_TOOLS, then the provider id
+VLM_USE_TOOLS_FALLBACK=   # same, for the second extract rung
 VLM_MAX_CONCURRENCY=4     # process-global cap on in-flight model calls; 0 = unlimited
 
 # Pipeline
