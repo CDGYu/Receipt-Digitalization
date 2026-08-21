@@ -328,8 +328,10 @@ git commit -m "feat(eval): a run directory that refuses to be reused"
 - Produces:
   - `rung_identity(client: Any) -> dict[str, Any]` — `{"model_id": str|None,
     "use_tools": bool|None}`.
-  - `config_identity(tiers: PassClients, settings: Any) -> dict[str, Any]` —
-    the `config` block defined above.
+  - `config_identity(tiers: Any, settings: Any) -> dict[str, Any]` —
+    the `config` block defined above. *(This line said `tiers: PassClients`
+    while the task's own code block said `Any`; corrected to match what
+    shipped. See defect 6.)*
 
 **The trap this task exists to avoid, measured before the plan was written:**
 `use_tools` is an attribute of `OpenAICompatClient` and **is not present on
@@ -1552,6 +1554,40 @@ are deleted before the branch merges** — that is the condition, not a
 preference. **Cost if wrong:** a merged branch whose module docstring advertises
 a command that does not work, guarded by Task 5's step and by the final
 whole-branch review.
+
+### 2026-08-22 — caught during Task 2, by its implementer
+
+**Defect 4 — Task 2's `config_identity` tests could not tell the triage tier
+from rung 0, and the assertion could not fail.** Both of the brief's
+`config_identity` tests passed the *same* client object as `triage` and as
+`extract_rungs[0]`, so `config["triage"]` was asserted against a value
+indistinguishable from rung one's. **Reproduced by the controller on the
+committed tree:** replacing `rung_identity(tiers.triage)` with
+`rung_identity(tiers.extract_rungs[0])` still parses, and **nine of the ten
+tests stay green** — only the test the implementer added catches it. Recording
+rung one as the triage tier would have shipped with every gate green. This is
+the "test that cannot fail" class this repository has shipped three of before.
+Closed by the implementer with one test using distinct triage and rung clients,
+proven red under exactly that mutation. No production change was needed.
+
+**Defect 5 — the brief's `_Settings` docstring said "The four settings the
+config block reads"; it reads two.** A count in prose that quantifies over the
+thing beside it, wrong at the moment of writing. Corrected by the implementer to
+"two".
+
+**Defect 6 — Task 2's Interfaces block and its code block disagreed about an
+annotation.** The Interfaces line declared `config_identity(tiers: PassClients,
+…)` while the code block shipped `tiers: Any`. The plan's own self-review checked
+symbol *names* for consistency and never checked *annotations*.
+**Ruling: the plan was corrected to match the shipped code, not the reverse.**
+`config_identity` needs only `.triage` and `.extract_rungs`, so `Any` is
+uninformative rather than wrong; and tightening it would buy nothing today
+because **mypy is a declared dependency and configured in `[tool.mypy]` but is
+invoked by no gate** — verified, and both `scripts/verify.py` and
+`.github/workflows/ci.yml` carry notes that an earlier version listed it and no
+longer does. Tightening to `PassClients` is recorded as a deferred minor for the
+final review. **Cost if wrong:** an annotation no checker reads is less
+informative than it could be.
 
 **Non-defects, verified rather than assumed while writing:** `PassClients` has
 exactly `triage` and `extract_rungs`; all eleven `FieldBreakdown` fields default
