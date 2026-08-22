@@ -498,9 +498,13 @@ Two corrections to Step 3, for whoever runs Task 3:
   not in the module Step 3 names.
 - **A green corpus check is not proof it ran.** `tests/test_rules.py` builds its
   corpus inside a bare `except Exception`, so one label that will not parse
-  takes the whole corpus to `{}` and every case **skips** while the suite stays
-  green — **ISSUE-021**. If you add a label and the corpus case count does not
-  go up, that is the bug, not luck.
+  takes the whole corpus to `{}` while the suite stays green — **ISSUE-021**.
+  **The signal is the number of real-label cases**, not the total: that check
+  also carries two synthetic calendar cases which pass whether or not a single
+  label loaded. If you add a label and the real-label cases do not go up, that
+  is the bug, not luck. And measured: there is at least one malformation that
+  leaves **no red anywhere** — `tests/test_eval_floor.py` accepts it and its own
+  case count goes *up* — so a growing count elsewhere is not reassurance either.
 
 ### 2026-08-22 — caught during Task 2, by its implementer
 

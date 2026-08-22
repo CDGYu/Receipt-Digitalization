@@ -2045,7 +2045,9 @@ consequence while the golden set held only receipts from July.
 ### What is wrong
 
 `tests/test_rules.py` loads the real labels directory at import and
-`test_real_corpus_labels_produce_no_errors` scores every label against a frozen
+`test_real_corpus_labels_produce_no_errors` (renamed
+`test_the_real_corpus_validates_as_production_does` by the fix) scores every
+label against a frozen
 `GOLDEN_TODAY = date(2026, 7, 28)`. Rule `R031` flags a future receipt date, its
 severity is `Severity.ERROR`, and `future_date_slack_days` defaults to `1`.
 
@@ -2103,14 +2105,26 @@ carries no capture date** at all: it holds `category` and `holdout` per receipt
 and nothing else, so the parenthetical variant did not exist. That sentence was
 written from memory rather than from the file.
 
-**What the tree actually said.** The corpus check was the **only** caller
-overriding `today`. All four production construction sites —
-`eval/run_baseline.py`, `src/receipts/extract/extractor.py`,
-`src/receipts/pipeline.py`, `src/receipts/validate/validator.py` — build a bare
-`ValidationContext()`, and `ValidationContext.today` already defaults to
-`date.today`. `config=RuleConfig()` was the default too. **The override was the
-entire difference between the corpus check and production**, and dropping it
-makes the corpus validate the way a real receipt is validated.
+**What the tree actually said.** The corpus check was the only caller
+overriding `today` **that validates the real corpus** — nine test modules
+override it for their own fixtures, and an earlier version of this sentence said
+"the only caller" flatly, which is false. Every non-test site builds a bare
+`ValidationContext()`: `eval/run_baseline.py`, `scripts/try_one_receipt.py`,
+`src/receipts/extract/extractor.py`, `src/receipts/pipeline.py`,
+`src/receipts/validate/validator.py` — enumerated from the tree at the moment
+of writing, because a draft of this list said "all four" and omitted the
+`scripts/` one. `ValidationContext.today` already defaults to `date.today` and
+`config=RuleConfig()` was the default too, so **the override was the entire difference
+between the corpus check and a bare context.**
+
+**One thing that does not follow, stated because the draft asserted it.**
+"So the corpus is validated the way a real receipt is" is *not* implied.
+Production builds a bare context and then **populates** it — `extractor.py`
+sets `ctx.triage`, `pipeline.py` `replace()`s in the expected-buyer fields.
+Measured on all three labels: the ERROR findings are identical bare vs triaged,
+and the only rules the extra fields add are `R014`/`R015`, both `WARN`, which
+this check does not assert on. So the gap is invisible **today**, and becomes
+real the day an ERROR-severity rule reads a field production fills.
 
 **Why the remaining time-dependence is safe.** A receipt already in the past
 recedes further every day, so a label that passes now passes forever. The only
@@ -2121,15 +2135,34 @@ corpus. (No count is given: an earlier draft of this sentence, and the fix's
 commit message, both said "three dedicated unit tests"; there are two for
 `R031`, and the third the grep showed belongs to `R032`.)
 
-**Pinned by** `tests/test_rules.py::test_a_receipt_dated_today_is_not_a_corpus_error`,
-proven red twice: against the code as it stood before the fix, and against a
-re-freeze to the same literal. Both reds named that test and nothing else.
+**Pinned by** `tests/test_rules.py::test_the_real_corpus_validates_as_production_does`,
+which scores the real labels **and two synthetic calendar cases through one
+call**: a receipt dated today, which must be clean, and one dated past the
+future-date slack, which must still raise exactly `R031`.
 
-**One thing this resolution does NOT close:** a single frozen literal equal to
-*today's* date would satisfy the new test on the day it was written and fail the
-next. No single run can distinguish "frozen to today" from "tracks today", so
-the reason not to re-freeze is recorded in `_corpus_context()`'s docstring,
-where someone about to undo it will read it.
+**The first shape of this fix was itself unenforced, and the review found it.**
+The guard began as a separate test *beside* the corpus check, and the corpus
+check kept building its own context — so re-freezing that call site to
+`date(2026, 7, 28)` reinstated ISSUE-020 verbatim while all 118 tests and the
+lint gate stayed green. **A guard that builds its own context cannot see the
+check re-freezing its own.** That is why both synthetic cases now live *inside*
+the parametrised check.
+
+**Why both ends are needed, each measured rather than imagined.** "Today's
+receipt passes" alone is satisfied *forever* by a context frozen far in the
+**future** (`date(2099, 1, 1)`) or with the slack inflated
+(`future_date_slack_days=100000`) — and either makes `R031` vacuous on the whole
+corpus, which is the same vacuity Option 2 was rejected for, reached by another
+door. An earlier draft of this section called that residual a one-day exposure.
+It was unbounded.
+
+All three redden now, one mutation per run, each parsed before it was believed:
+the original literal reddens the dated-today case; 2099 and the inflated slack
+each redden the past-the-slack case.
+
+*(A draft said the pin was "proven red twice: against the code before the fix,
+and against a re-freeze". Those were one mutation described twice — the helper
+did not exist before the fix, so both reduce to the same freeze.)*
 
 ### Related
 
@@ -2187,16 +2220,58 @@ entirely — but they would fix it believing the corpus check had been running,
 and any malformation that `load_labels` rejects while `test_eval_floor`'s own
 parse tolerates leaves no red at all.
 
+### Correction, 2026-08-22 — the handler is dead, not merely broad
+
+**A draft of this issue said "Absent is `FileNotFoundError`". That is false, and
+it makes the remedy wrong.** Absence never raises: `_label_files` uses
+`labels_dir.glob("*.json")`, and a glob over a directory that does not exist
+yields nothing rather than throwing. Measured:
+
+```
+absent directory     -> RETURNED {}  (no exception)
+empty directory      -> RETURNED {}  (no exception)
+```
+
+So the `except Exception` **cannot ever fire for the case its own comment
+names.** The PII-absent skip is delivered entirely by the empty glob. The
+handler fires only for the broken case — the one case it must not swallow. It is
+not over-broad; it is **100% mis-targeted**.
+
+### A worked instance where nothing goes red at all
+
+The hedge below says `tests/test_eval_floor.py` "would redden on most such
+files". Here is one where it does not, found by the review. `load_labels` parses
+with `model_validate_json` (pydantic-core's parser); `test_eval_floor` uses
+`json.loads` then `model_validate`. A lone surrogate escape diverges: the first
+rejects it, the second accepts. With a fourth label carrying
+`"description_raw": "DSL\ud800-2"`:
+
+```
+tests/test_rules.py     : 115 passed, 1 skipped   (corpus 3 cases -> 1 skip)
+tests/test_eval_floor.py: 21 passed               (was 17 -- it GREW by 4, green)
+full suite              : 1348 passed, 1 skipped, exit 0
+```
+
+**No red anywhere**, and `test_eval_floor`'s case count going *up* is not
+evidence the label is good.
+
 ### How to resume
 
-Narrow the handler to the condition it means. Absent is `FileNotFoundError` (or
-an empty glob); anything else should raise. **A silent skip is how a guard
-becomes vacuous** — the same reasoning
+**Delete the try/except.** Narrowing it is the wrong fix, because there is no
+condition to narrow it to: absence already returns `{}` without raising. A bare
+`GOLDEN_LABELS = load_labels(DEFAULT_LABELS_DIR)` was measured with every label
+moved out of the tree — `115 passed, 1 skipped`, no import error — so the
+clone-with-no-labels case survives deletion untouched.
+
+**A silent skip is how a guard becomes vacuous** — the same reasoning
 `docs/superpowers/plans/2026-08-22-growing-the-golden-set.md` gives for not
 adding a skip to the privacy tests.
 
-If the skip must stay broad, make it **loud**: emit a warning naming the file
-that failed, so a green run cannot be mistaken for a run that checked anything.
+**One thing ISSUE-020's fix changed here.** The corpus check is now parametrised
+over the labels *plus two synthetic calendar cases*, so an unloadable label no
+longer shows as `1 skipped`; it shows as the two synthetic cases passing. The
+count of real-label cases going **down** is still the signal, and it is now the
+only one — which makes this issue more worth closing, not less.
 
 ### Related
 
