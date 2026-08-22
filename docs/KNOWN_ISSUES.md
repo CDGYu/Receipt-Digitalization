@@ -1960,3 +1960,138 @@ the field's committed type would change, so it is a decision rather than a line.
 
 - ISSUE-015 — `PassAttempt.rung` is write-only; this is the reader it wants.
 - ADR-0047 decision 3, ADR-0049 decision 4.
+
+---
+
+## ISSUE-019 — "Committed whole or not at all" is a rule no gate holds
+
+**Status:** OPEN — found by the whole-branch review of
+`feat/golden-set-privacy`, before merge.
+**Owner action required:** no, but the remedy is a design decision.
+**Discovered:** 2026-08-22, closing ISSUE-001 step 7's machinery.
+**Pre-existing:** no — it arrives with ADR-0050, which states the rule.
+**Blocks:** nothing today. It is a stated guarantee with nothing behind it,
+which is the shape this repository has twice paid for.
+
+### What is wrong
+
+ADR-0050 decision 1 ends "**So a label is committed whole or not at all**", and
+`eval/golden/README.md` tells a labeller the same thing. **Nothing checks it.**
+A tracked `r*` label with `merchant.name`, `merchant.address`, `merchant.tax_id`
+and `buyer.name` set to `null` passes every gate. Measured by the whole-branch
+review on a replica of the branch tip, with the label committed and the full
+suite green; the classification half is re-derived below and is the controller's
+own.
+
+The nearest guard, `test_a_label_declares_every_field_the_schema_declares`,
+compares the paths the raw JSON declares against the paths the parsed model
+carries. A **deleted** key is caught, because the schema default fills it and
+the two sets differ. A key present with value `null` appears in both sets, so
+**redaction by nulling is invisible to it.**
+
+There is a second violation shape the design's own measurement does not cover.
+A sentinel string corrupts the metric a different way — scoring a correct read
+as *wrong* rather than as *invented*, with `hallucinated` unchanged:
+
+```
+intact               transcription 28/28   core 12/12   hallucinated=0
+merchant.name NULL   transcription 27/27   core 11/11   hallucinated=1
+merchant.name "[REDACTED]"
+                     transcription 27/28   core 11/12   hallucinated=0
+```
+
+### Why it is hard rather than merely undone
+
+**A redacted field and an absent one are indistinguishable in the label.**
+`eval/golden/README.md` step 3 tells a labeller to use `null` for anything the
+receipt does not show or that cannot be read — so `merchant.tax_id: null` is
+correct for a receipt with no printed tax ID, and wrong for one where the
+labeller removed it. A pin asserting "the PII paths are filled" would redden on
+a legitimate receipt.
+
+Closing this needs a **declared marker** — something in the label or the manifest
+that says "this path was withheld" as distinct from "this path was blank" — and
+that is a schema decision ADR-0050 deliberately does not take.
+
+### How to resume
+
+State one bounded property and enforce it at both ends, rather than enumerating
+redaction shapes (review standard 19 — nulls and sentinels are two shapes of one
+class, and a third will exist). The candidate: a label carries an explicit
+withheld-paths declaration, empty for every public label, and a test asserts
+every tracked label's declaration is empty. That also gives the metric the
+`field_breakdown` hook design §3 says field-level redaction would need, without
+taking it.
+
+### Related
+
+- ADR-0050 decisions 1 and 2.
+- The 2026-08-22 growing-the-golden-set design, §3 and §8's last bullet.
+
+---
+
+## ISSUE-020 — A frozen `GOLDEN_TODAY` reddens the suite for any recent receipt
+
+**Status:** OPEN — found by the whole-branch review of
+`feat/golden-set-privacy`, before merge.
+**Owner action required:** no.
+**Discovered:** 2026-08-22.
+**Pre-existing:** yes — the frozen date predates the branch and had no
+consequence while the golden set held only receipts from July.
+**Blocks:** **ISSUE-001 step 7, on its first receipt.**
+
+### What is wrong
+
+`tests/test_rules.py` loads the real labels directory at import and
+`test_real_corpus_labels_produce_no_errors` scores every label against a frozen
+`GOLDEN_TODAY = date(2026, 7, 28)`. Rule `R031` flags a future receipt date, its
+severity is `Severity.ERROR`, and `future_date_slack_days` defaults to `1`.
+
+**So a correctly-made label for any receipt dated after 2026-07-29 fails the
+suite.** Measured with a label copied from `r001` and dated 2026-08-20:
+
+```
+FAILED tests/test_rules.py::test_real_corpus_labels_produce_no_errors[p999]
+E  AssertionError: p999: [R031] receipt.date 2026-08-20 is in the future
+   (today is 2026-07-28). [...]
+```
+
+(The rule's message continues "This usually means day and month were swapped, or
+a digit in the year was misread" — advice that is wrong here, which is the
+point.)
+
+Every receipt Task 3 collects will be dated after 2026-07-29.
+
+### The trap that comes with it
+
+The plan's Task 3 Step 3 tells the labeller to run **only**
+`tests/test_eval_floor.py` and says "a failure there means the label is wrong,
+not the test". Applied to this failure the reason is **backwards**: the label is
+right and the frozen date is stale. That is review standard 28 — a correct
+instruction carrying a false reason is more dangerous than a wrong one, because
+the reason is what a reader generalises from.
+
+Note also that `tests/test_rules.py` is a **fifth** reader of the labels
+directory, reaching it transitively through `eval/golden_set.py`'s glob rather
+than globbing itself. ADR-0050's four-row table enumerates the globs and is
+correct as written; the set of things a new label affects is larger than the set
+of things that glob.
+
+### How to resume
+
+Two options, and the choice is a design call nobody has made:
+
+1. **Move the frozen date** on each collection round. Cheapest, and it rots
+   again by construction.
+2. **Score each label against its own receipt date** (or the label's capture
+   date from `manifest.json`), so the corpus test asks "was this valid when it
+   was issued" rather than "is it valid on one hardcoded day". Removes the class
+   rather than the instance, and changes what the test means.
+
+Whichever is chosen, the plan's Step 3 instruction needs the corrected reason.
+
+### Related
+
+- ISSUE-001 step 7; ADR-0050 decision 2.
+- `src/receipts/validate/rules.py`'s `R031`;
+  `src/receipts/validate/context.py`'s `future_date_slack_days`.
