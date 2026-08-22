@@ -2174,7 +2174,8 @@ did not exist before the fix, so both reduce to the same freeze.)*
 
 ## ISSUE-021 — One unloadable label silently disables the whole real-corpus check
 
-**Status:** OPEN — found while closing ISSUE-020, in the same block.
+**Status:** **CLOSED 2026-08-22**, on `feat/corpus-loads-loudly`. Found while
+closing ISSUE-020, in the same block.
 **Owner action required:** no.
 **Discovered:** 2026-08-22.
 **Pre-existing:** yes.
@@ -2272,6 +2273,47 @@ over the labels *plus two synthetic calendar cases*, so an unloadable label no
 longer shows as `1 skipped`; it shows as the two synthetic cases passing. The
 count of real-label cases going **down** is still the signal, and it is now the
 only one — which makes this issue more worth closing, not less.
+
+### Resolution, 2026-08-22 — deleted, not narrowed
+
+**The handler is gone.** There was nothing to narrow it to: `_label_files`
+globs, and **its own docstring already said so** — *"a missing directory yields
+an empty list — `Path.glob` does not raise on a non-existent directory, so
+callers stay exception-free."* The handler was written against a hazard the code
+it calls documents as impossible. Re-derived rather than taken from that
+docstring: an absent directory and an empty one both return `{}` with no
+exception.
+
+**Measured end to end, in the runtime rather than by reasoning about it.** With
+a malformed label present, collection now stops and names the file:
+
+```
+E   pydantic_core._pydantic_core.ValidationError: 1 validation error for ReceiptExtraction
+E     Invalid JSON: key must be a string at line 1 column 3 ...
+ERROR tests/test_rules.py
+!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+```
+
+The probe was named `p999.json` on purpose — that pattern is gitignored, so a
+probe stranded by an interrupted session could never reach the index. It was
+removed and the labels directory verified back to its three real files.
+
+**The standing guard** is
+`tests/test_rules.py::test_every_label_file_on_disk_reached_the_corpus`: what is
+on disk is what got scored. Proven red by making the handler fire exactly as a
+broken label would, which left the corpus `{}` while three labels sat beside it.
+
+**The red also showed the defect's signature directly:** the module went from
+**120 cases to 116**. The three real-label cases vanished from the
+parametrisation and *nothing else noticed* — which is precisely why plan
+Defect 7 tells a labeller to count the real-label cases rather than the total.
+
+**What this does not change.** The divergence between `model_validate_json` and
+`json.loads` + `model_validate` is still real — a lone surrogate escape is
+accepted by one and rejected by the other. It is no longer *silent*, because
+the strict loader now fails the run instead of emptying the corpus, but the two
+parsers still disagree about what a valid label is. Nobody has decided whether
+they should.
 
 ### Related
 

@@ -496,15 +496,19 @@ Two corrections to Step 3, for whoever runs Task 3:
   only that module. With ISSUE-020 closed, `tests/test_rules.py`'s real-corpus
   check is the one that validates a new label against the *validator*, and it is
   not in the module Step 3 names.
-- **A green corpus check is not proof it ran.** `tests/test_rules.py` builds its
-  corpus inside a bare `except Exception`, so one label that will not parse
-  takes the whole corpus to `{}` while the suite stays green — **ISSUE-021**.
-  **The signal is the number of real-label cases**, not the total: that check
-  also carries two synthetic calendar cases which pass whether or not a single
-  label loaded. If you add a label and the real-label cases do not go up, that
-  is the bug, not luck. And measured: there is at least one malformation that
-  leaves **no red anywhere** — `tests/test_eval_floor.py` accepts it and its own
-  case count goes *up* — so a growing count elsewhere is not reassurance either.
+- **Count the real-label cases, not the total.** `tests/test_rules.py`'s corpus
+  check also carries two synthetic calendar cases that pass whether or not a
+  single label loaded, so a healthy total says nothing. If you add a label and
+  the real-label cases do not go up, that is the bug, not luck — and
+  `test_every_label_file_on_disk_reached_the_corpus` is the guard that says so.
+  **ISSUE-021, closed 2026-08-22**, is why the warning is here: a bare
+  `except Exception` used to take the whole corpus to `{}` while the suite
+  stayed green. A label that will not parse now fails collection loudly and
+  names the file.
+  **Still true, and not closed:** the strict loader and `tests/test_eval_floor.py`
+  disagree about what a valid label is — a lone surrogate escape is rejected by
+  one and accepted by the other — so that module's case count going *up* is not
+  reassurance about a label you just added.
 
 ### 2026-08-22 — caught during Task 2, by its implementer
 
