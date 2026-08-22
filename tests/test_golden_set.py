@@ -4,6 +4,9 @@
 from __future__ import annotations
 
 import json
+import traceback
+
+import pytest
 
 from eval.golden_set import (
     TEMPLATE_PATH,
@@ -91,6 +94,33 @@ def test_load_labels_returns_ids_and_skips_template_and_manifest(tmp_path):
     labels = load_labels(tmp_path)
     assert set(labels) == {"r001", "r002"}
     assert all(isinstance(v, ReceiptExtraction) for v in labels.values())
+
+
+def test_a_label_that_will_not_load_names_itself(tmp_path):
+    """The strict loader must say WHICH file it choked on.
+
+    It did not. ``path`` is a loop local and the parse error carries only the
+    file's *content*, so a reader got the echoed bytes and the loader's line
+    number and nothing else. Measured 2026-08-22 over a real run: the offending
+    filename appeared **zero** times in the whole pytest output (ISSUE-022).
+
+    That became expensive when ISSUE-021's fix turned a silent skip into an
+    abort: one unreadable label now stops the entire session, and the message
+    did not say which label to fix. ``eval/golden/README.md`` targets 50-100.
+
+    Asserted on the **rendered traceback** rather than on the mechanism, so the
+    pin survives any way of carrying the name -- a note, a wrapped exception, a
+    dedicated type. What a reader sees is the property; how it gets there is
+    not.
+    """
+    (tmp_path / "r001.json").write_text(_VALID_LABEL, encoding="utf-8")
+    (tmp_path / "r002.json").write_text('{1: "not a string key"}', encoding="utf-8")
+
+    with pytest.raises(Exception) as excinfo:
+        load_labels(tmp_path)
+
+    rendered = "".join(traceback.format_exception(excinfo.value))
+    assert "r002.json" in rendered, rendered
 
 
 # --------------------------------------------------------------------------- #

@@ -91,15 +91,33 @@ def load_labels(labels_dir: Path) -> dict[str, ReceiptExtraction]:
     """Load every label under ``labels_dir`` keyed by filename stem.
 
     The template and manifest sidecars are skipped. Each remaining ``*.json`` is
-    parsed with :meth:`ReceiptExtraction.model_validate_json`; a malformed file
-    raises here on purpose — this is the strict loader. Use
+    parsed with :meth:`ReceiptExtraction.model_validate_json`; a malformed or
+    unreadable file raises here on purpose — this is the strict loader. Use
     :func:`validate_labels` for the forgiving, report-only variant.
+
+    **The error names the file it choked on**, as a note on the exception rather
+    than a new type, so callers catching the original type still do. Pinned by
+    ``tests/test_golden_set.py::test_a_label_that_will_not_load_names_itself``,
+    which asserts on the rendered traceback rather than on the mechanism.
     """
     labels: dict[str, ReceiptExtraction] = {}
     for path in _label_files(labels_dir):
-        labels[path.stem] = ReceiptExtraction.model_validate_json(
-            path.read_text(encoding="utf-8")
-        )
+        try:
+            labels[path.stem] = ReceiptExtraction.model_validate_json(
+                path.read_text(encoding="utf-8")
+            )
+        except Exception as exc:  # noqa: BLE001 - re-raised unchanged, only named
+            # Name the file, then let the error out untouched.
+            #
+            # **This is not the handler ISSUE-021 deleted.** That one swallowed
+            # and returned ``{}``; this one adds the single thing the error was
+            # missing and re-raises. ``path`` is a loop local, so without it a
+            # reader gets the file's *content* and this function's line number
+            # and no filename at all -- measured, the name appeared zero times
+            # in a whole pytest run (ISSUE-022). A note rather than a wrapped
+            # exception, so the type every caller already sees is unchanged.
+            exc.add_note(f"while loading golden label {path.name}")
+            raise
     return labels
 
 
