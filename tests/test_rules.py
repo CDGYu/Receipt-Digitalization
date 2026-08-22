@@ -15,7 +15,7 @@ from decimal import Decimal
 
 import pytest
 
-from eval.golden_set import DEFAULT_LABELS_DIR, load_labels
+from eval.golden_set import DEFAULT_LABELS_DIR, _label_files, load_labels
 from receipts.extract.schema import (
     Buyer,
     ConsistencyResult,
@@ -617,10 +617,38 @@ def test_R020_and_R024_do_not_both_report(ctx):
 # that were false.
 # --------------------------------------------------------------------------- #
 
-try:
-    GOLDEN_LABELS = load_labels(DEFAULT_LABELS_DIR)
-except Exception:  # labels are PII and may be absent -- skip, never error
-    GOLDEN_LABELS = {}
+# No try/except. The handler that stood here caught everything and said "labels
+# are PII and may be absent -- skip, never error", but absence never raises:
+# ``_label_files`` globs, and its docstring says a missing directory yields an
+# empty list "so callers stay exception-free". Measured 2026-08-22 -- absent and
+# empty both return ``{}``. So the only thing it could ever swallow was a label
+# that would not parse, and it turned the whole corpus into ``{}`` while the
+# suite stayed green (ISSUE-021). A broken label now fails here, loudly.
+GOLDEN_LABELS = load_labels(DEFAULT_LABELS_DIR)
+
+
+def test_every_label_file_on_disk_reached_the_corpus():
+    """A label that will not load must not vanish from the corpus silently.
+
+    The corpus is built at import. Until 2026-08-22 that build sat inside a bare
+    ``except Exception`` whose comment read "labels are PII and may be absent"
+    -- and **absence never raises.** ``_label_files`` globs, and its own
+    docstring says so: "a missing directory yields an empty list ... so callers
+    stay exception-free". Measured: an absent directory and an empty one both
+    return ``{}``. So that handler could only ever fire for a label that would
+    not parse, which is the one case that must be loud, and it replaced the
+    whole corpus with ``{}`` while the suite stayed green (ISSUE-021).
+
+    The handler is gone, so a broken label now fails at import rather than
+    quietly. This is the standing guard on the observable either way: what is on
+    disk is what got scored. It goes red whenever the corpus is short of the
+    files beside it, which is what any future swallow would look like.
+    """
+    on_disk = {p.stem for p in _label_files(DEFAULT_LABELS_DIR)}
+    assert set(GOLDEN_LABELS) == on_disk, (
+        "labels on disk that never reached the corpus: "
+        f"{sorted(on_disk - set(GOLDEN_LABELS))}"
+    )
 
 
 #: Two synthetic cases, scored by the parametrised check below in the *same
