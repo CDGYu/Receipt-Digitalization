@@ -343,7 +343,10 @@ class EvalReport:
     returns only an extraction and a confidence), so they stay ``None`` here and
     are filled in by callers that measure the real pipeline.
 
-    ``n_failed`` / ``failures`` carry the receipts whose pipeline call raised.
+    ``n_failed`` / ``failures`` carry the receipts that reached a terminal
+    answer without being scored: one ``except`` in ``run_eval`` covers a label
+    that would not read or validate, a pipeline call that raised, and a
+    scoring error alike, and records one for each.
     They are *included* in ``n_receipts`` — a receipt the system could not read
     is processed but not correct, never a receipt that quietly left the batch
     (§18: nothing is ever silently dropped).
@@ -389,7 +392,8 @@ class EvalReport:
     #: fact that everything escalated, and this is the figure that answers it.
     extract_rung_counts: dict[str, int] | None = None
 
-    #: Receipts whose pipeline call raised, and ``(receipt_id, error)`` for each.
+    #: Receipts that failed anywhere in ``run_eval``, and ``(receipt_id, error)``
+    #: for each. See the class docstring: reading, the pipeline call and scoring alike.
     n_failed: int = 0
     failures: list[tuple[str, str]] = field(default_factory=list)
 
