@@ -474,6 +474,38 @@ does, stop: the ignore rule failed and Task 1's pin should have caught it.
 **This plan does not self-amend.** Everything above is the text as written; this
 log is what was wrong with it and when.
 
+### 2026-08-22 — caught during Task 2, by its implementer
+
+**Defect 4 — the plan's own remedy for a weak test was itself a test that could
+not fail.** Task 2 Step 5 correctly predicted its test would not discriminate,
+and prescribed the fix: "a golden dir with two labels plus a `make_pass_clients`
+double whose second repeat fails one of them, so the two repeats score different
+id sets." **They do not differ.** `run_eval`'s except branch still appends an
+`EvalResult(receipt_id=label_path.stem)` for a receipt that failed, so both
+repeats yield the same ids — measured `per_repeat=[['r1','r2'],['r1','r2']]`.
+Following the plan would have produced a **second** assertion that could not
+fail, in the step written to close the first.
+
+Closed by the implementer differently: grow the golden set **between** repeats
+(`_adds_a_label_after_the_first_repeat`, mirroring the module's existing
+`_empties_the_golden_set_after_the_first_repeat`), so repeat 1 sees `{r1}` and
+repeat 2 sees `{r1, r2}`, with an explicit precondition assertion so the fixture
+cannot silently flatten again. **Controller verified the `if index == 1`
+mutation is red.**
+
+**Defect 5 — the implementation comment the plan prescribed states something
+false.** It read "a repeat that failed to load a label contributes nothing".
+**Measured against `run_eval` with a malformed label: `ids in results: ['bad']`,
+`n_failed: 1`.** A failed receipt *is* in `scored_receipts`, for the same reason
+it is in `n_receipts`. The implementer refused to write the sentence and gave
+the true reason instead — that `run_eval` globs the labels directory afresh per
+repeat.
+
+**The shape, now at four depths in one plan.** Task 1 shipped a mutation that
+could not be caught and two more tests that could not fail; Task 2's *remedy*
+for a weak test was a third. Every one was caught by an implementer running the
+mutation instead of trusting the prose, and none by a gate.
+
 ### 2026-08-22 — caught during Task 1, by its implementer
 
 **Defect 1 — the plan's central mutation could not be caught, and it was the
