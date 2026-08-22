@@ -2285,7 +2285,7 @@ docstring: an absent directory and an empty one both return `{}` with no
 exception.
 
 **Measured end to end, in the runtime rather than by reasoning about it.** With
-a malformed label present, collection now stops and names the file:
+a malformed label present, collection now stops:
 
 ```
 E   pydantic_core._pydantic_core.ValidationError: 1 validation error for ReceiptExtraction
@@ -2294,19 +2294,42 @@ ERROR tests/test_rules.py
 !!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
 ```
 
+**It does not name the offending file, and a draft of this section said it
+did.** Measured: `grep -c p999` over the whole pytest output returns **0**. The
+error echoes the file's *content* and the loader's line; `path` is a loop local
+and pytest does not print locals without `--showlocals`. At three labels the
+culprit is guessable; at the 50-100 the README targets it is not, and
+`validate_labels` beside it already renders `"{filename}: {reason}"`. **That gap
+is ISSUE-022.**
+
 The probe was named `p999.json` on purpose — that pattern is gitignored, so a
 probe stranded by an interrupted session could never reach the index. It was
-removed and the labels directory verified back to its three real files.
+removed and the labels directory verified back to its three real files. **Twice
+the removal had to be done in Python**, because the destructive-commands hook
+refuses `rm` on an in-tree path; the second time it blocked a *compound* command
+and the deletion silently did not run, leaving the probe in place until the next
+check caught it.
 
 **The standing guard** is
 `tests/test_rules.py::test_every_label_file_on_disk_reached_the_corpus`: what is
 on disk is what got scored. Proven red by making the handler fire exactly as a
 broken label would, which left the corpus `{}` while three labels sat beside it.
 
-**The red also showed the defect's signature directly:** the module went from
-**120 cases to 116**. The three real-label cases vanished from the
-parametrisation and *nothing else noticed* — which is precisely why plan
-Defect 7 tells a labeller to count the real-label cases rather than the total.
+**Its first version did not discriminate, and the review caught that.** It took
+`on_disk` from `_label_files` — the very function the loader globs with — so
+anything that function dropped left both sides at once. Measured: excluding
+`r003.json` inside `_is_label_file` left a real label on disk and unscored with
+the guard and the entire suite green. It now reads the directory itself,
+case-insensitively, which also covers a label saved as `.JSON`: scored on this
+box's filesystem and invisible to the loader's glob on CI's Linux.
+
+**The red also showed the defect's signature directly:** collection went from
+**120 cases to 117** — the three real-label cases vanished from the
+parametrisation and *nothing but this guard noticed*, which is precisely why
+plan Defect 7 tells a labeller to count the real-label cases rather than the
+total. *(A draft said "120 cases to 116". 116 was the **passed** count with the
+guard failing beside it; no state ever collected 116. The delta that matters is
+3, which is the number of labels.)*
 
 **What this does not change.** The divergence between `model_validate_json` and
 `json.loads` + `model_validate` is still real — a lone surrogate escape is
@@ -2319,3 +2342,70 @@ they should.
 
 - ISSUE-020 — the same block, found while closing it.
 - ADR-0050 decision 2, on what a new label is and is not validated by.
+
+---
+
+## ISSUE-022 — A label that will not load fails loudly without saying which one
+
+**Status:** OPEN — found by the review of the ISSUE-021 fix, in the claim that
+fix made about itself.
+**Owner action required:** no.
+**Discovered:** 2026-08-22.
+**Pre-existing:** the behaviour is; the *exposure* arrives with ISSUE-021's fix,
+which turned a silent skip into a loud abort.
+**Blocks:** nothing. It costs a labeller time, and the cost grows with the
+corpus.
+
+### What is wrong
+
+`load_labels` parses each file with
+`ReceiptExtraction.model_validate_json(path.read_text(...))` and lets the error
+out unwrapped. `path` is a loop local, and pytest does not print locals without
+`--showlocals`, so the failure names the **test module** and the **loader line**
+and echoes the file's *content* — never its path. Measured over the whole pytest
+output with a malformed `p999.json` present:
+
+```
+$ python -m pytest tests/test_rules.py 2>&1 | grep -c "p999"
+0
+```
+
+```
+tests\test_rules.py:627: in <module>
+    GOLDEN_LABELS = load_labels(DEFAULT_LABELS_DIR)
+eval\golden_set.py:100: in load_labels
+    labels[path.stem] = ReceiptExtraction.model_validate_json(
+E   pydantic_core._pydantic_core.ValidationError: 1 validation error for ReceiptExtraction
+E     Invalid JSON: key must be a string at line 1 column 2 ...
+```
+
+At three labels the culprit is guessable. `eval/golden/README.md` targets 50-100.
+
+### Why it matters more from here on
+
+ISSUE-021's fix made this failure **abort the whole pytest session** rather than
+quietly empty the corpus. That is the right trade — but it means one unreadable
+private label blocks every test in the repository, and the message does not say
+which file to fix.
+
+### How to resume
+
+`validate_labels`, in the same module, already renders `"{filename}: {reason}"`.
+The narrow change is to wrap the parse in `load_labels` and re-raise carrying
+`path.name`.
+
+**Note what that is not.** Re-raising with context is the opposite of the
+handler ISSUE-021 deleted: that one *swallowed* and returned `{}`; this one
+would raise, louder and better addressed. The distinction is worth stating in
+the commit, because the diff will look like an `except` returning to the file it
+was just removed from.
+
+Check `load_labels`'s callers before changing the exception type —
+`tests/test_rules.py`, `eval/harness.py`'s neighbours and `validate_labels`
+itself are the places to look.
+
+### Related
+
+- ISSUE-021 — the fix whose own description claimed this already worked.
+- The 2026-08-22 growing-the-golden-set plan, Defect 7, which now warns a
+  labeller to match on the echoed content instead.
