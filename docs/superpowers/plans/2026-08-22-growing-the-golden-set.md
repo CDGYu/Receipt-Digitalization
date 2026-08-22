@@ -504,8 +504,9 @@ Two corrections to Step 3, for whoever runs Task 3:
   **ISSUE-021, closed 2026-08-22**, is why the warning is here: a bare
   `except Exception` used to take the whole corpus to `{}` while the suite
   stayed green. A label that will not read or parse now fails collection loudly
-  — but **it does not name the file** (ISSUE-022), so the content echoed in the
-  error is what you have to match against.
+  **and names itself** — look for the line reading
+  `while loading golden label <name>` (ISSUE-022, closed 2026-08-23; before that
+  the filename appeared nowhere in the output).
   **Do not read `test_every_label_file_on_disk_reached_the_corpus` as the guard
   that catches this for you.** It is a regression guard against re-adding a
   swallow; for a label you just added it is green whether the label parsed or

@@ -2347,8 +2347,8 @@ they should.
 
 ## ISSUE-022 — A label that will not load fails loudly without saying which one
 
-**Status:** OPEN — found by the review of the ISSUE-021 fix, in the claim that
-fix made about itself.
+**Status:** **CLOSED 2026-08-23**, on `feat/label-errors-name-the-file`. Found by
+the review of the ISSUE-021 fix, in the claim that fix made about itself.
 **Owner action required:** no.
 **Discovered:** 2026-08-22.
 **Pre-existing:** the behaviour is; the *exposure* arrives with ISSUE-021's fix,
@@ -2404,8 +2404,45 @@ Check `load_labels`'s callers before changing the exception type —
 `tests/test_rules.py`, `eval/harness.py`'s neighbours and `validate_labels`
 itself are the places to look.
 
+### Resolution, 2026-08-23 — a note, not a new exception type
+
+`load_labels` now wraps the parse and calls
+`exc.add_note(f"while loading golden label {path.name}")` before re-raising.
+
+**A note rather than a wrapped exception, deliberately.** Every caller sees the
+same exception type it saw before, so nothing can break on the change — and
+the enumeration behind that is small: `load_labels` has exactly two callers,
+`tests/test_golden_set.py` and `tests/test_rules.py`, neither of which catches
+anything. The note is carried in `__notes__` and rendered by both
+`traceback.format_exception` and pytest since Python 3.11; this project gates
+3.11 and 3.13.
+
+**Measured end to end in the collection path**, which is the case that matters,
+with a malformed label present:
+
+```
+E     Invalid JSON: key must be a string at line 1 column 2 ...
+E   while loading golden label p999.json
+ERROR tests/test_rules.py
+!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+```
+
+`grep -c "p999.json"` over the whole pytest output returns **1**. It returned
+**0** before.
+
+**This is not the handler ISSUE-021 deleted, and the diff will look like it
+is.** That one caught everything and returned `{}`, hiding the failure. This one
+catches, adds the one missing fact, and re-raises unchanged. Swallowing versus
+annotating is the whole difference, and the code comment says so at the site,
+because the next reader will arrive with ISSUE-021 in mind.
+
+**Pinned by** `tests/test_golden_set.py::test_a_label_that_will_not_load_names_itself`,
+which asserts on the **rendered traceback** rather than on `__notes__`, so the
+pin survives any other way of carrying the name — a wrapped exception, a
+dedicated type. What a reader sees is the property; how it gets there is not.
+Proven red by dropping the `add_note` call.
+
 ### Related
 
 - ISSUE-021 — the fix whose own description claimed this already worked.
-- The 2026-08-22 growing-the-golden-set plan, Defect 7, which now warns a
-  labeller to match on the echoed content instead.
+- The 2026-08-22 growing-the-golden-set plan, Defect 7.
