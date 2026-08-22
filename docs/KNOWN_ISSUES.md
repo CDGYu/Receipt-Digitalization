@@ -2411,9 +2411,12 @@ itself are the places to look.
 
 **A note rather than a wrapped exception, deliberately.** Every caller sees the
 same exception type it saw before, so nothing can break on the change — and
-the enumeration behind that is small: `load_labels` has exactly two callers,
-`tests/test_golden_set.py` and `tests/test_rules.py`, neither of which catches
-anything. The note is carried in `__notes__` and rendered by both
+the enumeration behind that is small: `load_labels` is called from two files,
+`tests/test_golden_set.py` and `tests/test_rules.py`. *(A draft added "neither
+of which catches anything". That was false the moment it was written: this
+branch's own pin wraps the call in `pytest.raises(Exception)`, one commit
+earlier. The conclusion survives — a bare `Exception` catch is type-agnostic —
+but the claim did not.)* The note is carried in `__notes__` and rendered by both
 `traceback.format_exception` and pytest since Python 3.11; this project gates
 3.11 and 3.13.
 
@@ -2440,7 +2443,21 @@ because the next reader will arrive with ISSUE-021 in mind.
 which asserts on the **rendered traceback** rather than on `__notes__`, so the
 pin survives any other way of carrying the name — a wrapped exception, a
 dedicated type. What a reader sees is the property; how it gets there is not.
-Proven red by dropping the `add_note` call.
+
+**Its first version could not tell "the file that failed" from "any file".** The
+fixture wrote a valid `r001` and a broken `r002`, so the broken label sorted
+last, and two wrong implementations passed: naming **every** label file, and
+naming the **last** one. Naming every file is precisely the failure this issue
+exists to prevent at 50-100 labels. The healthy labels now bracket the broken
+one and their **absence** is asserted; all three reds measured, one mutation per
+run.
+
+**And the reason the design was chosen is now pinned too**, by
+`test_naming_the_label_does_not_change_what_escapes`. "Every caller sees the same
+type" was stated in three places and enforced nowhere — a wrapping
+`raise RuntimeError(...) from exc` left the whole suite green. It derives the
+reference type from `model_validate_json` on the same bytes rather than naming
+pydantic, so it cannot rot when the schema library changes.
 
 ### Related
 
