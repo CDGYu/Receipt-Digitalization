@@ -1553,3 +1553,90 @@ def test_main_refuses_when_only_some_repeats_scored_nothing(
     # measured: pinning ``entries[i]["index"]`` to the constant 1, and shifting
     # every index by 100, each leave all 41 tests green.
     assert "Repeat(s) 2 of 2" in captured.err
+
+
+def _adds_a_label_after_the_first_repeat(golden, run_dir):
+    """A builder that grows the golden set once repeat 1 has written its file.
+
+    Keyed on observable state -- repeat 1's own results file being on disk --
+    rather than on a call count, for the reason
+    ``_empties_the_golden_set_after_the_first_repeat`` gives: ``run_repeats``
+    builds one extra set for the config block.
+
+    Growing the labels directory is what makes two repeats cover *different*
+    receipts, because ``run_eval`` globs it afresh on every repeat. A repeat
+    that merely **fails** a receipt does not: measured on this module, two
+    labels driven by ``_one_repeat_fails_factory`` give both repeats the id set
+    ``{r1, r2}``, because ``run_eval``'s except branch still records an
+    ``EvalResult`` carrying the failed receipt's id (``eval/harness.py``).
+
+    Two scripted responses per client, for the repeat that sees two labels; the
+    repeat that sees one leaves the second unused.
+    """
+    def build(settings=None):
+        if any((run_dir / "repeat-01").glob("*.json")):
+            _add_labelled_receipt(golden, "r2")
+        return PassClients(
+            triage=FakeVLMClient([_triage(), _triage()], model_id="triage-model"),
+            extract_rungs=(FakeVLMClient([_good(), _good()], model_id="cloud"),),
+        )
+
+    return build
+
+
+def test_the_aggregate_names_the_receipts_it_scored(tmp_path, monkeypatch):
+    """A number is only comparable to another number over the same receipts.
+
+    The golden set can hold gitignored labels, so a clone scores fewer receipts
+    than this machine does. The aggregate says which, rather than leaving a
+    reader to infer coverage from a total.
+
+    The golden set **grows between the repeats**, so the two cover different
+    receipts and the union is not repeat 1's view. Without that this test
+    cannot fail for the reason it is named for: measured, restricting the
+    accumulator to ``index == 1`` leaves it green over a one-label golden set,
+    and green again over two labels where one repeat fails a receipt. Proven
+    red against that mutation with the fixture below.
+    """
+    monkeypatch.setenv("VLM_PROVIDER", "ollama")
+    golden = tmp_path / "golden"
+    _write_golden(golden)
+    run_dir = tmp_path / "results" / "run-ids"
+    monkeypatch.setattr(
+        "eval.run_baseline.make_pass_clients",
+        _adds_a_label_after_the_first_repeat(golden, run_dir),
+    )
+
+    aggregate = run_repeats(
+        "run-ids", 2, golden_dir=golden, results_root=tmp_path / "results"
+    )
+
+    scored = aggregate["scored_receipts"]
+    assert scored == sorted(set(scored)), "sorted and deduplicated"
+    assert scored, "a scored run names at least one receipt"
+    # The ids themselves. `sorted(...)` satisfies the property above no
+    # matter what it sorted, and set iteration order is hash-seeded, so the
+    # property alone catches an unsorted `list(scored)` only on some seeds.
+    assert scored == ["r1", "r2"]
+
+    per_repeat = [
+        {
+            r["receipt_id"]
+            for r in json.loads(
+                (run_dir / entry["results_file"]).read_text(encoding="utf-8")
+            )["results"]
+        }
+        for entry in aggregate["repeats"]
+    ]
+    # The precondition that makes the check below discriminating.
+    assert per_repeat == [{"r1"}, {"r1", "r2"}], (
+        f"fixture did not make the repeats differ: {per_repeat}"
+    )
+
+    # It is the union over repeats, not one repeat's view.
+    assert set(scored) == set().union(*per_repeat)
+
+    # In the artifact, not only in the return value: the file is what a reader
+    # quotes from.
+    on_disk = json.loads((run_dir / "aggregate.json").read_text(encoding="utf-8"))
+    assert on_disk["scored_receipts"] == scored

@@ -327,6 +327,15 @@ def run_repeats(
     ``cost_per_receipt`` reaches this block as ``str(Decimal)`` -- measured,
     ``_report_to_dict`` stringifies it -- the day a run measures a cost.
 
+    ``scored_receipts`` names the receipts the run covered: the sorted union
+    of ``receipt_id`` over the repeats the file holds. A clone can hold fewer
+    labels than the machine that ran the eval -- ``p``-prefixed labels under
+    ``eval/golden/labels/`` are gitignored -- so two aggregates can carry
+    different numbers over different receipts with nothing in either file
+    saying so. A list rather than a count of the private ones, because a
+    count would be a second copy of the naming rule and a second copy of a
+    rule is one that can drift.
+
     Both ``make_pass_clients`` and ``run_baseline`` are reached **through the
     ``eval.run_baseline`` module** rather than imported by name here. That is
     load-bearing for the first of them: ``run_baseline`` looks
@@ -355,11 +364,24 @@ def run_repeats(
 
     config = config_identity(tiers, settings)
     entries: list[dict[str, Any]] = []
+    scored: set[str] = set()
     aggregate: dict[str, Any] = {}
 
     for index in range(1, repeats + 1):
         target = repeat_dir(run_dir, index)
         report = _baseline.run_baseline(golden_dir=golden_dir, results_dir=target)
+        # Which receipts this number is over. A clone can hold fewer labels
+        # than the machine that ran it -- `eval/golden/labels/p*.json` is
+        # gitignored -- so a total alone does not say what was covered.
+        # Accumulated across repeats rather than read off one: `run_eval` globs
+        # the labels directory afresh on every repeat, so a label that appears
+        # or disappears mid-run leaves two repeats covering different receipts,
+        # and the union is what the run as a whole reached. A receipt whose
+        # pipeline call raised is in this list too -- `run_eval` records an
+        # `EvalResult` for it -- for the same reason it is in `n_receipts`: it
+        # was put to the system and got a terminal answer.
+        scored.update(r.receipt_id for r in report.results)
+
         written = sorted(target.glob("*.json"))
         entries.append({
             "index": index,
@@ -384,6 +406,7 @@ def run_repeats(
             "spread_omitted": sorted(
                 {k for e in entries for k in e["metrics"]} - set(spread)
             ),
+            "scored_receipts": sorted(scored),
         }
         # Serialized here and persisted there: a file system that will not take
         # the write is a condition of the machine the run is on and must not
