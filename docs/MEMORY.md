@@ -42,7 +42,7 @@ moves, and this file has carried a wrong issue count before.
 **No count of refreshes is written here** — it is a number that moves without its
 sentence changing, which is review standard 5.
 
-**Freshness anchor `11e460f`** — the last commit that is not this handoff pair.
+**Freshness anchor `92a54ed`** — the last commit that is not this handoff pair.
 **It is written twice below — here and inside the command.** Moving one and not
 the other is what happened on this file's previous refresh, and the gate caught
 it because it parses the anchor out of the *command*.
@@ -57,7 +57,7 @@ else: a stamp cannot name the commit that writes it. The test is a command,
 not a commit and not a count:
 
 ```
-git log --oneline 11e460f..main -- ":(top,exclude)docs/MEMORY.md" ":(top,exclude)docs/NEXT_SESSION_PROMPT.md"
+git log --oneline 92a54ed..main -- ":(top,exclude)docs/MEMORY.md" ":(top,exclude)docs/NEXT_SESSION_PROMPT.md"
 git log --oneline refs/remotes/origin/main..main   # what a push would send
 git ls-remote --heads origin main                  # authoritative on what is pushed
 git branch --no-merged main                        # must name NOTHING
@@ -161,6 +161,17 @@ stays reachable — ADR-0042. `git log --oneline -- docs/MEMORY.md` is the list.
   *content* into the traceback as `input_value=...`. For a `p*` label that is
   real merchant data in pytest output. Pre-existing, and not made worse by any
   of today's fixes.
+  **What the three closes cost, and it is now a decision: ADR-0051.** Each of
+  the three shipped a test that was **proven red and still could not catch the
+  defect it was named for** — because the guard derived its expected value from
+  the same helper, function or fixture its subject used. A shared context helper
+  the check could bypass; an on-disk listing taken from the loader's own glob,
+  which left a real label unscored with the **entire suite green**; and a fixture
+  where the broken label sorted last, so naming *every* file passed. **Put the
+  mutation where the SUBJECT computes its answer.** Reviews found all three; no
+  gate found any.
+  **`docs/NEXT_SESSION_PROMPT.md` now opens with "THE TASK LIST"** — the ordered
+  work, with the spec, plan, README, ADR and issue behind each item.
   **And count real-label cases, not the total.** The corpus check carries two
   synthetic calendar cases that pass whether or not a single label loaded.
   **Still true and still worth reading before you collect:** the plan's Task 3

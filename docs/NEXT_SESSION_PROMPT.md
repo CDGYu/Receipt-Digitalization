@@ -20,6 +20,78 @@ it to "fix" a correct sentence in an Accepted ADR to match a wrong measurement.
 
 ---
 
+# THE TASK LIST — what is actually left, in order
+
+**Verify the branch and push state below before acting on any of this.** This
+section says what to do; the commands say where the tree is.
+
+## 1. ISSUE-001 step 7, Task 3 — COLLECT AND LABEL REAL RECEIPTS
+
+**This is the only thing standing between the project and a number that
+describes an actual receipt, and it needs a person and a camera.** Step 7's
+machinery merged 2026-08-22/23; **it grew the golden set by nothing.** The set is
+three receipts, all handwritten, against a 20% handwritten target.
+
+**Read before you photograph anything:**
+
+| what | where | why |
+|---|---|---|
+| the task | `docs/superpowers/plans/2026-08-22-growing-the-golden-set.md`, **Task 3** | the four steps, controller-only |
+| **its corrections** | same file, **dated defect log, Defect 7** | Step 3's instruction carries a false reason and names the wrong module |
+| the design | `docs/superpowers/specs/2026-08-22-growing-the-golden-set-design.md` §3, §7a, §7b | why redaction is per receipt; what was superseded |
+| the procedure | `eval/golden/README.md` | the four labelling steps, `eval/golden/TEMPLATE.json`, the money-as-string rule, `null` over a guess, the composition targets, and the public/private decision |
+| the decision | **ADR-0050** | a label is fully public or fully private; `p*` is gitignored |
+| what a number means | **ADR-0049**, **ADR-0040** | a baseline is a spread; what `field_accuracy` counts |
+
+**Four things that will bite, each already paid for:**
+
+- **`null` means "the receipt does not show this".** It is also what a redacted
+  field looks like, which is why **ISSUE-019** exists: "committed whole or not at
+  all" is a rule **no gate holds**, and the obvious pin is not writable.
+- **Nothing can check your label against the photograph** — **ISSUE-004**. The
+  images are gitignored, so a wrong transcription is invisible to CI at any
+  severity. Labelling accuracy is entirely on the reader. A printed-order defect
+  in `r001`/`r002` was once caught by a human reading a plan against the images
+  and by nothing else.
+- **Count real-label cases, not the total.** The corpus check carries two
+  synthetic calendar cases that pass whether or not a label loaded.
+- **A label that will not parse aborts the whole session and names itself** —
+  look for `while loading golden label <name>`. But **pydantic echoes that
+  label's content into the traceback**, so a `p*` label puts real merchant data
+  in pytest output. Nobody has decided what to do about that.
+
+**Then re-baseline** (Task 3 Step 4) and report min/max/median/n over the new
+set, never a single figure. **Compare only to a run over the same
+`scored_receipts`.**
+
+## 2. Optional, and none of it blocks Task 3
+
+Nineteen issues are open; `docs/KNOWN_ISSUES.md` is the list and each carries its
+own resume steps. The ones that bear on accuracy work specifically:
+
+- **ISSUE-017** — the variance is across receipts, not repeats. It is why Task 3
+  outranks any model choice.
+- **ISSUE-012 / ISSUE-013** — the escalation's per-rung counts never reach the
+  committed results file, and are keyed so two tiers on one model collapse.
+- **ISSUE-018 / ISSUE-015** — the escalation records that it escalated, never why;
+  `PassAttempt.rung` is still write-only.
+- **ISSUE-006** — still the only issue where a user gets a confidently wrong answer.
+
+## 3. How to work here, and why it is not optional
+
+- **Every review this project has run has found something real.** On 2026-08-22/23,
+  four branches got four independent reviews and every one found a false claim or
+  a guard that did not guard, in work that had already been checked. **Five gates
+  were green on all of them.**
+- **ADR-0051** is the newest and the one that changes what you do: a guard must
+  not share its derivation with its subject. **Put the mutation where the
+  SUBJECT computes its answer**, not where the guard computes its expectation.
+- **Review standards 1—28** are in `docs/MEMORY.md`. Hold all of them.
+- **The handoff pair goes last and alone** (ADR-0033), and **every `main` push
+  needs its own fresh ask.**
+
+---
+
 # BRANCH AND PUSH STATE — the commands below are the answer, not this heading.
 
 **Do not expect `git rev-parse main` to equal the stamp's anchor.** It will be
@@ -722,6 +794,11 @@ never one.
 ---
 
 # THE WORK, IN ORDER
+
+> **This section is the archive, not the task list.** Every entry below is a
+> milestone that has already merged; it exists for the reading order each one
+> leaves behind. **What is actually left is "THE TASK LIST" at the top of this
+> file.**
 
 *(§0e and §0d are newest and sit first deliberately. They are lettered rather
 than renumbered to the front because renumbering ages every citation of §0a–§0c,
