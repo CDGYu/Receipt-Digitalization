@@ -42,7 +42,7 @@ moves, and this file has carried a wrong issue count before.
 **No count of refreshes is written here** — it is a number that moves without its
 sentence changing, which is review standard 5.
 
-**Freshness anchor `e58a13f`** — the last commit that is not this handoff pair.
+**Freshness anchor `fadedf4`** — the last commit that is not this handoff pair.
 **It is written twice below — here and inside the command.** Moving one and not
 the other is what happened on this file's previous refresh, and the gate caught
 it because it parses the anchor out of the *command*.
@@ -57,7 +57,7 @@ else: a stamp cannot name the commit that writes it. The test is a command,
 not a commit and not a count:
 
 ```
-git log --oneline e58a13f..main -- ":(top,exclude)docs/MEMORY.md" ":(top,exclude)docs/NEXT_SESSION_PROMPT.md"
+git log --oneline fadedf4..main -- ":(top,exclude)docs/MEMORY.md" ":(top,exclude)docs/NEXT_SESSION_PROMPT.md"
 git log --oneline refs/remotes/origin/main..main   # what a push would send
 git ls-remote --heads origin main                  # authoritative on what is pushed
 git branch --no-merged main                        # must name NOTHING
@@ -141,14 +141,22 @@ stays reachable — ADR-0042. `git log --oneline -- docs/MEMORY.md` is the list.
   **What it does NOT do: collect a single receipt.** That is Task 3 of the plan,
   it needs a person and a camera, no code removes it, and **it is the next
   thing.**
-  **READ ISSUE-020 BEFORE YOU PHOTOGRAPH ANYTHING.** `tests/test_rules.py`
-  scores every golden label against a frozen `GOLDEN_TODAY = date(2026, 7, 28)`;
-  `R031` is `Severity.ERROR` and the future-date slack is one day, so **a
-  correctly-made label for any receipt dated after 2026-07-29 reddens the
-  suite** — which is every receipt you are about to collect. The plan's Task 3
-  Step 3 tells you "a failure there means the label is wrong, not the test", and
-  **for that failure the reason is backwards**: the label is right and the date
-  is stale. Decide ISSUE-020's remedy before collecting, not after.
+  **ISSUE-020 is CLOSED** (2026-08-22, `feat/corpus-date-not-frozen`), and it
+  would have reddened your suite on the very first receipt: the real-corpus
+  check scored every label against a frozen `today` of 2026-07-28, so anything
+  dated after 2026-07-29 failed `R031`. It now builds a bare
+  `ValidationContext()` — what every non-test caller builds — and carries two
+  synthetic calendar cases that bound `today` at both ends. **Do not re-pin it
+  to a literal**; the check's own docstring says why.
+  **ISSUE-021 is what that left, and it is live.** `tests/test_rules.py` builds
+  its corpus inside a bare `except Exception`, and an absent directory never
+  raises — so that handler cannot fire for the case its comment names and fires
+  only for a label that will not parse, taking the whole corpus to `{}` while
+  the suite stays green. **The signal is the number of real-label cases**, not
+  the total. There is at least one malformation that leaves no red anywhere.
+  **Still true and still worth reading before you collect:** the plan's Task 3
+  Step 3 says "a failure there means the label is wrong, not the test". That is
+  a blanket, and ISSUE-020 was the counter-example. Plan Defect 7 is the record.
   **ISSUE-019 is the other one this left:** "a label is committed whole or not
   at all" is a rule **no gate holds**, and the obvious pin is not writable — the
   README tells labellers to use `null` for what a receipt does not show, so a
@@ -2964,8 +2972,9 @@ with an entry point gets run from outside the repository.
 - **`docs/KNOWN_ISSUES.md`** — **no count is written here; derive it** with
   `grep -c "^## ISSUE-" docs/KNOWN_ISSUES.md`. This entry said "**two** issues
   now" from the day there were two until 2026-08-22, by which point there were
-  twenty — found by a whole-branch review, not by any gate, because nothing can
-  redden on a prose count. Start with **ISSUE-001** (the accuracy baseline, its
+  twenty, and twenty-one the day after — each time found by a review rather
+  than by any gate, because nothing can redden on a prose count. **Run the
+  command; do not read a number here.** Start with **ISSUE-001** (the accuracy baseline, its
   diagnosis and resume steps). **ISSUE-002** (added 2026-08-18): a repair
   attempt's
   `extraction_runs.prompt_hash` names a prompt that was never sent, because

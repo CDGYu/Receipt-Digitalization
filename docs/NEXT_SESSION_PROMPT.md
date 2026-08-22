@@ -61,14 +61,23 @@ Task 3 of `docs/superpowers/plans/2026-08-22-growing-the-golden-set.md` is
 controller-only: collect and label real receipts. It needs a person and a
 camera.
 
-**Two things to settle BEFORE you photograph anything:**
+**What to know BEFORE you photograph anything:**
 
-- **ISSUE-020, and it will redden your suite on the first receipt.**
-  `tests/test_rules.py` scores every golden label against a frozen
-  `GOLDEN_TODAY = date(2026, 7, 28)`; `R031` is `Severity.ERROR` with one day of
-  slack, so any receipt dated after 2026-07-29 fails. **And the plan's Task 3
-  Step 3 tells you the label is wrong when it is the date that is stale** — a
-  correct instruction carrying a false reason, which is review standard 28.
+- **ISSUE-020 is CLOSED** (2026-08-22), and it would have stopped you on the
+  first receipt: the real-corpus check scored every label against a frozen
+  `today` of 2026-07-28, so anything dated after 2026-07-29 failed `R031`. It
+  now builds a bare `ValidationContext()` and carries two synthetic calendar
+  cases bounding `today` at both ends. **Do not re-pin it to a literal.**
+- **ISSUE-021 is live, and it is the one that can fool you.** The corpus is
+  built inside a bare `except Exception`; an absent directory never raises, so
+  that handler only ever fires for a label that will not parse, and then the
+  whole corpus goes to `{}` while the suite stays green. **Count the real-label
+  cases, not the total** — the check now always carries two synthetic ones. At
+  least one malformation leaves no red anywhere.
+- **The plan's Task 3 Step 3 still tells you "a failure there means the label is
+  wrong, not the test".** ISSUE-020 was the counter-example; the blanket
+  remains. Plan Defect 7 is the record, and it also says to run the whole suite
+  rather than the one module Step 3 names.
 - **ISSUE-019** — "a label is committed whole or not at all" is a rule **no gate
   holds**, and the obvious pin is not writable, because the README tells you to
   use `null` for what a receipt does not show. Redacted and absent look the
@@ -260,8 +269,9 @@ which is the check to run, not a number to read. Review standard 23.)*
 
 **If you want one sentence:** **collect and label real receipts — step 7's
 Task 3.** Steps 5 and 6 landed the mechanism and the number; step 7's machinery
-landed 2026-08-22 (ADR-0050) and grew the set by nothing. **Read ISSUE-020
-first** or your first receipt reddens the suite.
+landed 2026-08-22 (ADR-0050) and grew the set by nothing. **Read ISSUE-021 and
+plan Defect 7 first** — ISSUE-020, which would have reddened your first receipt,
+is closed.
 If you want something smaller, **ISSUE-006** is still the only issue on the board
 where a user gets a confidently wrong answer.
 
@@ -2051,8 +2061,8 @@ it is also the production reader **ISSUE-015** has been asking for.
 **What to do next, shortest honest answer: ISSUE-001 step 7's Task 3 — collect
 and label real receipts.** The machinery to do it safely is merged; the set is
 still three. ISSUE-017 is why it outranks any model choice: on three receipts,
-one is a near-total failure and the average hides it. **Settle ISSUE-020 before
-you photograph anything.** **ISSUE-006** is
+one is a near-total failure and the average hides it. **ISSUE-020 is closed;
+read ISSUE-021 and plan Defect 7 before you photograph anything.** **ISSUE-006** is
 still the only issue where a user gets a confidently wrong answer.
 
 **Two things measured this session that will bite you.**
