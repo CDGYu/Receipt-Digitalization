@@ -84,7 +84,7 @@ class _Settings:
     ``get_settings()`` resolves on the machine this runs on -- measured -- so
     a stub carrying them cannot tell a block that read *this* object from one
     that ignored its argument and read a process-global ``Settings()``.
-    Measured with exactly that mutation on the committed tree: all 41 tests
+    Measured with exactly that mutation on the committed tree: the module
     stayed green. ``"XTS"`` is the ISO 4217 code reserved for testing and no
     configuration resolves to it; ``999`` is not the timeout default.
     """
@@ -785,7 +785,7 @@ def test_each_repeats_counts_are_the_counts_its_own_results_file_records(
 
     Added because three of its four keys were asserted nowhere -- measured on the
     committed tree, hard-coding ``receipts``, ``auto_approved`` and
-    ``critical_correct`` to 0 left all 27 tests green, and those three are the
+    ``critical_correct`` to 0 left the module green, and those three are the
     denominator and the numerators of every accuracy figure this artifact
     reports. The repeats deliberately disagree, so a block read once and reused
     for every entry fails here too.
@@ -1551,7 +1551,7 @@ def test_main_refuses_when_only_some_repeats_scored_nothing(
     # The rendered index list, not the bare digit. ``"2" in err`` is satisfied
     # by the literal ``of 2`` in the same sentence whatever the indices say --
     # measured: pinning ``entries[i]["index"]`` to the constant 1, and shifting
-    # every index by 100, each leave all 41 tests green.
+    # every index by 100, each leave the module green.
     assert "Repeat(s) 2 of 2" in captured.err
 
 
@@ -1567,10 +1567,8 @@ def _swaps_the_label_after_the_first_repeat(golden, run_dir):
     ``{r1}`` and repeat 2 covers ``{r2}``, so *neither* repeat's id set is the
     union and no single repeat can stand in for it. A fixture that only *grew*
     the golden set leaves repeat 2's set equal to the union, and "keep the last
-    repeat" passes: measured on the shipped tree, rebinding
-    ``scored = {r.receipt_id for r in report.results}`` in place of
-    ``scored.update(...)`` -- a one-token slip, and the likelier one -- left all
-    49 tests in this module green.
+    repeat" passes; the measurements are in the test's own docstring below,
+    where they carry the commit they were made on.
 
     Swapping also closes a third direction: the labels directory ends holding
     only ``r2``, so an implementation that re-globbed it at the end instead of
