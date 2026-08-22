@@ -1,0 +1,169 @@
+{
+  "prompt_version": "1.1.0",
+  "auto_approve_threshold": "0.85",
+  "counts": {
+    "receipts": 1,
+    "auto_approved": 0,
+    "critical_correct": 1,
+    "failed": 0
+  },
+  "metrics": {
+    "auto_approval_precision": null,
+    "auto_approval_rate": 0.0,
+    "critical_field_accuracy": 1.0,
+    "transcription_accuracy": 0.9583333333333334,
+    "transcription_accuracy_core": 0.9333333333333333,
+    "transcription_accuracy_line_items": 1.0,
+    "self_report_agreement": 0.625,
+    "hallucinated_fields": 0,
+    "correctly_empty_fields": 30,
+    "structural_mismatch_fields": 0,
+    "line_item_precision": 1.0,
+    "line_item_recall": 1.0,
+    "line_item_f1": 1.0,
+    "cost_per_receipt": null,
+    "p50_latency_s": null,
+    "p95_latency_s": null
+  },
+  "failures": [],
+  "calibration": [
+    [
+      "0",
+      1.0,
+      1.0
+    ],
+    [
+      "0.1",
+      1.0,
+      1.0
+    ],
+    [
+      "0.2",
+      1.0,
+      1.0
+    ],
+    [
+      "0.3",
+      1.0,
+      1.0
+    ],
+    [
+      "0.4",
+      1.0,
+      1.0
+    ],
+    [
+      "0.5",
+      1.0,
+      1.0
+    ],
+    [
+      "0.6",
+      1.0,
+      1.0
+    ],
+    [
+      "0.7",
+      1.0,
+      1.0
+    ],
+    [
+      "0.8",
+      1.0,
+      1.0
+    ],
+    [
+      "0.820",
+      1.0,
+      1.0
+    ],
+    [
+      "0.9",
+      0.0,
+      1.0
+    ],
+    [
+      "1",
+      0.0,
+      1.0
+    ]
+  ],
+  "results": [
+    {
+      "receipt_id": "r002",
+      "confidence": "0.820",
+      "critical_correct": true,
+      "transcription_correct": 23,
+      "transcription_total": 24,
+      "self_report_correct": 5,
+      "self_report_total": 8,
+      "hallucinated": 0,
+      "correctly_empty": 30,
+      "structural_mismatch": 0,
+      "field_results": {
+        "buyer.name": true,
+        "buyer.tax_id": true,
+        "line_items[0].bbox": true,
+        "line_items[0].description_raw": true,
+        "line_items[0].is_template_row": true,
+        "line_items[0].line_total": true,
+        "line_items[0].modifiers": true,
+        "line_items[0].position": true,
+        "line_items[0].qty": true,
+        "line_items[0].sku": true,
+        "line_items[0].unit": true,
+        "line_items[0].unit_price": true,
+        "line_items[1].bbox": true,
+        "line_items[1].description_raw": true,
+        "line_items[1].is_template_row": true,
+        "line_items[1].line_total": true,
+        "line_items[1].modifiers": true,
+        "line_items[1].position": true,
+        "line_items[1].qty": true,
+        "line_items[1].sku": true,
+        "line_items[1].unit": true,
+        "line_items[1].unit_price": true,
+        "line_items[2].bbox": true,
+        "line_items[2].description_raw": true,
+        "line_items[2].is_template_row": true,
+        "line_items[2].line_total": true,
+        "line_items[2].modifiers": true,
+        "line_items[2].position": true,
+        "line_items[2].qty": true,
+        "line_items[2].sku": true,
+        "line_items[2].unit": true,
+        "line_items[2].unit_price": true,
+        "merchant.address": false,
+        "merchant.branch": true,
+        "merchant.name": true,
+        "merchant.phone": true,
+        "merchant.tax_id": true,
+        "meta.ambiguous_fields": true,
+        "meta.is_handwritten": true,
+        "meta.is_refund": true,
+        "meta.legibility": false,
+        "meta.notes": false,
+        "meta.receipt_is_inconsistent": false,
+        "meta.unreadable_regions": true,
+        "payment.card_last4": true,
+        "payment.method": true,
+        "receipt.cashier": true,
+        "receipt.currency": true,
+        "receipt.date": true,
+        "receipt.date_raw": true,
+        "receipt.decimal_convention": true,
+        "receipt.number": true,
+        "receipt.terminal": true,
+        "receipt.time": true,
+        "totals.change": true,
+        "totals.discount": true,
+        "totals.prices_include_tax": true,
+        "totals.subtotal": true,
+        "totals.tax": true,
+        "totals.tax_breakdown": true,
+        "totals.tender": true,
+        "totals.total": true
+      }
+    }
+  ]
+}

@@ -1,0 +1,223 @@
+{
+  "run_id": "ladder-probe",
+  "n_repeats": 1,
+  "n_repeats_requested": 1,
+  "n_failed": 0,
+  "config": {
+    "prompt_version": "1.1.0",
+    "prompt_bundle_hash": "528cd19c6e5b0f2d",
+    "default_currency": "PHP",
+    "vlm_timeout_s": 600,
+    "triage": {
+      "model_id": "granite3.2-vision:2b",
+      "use_tools": false
+    },
+    "extract_rungs": [
+      {
+        "model_id": "granite3.2-vision:2b",
+        "use_tools": true
+      },
+      {
+        "model_id": "gemma4:cloud",
+        "use_tools": true
+      }
+    ]
+  },
+  "repeats": [
+    {
+      "index": 1,
+      "results_file": "repeat-01/2026-08-22-1.1.0.json",
+      "counts": {
+        "receipts": 1,
+        "auto_approved": 0,
+        "critical_correct": 1,
+        "failed": 0
+      },
+      "metrics": {
+        "auto_approval_precision": null,
+        "auto_approval_rate": 0.0,
+        "critical_field_accuracy": 1.0,
+        "transcription_accuracy": 0.9583333333333334,
+        "transcription_accuracy_core": 0.9333333333333333,
+        "transcription_accuracy_line_items": 1.0,
+        "self_report_agreement": 0.625,
+        "hallucinated_fields": 0,
+        "correctly_empty_fields": 30,
+        "structural_mismatch_fields": 0,
+        "line_item_precision": 1.0,
+        "line_item_recall": 1.0,
+        "line_item_f1": 1.0,
+        "cost_per_receipt": null,
+        "p50_latency_s": null,
+        "p95_latency_s": null
+      },
+      "extract_rung_counts": {
+        "gemma4:cloud": 1
+      },
+      "failures": []
+    }
+  ],
+  "spread": {
+    "auto_approval_precision": {
+      "min": null,
+      "max": null,
+      "median": null,
+      "n": 0,
+      "n_null": 1,
+      "values": [
+        null
+      ]
+    },
+    "auto_approval_rate": {
+      "min": 0.0,
+      "max": 0.0,
+      "median": 0.0,
+      "n": 1,
+      "n_null": 0,
+      "values": [
+        0.0
+      ]
+    },
+    "critical_field_accuracy": {
+      "min": 1.0,
+      "max": 1.0,
+      "median": 1.0,
+      "n": 1,
+      "n_null": 0,
+      "values": [
+        1.0
+      ]
+    },
+    "transcription_accuracy": {
+      "min": 0.9583333333333334,
+      "max": 0.9583333333333334,
+      "median": 0.9583333333333334,
+      "n": 1,
+      "n_null": 0,
+      "values": [
+        0.9583333333333334
+      ]
+    },
+    "transcription_accuracy_core": {
+      "min": 0.9333333333333333,
+      "max": 0.9333333333333333,
+      "median": 0.9333333333333333,
+      "n": 1,
+      "n_null": 0,
+      "values": [
+        0.9333333333333333
+      ]
+    },
+    "transcription_accuracy_line_items": {
+      "min": 1.0,
+      "max": 1.0,
+      "median": 1.0,
+      "n": 1,
+      "n_null": 0,
+      "values": [
+        1.0
+      ]
+    },
+    "self_report_agreement": {
+      "min": 0.625,
+      "max": 0.625,
+      "median": 0.625,
+      "n": 1,
+      "n_null": 0,
+      "values": [
+        0.625
+      ]
+    },
+    "hallucinated_fields": {
+      "min": 0,
+      "max": 0,
+      "median": 0,
+      "n": 1,
+      "n_null": 0,
+      "values": [
+        0
+      ]
+    },
+    "correctly_empty_fields": {
+      "min": 30,
+      "max": 30,
+      "median": 30,
+      "n": 1,
+      "n_null": 0,
+      "values": [
+        30
+      ]
+    },
+    "structural_mismatch_fields": {
+      "min": 0,
+      "max": 0,
+      "median": 0,
+      "n": 1,
+      "n_null": 0,
+      "values": [
+        0
+      ]
+    },
+    "line_item_precision": {
+      "min": 1.0,
+      "max": 1.0,
+      "median": 1.0,
+      "n": 1,
+      "n_null": 0,
+      "values": [
+        1.0
+      ]
+    },
+    "line_item_recall": {
+      "min": 1.0,
+      "max": 1.0,
+      "median": 1.0,
+      "n": 1,
+      "n_null": 0,
+      "values": [
+        1.0
+      ]
+    },
+    "line_item_f1": {
+      "min": 1.0,
+      "max": 1.0,
+      "median": 1.0,
+      "n": 1,
+      "n_null": 0,
+      "values": [
+        1.0
+      ]
+    },
+    "cost_per_receipt": {
+      "min": null,
+      "max": null,
+      "median": null,
+      "n": 0,
+      "n_null": 1,
+      "values": [
+        null
+      ]
+    },
+    "p50_latency_s": {
+      "min": null,
+      "max": null,
+      "median": null,
+      "n": 0,
+      "n_null": 1,
+      "values": [
+        null
+      ]
+    },
+    "p95_latency_s": {
+      "min": null,
+      "max": null,
+      "median": null,
+      "n": 0,
+      "n_null": 1,
+      "values": [
+        null
+      ]
+    }
+  },
+  "spread_omitted": []
+}

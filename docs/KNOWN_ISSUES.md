@@ -6,14 +6,51 @@ resume — so picking it up later does not mean re-deriving the diagnosis.
 
 ---
 
-## ISSUE-001 — The first real baseline run has never completed
+## ISSUE-001 — The first real baseline
 
-**Status:** OPEN — deferred by the user until the system is built.
+*(Heading corrected 2026-08-22. It read "The first real baseline run has never
+completed", which stopped being true that day. Citations name the issue number,
+not the heading.)*
+
+**Status:** OPEN, NARROWED — **step 6 is DONE, 2026-08-22 (ADR-0049).** Steps 7
+(grow the golden set) and 8 (calibrate) remain, and step 7 now gates more than
+the model does — see the measurement below.
 **Owner action required:** yes — but **not the provider choice this issue
 recommends.** See the ruling immediately below.
 **Discovered:** 2026-07-28. **Blocks:** the first real accuracy numbers (spec §16),
 threshold calibration (P3.T6 / P8), and any prompt/rule change that should be
 re-evaluated.
+
+> ## MEASUREMENT, 2026-08-22 — STEP 6 IS DONE, and the number is a spread
+>
+> **Cloud-only, one rung**, `gemma4:cloud` for triage and extract,
+> `use_tools=true`, no fallback. Five repeats, 15 receipts, `n_failed` 0,
+> `spread_omitted` empty, 5 of 5 complete, 2m20s wall clock. Committed at
+> `62eefa3` under `eval/results/2026-08-22-cloud-only/`.
+>
+> | metric | min | max | median | n |
+> |---|---|---|---|---|
+> | `transcription_accuracy` | 60.00% | 61.43% | 60.00% | 5 |
+> | `transcription_accuracy_core` | 52.50% | 55.00% | 52.50% | 5 |
+> | `critical_field_accuracy` | 0.00% | 33.33% | 33.33% | 5 |
+> | `line_item_f1` | 55.56% | 55.56% | 55.56% | 5 |
+>
+> **DO NOT QUOTE 60% AS THE ACCURACY.** It is an average over three receipts
+> that scored **11%, 64% and 96%**. See ISSUE-017 — the variance that matters is
+> across receipts, not across repeats, and this issue's own standing warning was
+> aimed at the wrong axis.
+>
+> **The repeats still earned their cost.** `critical_field_accuracy` came back
+> 33.33, **0.00**, 33.33, 33.33, 33.33 — one repeat in five scored zero on the
+> metric that gates auto-approval, from identical inputs at `temperature=0`.
+>
+> **`cost_per_receipt` and both latency percentiles are `null` on every
+> repeat.** Nothing in `eval/` or `src/` assigns them.
+>
+> **No per-call timing exists here.** `VLM_TIMEOUT_S` bounds one HTTP attempt
+> and the SDK retries (ADR-0047 decision 8).
+>
+> **Step 2's `VLM_TIMEOUT_S` is 900 → that is stale; it is 600.**
 
 > ## USER RULING, 2026-08-14 — Ollama only, and accuracy is the priority
 >
@@ -1590,7 +1627,10 @@ which is a decision rather than a patch.
 **Discovered:** 2026-08-20, during the local→Cloud escalation milestone;
 promoted here 2026-08-21 by that branch's whole-branch review.
 **Pre-existing:** no — the field arrived with this milestone.
-**Blocks:** ISSUE-001 step 6, partially.
+**Blocks:** nothing. *(Updated 2026-08-22: it read "ISSUE-001 step 6,
+partially". Step 6 ran without it — the aggregate `eval/run_repeats.py` writes
+carries the per-rung provenance the results file omits, so this issue's stated
+reason for blocking is discharged. Who owns `run_eval`'s write is still open.)*
 
 ### What is wrong
 
@@ -1775,6 +1815,10 @@ fixes are both worse than the gap.
 **Discovered:** 2026-08-20 during the local→Cloud escalation milestone (M1 of
 its whole-branch review); promoted here 2026-08-21. **Pre-existing:** no.
 **Blocks:** nothing measured; it narrows when the fallback fires.
+*(Updated 2026-08-22: it **does** gate a ladder configuration. If granite emits
+`merchant.name=""`, `totals.total=0` or `prices_include_tax=False`, its
+extraction is kept and never escalates. Filed under "does not gate anything",
+which is true of a cloud-only run and false of a ladder.)*
 
 ### What is wrong
 
@@ -1826,3 +1870,93 @@ twice. There is no per-call measurement in this repository.
   §3.1, §3.3, §4 — the predicate, both earlier corrections, and why the grouping
   is shared.
 - ISSUE-008 — why a second copy of the predicate is not the answer.
+
+---
+
+## ISSUE-017 — The baseline's variance is across receipts, not across repeats
+
+**Status:** OPEN — a finding, not a bug. It changes how every accuracy figure in
+this project must be read.
+**Owner action required:** no. **Discovered:** 2026-08-22, ISSUE-001 step 6.
+**Pre-existing:** yes, and invisible until a real run existed.
+**Blocks:** any single-figure accuracy claim.
+
+### What is wrong
+
+`transcription_accuracy` per receipt, over the same five repeats of the
+2026-08-22 cloud-only baseline:
+
+| receipt | min | max | median |
+|---|---|---|---|
+| r001 | 60.71% | 64.29% | 64.29% |
+| r002 | 91.67% | 95.83% | 95.83% |
+| **r003** | **11.11%** | **11.11%** | **11.11%** |
+
+The published 60.00–61.43% is an average over receipts spanning **11% to 96%**.
+The spread across repeats is ±1.4 points; across receipts it is **85 points**.
+
+**ISSUE-001 step 6's standing warning — "do not report a single run" — was aimed
+at the wrong axis.** Runs barely vary. Receipts vary enormously, and averaging
+three into one figure hides that one of the three is a near-total failure.
+
+**r003 scored exactly 11.11% on all five repeats.** A perfectly stable failure
+is not the signature of a model that read the page and got it wrong.
+
+### Why it is not being fixed
+
+It is not a defect in code. It is a fact about a three-receipt corpus, and the
+remedy is ISSUE-001 step 7 — grow the golden set — which this makes more urgent
+than the model choice does.
+
+### How to resume
+
+Derive it from the committed per-repeat files:
+`results[].transcription_correct / transcription_total`, per `receipt_id`. The
+aggregate carries run-level metrics only, so this is invisible in
+`aggregate.json` — see ADR-0049's "What this ADR does not decide".
+
+### Related
+
+- ISSUE-001 step 6 (the measurement) and step 7 (the remedy).
+- ADR-0049 decision 3.
+
+---
+
+## ISSUE-018 — The escalation records that it escalated, never why
+
+**Status:** OPEN — a gap the first real ladder run exposed.
+**Owner action required:** no. **Discovered:** 2026-08-22, ISSUE-001 step 6.
+**Pre-existing:** yes — it arrived with ADR-0047 and had no consequence until a
+real rung was discarded. **Blocks:** interpreting any ladder run.
+
+### What is wrong
+
+ADR-0047 decision 3 discards a rung on **two** clauses: the call **raised**, or
+the extraction **read nothing**. They are different facts about the local model —
+a raise says the box is too slow, a read-nothing says the model cannot read the
+page — and **nothing records which one fired.**
+
+Measured 2026-08-22: `PassAttempt` carries exactly `pass_name`, `model_id`,
+`rung`, `kept`. No field records a discard reason, and `.rung` is read nowhere
+in `src/` or `eval/` (ISSUE-015).
+
+The first real ladder run (`eval/results/ladder-probe/`, one receipt, 41m39s)
+shows `extract_rung_counts: {"gemma4:cloud": 1}` — granite ran, was discarded,
+the cloud rung was kept. **Which clause fired is unrecoverable from the
+artifact.**
+
+**Do not infer it from elapsed time.** `VLM_TIMEOUT_S` bounds one HTTP attempt
+and the SDK retries (ADR-0047 decision 8), so any elapsed figure covers an
+unknown number of attempts.
+
+### How to resume
+
+`PassAttempt` is the natural home, and it is also the natural reader ISSUE-015
+asks for: a field recording why a non-kept rung was discarded gives `rung` its
+first production consumer and answers this at the same time. Both the plan and
+the field's committed type would change, so it is a decision rather than a line.
+
+### Related
+
+- ISSUE-015 — `PassAttempt.rung` is write-only; this is the reader it wants.
+- ADR-0047 decision 3, ADR-0049 decision 4.
