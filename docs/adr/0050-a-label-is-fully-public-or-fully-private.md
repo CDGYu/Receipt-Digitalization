@@ -57,11 +57,25 @@ metric surface, where narrowing one moves a published metric.
 
 **So a label is committed whole or not at all.**
 
+**That is a rule for labellers, and no gate holds it.** A tracked label with its
+PII nulled passes every gate — measured. The reason it is hard rather than
+merely undone: `eval/golden/README.md` also tells a labeller to use `null` for
+anything the receipt does not show, so **a redacted field and an absent one are
+indistinguishable in the label**, and any pin asserting "PII is filled" would
+false-positive on a legitimate receipt with no printed tax ID. Closing it needs a
+declared marker, which is a design decision this milestone does not take.
+**ISSUE-019.**
+
 **This is pinned, not merely argued.**
 `tests/test_golden_privacy.py::test_nulling_a_pii_field_in_the_truth_scores_a_correct_read_as_invented`
-asserts it as three deltas rather than as absolute counts, so re-labelling
-`r001` cannot rot it. Proven red two independent ways, each mutation parsed
-before it was believed: counting a filled prediction over an empty truth as
+asserts deltas rather than absolute counts, so re-labelling `r001` cannot rot
+it. **One of the three discriminates and two are invariants:** the
+`hallucinated` delta is what both mutations below redden, while the
+`transcription_total` and `core_total` deltas record only that the nulled path
+left the filled set, which holds however the absent branch classifies it.
+
+Proven red two independent ways, each mutation parsed before it was believed:
+counting a filled prediction over an empty truth as
 `correctly_empty` instead of `hallucinated`, and having `field_breakdown` skip
 empty-truth paths in every class — which is literally the change field-level
 redaction would require. Both redden the central assertion; neither the
@@ -89,12 +103,15 @@ prefix. The images directory was already excluded.
 property.** Enumerated from the tree rather than argued — every glob over the
 labels directory:
 
-| reader | line |
+| reader | the symbol holding the glob |
 |---|---|
-| `eval/golden_set.py` | `:82` |
-| `eval/harness.py` | `:248` |
-| `src/receipts/cli.py` | `:1333` |
-| `tests/test_eval_floor.py` | `:45` |
+| `eval/golden_set.py` | `_label_files` |
+| `eval/harness.py` | `run_eval` |
+| `src/receipts/cli.py` | `cmd_eval` |
+| `tests/test_eval_floor.py` | `_labels` |
+
+Cited by symbol rather than by line, because a line number rots silently and
+nothing here would go red when it did (ADR-0028 decision 5).
 
 Each globs one directory, so a private label sitting beside a public one is
 scored here and is simply absent in a clone.
@@ -103,17 +120,34 @@ scored here and is simply absent in a clone.
 a precedence rule between two sources — the two-mechanisms-that-must-agree shape
 this repository legislates against.
 
-**A consequence that is free and easy to miss:** `tests/test_eval_floor.py`
-parametrises over every label present, so a private label is validated by the
-suite the moment it lands, and the local suite runs more parametrised cases than
-CI does. Both are correct; neither needs code.
+**A consequence that is free and easy to miss:** the suite parametrises over
+every label present, so a label is validated the moment it lands and the local
+suite runs more parametrised cases than CI does.
 
-**The rule is enforced at both ends.** `git check-ignore --no-index` is asked
+**And one that is not free.** `tests/test_rules.py` also loads the real labels
+directory — transitively, through `eval/golden_set.py`'s glob, which is why it is
+not a fifth row in the table above — and
+`test_real_corpus_labels_produce_no_errors` scores them against a frozen
+`GOLDEN_TODAY = date(2026, 7, 28)`. Rule `R031` is `Severity.ERROR` and the
+future-date slack is one day, so **a label for any receipt dated after
+2026-07-29 reddens the suite**, which is every receipt Task 3 will photograph.
+The label is right and the frozen date is stale. **ISSUE-020.**
+
+**The rule is checked from both directions, within a stated bound.**
+`git check-ignore --no-index` is asked
 about a *name* rather than the index about a *file* — the index otherwise
 refuses to call a tracked path ignored, which left a blanket
 `eval/golden/labels/*.json` passing every test while destroying the public set.
 Samples differing in the digit after the `p` rule out any literal-prefix
-narrowing, and a tripwire asserts no `p` file has ever reached the index.
+narrowing.
+
+**What the tripwire does and does not cover.** `test_no_private_label_is_committed`
+reads `git ls-files`, so it asserts that no `p` file is in the index **now**. A
+label committed and then removed leaves the index clean and the tripwire green
+while the PII stays retrievable from history — which is the direction
+`eval/golden/README.md` itself calls permanent. Nothing here guards that, and
+nothing cheaply can: the guard is the `.gitignore` rule and the habit of reading
+`git diff --cached --stat` before committing.
 
 ---
 
