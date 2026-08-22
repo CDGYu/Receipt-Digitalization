@@ -1567,8 +1567,7 @@ def _swaps_the_label_after_the_first_repeat(golden, run_dir):
     ``{r1}`` and repeat 2 covers ``{r2}``, so *neither* repeat's id set is the
     union and no single repeat can stand in for it. A fixture that only *grew*
     the golden set leaves repeat 2's set equal to the union, and "keep the last
-    repeat" passes; the measurements are in the test's own docstring below,
-    where they carry the commit they were made on.
+    repeat" passes.
 
     Swapping also closes a third direction: the labels directory ends holding
     only ``r2``, so an implementation that re-globbed it at the end instead of
