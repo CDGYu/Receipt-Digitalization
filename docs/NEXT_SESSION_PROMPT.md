@@ -209,7 +209,7 @@ which is the check to run, not a number to read. Review standard 23.)*
 
 | # | track | state | where the detail is |
 |---|---|---|---|
-| **T2** | **Make accuracy measurable** | **Step 5 is DONE (ADR-0047).** Steps 2-5 are answered; **step 6 — the first real baseline — is the next thing, and nothing blocks it.** | §1 below, `docs/KNOWN_ISSUES.md` ISSUE-001 |
+| **T2** | **Make accuracy measurable** | **Steps 5 and 6 are DONE (ADR-0047, ADR-0049).** A number exists and it is a spread. **Step 7 — grow the golden set — is the next thing, and ISSUE-017 is why it now matters more than the model does.** | §1 below, `docs/KNOWN_ISSUES.md` ISSUE-001 |
 | ~~T5~~ | ~~Look at `/app/receipts`~~ | **DONE 2026-08-20.** Opened in three engines; the download works, one defect found and fixed. **No ADR.** | `docs/MEMORY.md`, ISSUE-010, §2 |
 | T6 | Correctness issues left recorded | **OPEN.** ISSUE-005, 006, 007, 008, 009. | §3 below |
 | **T9** | **What the escalation left** | **OPEN.** ISSUE-012 and 013 gate step 6's number; 014, 015, 016 do not. | **§6b below**, ADR-0047 |
@@ -236,7 +236,7 @@ is a pointer; where it and an entry disagree, the entry wins.**
 
 | issue | one line | state |
 |---|---|---|
-| **ISSUE-001** | **The first real baseline run has never completed.** No accuracy number in this project is measured. Gates T2, Phase 6's success metric, P3.T6/P8.T1, and any precision claim. | **OPEN — the blocker** |
+| **ISSUE-001** | **Step 6 is DONE (2026-08-22).** `transcription_accuracy` min 60.00% / max 61.43% / median 60.00% over five repeats — but read ISSUE-017 before quoting it. Steps 7 and 8 remain. | **OPEN, NARROWED** |
 | ISSUE-002 | A repair attempt's `extraction_runs.prompt_hash` names a prompt that was never sent. | OPEN, pre-existing, deliberately not fixed |
 | ISSUE-003 | A blank pre-printed row drops the unit the form prints on it (`Lt.` on all six r001 rows). | OPEN by design — labelling it creates five unearnable paths |
 | ISSUE-004 | Nothing checks a golden label against its photograph; per-label content rot is open. | OPEN **by design** — re-reading the image is the only instrument |
@@ -251,13 +251,15 @@ is a pointer; where it and an entry disagree, the entry wins.**
 | **ISSUE-013** | **`extract_rung_counts` is keyed by `model_id`, but ADR-0047 defines a tier as `(model, use_tools)`** — so two rungs on one model with opposed tools flags are two tiers and one count, and the escalation goes invisible in the figure that exists to expose it. | **OPEN — a decision ADR-0047 does not take** |
 | ISSUE-014 | `frozen=True` on `PassAttempt`, `RunOutcome` and `PassClients` is pinned by nothing; dropping any one leaves the suite green. Tree-wide there are 10 frozen dataclasses and 0 `FrozenInstanceError` assertions. | OPEN — stated interface property, unenforced |
 | ISSUE-015 | `PassAttempt.rung` is **write-only in production** — four write sites, no reader in `src/` or `eval/`. | OPEN — either give it a reader (see ISSUE-013) or drop it |
-| ISSUE-016 | `read_nothing` still counts vacuous values as content: `merchant.name=""`, `totals.total=0`, `prices_include_tax=False`. The **third** never-fires shape in this predicate's history. | OPEN — **report-don't-fix**; do not enumerate fields, do not change `is_filled` |
+| ISSUE-016 | `read_nothing` still counts vacuous values as content: `merchant.name=""`, `totals.total=0`, `prices_include_tax=False`. The **third** never-fires shape in this predicate's history. **It gates a ladder configuration**, which its own "does not gate anything" filing denies. | OPEN — **report-don't-fix**; do not enumerate fields, do not change `is_filled` |
+| **ISSUE-017** | **The baseline's variance is across receipts, not repeats.** r001 60.71-64.29%, r002 91.67-95.83%, **r003 11.11% on all five repeats**. The headline averages receipts spanning 11% to 96% and describes none of them. | **OPEN — read before quoting any figure** |
+| **ISSUE-018** | **The escalation records that it escalated, never why.** ADR-0047 decision 3 discards on two clauses — raised, or read nothing — and `PassAttempt` has no field for which. A timeout and an unreadable page are different facts. | **OPEN — a decision, and ISSUE-015's missing reader** |
 
 ---
 
 ## THE WORK, IN PRIORITY ORDER
 
-### §1. T2 — make accuracy measurable (ISSUE-001). **STEP 6 IS THE NEXT WORK.**
+### §1. T2 — make accuracy measurable (ISSUE-001). **STEP 6 IS DONE; STEP 7 IS NEXT.**
 
 **Nothing in this project has a measured accuracy number.** Phase 6's merchant
 matching and the buyer capture are both **built and unvalidated** because of it.
@@ -1972,29 +1974,48 @@ and was measured not to need it.)*
 
 ## Today's goal
 
-# NOTHING IS IN FLIGHT. ISSUE-001 step 5 merged on 2026-08-21.
+# NOTHING IS IN FLIGHT. ISSUE-001 **step 6** merged on 2026-08-22 — THIS PROJECT HAS A MEASURED NUMBER.
 
 **`git branch --no-merged main` must name nothing.** Run it rather than
 believing this sentence — it has been wrong in **both** directions, announcing
 no branch while one existed for three days, and announcing one after it landed.
 
-**You are starting, not finishing.** The close ran in full: seven tasks each
-with a fresh implementer, a whole-branch review on the strongest model returning
-MERGE AFTER FIXES, one fix wave, one scoped re-review **which found the wave had
-written four false claims of its own**, one controller fix for those, ADR-0047,
-then a true fast-forward.
+**You are starting, not finishing.** ISSUE-001 step 6 ran. Merged by true
+fast-forward `3939147` -> `aca2521`, **22 commits, single parent each, zero merge
+commits**. Decision: **ADR-0049**. **`main` is NOT pushed** — run the command
+below rather than believing this clause, and every `main` push needs its own
+fresh ask.
 
-**The next thing is step 6, and nothing blocks it.** For the first time since
-2026-07-28 there is a mechanism that can put a model which reads receipts in
-front of the golden set. What that costs you before you start it: **read
-ISSUE-012 and ISSUE-013 first** — the per-rung counts do not reach the committed
-results file, and they are keyed in a way that can hide an escalation. Step 6
-commits a number; both of those decide what that number is worth.
+**THE NUMBER, AND IT IS A SPREAD.** Cloud-only, one rung, `gemma4:cloud` both
+passes, five repeats, 15 receipts, `n_failed` 0, committed at `62eefa3`:
+`transcription_accuracy` **min 60.00%, max 61.43%, median 60.00%, n=5**.
 
-**And the standing warning on step 6 has not moved:** cloud inference is **not
-deterministic at `temperature=0`** — two identical runs on r002 scored 55.56%
-and 61.11%. Repeats and a spread, or the figure is a sample wearing a number's
-clothes.
+**DO NOT QUOTE 60% AS THE ACCURACY.** Per receipt it is **r001 60.71-64.29%,
+r002 91.67-95.83%, r003 11.11% on every one of the five repeats.** The headline
+is an average over receipts spanning 11% to 96%; it describes no receipt. That
+is **ISSUE-017**, and it is the finding this milestone did not expect: **the
+standing warning above was aimed at the wrong axis.** Runs barely vary — ±1.4
+points. Receipts vary by **85 points**.
+
+**The escalation fired against a real model for the first time**
+(`eval/results/ladder-probe/`, ONE receipt, 41m39s, not a baseline): granite ran,
+was discarded, `gemma4:cloud` produced the kept extraction. ADR-0047's closing
+gap is closed. **But which of its decision 3 clauses fired — raised, or read
+nothing — is not recorded and cannot be recovered.** That is **ISSUE-018**, and
+it is also the production reader **ISSUE-015** has been asking for.
+
+**What to do next, shortest honest answer: ISSUE-001 step 7 — grow the golden
+set.** ISSUE-017 makes it more urgent than any model choice: on three receipts,
+one of them is a near-total failure and the average hides it. **ISSUE-006** is
+still the only issue where a user gets a confidently wrong answer.
+
+**Two things measured this session that will bite you.**
+`python -m eval.run_repeats` **does not run from outside the repository** —
+`pyproject.toml` excludes `eval/` from the installed package, so invoke it from
+the repo root. And **granite is far slower than ISSUE-001's carried figure
+suggests**: a standalone triage call alone exceeded 10 minutes and was killed at
+10m28s, and one receipt through the full ladder took 41m39s. `VLM_TIMEOUT_S` is
+**600**, not the `900` ISSUE-001 step 2 still claims.
 
 **Run these first, and believe them over this document:**
 

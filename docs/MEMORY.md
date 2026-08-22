@@ -6,11 +6,23 @@ continuity protocol itself — what lives where, and why this snapshot must be
 verified rather than trusted — is **ADR-0019**, extended by **ADR-0021** (whose
 2026-08-02 dated correction widened the freshness check after a docs-only task
 proved invisible to it).
-Last updated: **2026-08-21**, by the session that built **ISSUE-001 step 5**,
-the local-to-Cloud escalation — the thing that has gated this project since
-2026-07-28. **ADR-0047** is the decision; it **corrects ADR-0002**, whose
-2026-08-18 correction deferred the granularity fix to "the escalation ADR, which
-does not exist yet".
+Last updated: **2026-08-22**, by the session that ran **ISSUE-001 step 6** —
+**the first measured accuracy number in this project's history**, after the gap
+that opened on 2026-07-28. **ADR-0049** is the decision.
+
+**Do not quote a single figure.** `transcription_accuracy` over five repeats of
+the three golden receipts is **min 60.00%, max 61.43%, median 60.00%** — and
+that is an average over receipts that scored **11%, 64% and 96%**. The spread
+across repeats is ±1.4 points; across receipts it is **85 points**. ISSUE-001
+step 6's own standing warning ("do not report a single run, because runs vary")
+was aimed at the wrong axis: runs barely vary, receipts vary enormously.
+**ISSUE-017** is that finding; **r003 scored exactly 11.11% on all five
+repeats.**
+
+**The escalation fired against a real model for the first time** — granite ran,
+was discarded, `gemma4:cloud` produced the kept extraction — closing ADR-0047's
+own stated gap. **But which of decision 3's two clauses fired is not recorded
+and cannot be recovered**, which is **ISSUE-018**.
 
 **The ladder is per pass, not confidence-triggered**, because ISSUE-001's own
 measurements falsify the premise a confidence trigger rests on. **And the
@@ -30,7 +42,7 @@ moves, and this file has carried a wrong issue count before.
 **No count of refreshes is written here** — it is a number that moves without its
 sentence changing, which is review standard 5.
 
-**Freshness anchor `2a2dc1b`** — the last commit that is not this handoff pair.
+**Freshness anchor `a54a2f9`** — the last commit that is not this handoff pair.
 **It is written twice below — here and inside the command.** Moving one and not
 the other is what happened on this file's previous refresh, and the gate caught
 it because it parses the anchor out of the *command*.
@@ -45,7 +57,7 @@ else: a stamp cannot name the commit that writes it. The test is a command,
 not a commit and not a count:
 
 ```
-git log --oneline 2a2dc1b..main -- ":(top,exclude)docs/MEMORY.md" ":(top,exclude)docs/NEXT_SESSION_PROMPT.md"
+git log --oneline a54a2f9..main -- ":(top,exclude)docs/MEMORY.md" ":(top,exclude)docs/NEXT_SESSION_PROMPT.md"
 git log --oneline refs/remotes/origin/main..main   # what a push would send
 git ls-remote --heads origin main                  # authoritative on what is pushed
 git branch --no-merged main                        # must name NOTHING
@@ -117,6 +129,37 @@ stays reachable — ADR-0042. `git log --oneline -- docs/MEMORY.md` is the list.
   "NO BRANCH IN FLIGHT" for three days while one existed, in 2026-08, and then
   announced one for three days after it landed would have been the same defect
   in the other direction.
+- **ISSUE-001 step 6 is DONE — THIS PROJECT HAS A MEASURED NUMBER** (2026-08-22,
+  ADR-0049). Merged by true fast-forward `3939147` -> `aca2521`, **22 commits,
+  single parent each, zero merge commits**; `feat/first-real-baseline` is kept at
+  its merge point. **`main` is NOT pushed** — run
+  `git log --oneline refs/remotes/origin/main..main` rather than believing this
+  clause, and every `main` push needs its own fresh ask.
+  **The number, and it is a spread:** cloud-only, one rung, `gemma4:cloud` both
+  passes, five repeats, 15 receipts, `n_failed` 0.
+  `transcription_accuracy` **min 60.00%, max 61.43%, median 60.00%, n=5**.
+  Committed at `62eefa3` under `eval/results/2026-08-22-cloud-only/`.
+  **DO NOT QUOTE 60%.** Per receipt it is r001 60.71-64.29%, r002 91.67-95.83%,
+  **r003 11.11% on every one of the five repeats**. The figure describes no
+  receipt. That is **ISSUE-017**, and it makes step 7 — grow the golden set —
+  more urgent than any model choice.
+  **What the mechanism is:** `eval/run_repeats.py`, a caller *above*
+  `run_baseline`. Nothing under `src/` changed. Each repeat gets its own results
+  directory, which removes the `{date}-{prompt_version}.json` collision by
+  construction, and one `aggregate.json` carries config identity, per-repeat
+  metrics, per-repeat rung provenance, `n_failed`, `spread_omitted` and a spread
+  whose every figure was observed (`median_low`, no mean, no stdev).
+  **The escalation fired against a real model** for the first time
+  (`eval/results/ladder-probe/`, ONE receipt, 41m39s, not a baseline):
+  `extract_rung_counts: {"gemma4:cloud": 1}`. ADR-0047's closing gap is closed.
+  **But which clause of its decision 3 fired is unrecorded and unrecoverable** —
+  `PassAttempt` has no field for it — which is **ISSUE-018**, and also the
+  production reader **ISSUE-015** has been asking for.
+  **What the close cost:** 21 plan defects, every one the plan author's, and
+  **eight assertions that could not fail** — one per task, two of them created by
+  the very fix rounds that closed earlier ones. The worst would have let a runner
+  recording **zero measured numbers** pass its brief. **No gate caught any of
+  them**; all five were green throughout.
 - **ISSUE-001 step 5, the local-to-Cloud escalation, is COMPLETE AND MERGED**
   (2026-08-21, true fast-forward `de90c8a` -> `1f245d9`, **30 commits, single
   parent each, zero merge commits**). `feat/local-to-cloud-escalation` is kept
