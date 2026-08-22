@@ -89,6 +89,10 @@ own resume steps. The ones that bear on accuracy work specifically:
 - **Review standards 1—28** are in `docs/MEMORY.md`. Hold all of them.
 - **The handoff pair goes last and alone** (ADR-0033), and **every `main` push
   needs its own fresh ask.**
+- **No file here records whether `main` is pushed.** Two sentences claiming it
+  rotted, the second on 2026-08-23. `git ls-remote --heads origin main` against
+  `git rev-parse main` is the answer; `git log --oneline
+  refs/remotes/origin/main..main` says what a push would send.
 
 ---
 
@@ -2125,9 +2129,11 @@ no branch while one existed for three days, and announcing one after it landed.
 private-label convention and `scored_receipts`. Merged by true fast-forward
 `7afafcf` -> `e58a13f`, **15 commits, single parent each, zero merge commits**.
 Decision: **ADR-0050**. **It collected no receipt**, which is the whole of what
-remains. **`main` is NOT pushed** — run the command
-below rather than believing this clause, and every `main` push needs its own
-fresh ask.
+remains. **No push state is written here** — run the command below, and every
+`main` push needs its own fresh ask. *(This clause said "`main` is NOT pushed"
+until 2026-08-23, by which point it had been pushed. Twice now. The hedge telling
+you to run the command did not stop either rot, which is ADR-0042's point about a
+warning not being a check.)*
 
 **THE NUMBER, AND IT IS A SPREAD.** Cloud-only, one rung, `gemma4:cloud` both
 passes, five repeats, 15 receipts, `n_failed` 0, committed at `62eefa3`:

@@ -193,9 +193,13 @@ stays reachable — ADR-0042. `git log --oneline -- docs/MEMORY.md` is the list.
 - **ISSUE-001 step 6 is DONE — THIS PROJECT HAS A MEASURED NUMBER** (2026-08-22,
   ADR-0049). Merged by true fast-forward `3939147` -> `aca2521`, **22 commits,
   single parent each, zero merge commits**; `feat/first-real-baseline` is kept at
-  its merge point. **`main` is NOT pushed** — run
-  `git log --oneline refs/remotes/origin/main..main` rather than believing this
-  clause, and every `main` push needs its own fresh ask.
+  its merge point. **No push state is written here** — run
+  `git log --oneline refs/remotes/origin/main..main`, and every `main` push needs
+  its own fresh ask. *(This clause said "`main` is NOT pushed" until 2026-08-23,
+  by which point it had been pushed. It is the second time that exact sentence
+  has rotted in this pair; the hedge telling a reader to run the command instead
+  did not stop either one, because a warning addressed to a future reader is not
+  a check — ADR-0042.)*
   **The number, and it is a spread:** cloud-only, one rung, `gemma4:cloud` both
   passes, five repeats, 15 receipts, `n_failed` 0.
   `transcription_accuracy` **min 60.00%, max 61.43%, median 60.00%, n=5**.
