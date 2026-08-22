@@ -44,14 +44,52 @@ git log --oneline refs/remotes/origin/main..main  # what the pending push would 
 
 ## What last merged, and how to check what is pushed.
 
-**ISSUE-001 step 5 — the local-to-Cloud escalation — merged by true
-fast-forward on 2026-08-21** — `de90c8a` -> `1f245d9`, **30 commits**, single
+> **This section was stale when you were last handed it, for the third time.**
+> The 2026-08-22 refresh left this paragraph naming **step 5** although **step 6
+> had already merged** before that refresh was written. The warning two
+> paragraphs down said this paragraph had failed to move twice; it then failed a
+> third time, in the very refresh that carried the warning. **Read the git
+> commands above, not this heading.**
+
+**ISSUE-001 step 7's MACHINERY — the private-label convention and
+`scored_receipts` — merged by true fast-forward on 2026-08-22** —
+`7afafcf` -> `e58a13f`, **15 commits**, single parent each, zero merge commits.
+Decision: **ADR-0050**. `feat/golden-set-privacy` is kept at its merge point.
+
+**It grows the golden set by nothing, and that is the whole remaining job.**
+Task 3 of `docs/superpowers/plans/2026-08-22-growing-the-golden-set.md` is
+controller-only: collect and label real receipts. It needs a person and a
+camera.
+
+**Two things to settle BEFORE you photograph anything:**
+
+- **ISSUE-020, and it will redden your suite on the first receipt.**
+  `tests/test_rules.py` scores every golden label against a frozen
+  `GOLDEN_TODAY = date(2026, 7, 28)`; `R031` is `Severity.ERROR` with one day of
+  slack, so any receipt dated after 2026-07-29 fails. **And the plan's Task 3
+  Step 3 tells you the label is wrong when it is the date that is stale** — a
+  correct instruction carrying a false reason, which is review standard 28.
+- **ISSUE-019** — "a label is committed whole or not at all" is a rule **no gate
+  holds**, and the obvious pin is not writable, because the README tells you to
+  use `null` for what a receipt does not show. Redacted and absent look the
+  same.
+
+*(The previous last-merge was **ISSUE-001 step 6, the first measured accuracy
+number in this project's history**, 2026-08-22 — `3939147` -> `aca2521`, 22
+commits, single parent each, zero merge commits. Decision **ADR-0049**.
+**The number is a spread and describes no receipt** — 60.00-61.43% across five
+repeats, while per receipt those same runs give 60.71-64.29%, 91.67-95.83% and
+**11.11% on every one of the five**. That is ISSUE-017. **Do not quote 60%.**)*
+
+*(The previous last-merge was **ISSUE-001 step 5, the local-to-Cloud
+escalation**, 2026-08-21 — `de90c8a` -> `1f245d9`, **30 commits**, single
 parent each, zero merge commits. Decision: **ADR-0047**, which **corrects
 ADR-0002**. `docs/KNOWN_ISSUES.md` ISSUE-012 through ISSUE-016 are what it
-leaves; `docs/MEMORY.md`'s Snapshot bullet is the summary.
+leaves.)*
 
-**The five things to know before touching it** are ADR-0047's decisions 2, 3, 5,
-6 and 8, and every one of them is a trap in a different direction:
+**The five things to know before touching the escalation** are ADR-0047's
+decisions 2, 3, 5, 6 and 8, and every one of them is a trap in a different
+direction:
 
 - **a tier is `(model, use_tools)`, not a provider.** Both models here are
   provider `ollama` and want opposite answers about tool use;
@@ -65,8 +103,9 @@ leaves; `docs/MEMORY.md`'s Snapshot bullet is the summary.
   twice, so any elapsed timing is wall clock over an unknown number of attempts.
   **There is no per-call measurement in this repository** — do not quote one.
 
-**And the thing it leaves undone: no accuracy number.** That is step 6, and
-**nothing blocks it now**. Two of its open issues bite there specifically —
+**What the escalation left undone was the accuracy number — and step 6 has
+since delivered it** (ADR-0049; read the spread, never a single figure).
+Two of ADR-0047's open issues bite there specifically —
 ISSUE-012 (the per-rung counts never reach the committed results file) and
 ISSUE-013 (they are keyed by `model_id`, so two tiers on one model collapse into
 one count).
@@ -212,16 +251,17 @@ which is the check to run, not a number to read. Review standard 23.)*
 | **T2** | **Make accuracy measurable** | **Steps 5 and 6 are DONE (ADR-0047, ADR-0049).** A number exists and it is a spread. **Step 7 — grow the golden set — is the next thing, and ISSUE-017 is why it now matters more than the model does.** | §1 below, `docs/KNOWN_ISSUES.md` ISSUE-001 |
 | ~~T5~~ | ~~Look at `/app/receipts`~~ | **DONE 2026-08-20.** Opened in three engines; the download works, one defect found and fixed. **No ADR.** | `docs/MEMORY.md`, ISSUE-010, §2 |
 | T6 | Correctness issues left recorded | **OPEN.** ISSUE-005, 006, 007, 008, 009. | §3 below |
-| **T9** | **What the escalation left** | **OPEN.** ISSUE-012 and 013 gate step 6's number; 014, 015, 016 do not. | **§6b below**, ADR-0047 |
+| **T9** | **What the escalation left** | **OPEN.** ISSUE-012 and 013 were called gates on step 6's number; step 6 committed one anyway (ADR-0049) and they stayed open. 014, 015, 016 likewise. | **§6b below**, ADR-0047 |
 | T7 | Phases 7 and 8 | Partly blocked on T2. | §4 below |
 | T8 | Earlier-phase leftovers | Open, unblocked, low priority. | §5 below |
 | ~~T1~~ | ~~Phase 6 merchants~~ | **CLOSED 2026-08-18.** ADR-0043. | `docs/MEMORY.md` |
 | ~~T3~~ | ~~Buyer and blank rows~~ | **CLOSED 2026-08-19.** ADR-0044, ADR-0045. | `docs/MEMORY.md` |
 | ~~T4~~ | ~~The results list ("A1")~~ | **CLOSED 2026-08-20.** ADR-0046. | `docs/MEMORY.md`, §7 |
 
-**If you want one sentence:** **run step 6 — the first real baseline.** The
-mechanism landed 2026-08-21 (ADR-0047) and nothing blocks it; read **ISSUE-012**
-and **ISSUE-013** first, because they decide what the committed number is worth.
+**If you want one sentence:** **collect and label real receipts — step 7's
+Task 3.** Steps 5 and 6 landed the mechanism and the number; step 7's machinery
+landed 2026-08-22 (ADR-0050) and grew the set by nothing. **Read ISSUE-020
+first** or your first receipt reddens the suite.
 If you want something smaller, **ISSUE-006** is still the only issue on the board
 where a user gets a confidently wrong answer.
 
@@ -247,7 +287,7 @@ is a pointer; where it and an entry disagree, the entry wins.**
 | ISSUE-009 | `CorrectionPatch`'s docstring no longer describes the contract it validates; OpenAPI omits `buyer.*` and `is_template_row`. | OPEN — harmless, misleading |
 | ISSUE-010 | `/app/receipts` **has now been opened**, in three engines. The download **works**; the predicted defect was refuted. One real finding (the gutter) is fixed. | **OPEN, narrowed** — only the collapsed-table `border-radius`, a repo-wide question |
 | ISSUE-011 | A measured-false `class="undefined"` spelling survives in **three** test files (four sentences). | OPEN — pre-existing, cosmetic |
-| **ISSUE-012** | **The per-rung counts never reach the committed results JSON.** They reach the printed report and the return value; `run_eval` writes the file before it returns and `run_baseline` folds them in after. | **OPEN — must close before step 6 commits a number** |
+| **ISSUE-012** | **The per-rung counts never reach the committed results JSON.** They reach the printed report and the return value; `run_eval` writes the file before it returns and `run_baseline` folds them in after. | **OPEN.** This row said "must close before step 6 commits a number"; step 6 committed one on 2026-08-22 without it |
 | **ISSUE-013** | **`extract_rung_counts` is keyed by `model_id`, but ADR-0047 defines a tier as `(model, use_tools)`** — so two rungs on one model with opposed tools flags are two tiers and one count, and the escalation goes invisible in the figure that exists to expose it. | **OPEN — a decision ADR-0047 does not take** |
 | ISSUE-014 | `frozen=True` on `PassAttempt`, `RunOutcome` and `PassClients` is pinned by nothing; dropping any one leaves the suite green. Tree-wide there are 10 frozen dataclasses and 0 `FrozenInstanceError` assertions. | OPEN — stated interface property, unenforced |
 | ISSUE-015 | `PassAttempt.rung` is **write-only in production** — four write sites, no reader in `src/` or `eval/`. | OPEN — either give it a reader (see ISSUE-013) or drop it |
@@ -401,7 +441,9 @@ All five are recorded in `docs/KNOWN_ISSUES.md` with their measurements, and
 **ADR-0047's "What this ADR does not decide"** is why two of them are open
 decisions rather than bugs. **Do not re-derive them.**
 
-**These two gate step 6's number, and should be settled before it commits one:**
+**These two were called gates on step 6's number. Step 6 committed a number on
+2026-08-22 without settling either, so read them as caveats on that figure
+rather than as blockers:**
 
 - **ISSUE-012 — the per-rung counts never reach the committed results JSON.**
   They reach the printed report and the return value. `run_eval` writes the file
@@ -1974,15 +2016,17 @@ and was measured not to need it.)*
 
 ## Today's goal
 
-# NOTHING IS IN FLIGHT. ISSUE-001 **step 6** merged on 2026-08-22 — THIS PROJECT HAS A MEASURED NUMBER.
+# NOTHING IS IN FLIGHT. ISSUE-001 **step 7's MACHINERY** merged on 2026-08-22 — AND THE GOLDEN SET IS STILL THREE RECEIPTS.
 
 **`git branch --no-merged main` must name nothing.** Run it rather than
 believing this sentence — it has been wrong in **both** directions, announcing
 no branch while one existed for three days, and announcing one after it landed.
 
-**You are starting, not finishing.** ISSUE-001 step 6 ran. Merged by true
-fast-forward `3939147` -> `aca2521`, **22 commits, single parent each, zero merge
-commits**. Decision: **ADR-0049**. **`main` is NOT pushed** — run the command
+**You are starting, not finishing.** ISSUE-001 step 7's machinery ran — the
+private-label convention and `scored_receipts`. Merged by true fast-forward
+`7afafcf` -> `e58a13f`, **15 commits, single parent each, zero merge commits**.
+Decision: **ADR-0050**. **It collected no receipt**, which is the whole of what
+remains. **`main` is NOT pushed** — run the command
 below rather than believing this clause, and every `main` push needs its own
 fresh ask.
 
@@ -2004,9 +2048,11 @@ gap is closed. **But which of its decision 3 clauses fired — raised, or read
 nothing — is not recorded and cannot be recovered.** That is **ISSUE-018**, and
 it is also the production reader **ISSUE-015** has been asking for.
 
-**What to do next, shortest honest answer: ISSUE-001 step 7 — grow the golden
-set.** ISSUE-017 makes it more urgent than any model choice: on three receipts,
-one of them is a near-total failure and the average hides it. **ISSUE-006** is
+**What to do next, shortest honest answer: ISSUE-001 step 7's Task 3 — collect
+and label real receipts.** The machinery to do it safely is merged; the set is
+still three. ISSUE-017 is why it outranks any model choice: on three receipts,
+one is a near-total failure and the average hides it. **Settle ISSUE-020 before
+you photograph anything.** **ISSUE-006** is
 still the only issue where a user gets a confidently wrong answer.
 
 **Two things measured this session that will bite you.**
@@ -2078,10 +2124,11 @@ simplify something load-bearing. Every near-miss in that milestone was one.
 **Then** pick from the START HERE index, which carries every open issue — or
 answer the questions under "Blocked on the user" and let that pick for you.
 
-**If you want the shortest honest answer to "what next":** **ISSUE-001 step 6**,
-the first real baseline. Step 5 built the mechanism and nothing blocks step 6 now
-— it is the first time a model that can read a receipt meets the golden set, and
-it is what the project has been blocked on since 2026-07-28. **Read ISSUE-012 and
+**If you want the shortest honest answer to "what next":** **ISSUE-001 step 7's
+Task 3** — collect and label real receipts. Step 5 built the mechanism, step 6
+measured the number, and step 7 built the machinery that lets the set grow
+without publishing real businesses' details. **What none of them did is add a
+receipt**, and the number will keep describing no receipt until one does. **Read ISSUE-012 and
 ISSUE-013 before starting it**, because both decide what the committed number is
 worth. If you want something smaller first, **ISSUE-006** is the only issue on
 the board where a user gets a confidently wrong answer.

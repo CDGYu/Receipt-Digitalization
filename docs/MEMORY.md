@@ -42,7 +42,7 @@ moves, and this file has carried a wrong issue count before.
 **No count of refreshes is written here** — it is a number that moves without its
 sentence changing, which is review standard 5.
 
-**Freshness anchor `a54a2f9`** — the last commit that is not this handoff pair.
+**Freshness anchor `e58a13f`** — the last commit that is not this handoff pair.
 **It is written twice below — here and inside the command.** Moving one and not
 the other is what happened on this file's previous refresh, and the gate caught
 it because it parses the anchor out of the *command*.
@@ -57,7 +57,7 @@ else: a stamp cannot name the commit that writes it. The test is a command,
 not a commit and not a count:
 
 ```
-git log --oneline a54a2f9..main -- ":(top,exclude)docs/MEMORY.md" ":(top,exclude)docs/NEXT_SESSION_PROMPT.md"
+git log --oneline e58a13f..main -- ":(top,exclude)docs/MEMORY.md" ":(top,exclude)docs/NEXT_SESSION_PROMPT.md"
 git log --oneline refs/remotes/origin/main..main   # what a push would send
 git ls-remote --heads origin main                  # authoritative on what is pushed
 git branch --no-merged main                        # must name NOTHING
@@ -129,6 +129,39 @@ stays reachable — ADR-0042. `git log --oneline -- docs/MEMORY.md` is the list.
   "NO BRANCH IN FLIGHT" for three days while one existed, in 2026-08, and then
   announced one for three days after it landed would have been the same defect
   in the other direction.
+- **ISSUE-001 step 7's MACHINERY is DONE and merged — and the golden set is
+  NOT grown** (2026-08-22, **ADR-0050**). Merged by true fast-forward
+  `7afafcf` -> `e58a13f`, **15 commits, single parent each, zero merge
+  commits**; `feat/golden-set-privacy` is kept at its merge point.
+  **What it delivers:** a label is **fully public or fully private, never partly
+  redacted** — `eval/golden/labels/p*.json` is gitignored, and **no module
+  changed**, because every reader already globs the one directory. And
+  `aggregate.json` gains `scored_receipts`, the sorted union of the ids a run
+  actually scored, so two numbers can be compared only over the same set.
+  **What it does NOT do: collect a single receipt.** That is Task 3 of the plan,
+  it needs a person and a camera, no code removes it, and **it is the next
+  thing.**
+  **READ ISSUE-020 BEFORE YOU PHOTOGRAPH ANYTHING.** `tests/test_rules.py`
+  scores every golden label against a frozen `GOLDEN_TODAY = date(2026, 7, 28)`;
+  `R031` is `Severity.ERROR` and the future-date slack is one day, so **a
+  correctly-made label for any receipt dated after 2026-07-29 reddens the
+  suite** — which is every receipt you are about to collect. The plan's Task 3
+  Step 3 tells you "a failure there means the label is wrong, not the test", and
+  **for that failure the reason is backwards**: the label is right and the date
+  is stale. Decide ISSUE-020's remedy before collecting, not after.
+  **ISSUE-019 is the other one this left:** "a label is committed whole or not
+  at all" is a rule **no gate holds**, and the obvious pin is not writable — the
+  README tells labellers to use `null` for what a receipt does not show, so a
+  redacted field and an absent one are indistinguishable. It needs a declared
+  marker, which is a schema decision nobody has taken.
+  **What the close cost:** every stage found real defects in the stage before
+  it. The plan's own central mutation could not be caught, and it was the
+  mutation its task existed to prove; its prescribed *remedy* for a weak test
+  was itself a test that could not fail; and the closure for **that** was weak
+  in the opposite direction. The whole-branch review then found **four
+  Importants, three of them in the ADR written to close the milestone**,
+  including the branch's headline sentence having no gate at all. **No gate
+  caught any of them; all five were green throughout.**
 - **ISSUE-001 step 6 is DONE — THIS PROJECT HAS A MEASURED NUMBER** (2026-08-22,
   ADR-0049). Merged by true fast-forward `3939147` -> `aca2521`, **22 commits,
   single parent each, zero merge commits**; `feat/first-real-baseline` is kept at
@@ -146,9 +179,15 @@ stays reachable — ADR-0042. `git log --oneline -- docs/MEMORY.md` is the list.
   **What the mechanism is:** `eval/run_repeats.py`, a caller *above*
   `run_baseline`. Nothing under `src/` changed. Each repeat gets its own results
   directory, which removes the `{date}-{prompt_version}.json` collision by
-  construction, and one `aggregate.json` carries config identity, per-repeat
-  metrics, per-repeat rung provenance, `n_failed`, `spread_omitted` and a spread
-  whose every figure was observed (`median_low`, no mean, no stdev).
+  construction, and one `aggregate.json` carries the run's config identity, its
+  per-repeat metrics and rung provenance, and a spread whose every figure was
+  observed (`median_low`, no mean, no stdev). **No key list is written here —
+  read the file.** The version of this sentence that closed its enumeration went
+  stale the moment `scored_receipts` was added (2026-08-22), which is review
+  standard 20 happening to the sentence that describes the artifact. The three
+  worth knowing by name: `n_failed`, `spread_omitted`, and `scored_receipts` —
+  what failed, what the spread has no entry for, and which receipts the number
+  is over.
   **The escalation fired against a real model** for the first time
   (`eval/results/ladder-probe/`, ONE receipt, 41m39s, not a baseline):
   `extract_rung_counts: {"gemma4:cloud": 1}`. ADR-0047's closing gap is closed.
@@ -2922,8 +2961,13 @@ with an entry point gets run from outside the repository.
   inventory, §15 milestones, §16 eval, §17 config, **§18 traps (PAN)**, §19 DoD.
 - `docs/NEXT_SESSION_PROMPT.md` — the ordered task list and reading order.
 - `IMPLEMENTATION_PLAN.md` · `README.md` (§5 design decisions) · `VLM_AND_DATA.md`
-- **`docs/KNOWN_ISSUES.md`** — **two** issues now. ISSUE-001 with its diagnosis
-  and resume steps, and **ISSUE-002** (added 2026-08-18): a repair attempt's
+- **`docs/KNOWN_ISSUES.md`** — **no count is written here; derive it** with
+  `grep -c "^## ISSUE-" docs/KNOWN_ISSUES.md`. This entry said "**two** issues
+  now" from the day there were two until 2026-08-22, by which point there were
+  twenty — found by a whole-branch review, not by any gate, because nothing can
+  redden on a prose count. Start with **ISSUE-001** (the accuracy baseline, its
+  diagnosis and resume steps). **ISSUE-002** (added 2026-08-18): a repair
+  attempt's
   `extraction_runs.prompt_hash` names a prompt that was never sent, because
   `_attempt_prompt_hash`'s repair branch omits the system prompt that `repair()`
   actually sends. **Pre-existing, deliberately not fixed** — fixing it changes
