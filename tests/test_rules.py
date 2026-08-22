@@ -625,8 +625,10 @@ def test_R020_and_R024_do_not_both_report(ctx):
 # return ``{}``. So nothing it swallowed was an absent corpus; what it swallowed
 # was a label that would not read or parse, and it turned the whole corpus into
 # ``{}`` while the suite stayed green (ISSUE-021). A broken or unreadable label
-# now fails here, loudly -- though **not by name**: the error echoes the file's
-# content and the loader's line, never its path.
+# now fails here, loudly **and by name** -- look for the line reading
+# ``while loading golden label <name>``. Until 2026-08-23 it did not: the error
+# echoed the file's content and the loader's line and never its path, which is
+# ISSUE-022, closed on `feat/label-errors-name-the-file`.
 GOLDEN_LABELS = load_labels(DEFAULT_LABELS_DIR)
 
 

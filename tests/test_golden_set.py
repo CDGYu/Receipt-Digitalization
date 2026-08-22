@@ -96,6 +96,11 @@ def test_load_labels_returns_ids_and_skips_template_and_manifest(tmp_path):
     assert all(isinstance(v, ReceiptExtraction) for v in labels.values())
 
 
+#: A label body that will not parse at all. Kept beside the fixture that uses it
+#: so the two cannot drift.
+_BROKEN_LABEL = '{1: "not a string key"}'
+
+
 def test_a_label_that_will_not_load_names_itself(tmp_path):
     """The strict loader must say WHICH file it choked on.
 
@@ -108,19 +113,55 @@ def test_a_label_that_will_not_load_names_itself(tmp_path):
     abort: one unreadable label now stops the entire session, and the message
     did not say which label to fix. ``eval/golden/README.md`` targets 50-100.
 
+    **The healthy labels bracket the broken one, and their absence is asserted.**
+    A first version wrote only ``r001`` and a broken ``r002``, so the broken file
+    sorted last and "names the file that failed" was indistinguishable from
+    "names every file" or "names the last file" -- measured, both of those wrong
+    implementations passed it, and naming every file is precisely the failure
+    this issue exists to prevent at 50-100 labels.
+
     Asserted on the **rendered traceback** rather than on the mechanism, so the
     pin survives any way of carrying the name -- a note, a wrapped exception, a
-    dedicated type. What a reader sees is the property; how it gets there is
-    not.
+    dedicated type. What a reader sees is the property; how it gets there is not.
     """
     (tmp_path / "r001.json").write_text(_VALID_LABEL, encoding="utf-8")
-    (tmp_path / "r002.json").write_text('{1: "not a string key"}', encoding="utf-8")
+    (tmp_path / "r002.json").write_text(_BROKEN_LABEL, encoding="utf-8")
+    (tmp_path / "r003.json").write_text(_VALID_LABEL, encoding="utf-8")
 
     with pytest.raises(Exception) as excinfo:
         load_labels(tmp_path)
 
     rendered = "".join(traceback.format_exception(excinfo.value))
     assert "r002.json" in rendered, rendered
+    assert "r001.json" not in rendered, "named a label that loaded fine: " + rendered
+    assert "r003.json" not in rendered, "named a label that loaded fine: " + rendered
+
+
+def test_naming_the_label_does_not_change_what_escapes(tmp_path):
+    """The reason the loader uses a note instead of a wrapped exception.
+
+    ``load_labels`` catches to annotate and re-raises unchanged, so every caller
+    sees the exception it saw before. That is stated in the loader's docstring,
+    in the comment at the site, and in ISSUE-022's resolution -- and until this
+    test, in nothing that could fail.
+
+    The reference type is derived here rather than named, so the assertion does
+    not hard-code pydantic and cannot rot when the schema library changes: it is
+    whatever ``model_validate_json`` raises on the same bytes.
+
+    Goes red if the handler ever wraps -- ``raise RuntimeError(...) from exc``
+    leaves the traceback naming the file and every other test green.
+    """
+    (tmp_path / "r001.json").write_text(_BROKEN_LABEL, encoding="utf-8")
+
+    with pytest.raises(Exception) as direct:
+        ReceiptExtraction.model_validate_json(_BROKEN_LABEL)
+    with pytest.raises(Exception) as through_loader:
+        load_labels(tmp_path)
+
+    assert type(through_loader.value) is type(direct.value)
+    assert through_loader.value.__cause__ is None, "re-raised, never wrapped"
+
 
 
 # --------------------------------------------------------------------------- #

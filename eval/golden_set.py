@@ -106,7 +106,7 @@ def load_labels(labels_dir: Path) -> dict[str, ReceiptExtraction]:
             labels[path.stem] = ReceiptExtraction.model_validate_json(
                 path.read_text(encoding="utf-8")
             )
-        except Exception as exc:  # noqa: BLE001 - re-raised unchanged, only named
+        except Exception as exc:
             # Name the file, then let the error out untouched.
             #
             # **This is not the handler ISSUE-021 deleted.** That one swallowed
