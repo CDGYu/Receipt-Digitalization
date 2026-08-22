@@ -1555,27 +1555,42 @@ def test_main_refuses_when_only_some_repeats_scored_nothing(
     assert "Repeat(s) 2 of 2" in captured.err
 
 
-def _adds_a_label_after_the_first_repeat(golden, run_dir):
-    """A builder that grows the golden set once repeat 1 has written its file.
+def _swaps_the_label_after_the_first_repeat(golden, run_dir):
+    """A builder that replaces the golden set's one label once repeat 1 is done.
 
     Keyed on observable state -- repeat 1's own results file being on disk --
     rather than on a call count, for the reason
     ``_empties_the_golden_set_after_the_first_repeat`` gives: ``run_repeats``
     builds one extra set for the config block.
 
-    Growing the labels directory is what makes two repeats cover *different*
+    **Disjoint, not nested**, and that is the whole point. Repeat 1 covers
+    ``{r1}`` and repeat 2 covers ``{r2}``, so *neither* repeat's id set is the
+    union and no single repeat can stand in for it. A fixture that only *grew*
+    the golden set leaves repeat 2's set equal to the union, and "keep the last
+    repeat" passes: measured on the shipped tree, rebinding
+    ``scored = {r.receipt_id for r in report.results}`` in place of
+    ``scored.update(...)`` -- a one-token slip, and the likelier one -- left all
+    49 tests in this module green.
+
+    Swapping also closes a third direction: the labels directory ends holding
+    only ``r2``, so an implementation that re-globbed it at the end instead of
+    reading the reports cannot produce ``{r1, r2}`` either.
+
+    Changing the labels directory is what makes two repeats cover different
     receipts, because ``run_eval`` globs it afresh on every repeat. A repeat
     that merely **fails** a receipt does not: measured on this module, two
     labels driven by ``_one_repeat_fails_factory`` give both repeats the id set
     ``{r1, r2}``, because ``run_eval``'s except branch still records an
     ``EvalResult`` carrying the failed receipt's id (``eval/harness.py``).
 
-    Two scripted responses per client, for the repeat that sees two labels; the
-    repeat that sees one leaves the second unused.
+    Two scripted responses per client where each repeat needs one, so a fixture
+    that stopped swapping fails on the precondition assertion below rather than
+    on ``FakeVLMClient exhausted``.
     """
     def build(settings=None):
         if any((run_dir / "repeat-01").glob("*.json")):
             _add_labelled_receipt(golden, "r2")
+            (golden / "labels" / "r1.json").unlink(missing_ok=True)
         return PassClients(
             triage=FakeVLMClient([_triage(), _triage()], model_id="triage-model"),
             extract_rungs=(FakeVLMClient([_good(), _good()], model_id="cloud"),),
@@ -1591,12 +1606,17 @@ def test_the_aggregate_names_the_receipts_it_scored(tmp_path, monkeypatch):
     than this machine does. The aggregate says which, rather than leaving a
     reader to infer coverage from a total.
 
-    The golden set **grows between the repeats**, so the two cover different
-    receipts and the union is not repeat 1's view. Without that this test
-    cannot fail for the reason it is named for: measured, restricting the
-    accumulator to ``index == 1`` leaves it green over a one-label golden set,
-    and green again over two labels where one repeat fails a receipt. Proven
-    red against that mutation with the fixture below.
+    The golden set's label is **swapped between the repeats**, so the two cover
+    disjoint receipts and neither one's set is the union. Without that this
+    test cannot fail for the reason it is named for. Measured, in order of how
+    much each fixture sees:
+
+    * one label, every repeat scoring it -- ``if index == 1`` passes;
+    * two labels where one repeat *fails* one -- ``if index == 1`` passes, since
+      ``run_eval`` records an ``EvalResult`` for a failed receipt too;
+    * a golden set that only grows -- ``if index == 1`` fails, but rebinding
+      ``scored = {...}`` passes, because repeat 2's set *is* the union;
+    * disjoint, below -- both fail.
     """
     monkeypatch.setenv("VLM_PROVIDER", "ollama")
     golden = tmp_path / "golden"
@@ -1604,7 +1624,7 @@ def test_the_aggregate_names_the_receipts_it_scored(tmp_path, monkeypatch):
     run_dir = tmp_path / "results" / "run-ids"
     monkeypatch.setattr(
         "eval.run_baseline.make_pass_clients",
-        _adds_a_label_after_the_first_repeat(golden, run_dir),
+        _swaps_the_label_after_the_first_repeat(golden, run_dir),
     )
 
     aggregate = run_repeats(
@@ -1628,12 +1648,14 @@ def test_the_aggregate_names_the_receipts_it_scored(tmp_path, monkeypatch):
         }
         for entry in aggregate["repeats"]
     ]
-    # The precondition that makes the check below discriminating.
-    assert per_repeat == [{"r1"}, {"r1", "r2"}], (
-        f"fixture did not make the repeats differ: {per_repeat}"
+    # The precondition that makes the check below discriminating: disjoint, so
+    # neither repeat's set equals the union.
+    assert per_repeat == [{"r1"}, {"r2"}], (
+        f"fixture did not make the repeats disjoint: {per_repeat}"
     )
 
-    # It is the union over repeats, not one repeat's view.
+    # It is the union over repeats, not one repeat's view -- not the first
+    # repeat's, and not the last's.
     assert set(scored) == set().union(*per_repeat)
 
     # In the artifact, not only in the return value: the file is what a reader

@@ -376,10 +376,13 @@ def run_repeats(
         # Accumulated across repeats rather than read off one: `run_eval` globs
         # the labels directory afresh on every repeat, so a label that appears
         # or disappears mid-run leaves two repeats covering different receipts,
-        # and the union is what the run as a whole reached. A receipt whose
-        # pipeline call raised is in this list too -- `run_eval` records an
-        # `EvalResult` for it -- for the same reason it is in `n_receipts`: it
-        # was put to the system and got a terminal answer.
+        # and the union is what the run as a whole reached. A receipt is here
+        # even when nothing was read from it: one `except` in `run_eval` covers
+        # a label that would not read or validate, a pipeline call that raised
+        # and a scoring error alike, and it records an `EvalResult` carrying
+        # the id on every one of them. The same rule as `n_receipts`, where
+        # nothing silently leaves the batch -- so this key names what the run
+        # was run over, not what succeeded. `n_failed` is the other question.
         scored.update(r.receipt_id for r in report.results)
 
         written = sorted(target.glob("*.json"))
