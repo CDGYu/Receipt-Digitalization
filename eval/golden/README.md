@@ -28,7 +28,9 @@ Keep each image next to its label by filename stem — `images/{id}.jpg` pairs w
 
 1. Photograph the receipt the way it will really be captured: phone camera,
    indoor light, slightly crumpled. Save it as `images/{id}.<ext>`.
-2. Copy `TEMPLATE.json` to `labels/{id}.json`.
+2. Copy `TEMPLATE.json` to `labels/{id}.json`. **The `{id}` you type here is the
+   privacy decision** — `p` for a real third party's receipt, `r` for one you may
+   publish. Read "Public or private?" below before you name the file.
 3. Replace **every** value with exactly what the image shows. Transcribe the
    printed values even if they do not add up — do not "fix" the receipt.
    - **Money is a JSON string**, e.g. `"761.60"` (not `761.60`). The string keeps

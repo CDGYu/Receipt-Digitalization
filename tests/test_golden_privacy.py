@@ -22,6 +22,21 @@ from eval.golden_set import _is_label_file
 
 REPO = Path(__file__).resolve().parents[1]
 
+#: The one directory this convention governs, named once so a test cannot drift
+#: from the path it claims to be checking.
+LABELS_DIR = "eval/golden/labels"
+
+#: Private ids the rule has to cover. They differ in the digit immediately after
+#: the ``p``, so no rule of the form ``p<literal>*`` can satisfy all three: it
+#: fixes that digit and misses two of them. Measured 2026-08-22,
+#: ``eval/golden/labels/p0*.json`` ignores ``p001`` and the ``p042`` this tuple
+#: replaced, while leaving every id from ``p100`` up committable -- and the
+#: README targets 50-100 receipts, so ``p100`` is an id someone reaches rather
+#: than a hypothetical. (A character class such as ``p[0-9]*`` does satisfy all
+#: three; for numeric ids that is the same rule, and the narrowing that actually
+#: gets written is a literal prefix.)
+PRIVATE_SAMPLES = ("p001.json", "p100.json", "p900.json")
+
 
 def _git(*args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
@@ -35,8 +50,10 @@ def _git(*args: str) -> subprocess.CompletedProcess[str]:
     )
 
 
-def _check_ignore(relative: str) -> bool:
-    """True when the ignore rules cover ``relative``. Asks git, never the file text.
+def _ignore_source(relative: str) -> str | None:
+    """The ignore *file* whose rule covers ``relative``, or ``None`` if none does.
+
+    Asks git, never the file text.
 
     ``--no-index`` is load-bearing. Without it ``git check-ignore`` consults the
     index first and will not call a *tracked* path ignored, so the blanket
@@ -47,45 +64,62 @@ def _check_ignore(relative: str) -> bool:
     reported ignored. The question the convention asks is what the rules say
     about a *name*, and that is the question ``--no-index`` answers.
 
+    The *source* is returned rather than a bool because an exit code cannot tell
+    a shared convention from a local one. Measured 2026-08-22 with the rule in
+    ``.git/info/exclude`` and nothing in ``.gitignore``: all five tests green,
+    on a convention that reaches no clone and no reviewer.
+
     Exit 0 means ignored and 1 means not ignored; anything else is git failing
     (128: no repository, a bad ``safe.directory``, no git at all) and is raised
     rather than read as "not ignored", which is the *passing* direction for
     :func:`test_a_public_label_is_not_ignored`.
     """
-    result = _git("check-ignore", "--no-index", "-q", relative)
+    result = _git("check-ignore", "--no-index", "-v", relative)
     if result.returncode not in (0, 1):
         raise RuntimeError(
             f"git check-ignore failed ({result.returncode}) on {relative}: "
             f"{result.stderr.strip()}"
         )
-    return result.returncode == 0
+    if result.returncode == 1:
+        return None
+    # -v prints "<source>:<line>:<pattern>\t<pathname>". Splitting the tab off
+    # first and then from the right keeps a Windows drive letter in <source>.
+    described = result.stdout.strip().split("\t", 1)[0]
+    fields = described.rsplit(":", 2)
+    return fields[0] if len(fields) == 3 else described
 
 
 def _tracked_labels() -> list[str]:
     """Every path git has in the index under the labels directory.
 
-    Raises on a failed git instead of returning nothing: an empty list is what a
-    broken environment produces, and it is also what makes
-    :func:`test_no_private_label_is_committed` pass. A tripwire that goes green
-    when its instrument is broken is not a tripwire.
+    Raises on a failed git *and* on a successful-but-empty answer. Both are the
+    shape a broken instrument produces, and both are also what makes
+    :func:`test_no_private_label_is_committed` pass: ``git ls-files`` exits 0
+    with no output when its path is missing or renamed. A tripwire that goes
+    green when its instrument is broken is not a tripwire.
     """
-    result = _git("ls-files", "eval/golden/labels")
+    result = _git("ls-files", LABELS_DIR)
     if result.returncode != 0:
         raise RuntimeError(
             f"git ls-files failed ({result.returncode}): {result.stderr.strip()}"
         )
-    return result.stdout.split()
+    paths = result.stdout.split()
+    if not paths:
+        raise RuntimeError(
+            f"git ls-files listed nothing under {LABELS_DIR}: the directory is "
+            "missing, renamed or untracked. 'Nothing there' is also what a "
+            "clean leak check looks like, so it is raised rather than passed."
+        )
+    return paths
 
 
 def test_a_private_label_is_ignored_by_git():
-    assert _check_ignore("eval/golden/labels/p001.json"), (
-        "a p-prefixed label must be gitignored: it carries a real merchant's "
-        "name, address and tax id"
-    )
-    assert _check_ignore("eval/golden/labels/p042.json"), (
-        "the rule covers the p prefix, not one filename -- every private label "
-        "yet to be written is the point"
-    )
+    for name in PRIVATE_SAMPLES:
+        assert _ignore_source(f"{LABELS_DIR}/{name}") == ".gitignore", (
+            f"{name} must be ignored by a rule in the tracked .gitignore -- it "
+            "carries a real merchant's name, address and tax id, and a rule "
+            "kept anywhere else protects this clone only"
+        )
 
 
 def test_a_public_label_is_not_ignored():
@@ -94,11 +128,20 @@ def test_a_public_label_is_not_ignored():
     ``r004.json`` is the next public label anyone adds, and naming one that does
     not exist yet keeps the assertion about the *rule*: a blanket ignore does
     its damage to the labels still to come, not to the three already committed.
+
+    ``frontend/package.json`` is the other axis a too-wide rule opens. A bare
+    ``p*.json``, written without the directory in front of it, matches at every
+    level of the tree -- measured 2026-08-22, it covers both tracked frontend
+    manifests while leaving all five of these tests green.
     """
-    assert not _check_ignore("eval/golden/labels/r001.json")
-    assert not _check_ignore("eval/golden/labels/r004.json"), (
+    assert _ignore_source(f"{LABELS_DIR}/r001.json") is None
+    assert _ignore_source(f"{LABELS_DIR}/r004.json") is None, (
         "the next public label must land in git; an ignore rule wide enough to "
         "cover it destroys the public set one receipt at a time"
+    )
+    assert _ignore_source("frontend/package.json") is None, (
+        "the rule must be anchored to the labels directory; an unanchored "
+        "pattern matches at every level and reaches files it never named"
     )
 
 
@@ -114,7 +157,7 @@ def test_the_existing_labels_are_still_tracked():
     """
     tracked = _tracked_labels()
     for stem in ("r001", "r002", "r003"):
-        assert f"eval/golden/labels/{stem}.json" in tracked
+        assert f"{LABELS_DIR}/{stem}.json" in tracked
 
 
 def test_every_label_reader_accepts_a_private_name():
