@@ -9,16 +9,21 @@ receipt, and privacy is carried by the filename.
 That measurement was re-derived 2026-08-22 before this module was written, with
 ``eval/golden/labels/r001.json`` as the truth and a prediction identical to it:
 intact, ``transcription 28/28 hallucinated=0``; with ``merchant.name`` nulled in
-the truth alone, ``27/27 hallucinated=1``. Nothing here re-runs it -- it is the
-reason the convention has this shape, not a property these tests pin.
+the truth alone, ``27/27 hallucinated=1``. It is pinned below, because the
+design's section 7.4 asks for it and because it is the *reason* the convention
+has this shape: a change that quietly reversed it would leave everything else in
+this module guarding a rule nobody needed any more.
 """
 
 from __future__ import annotations
 
+import json
 import subprocess
 from pathlib import Path
 
 from eval.golden_set import _is_label_file
+from eval.metrics import field_breakdown
+from receipts.extract.schema import ReceiptExtraction
 
 REPO = Path(__file__).resolve().parents[1]
 
@@ -173,3 +178,48 @@ def test_no_private_label_is_committed():
     """The milestone's whole point, asserted over the tracked tree."""
     leaked = [f for f in _tracked_labels() if Path(f).name.startswith("p")]
     assert not leaked, f"private labels committed: {leaked}"
+
+
+def test_nulling_a_pii_field_in_the_truth_scores_a_correct_read_as_invented():
+    """The measurement that rules out field-level redaction, pinned.
+
+    ADR-0040 reads *filled* from the truth side only, so nulling a PII field
+    there does not merely drop it from the denominator -- it moves the path into
+    the absent classes, where a prediction that fills it is **hallucinated**. A
+    model that read the real merchant name off the image would be scored as
+    inventing it, and a public CI run would report hallucinations that never
+    happened. That is why a label is committed whole or not at all.
+
+    Asserted as three deltas rather than as absolute counts, so re-labelling
+    ``r001`` cannot rot it (review standard 5): one path leaves
+    ``transcription_total``, one leaves ``core_total``, and exactly one arrives
+    in ``hallucinated``. The prediction is byte-identical to the intact truth in
+    both halves, so the only thing that differs between them is the truth.
+
+    Goes red if ``eval/metrics.py``'s ``_is_filled`` learns to treat a ``None``
+    truth path as absent-by-declaration rather than as empty, or if
+    ``field_breakdown`` stops counting a filled prediction over an empty truth
+    as ``hallucinated`` -- which is the change someone makes while reintroducing
+    field-level redaction believing it only shrinks a denominator.
+    """
+    raw = (REPO / LABELS_DIR / "r001.json").read_text(encoding="utf-8")
+    predicted = ReceiptExtraction.model_validate_json(raw)
+    intact = field_breakdown(predicted, ReceiptExtraction.model_validate_json(raw))
+
+    # The precondition. Without it every delta below is satisfied by a truth
+    # that was already scoring hallucinations, and the test pins nothing.
+    assert intact.hallucinated == 0, (
+        f"a prediction identical to the truth must invent nothing, got {intact.hallucinated}"
+    )
+
+    nulled = json.loads(raw)
+    assert nulled["merchant"]["name"] is not None, "fixture: the name must start filled"
+    nulled["merchant"]["name"] = None
+    redacted = field_breakdown(predicted, ReceiptExtraction.model_validate(nulled))
+
+    assert redacted.hallucinated == intact.hallucinated + 1, (
+        "nulling one PII field in the truth alone must make a correct read of it "
+        "score as invented -- this is why redaction is per receipt, not per field"
+    )
+    assert redacted.transcription_total == intact.transcription_total - 1
+    assert redacted.core_total == intact.core_total - 1
