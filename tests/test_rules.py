@@ -15,7 +15,7 @@ from decimal import Decimal
 
 import pytest
 
-from eval.golden_set import DEFAULT_LABELS_DIR, _label_files, load_labels
+from eval.golden_set import DEFAULT_LABELS_DIR, load_labels
 from receipts.extract.schema import (
     Buyer,
     ConsistencyResult,
@@ -620,10 +620,13 @@ def test_R020_and_R024_do_not_both_report(ctx):
 # No try/except. The handler that stood here caught everything and said "labels
 # are PII and may be absent -- skip, never error", but absence never raises:
 # ``_label_files`` globs, and its docstring says a missing directory yields an
-# empty list "so callers stay exception-free". Measured 2026-08-22 -- absent and
-# empty both return ``{}``. So the only thing it could ever swallow was a label
-# that would not parse, and it turned the whole corpus into ``{}`` while the
-# suite stayed green (ISSUE-021). A broken label now fails here, loudly.
+# empty list "so callers stay exception-free". Measured 2026-08-22 -- absent,
+# empty, unreadable, and a path that is a file rather than a directory all
+# return ``{}``. So nothing it swallowed was an absent corpus; what it swallowed
+# was a label that would not read or parse, and it turned the whole corpus into
+# ``{}`` while the suite stayed green (ISSUE-021). A broken or unreadable label
+# now fails here, loudly -- though **not by name**: the error echoes the file's
+# content and the loader's line, never its path.
 GOLDEN_LABELS = load_labels(DEFAULT_LABELS_DIR)
 
 
@@ -635,16 +638,36 @@ def test_every_label_file_on_disk_reached_the_corpus():
     -- and **absence never raises.** ``_label_files`` globs, and its own
     docstring says so: "a missing directory yields an empty list ... so callers
     stay exception-free". Measured: an absent directory and an empty one both
-    return ``{}``. So that handler could only ever fire for a label that would
-    not parse, which is the one case that must be loud, and it replaced the
-    whole corpus with ``{}`` while the suite stayed green (ISSUE-021).
+    return ``{}``, and so do an unreadable directory and a path that is a file.
+    So that handler never fired for an absent corpus at all; it fired for a
+    label that would not read or parse, which is the one case that must be
+    loud, and it replaced the whole corpus with ``{}`` while the suite stayed
+    green (ISSUE-021).
 
     The handler is gone, so a broken label now fails at import rather than
     quietly. This is the standing guard on the observable either way: what is on
-    disk is what got scored. It goes red whenever the corpus is short of the
-    files beside it, which is what any future swallow would look like.
+    disk is what got scored.
+
+    **Both sides are derived independently, and that is the whole point.** A
+    first version of this test took ``on_disk`` from ``_label_files`` -- the same
+    function the loader globs with -- so anything that function dropped vanished
+    from both sides at once and the test stayed green. Measured: excluding
+    ``r003.json`` inside ``_is_label_file`` left a real label on disk, unscored,
+    with this test and the whole suite passing. The listing here is therefore a
+    plain directory read, matched case-insensitively, which also catches a label
+    saved as ``.JSON`` -- scored on a case-insensitive filesystem and invisible
+    to the loader's glob on CI's Linux.
+
+    It relies on the labels directory holding only labels; `TEMPLATE.json` and
+    `manifest*.json` live one level up, in ``eval/golden/``. A sidecar dropped in
+    here would redden this test, which is the correct answer: it would not be
+    scored either.
     """
-    on_disk = {p.stem for p in _label_files(DEFAULT_LABELS_DIR)}
+    on_disk = {
+        f.stem
+        for f in DEFAULT_LABELS_DIR.iterdir()
+        if f.is_file() and f.suffix.lower() == ".json"
+    }
     assert set(GOLDEN_LABELS) == on_disk, (
         "labels on disk that never reached the corpus: "
         f"{sorted(on_disk - set(GOLDEN_LABELS))}"
