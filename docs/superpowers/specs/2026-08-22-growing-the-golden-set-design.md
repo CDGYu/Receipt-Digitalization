@@ -194,6 +194,45 @@ Offline, no network, no provider — the seam `run_baseline` already exposes.
 
 ---
 
+## §7a. Correction, 2026-08-22 — most of this already exists
+
+**Found during the plan's pre-flight, and it narrows this design considerably.**
+`eval/golden/` already contains `README.md`, `TEMPLATE.json`, `manifest.json`
+and `manifest.example.json`, all tracked. The README specifies the four-step
+labelling procedure, the file-stem pairing between `labels/{id}.json` and
+`images/{id}.<ext>`, the money-as-string rule, `null` over a guess, and the
+composition targets from spec §15:
+
+| category | target | actual today |
+|---|---|---|
+| `printed_clean` | 60% | **0** |
+| `printed_degraded` | 15% | **0** |
+| `handwritten` | 20% | **3 of 3 — 100%** |
+| `adversarial` | 5% | **0** |
+
+Hold out 20–30%; `manifest.json` marks r003 as the only holdout.
+
+**Two consequences.**
+
+**This design's contribution is narrower than §4–§5 imply**: everything except
+the private-label mechanism already exists. §5's "labels are not seeded from the
+pipeline's own output" remains a genuine addition — the README does not say it —
+but the procedure it constrains is already written.
+
+**And the composition is itself a finding.** The set is **100% handwritten
+against a 20% target**, five times its intended weight, and handwritten is the
+hardest category. ADR-0049's 60.00–61.43% is an average over three receipts
+*all* drawn from the hardest fifth of the intended mix. Growing toward the
+documented targets should move the measured figure substantially **with no model
+change at all** — which is a further reason step 7 gates more than the model
+does, and a reason not to read today's number as a ceiling.
+
+**What still needs building** is only: the private-label naming convention and
+its `.gitignore` entry, the README section documenting it, and whatever the
+public/private split requires in the artifact.
+
+---
+
 ## §8. What this does not decide
 
 - **Whether the repo goes private, or history is rewritten.** Unchanged, and
@@ -219,6 +258,10 @@ Offline, no network, no provider — the seam `run_baseline` already exposes.
    files.** The per-repeat files already carry the ids; the aggregate count is a
    convenience that can drift from them, and this milestone has already paid for
    one derived count that drifted.
-3. **What a labelling run looks like operationally** — one receipt at a time, or
-   a batch — and whether anything should validate a new label parses and its
-   `meta` is filled before it joins the set.
+3. ~~**What a labelling run looks like operationally.**~~ **ANSWERED BY THE
+   REPO, and this question should never have been asked.** Found during the
+   plan's pre-flight: `eval/golden/README.md` already documents a four-step
+   labelling procedure against `eval/golden/TEMPLATE.json`, `manifest.json`
+   already carries `category` and `holdout` per receipt, and `validate_labels`
+   and `composition_stats` are built and working (`validate_labels` returns `[]`
+   today). See the correction below.
