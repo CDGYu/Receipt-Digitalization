@@ -72,11 +72,15 @@ camera.
   `except Exception` that could only ever fire for a label that would not read
   or parse, and it took the whole corpus to `{}` while the suite stayed green.
   The handler is gone; a bad label now aborts collection.
-- **ISSUE-022 is live, and it is the one you will actually hit.** That abort
-  **does not name the file.** Measured: the filename appears zero times in the
-  whole pytest output — the error echoes the file's *content* and the loader's
-  line. One unreadable private label blocks every test in the repository and
-  does not say which label it is. Match on the content the error echoes.
+- **ISSUE-022 is CLOSED** (2026-08-23). That abort used to name nothing — the
+  filename appeared zero times in the whole output. It now prints
+  `while loading golden label <name>`. A bad label still stops the whole
+  session; it just tells you which one.
+- **Nobody has decided about this one, and it touches privacy.** pydantic echoes
+  the failing label's *content* into the traceback as `input_value=...`. For a
+  `p*` label that is real merchant data sitting in pytest output. Pre-existing
+  and unchanged by today's work, but you will see it the first time a real
+  receipt's label fails to parse.
 - **Count real-label cases, not the total.** The corpus check carries two
   synthetic calendar cases that pass whether or not a label loaded, and
   `test_every_label_file_on_disk_reached_the_corpus` is a *regression* guard
@@ -277,9 +281,9 @@ which is the check to run, not a number to read. Review standard 23.)*
 
 **If you want one sentence:** **collect and label real receipts — step 7's
 Task 3.** Steps 5 and 6 landed the mechanism and the number; step 7's machinery
-landed 2026-08-22 (ADR-0050) and grew the set by nothing. **Read ISSUE-022 and
-plan Defect 7 first** — ISSUE-020 and ISSUE-021, which would each have stopped
-you, are closed.
+landed 2026-08-22 (ADR-0050) and grew the set by nothing. **Read plan Defect 7
+first** — ISSUE-020, ISSUE-021 and ISSUE-022, which would each have stopped or
+misled you, are all closed.
 If you want something smaller, **ISSUE-006** is still the only issue on the board
 where a user gets a confidently wrong answer.
 
@@ -2070,7 +2074,7 @@ it is also the production reader **ISSUE-015** has been asking for.
 and label real receipts.** The machinery to do it safely is merged; the set is
 still three. ISSUE-017 is why it outranks any model choice: on three receipts,
 one is a near-total failure and the average hides it. **ISSUE-020 is closed;
-read ISSUE-022 and plan Defect 7 before you photograph anything.** **ISSUE-006** is
+read plan Defect 7 before you photograph anything.** **ISSUE-006** is
 still the only issue where a user gets a confidently wrong answer.
 
 **Two things measured this session that will bite you.**
