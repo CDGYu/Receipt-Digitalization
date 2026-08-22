@@ -12,14 +12,15 @@ and mix.
 
 ```
 eval/golden/
-  labels/{id}.json        one hand-label per receipt (tracked in git)
+  labels/{id}.json        one hand-label per receipt (`r` tracked, `p` ignored)
   images/                 the source photos (GIT-IGNORED — receipts hold PII)
   manifest.json           id -> {"category", "holdout"} sidecar (you create this)
   manifest.example.json   a worked example of the manifest
   TEMPLATE.json           a schema-valid worked label to copy
 ```
 
-Labels are committed; images are not (`eval/golden/images/` is in `.gitignore`).
+Public labels are committed; images are not (`eval/golden/images/` is in
+`.gitignore`), and neither is a private label — see "Public or private?" below.
 Keep each image next to its label by filename stem — `images/{id}.jpg` pairs with
 `labels/{id}.json`.
 
@@ -38,6 +39,27 @@ Keep each image next to its label by filename stem — `images/{id}.jpg` pairs w
      when it is ambiguous.
 4. Record the receipt's category and holdout flag in `manifest.json`
    (see `manifest.example.json`).
+
+## Public or private?
+
+**Decide this before you write the label, not after.** A label is committed in
+full or not at all — there is no partly-redacted label, because nulling a PII
+field in the truth makes a model that reads the real value score as having
+*hallucinated* it (measured; see the 2026-08-22 growing-the-golden-set design,
+section 3).
+
+| the receipt is… | name it | what happens |
+|---|---|---|
+| a real third party's, with their name, address or tax id on it | `p{id}.json` | gitignored — scored here, absent from the repo |
+| yours, synthetic, or the owner has consented to publication | `r{id}.json` | committed, as the existing three are |
+
+**When in doubt, use `p`.** A label committed by mistake is in git history
+permanently; a private label can always be published later.
+
+Record the receipt in `manifest.json` either way — an id, a category and a
+holdout flag carry no personal data, and keeping every receipt there is what
+lets `composition_stats` report the real mix. A clone that lacks the label
+simply does not count it.
 
 ## Composition targets (spec §15)
 

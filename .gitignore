@@ -51,6 +51,14 @@ htmlcov/
 
 # Generated data & exports (receipts may contain PII)
 eval/golden/images/
+
+# A golden label is fully public or fully private, never partly redacted:
+# nulling a PII field in the truth makes a correct read score as a
+# hallucination (see the 2026-08-22 growing-the-golden-set design, section 3).
+# `p`-prefixed labels carry a real merchant's name, address and tax id and are
+# never committed. Their images are already excluded by the line above.
+eval/golden/labels/p*.json
+
 *.xlsx
 
 # OS / editor
