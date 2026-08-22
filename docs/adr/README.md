@@ -55,6 +55,7 @@ Accepted; supersede it with a new ADR rather than editing history.
 | [0047](0047-a-tier-is-a-model-and-its-tools-flag.md) | A tier is a model and its tools flag, and the escalation is eval-only | Accepted |
 | [0048](0048-a-rationale-is-a-second-claim.md) | A rationale is a second claim, and it is the one nobody checks | Accepted |
 | [0049](0049-a-baseline-is-a-spread-over-receipts.md) | A baseline is a spread over receipts, and the escalation does not say why it fired | Accepted |
+| [0050](0050-a-label-is-fully-public-or-fully-private.md) | A golden label is fully public or fully private | Accepted |
 
 Read **0001** first: it is the invariant everything else defers to. **0007** is
 the one to read before touching anything that writes card data or money, and
