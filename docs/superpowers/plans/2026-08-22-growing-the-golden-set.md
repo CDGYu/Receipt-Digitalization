@@ -469,6 +469,58 @@ does, stop: the ignore rule failed and Task 1's pin should have caught it.
 
 ---
 
+## Dated defect log
+
+**This plan does not self-amend.** Everything above is the text as written; this
+log is what was wrong with it and when.
+
+### 2026-08-22 — caught during Task 1, by its implementer
+
+**Defect 1 — the plan's central mutation could not be caught, and it was the
+mutation the task exists to prove.** Task 1 Step 5 named a blanket
+`eval/golden/labels/*.json` as "the mutation that matters, because a blanket
+ignore satisfies the first test while destroying the public set", and predicted
+`test_a_public_label_is_not_ignored` would redden. **It does not.**
+`git check-ignore` consults the **index** first and will not call a *tracked*
+path ignored, so under the blanket the brief's five tests run verbatim were
+**5 passed** — entirely green against the one wrong rule that destroys the
+public set.
+
+**Reproduced by the controller** in a throwaway repository: with a blanket
+`labels/*.json`, a tracked `r001.json` returns `rc=1` ("not ignored") while an
+untracked `p001.json` returns `rc=0`; the same `r001.json` with `--no-index`
+returns `rc=0`, proving the rule does match and only the index was hiding it.
+
+Closed **two independent ways**, either sufficient alone: `--no-index`, which
+asks the rules about a *name* rather than the index about a *file*; and an
+assertion on `r004.json`, the next public label, which no index entry can mask.
+Verified after the fix: the blanket now reddens `test_a_public_label_is_not_ignored`
+and an exact-filename rule reddens `test_a_private_label_is_ignored_by_git`.
+
+**Defect 2 — a third wrong rule the brief also could not catch.** An exact
+filename rule, `eval/golden/labels/p001.json`, passed every test the brief
+wrote. Found and closed by the implementer with an assertion on `p042.json`,
+since the rule must cover every private label not yet written.
+
+**Defect 3 — a docstring claiming a guard it cannot provide.** The brief's
+`test_the_existing_labels_are_still_tracked` docstring said it "guards the
+blanket-ignore mistake". It cannot: `git ls-files` reports the index, and an
+ignore rule never untracks anything, so it stays green under the blanket
+(measured). Corrected to state what it does guard.
+
+**Also closed by the implementer, unprompted:** two wrong-reason passes, where a
+failed `git` (`rc 128`, or an empty `ls-files`) would have read as the *passing*
+direction; and two `eval/golden/README.md` lines stating flatly that "Labels are
+committed", which the section this task adds contradicts two paragraphs later.
+
+**The shape to carry forward:** every one of these is a test that could not
+fail, in a task whose entire subject is a rule that must catch wrong
+implementations. The previous milestone shipped eight of that class; this plan
+shipped three more in its first task, and the brief's own Step 5 — written to
+prove the rule was a rule and not a blanket — was one of them.
+
+---
+
 ## Self-review of this plan
 
 **Spec coverage.** §1 → Task 3. §2 (the fixture constraint) → Global
