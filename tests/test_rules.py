@@ -601,13 +601,15 @@ def test_R020_and_R024_do_not_both_report(ctx):
 # --------------------------------------------------------------------------- #
 # Real-corpus regression
 #
-# The three committed labels are hand-verified Philippine BIR sales invoices.
-# They reconcile (R022 passes on all three), so a clean validator run must
-# produce ZERO errors. Before the convention fix, every one of them raised a
-# false R020 ERROR of exactly the VAT amount.
+# The committed labels are hand-verified Philippine BIR sales invoices. They
+# reconcile (R022 passes on every one), so a clean validator run must produce
+# ZERO errors. Before the convention fix, every one of them raised a false R020
+# ERROR of exactly the VAT amount.
+#
+# No count is written here. It said "three" from the day there were three, and
+# the corpus is *meant* to grow -- that growth is what broke this block once
+# already (ISSUE-020, closed 2026-08-22; see the context helper below).
 # --------------------------------------------------------------------------- #
-
-GOLDEN_TODAY = date(2026, 7, 28)
 
 try:
     GOLDEN_LABELS = load_labels(DEFAULT_LABELS_DIR)
@@ -615,16 +617,57 @@ except Exception:  # labels are PII and may be absent -- skip, never error
     GOLDEN_LABELS = {}
 
 
+def _corpus_context() -> ValidationContext:
+    """The context the real-corpus check runs under: the production default.
+
+    Defined once and used by both the corpus check and the guard below, so the
+    two cannot drift -- a guard that builds its own context stops guarding the
+    check it is named for.
+
+    **Do not pin ``today`` to a literal here.** It was ``date(2026, 7, 28)``
+    until 2026-08-22, which was simply the current date the day it was written.
+    R031 is an ERROR that fires when a receipt date exceeds ``today`` by more
+    than ``future_date_slack_days``, so every receipt collected for the corpus
+    after that date failed a check whose subject is the *validator*, not the
+    calendar (ISSUE-020). A bare ``ValidationContext()`` is also exactly what
+    every production caller builds, so the corpus is validated the way a real
+    receipt is.
+    """
+    return ValidationContext()
+
+
 @pytest.mark.parametrize("label_id", sorted(GOLDEN_LABELS) or [None])
 def test_real_corpus_labels_produce_no_errors(label_id):
     if label_id is None:
         pytest.skip("no labels in eval/golden/labels")
-    report = validate(
-        GOLDEN_LABELS[label_id],
-        ValidationContext(today=GOLDEN_TODAY, config=RuleConfig()),
-    )
+    report = validate(GOLDEN_LABELS[label_id], _corpus_context())
     errors = report.by_severity(Severity.ERROR)
     assert not errors, f"{label_id}: " + " | ".join(f.render() for f in errors)
+
+
+def test_a_receipt_dated_today_is_not_a_corpus_error():
+    """A receipt photographed today must pass the check the corpus runs.
+
+    The corpus is meant to grow, and a receipt collected for it is dated at or
+    near the day it is photographed. R031 is an ERROR and fires when the receipt
+    date exceeds the context's ``today`` by more than
+    ``future_date_slack_days``, so a context frozen to any literal date makes
+    every receipt collected after it fail a check whose subject is the
+    *validator*, not the calendar.
+
+    Uses the real current date on purpose. The dependence is monotone and in the
+    safe direction: a receipt already in the past recedes further with every
+    day, so a label that passes here passes forever, and the only thing that can
+    redden it is a date genuinely in the future -- a typo, which is exactly what
+    R031 exists to catch.
+    """
+    r = clean_receipt()
+    r.receipt.date = date.today().isoformat()
+    errors = validate(r, _corpus_context()).by_severity(Severity.ERROR)
+    assert not errors, (
+        "a receipt dated today must not be a corpus error: "
+        + " | ".join(f.render() for f in errors)
+    )
 
 
 def test_R025_tax_bands_do_not_sum(ctx):
