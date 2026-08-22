@@ -486,12 +486,26 @@ repeats yield the same ids — measured `per_repeat=[['r1','r2'],['r1','r2']]`.
 Following the plan would have produced a **second** assertion that could not
 fail, in the step written to close the first.
 
-Closed by the implementer differently: grow the golden set **between** repeats
-(`_adds_a_label_after_the_first_repeat`, mirroring the module's existing
-`_empties_the_golden_set_after_the_first_repeat`), so repeat 1 sees `{r1}` and
-repeat 2 sees `{r1, r2}`, with an explicit precondition assertion so the fixture
-cannot silently flatten again. **Controller verified the `if index == 1`
+Closed by the implementer differently, and it took two rounds. The first grew
+the golden set **between** repeats, mirroring the module's existing
+`_empties_the_golden_set_after_the_first_repeat`, so repeat 1 saw `{r1}` and
+repeat 2 saw `{r1, r2}`, with an explicit precondition assertion so the fixture
+could not silently flatten again. **Controller verified the `if index == 1`
 mutation is red.**
+
+**Defect 6 — that closure was itself non-discriminating, in the opposite
+direction.** Found by review round 1, measured at `3ca4ec4`: because the fixture
+only *grew*, repeat 2's id set **was** the union, so an implementation keeping
+only the last repeat's ids satisfied every assertion. Rebinding
+`scored = {r.receipt_id for r in report.results}` in place of `scored.update(...)`
+— a one-token slip, and the likelier one at that line — left all 49 tests in
+the module green. Closed by making the repeats **disjoint** rather than nested:
+`_swaps_the_label_after_the_first_repeat` adds `r2` *and unlinks `r1`*, so
+repeat 1 covers `{r1}`, repeat 2 covers `{r2}`, and neither set equals the
+union. **Controller confirmed both directions red**, and the scoped re-review
+confirmed them independently in a byte-faithful replica — additionally showing,
+by neutralising the exact-value assertion, that the union assertion itself is
+what discriminates rather than a neighbour doing its work.
 
 **Defect 5 — the implementation comment the plan prescribed states something
 false.** It read "a repeat that failed to load a label contributes nothing".
@@ -501,10 +515,15 @@ it is in `n_receipts`. The implementer refused to write the sentence and gave
 the true reason instead — that `run_eval` globs the labels directory afresh per
 repeat.
 
-**The shape, now at four depths in one plan.** Task 1 shipped a mutation that
-could not be caught and two more tests that could not fail; Task 2's *remedy*
-for a weak test was a third. Every one was caught by an implementer running the
-mutation instead of trusting the prose, and none by a gate.
+**The shape recurred at every depth this plan reached.** A mutation that could
+not be caught; tests that could not fail; a prescribed *remedy* for a weak test
+that was itself a weak test; and then a closure for that which was weak in the
+opposite direction. **No count is written here.** Every earlier version of this
+sentence carried one, and each was falsified by the round that followed — which
+is the same shape, one level up (review standard 20: write a sentence that does
+not quantify, or enumerate from the tree at the moment you write it). Every
+instance was caught by someone running the mutation instead of trusting the
+prose, and **none by a gate.**
 
 ### 2026-08-22 — caught during Task 1, by its implementer
 
@@ -548,8 +567,8 @@ committed", which the section this task adds contradicts two paragraphs later.
 **The shape to carry forward:** every one of these is a test that could not
 fail, in a task whose entire subject is a rule that must catch wrong
 implementations. The previous milestone shipped eight of that class; this plan
-shipped three more in its first task, and the brief's own Step 5 — written to
-prove the rule was a rule and not a blanket — was one of them.
+added further instances in its first task alone, and the brief's own Step 5 —
+written to prove the rule was a rule and not a blanket — was one of them.
 
 ---
 
