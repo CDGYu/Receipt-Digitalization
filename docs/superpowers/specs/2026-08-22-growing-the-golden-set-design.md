@@ -233,6 +233,43 @@ public/private split requires in the artifact.
 
 ---
 
+## §7b. Correction, 2026-08-22 — the split count was superseded, and never built
+
+**§4's "one top-level count naming the public/private split" does not exist, and
+that is deliberate.** The plan resolved §9's question 2 the other way: the aggregate
+carries `scored_receipts`, a **sorted union of the receipt ids actually scored**,
+and no count of any kind. The reasoning is in
+`docs/superpowers/plans/2026-08-22-growing-the-golden-set.md` under "The spec's
+§9 questions, resolved" — a count of how many labels were private restates the
+naming rule, and a second copy of a rule is one that can drift, which this
+milestone had already paid for once.
+
+**Three sentences in this document still describe the superseded shape.** They
+are named here rather than silently edited, because this is a dated record and
+§4 genuinely did specify a count when it was written:
+
+- **§4**, "The aggregate gains one top-level count naming the public/private
+  split, **derived by comparing the scored ids against the tracked label
+  names**." Neither half shipped. `scored_receipts` is a list, not a count, and
+  it is accumulated from `report.results` inside `eval/run_repeats.py`'s loop —
+  it never reads a tracked label name, which is exactly what lets it restate
+  nothing.
+- **§7.2**, "The public/private split in the aggregate matches the ids actually
+  scored. Proven red by hardcoding the count." **There is no count to
+  hardcode.** What shipped is pinned instead by
+  `tests/test_run_repeats.py::test_the_aggregate_names_the_receipts_it_scored`,
+  proven red against an implementation that keeps only the first repeat's ids,
+  one that keeps only the last's, and one that re-globs the labels directory at
+  the end.
+- **§7a**, "whatever the public/private split requires in the artifact." What it
+  required was a list of ids.
+
+**§4's load-bearing claim is untouched by this.** "Coverage is recorded, not
+implied" is what shipped; only the form changed, from a count that restates the
+naming rule to a list that restates nothing.
+
+---
+
 ## §8. What this does not decide
 
 - **Whether the repo goes private, or history is rewritten.** Unchanged, and
