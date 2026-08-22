@@ -42,7 +42,7 @@ moves, and this file has carried a wrong issue count before.
 **No count of refreshes is written here** — it is a number that moves without its
 sentence changing, which is review standard 5.
 
-**Freshness anchor `fadedf4`** — the last commit that is not this handoff pair.
+**Freshness anchor `1c64aaf`** — the last commit that is not this handoff pair.
 **It is written twice below — here and inside the command.** Moving one and not
 the other is what happened on this file's previous refresh, and the gate caught
 it because it parses the anchor out of the *command*.
@@ -57,7 +57,7 @@ else: a stamp cannot name the commit that writes it. The test is a command,
 not a commit and not a count:
 
 ```
-git log --oneline fadedf4..main -- ":(top,exclude)docs/MEMORY.md" ":(top,exclude)docs/NEXT_SESSION_PROMPT.md"
+git log --oneline 1c64aaf..main -- ":(top,exclude)docs/MEMORY.md" ":(top,exclude)docs/NEXT_SESSION_PROMPT.md"
 git log --oneline refs/remotes/origin/main..main   # what a push would send
 git ls-remote --heads origin main                  # authoritative on what is pushed
 git branch --no-merged main                        # must name NOTHING
@@ -148,12 +148,18 @@ stays reachable — ADR-0042. `git log --oneline -- docs/MEMORY.md` is the list.
   `ValidationContext()` — what every non-test caller builds — and carries two
   synthetic calendar cases that bound `today` at both ends. **Do not re-pin it
   to a literal**; the check's own docstring says why.
-  **ISSUE-021 is what that left, and it is live.** `tests/test_rules.py` builds
-  its corpus inside a bare `except Exception`, and an absent directory never
-  raises — so that handler cannot fire for the case its comment names and fires
-  only for a label that will not parse, taking the whole corpus to `{}` while
-  the suite stays green. **The signal is the number of real-label cases**, not
-  the total. There is at least one malformation that leaves no red anywhere.
+  **ISSUE-021 is CLOSED too** (2026-08-22, `feat/corpus-loads-loudly`). The
+  corpus was built inside a bare `except Exception` that could never fire for
+  the case its comment named — absence does not raise — and so fired only for a
+  label that would not read or parse, taking the whole corpus to `{}` while the
+  suite stayed green. The handler is deleted; a bad label now aborts collection.
+  **ISSUE-022 is what THAT left, and you will meet it during Task 3.** The abort
+  **does not name the offending file**: the error echoes the file's content and
+  the loader's line, because `path` is a loop local. Measured — the filename
+  appears zero times in the whole pytest output. One unreadable private label
+  now blocks every test in the repository without saying which one it is.
+  **And count real-label cases, not the total.** The corpus check carries two
+  synthetic calendar cases that pass whether or not a single label loaded.
   **Still true and still worth reading before you collect:** the plan's Task 3
   Step 3 says "a failure there means the label is wrong, not the test". That is
   a blanket, and ISSUE-020 was the counter-example. Plan Defect 7 is the record.
@@ -2972,9 +2978,9 @@ with an entry point gets run from outside the repository.
 - **`docs/KNOWN_ISSUES.md`** — **no count is written here; derive it** with
   `grep -c "^## ISSUE-" docs/KNOWN_ISSUES.md`. This entry said "**two** issues
   now" from the day there were two until 2026-08-22, by which point there were
-  twenty, and twenty-one the day after — each time found by a review rather
-  than by any gate, because nothing can redden on a prose count. **Run the
-  command; do not read a number here.** Start with **ISSUE-001** (the accuracy baseline, its
+  twenty, twenty-one the day after, and twenty-two within the hour — each
+  found by a review rather than by any gate, because nothing can redden on a
+  prose count. **Run the command; do not read a number here.** Start with **ISSUE-001** (the accuracy baseline, its
   diagnosis and resume steps). **ISSUE-002** (added 2026-08-18): a repair
   attempt's
   `extraction_runs.prompt_hash` names a prompt that was never sent, because

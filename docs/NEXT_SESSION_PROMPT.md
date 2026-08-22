@@ -68,12 +68,20 @@ camera.
   `today` of 2026-07-28, so anything dated after 2026-07-29 failed `R031`. It
   now builds a bare `ValidationContext()` and carries two synthetic calendar
   cases bounding `today` at both ends. **Do not re-pin it to a literal.**
-- **ISSUE-021 is live, and it is the one that can fool you.** The corpus is
-  built inside a bare `except Exception`; an absent directory never raises, so
-  that handler only ever fires for a label that will not parse, and then the
-  whole corpus goes to `{}` while the suite stays green. **Count the real-label
-  cases, not the total** — the check now always carries two synthetic ones. At
-  least one malformation leaves no red anywhere.
+- **ISSUE-021 is CLOSED** (2026-08-22). The corpus was built inside a bare
+  `except Exception` that could only ever fire for a label that would not read
+  or parse, and it took the whole corpus to `{}` while the suite stayed green.
+  The handler is gone; a bad label now aborts collection.
+- **ISSUE-022 is live, and it is the one you will actually hit.** That abort
+  **does not name the file.** Measured: the filename appears zero times in the
+  whole pytest output — the error echoes the file's *content* and the loader's
+  line. One unreadable private label blocks every test in the repository and
+  does not say which label it is. Match on the content the error echoes.
+- **Count real-label cases, not the total.** The corpus check carries two
+  synthetic calendar cases that pass whether or not a label loaded, and
+  `test_every_label_file_on_disk_reached_the_corpus` is a *regression* guard
+  against re-adding a swallow — for a label you just added it is green whether
+  it parsed or was filtered out.
 - **The plan's Task 3 Step 3 still tells you "a failure there means the label is
   wrong, not the test".** ISSUE-020 was the counter-example; the blanket
   remains. Plan Defect 7 is the record, and it also says to run the whole suite
@@ -269,9 +277,9 @@ which is the check to run, not a number to read. Review standard 23.)*
 
 **If you want one sentence:** **collect and label real receipts — step 7's
 Task 3.** Steps 5 and 6 landed the mechanism and the number; step 7's machinery
-landed 2026-08-22 (ADR-0050) and grew the set by nothing. **Read ISSUE-021 and
-plan Defect 7 first** — ISSUE-020, which would have reddened your first receipt,
-is closed.
+landed 2026-08-22 (ADR-0050) and grew the set by nothing. **Read ISSUE-022 and
+plan Defect 7 first** — ISSUE-020 and ISSUE-021, which would each have stopped
+you, are closed.
 If you want something smaller, **ISSUE-006** is still the only issue on the board
 where a user gets a confidently wrong answer.
 
@@ -2062,7 +2070,7 @@ it is also the production reader **ISSUE-015** has been asking for.
 and label real receipts.** The machinery to do it safely is merged; the set is
 still three. ISSUE-017 is why it outranks any model choice: on three receipts,
 one is a near-total failure and the average hides it. **ISSUE-020 is closed;
-read ISSUE-021 and plan Defect 7 before you photograph anything.** **ISSUE-006** is
+read ISSUE-022 and plan Defect 7 before you photograph anything.** **ISSUE-006** is
 still the only issue where a user gets a confidently wrong answer.
 
 **Two things measured this session that will bite you.**
