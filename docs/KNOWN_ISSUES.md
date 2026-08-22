@@ -2032,8 +2032,10 @@ taking it.
 
 ## ISSUE-020 — A frozen `GOLDEN_TODAY` reddens the suite for any recent receipt
 
-**Status:** OPEN — found by the whole-branch review of
-`feat/golden-set-privacy`, before merge.
+**Status:** **CLOSED 2026-08-22**, on `feat/corpus-date-not-frozen`. Found by
+the whole-branch review of `feat/golden-set-privacy`, before merge; fixed before
+any receipt was collected. **The fix was neither of the two options this issue
+proposed** — see the resolution below.
 **Owner action required:** no.
 **Discovered:** 2026-08-22.
 **Pre-existing:** yes — the frozen date predates the branch and had no
@@ -2090,8 +2092,113 @@ Two options, and the choice is a design call nobody has made:
 
 Whichever is chosen, the plan's Step 3 instruction needs the corrected reason.
 
+### Resolution, 2026-08-22 — and neither option above was taken
+
+**Option 2 was wrong twice, and both halves were caught only by checking the
+tree.** Scoring a label against its own receipt date makes `R031` **vacuous on
+the corpus**: `(date - date).days` is `0`, which is inside the slack for every
+label, so a typo'd future date — the exact defect `R031` exists to catch —
+becomes invisible in the one place real labels are checked. And **`manifest.json`
+carries no capture date** at all: it holds `category` and `holdout` per receipt
+and nothing else, so the parenthetical variant did not exist. That sentence was
+written from memory rather than from the file.
+
+**What the tree actually said.** The corpus check was the **only** caller
+overriding `today`. All four production construction sites —
+`eval/run_baseline.py`, `src/receipts/extract/extractor.py`,
+`src/receipts/pipeline.py`, `src/receipts/validate/validator.py` — build a bare
+`ValidationContext()`, and `ValidationContext.today` already defaults to
+`date.today`. `config=RuleConfig()` was the default too. **The override was the
+entire difference between the corpus check and production**, and dropping it
+makes the corpus validate the way a real receipt is validated.
+
+**Why the remaining time-dependence is safe.** A receipt already in the past
+recedes further every day, so a label that passes now passes forever. The only
+thing that can redden it is a date genuinely in the future, which is a typo —
+precisely what `R031` is for. `R031` itself never depended on this check — it is
+pinned by its own unit tests against synthetic receipts, which never touch the
+corpus. (No count is given: an earlier draft of this sentence, and the fix's
+commit message, both said "three dedicated unit tests"; there are two for
+`R031`, and the third the grep showed belongs to `R032`.)
+
+**Pinned by** `tests/test_rules.py::test_a_receipt_dated_today_is_not_a_corpus_error`,
+proven red twice: against the code as it stood before the fix, and against a
+re-freeze to the same literal. Both reds named that test and nothing else.
+
+**One thing this resolution does NOT close:** a single frozen literal equal to
+*today's* date would satisfy the new test on the day it was written and fail the
+next. No single run can distinguish "frozen to today" from "tracks today", so
+the reason not to re-freeze is recorded in `_corpus_context()`'s docstring,
+where someone about to undo it will read it.
+
 ### Related
 
 - ISSUE-001 step 7; ADR-0050 decision 2.
 - `src/receipts/validate/rules.py`'s `R031`;
   `src/receipts/validate/context.py`'s `future_date_slack_days`.
+
+---
+
+## ISSUE-021 — One unloadable label silently disables the whole real-corpus check
+
+**Status:** OPEN — found while closing ISSUE-020, in the same block.
+**Owner action required:** no.
+**Discovered:** 2026-08-22.
+**Pre-existing:** yes.
+**Blocks:** nothing today, and the exposure grows with every label collected.
+
+### What is wrong
+
+`tests/test_rules.py` builds its corpus at import:
+
+```python
+try:
+    GOLDEN_LABELS = load_labels(DEFAULT_LABELS_DIR)
+except Exception:  # labels are PII and may be absent -- skip, never error
+    GOLDEN_LABELS = {}
+```
+
+`load_labels` is **the strict loader** — its own docstring says a malformed
+file raises on purpose. So **any** label that will not parse takes the whole
+corpus to `{}`, the parametrisation collapses to `[None]`, and every
+real-corpus case **skips**. The suite stays green with its only real-data
+regression check switched off.
+
+Measured, on a throwaway directory rather than the tracked one:
+
+```
+valid only     : ['r001']
+with malformed : RAISES ValidationError
+  -> caught, GOLDEN_LABELS = {} -> parametrize [None] -> every corpus case SKIPS
+```
+
+**The comment is the tell.** "labels are PII and may be absent" describes the
+*intended* skip — a clone with no labels — and the handler cannot tell that
+from a label that is present and broken. Those need opposite answers: absent is
+a legitimate skip, broken is a failure.
+
+### Why it matters more from here on
+
+Step 7 exists to add labels, by hand, from photographs. Hand-written JSON is
+exactly where a parse or schema error comes from, and the moment one lands the
+corpus check goes quiet rather than loud. `tests/test_eval_floor.py` would
+redden on most such files, so a labeller is unlikely to miss the mistake
+entirely — but they would fix it believing the corpus check had been running,
+and any malformation that `load_labels` rejects while `test_eval_floor`'s own
+parse tolerates leaves no red at all.
+
+### How to resume
+
+Narrow the handler to the condition it means. Absent is `FileNotFoundError` (or
+an empty glob); anything else should raise. **A silent skip is how a guard
+becomes vacuous** — the same reasoning
+`docs/superpowers/plans/2026-08-22-growing-the-golden-set.md` gives for not
+adding a skip to the privacy tests.
+
+If the skip must stay broad, make it **loud**: emit a warning naming the file
+that failed, so a green run cannot be mistaken for a run that checked anything.
+
+### Related
+
+- ISSUE-020 — the same block, found while closing it.
+- ADR-0050 decision 2, on what a new label is and is not validated by.

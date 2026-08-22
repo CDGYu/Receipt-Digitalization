@@ -133,6 +133,13 @@ future-date slack is one day, so **a label for any receipt dated after
 2026-07-29 reddens the suite**, which is every receipt Task 3 will photograph.
 The label is right and the frozen date is stale. **ISSUE-020.**
 
+**Closed 2026-08-22**, on `feat/corpus-date-not-frozen`, before any receipt was
+collected: the corpus check was the only caller overriding `today`, and every
+production site already builds a bare `ValidationContext()`. The paragraph above
+is kept as the record of what was found. **Neither option ISSUE-020 itself
+proposed was taken** — that issue's resolution says why, including a claim in it
+that turned out to be false about the tree.
+
 **The rule is checked from both directions, within a stated bound.**
 `git check-ignore --no-index` is asked
 about a *name* rather than the index about a *file* — the index otherwise

@@ -474,6 +474,34 @@ does, stop: the ignore rule failed and Task 1's pin should have caught it.
 **This plan does not self-amend.** Everything above is the text as written; this
 log is what was wrong with it and when.
 
+### 2026-08-22 — caught after the merge, closing ISSUE-020
+
+**Defect 7 — Task 3 Step 3 tells the labeller the wrong thing to conclude, and
+names the wrong test.** Its sentence "a failure there means the label is wrong,
+not the test" is a blanket, and it was **false on the first receipt anyone would
+have collected**: `tests/test_rules.py` scored every golden label against a
+frozen `today` of 2026-07-28, so a correctly-made label for a receipt
+photographed in August failed `R031` as a future date. The label was right and
+the test was stale — the exact reverse of what Step 3 says to conclude. That is
+review standard 28: a correct instruction (do run the tests) carrying a false
+reason (the test is always right), and the reason is what a reader generalises.
+
+**The date is fixed** (ISSUE-020, closed on `feat/corpus-date-not-frozen`), so
+that particular counter-example is gone. **The blanket is what licensed it**, and
+it is still a blanket.
+
+Two corrections to Step 3, for whoever runs Task 3:
+
+- **Run the whole suite, not `tests/test_eval_floor.py` alone.** Step 3 names
+  only that module. With ISSUE-020 closed, `tests/test_rules.py`'s real-corpus
+  check is the one that validates a new label against the *validator*, and it is
+  not in the module Step 3 names.
+- **A green corpus check is not proof it ran.** `tests/test_rules.py` builds its
+  corpus inside a bare `except Exception`, so one label that will not parse
+  takes the whole corpus to `{}` and every case **skips** while the suite stays
+  green — **ISSUE-021**. If you add a label and the corpus case count does not
+  go up, that is the bug, not luck.
+
 ### 2026-08-22 — caught during Task 2, by its implementer
 
 **Defect 4 — the plan's own remedy for a weak test was itself a test that could
