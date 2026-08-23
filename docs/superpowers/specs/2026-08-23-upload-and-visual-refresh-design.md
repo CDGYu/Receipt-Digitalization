@@ -190,6 +190,61 @@ watches it *decline* a repair that made things worse, because
 `extract_with_repair` keeps the best attempt rather than the last. That is the
 hero beat.
 
+
+### Dated correction (2026-08-24) — §4 described a sequence nothing emits, and there is no elapsed time
+
+Two claims in "What it narrates" above are wrong, and **plan 3 inherits this
+section**, so they are corrected here rather than left for a reader to trip on.
+
+**1. The sequence is not what the pipeline narrates.** The block above reads
+`attempt 1 → validate → findings → repair → attempt 2 → … → keep the BEST
+attempt`. That is `extract_with_repair`'s *internal control flow*. It is not
+what reaches a screen.
+
+Re-derived 2026-08-24 by counting every `ProgressEvent(...)` construction in
+the tree — there are three that narrate, and one more that only rebuilds an
+event from JSON:
+
+| site | what it emits |
+|---|---|
+| `pipeline.py`, inside `_stage` | the stage name, **no detail** |
+| `extractor.py`, `_report` | `attempt {n} ({pass}): {k} error(s)` |
+| `extractor.py`, after `min(attempts)` | `kept attempt {n} of {m}` |
+| `progress.py`, `decode` | not an emitter — reconstructs from JSON |
+
+So **only `stage="extract"` ever carries a detail**, and `validate`, `findings`
+and `repair` emit nothing at all. The real sequence a screen can show is:
+
+```
+attempt 1 (extract): 3 errors → attempt 2 (repair): 0 errors → kept attempt 2 of 2
+```
+
+**The hero beat survives intact** — the audience still watches the system find
+its own mistake, fix it, and sometimes *decline* a repair that made things
+worse, because `Attempt.rank()` sorts on error count and a worse repair loses.
+Only the enumeration was wrong.
+
+**2. "Stages collapse to one quiet line with an elapsed time" — there is no
+elapsed time, and the screen ships without one.** `ProgressEvent` carries two
+fields, `stage` and `detail`; no timestamp crosses the wire, and the worker is
+asynchronous, so the only interval a browser can measure is between its own
+asks.
+
+That is not nothing — for a stage whose start *and* end were both observed, the
+gap between first sightings is its observed dwell, bracketed by one poll
+interval. But a stage shorter than the poll is invisible, and worse, it
+silently inflates its predecessor's measured interval with no way to tell the
+two cases apart. **Decision 10 already forbids presenting any of this as
+latency**, and an invented figure is worse than a missing one — this repository
+deleted one such figure before. The implementation therefore shows none and
+records why.
+
+**How both got here, since it is the same shape twice:** this section was
+written from the pipeline's source, describing what the code *does*, and then
+read as a description of what the code *reports*. Both were caught by an
+implementer reading the emitter instead of the design, and confirmed
+independently twice.
+
 ### Decision 10 — elapsed time is labelled as elapsed, never as latency
 
 `VLM_TIMEOUT_S` bounds one HTTP attempt and the SDK retries (ADR-0047 decision
