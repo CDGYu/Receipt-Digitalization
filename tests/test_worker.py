@@ -18,6 +18,7 @@ from __future__ import annotations
 import io
 import json
 import sys
+import types
 import uuid
 from datetime import date
 from decimal import Decimal as D
@@ -312,6 +313,77 @@ def test_the_progress_connection_asks_for_a_bounded_wait(monkeypatch):
     # Anti-vacuity: a `None` or `0` constant would satisfy both equalities above
     # while asking for no bound at all.
     assert worker_module.PROGRESS_SOCKET_TIMEOUT_S > 0
+
+
+def _fake_redis_module(calls: list):
+    """A stand-in for the ``redis`` module, recording ``Redis.from_url`` calls.
+
+    :func:`~receipts.worker.make_redis` imports ``redis`` inside its body, so
+    putting an object in ``sys.modules`` is enough to intercept the call
+    without the optional extra installed -- the same technique
+    ``test_make_progress_writer_without_redis_installed_says_so`` uses to make
+    that import fail.
+    """
+
+    def from_url(url, **kwargs):
+        calls.append((url, kwargs))
+        return _FakeRedis()
+
+    return types.SimpleNamespace(Redis=types.SimpleNamespace(from_url=from_url))
+
+
+def test_make_redis_forwards_the_bounds_it_is_given(monkeypatch):
+    """The half of the bound that *delivers* it, not the half that asks for it.
+
+    ``test_the_progress_connection_asks_for_a_bounded_wait`` pins what
+    ``make_progress_writer`` hands to ``make_redis``, and it monkeypatches
+    ``make_redis`` itself -- so it never runs this body. Every other test that
+    touches ``make_redis`` replaces it too, and the one that runs it aborts at
+    ``import redis``. Without this test the forwarding is deletable and the
+    writer opens an unbounded connection with every gate green, which is the
+    hung-Redis failure the bound exists for.
+
+    What a green run here does **not** establish: that ``redis`` honours either
+    argument, or that an unreachable Redis fails fast rather than blocking.
+    ``redis`` is not installed in this environment (see
+    ``test_importing_the_worker_does_not_import_rq_or_redis``); this pins that
+    the caller's values reach ``from_url``.
+    """
+    calls: list = []
+    monkeypatch.setitem(sys.modules, "redis", _fake_redis_module(calls))
+
+    worker_module.make_redis(
+        url="redis://localhost:6379/0",
+        socket_timeout=1.5,
+        socket_connect_timeout=2.5,
+    )
+
+    assert len(calls) == 1, f"from_url was not called exactly once: {calls}"
+    url, kwargs = calls[0]
+    assert url == "redis://localhost:6379/0"
+    # Equality, not containment, and two distinct values -- so a dropped
+    # argument, a swapped pair, or a `None` in place of either goes red.
+    assert kwargs == {"socket_timeout": 1.5, "socket_connect_timeout": 2.5}
+
+
+def test_make_redis_omits_the_bounds_it_is_not_given(monkeypatch):
+    """The other half: a caller that asks for nothing forwards nothing.
+
+    ``make_redis``'s docstring says the two timeouts reach ``from_url`` **only
+    when a caller gives one**, rather than being forwarded as ``None``. This
+    states that half as something that can fail. ``make_queue`` and
+    ``run_worker`` both call ``make_redis`` with neither timeout, so what they
+    get is whatever ``redis.Redis.from_url`` does on its own.
+    """
+    calls: list = []
+    monkeypatch.setitem(sys.modules, "redis", _fake_redis_module(calls))
+
+    worker_module.make_redis(url="redis://localhost:6379/0")
+
+    assert len(calls) == 1, f"from_url was not called exactly once: {calls}"
+    url, kwargs = calls[0]
+    assert url == "redis://localhost:6379/0"
+    assert kwargs == {}
 
 
 def _recording_process_receipt(seen: dict):
