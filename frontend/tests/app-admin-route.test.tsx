@@ -65,9 +65,12 @@ import type { Route } from '../src/route'
  * NOT stripped, and `route.ts` uses them throughout `currentRoute` -- so a
  * single-quoted `/app/` path written in a `//` comment would become a row here.
  * None is: stripping line comments as well yields the identical list, checked
- * rather than assumed. `admin-screen.test.tsx` strips nothing at all, so its
- * list can differ from this one; that file states no intent either way, and
- * this sentence is not one on its behalf.
+ * rather than assumed. `admin-screen.test.tsx`'s read of `route.ts` strips
+ * nothing, so its list can differ from this one; that file states no intent
+ * either way, and this sentence is not one on its behalf. (It does strip
+ * comments elsewhere, in its stylesheet census -- the unqualified claim that
+ * it "strips nothing at all" was false, and only its `route.ts` read was ever
+ * meant.)
  *
  * `/app/review` is not among the literals: `review` is the switch's *default*
  * and `route.ts` declares no string for it. The last case below covers it, and

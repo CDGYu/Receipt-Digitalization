@@ -35,8 +35,8 @@ function stubFetch(status: number, body: unknown) {
  * does not read that copy. Iterating `ACCEPTED_SUFFIXES` to check
  * `ACCEPTED_SUFFIXES` cannot fail for the thing it exists to check -- removing
  * an element removes its own assertion (ADR-0051). Reading the Python source is
- * the cheapest independent authority: eight other tests in this suite already
- * read repo files this way.
+ * the cheapest independent authority, and other tests in this suite already read
+ * repo files this way.
  *
  * `dirname(fileURLToPath(import.meta.url))` rather than
  * `new URL(specifier, import.meta.url)`: Vite rewrites that *pattern* into a
@@ -46,30 +46,42 @@ function stubFetch(status: number, body: unknown) {
  * and going through `import.meta.url` rather than `process.cwd()` keeps this
  * independent of where the runner was started.
  */
-function serverAllowedSuffixes(): string[] {
-  const source = readFileSync(
-    join(
-      dirname(fileURLToPath(import.meta.url)),
-      '..',
-      '..',
-      'src',
-      'receipts',
-      'ingest',
-      'ingest.py',
-    ),
-    'utf8',
-  )
+function parseAllowedSuffixes(source: string): string[] {
   const declaration = source.match(/_ALLOWED_SUFFIXES = frozenset\(([^)]*)\)/)
   if (declaration === null) {
     // Loudly. A renamed or reshaped declaration must break this guard, never
     // quietly reduce it to comparing the client's list against nothing.
     throw new Error('no `_ALLOWED_SUFFIXES = frozenset(...)` in ingest.py')
   }
-  const suffixes = [...declaration[1].matchAll(/"(\.[a-z]+)"/g)].map((match) => match[1])
+  // `[A-Za-z0-9]`, not `[a-z]`. A class that only spells lowercase letters
+  // DROPS `.jp2` or `.HEIC` from the parsed list instead of failing on it, so
+  // the length guard never fires and the set equality below still passes --
+  // while the client refuses a file the server accepts. That is a silent escape
+  // inside a guard whose whole job is to stop one. Exercised on a fixture by
+  // the test named `keeps a suffix with a digit or a capital in it`, because
+  // proving it needs a suffix `ingest.py` does not currently declare.
+  const suffixes = [...declaration[1].matchAll(/"(\.[A-Za-z0-9]+)"/g)].map((match) => match[1])
   if (suffixes.length === 0) {
     throw new Error('`_ALLOWED_SUFFIXES` parsed to nothing; its literal shape must have changed')
   }
   return suffixes
+}
+
+function serverAllowedSuffixes(): string[] {
+  return parseAllowedSuffixes(
+    readFileSync(
+      join(
+        dirname(fileURLToPath(import.meta.url)),
+        '..',
+        '..',
+        'src',
+        'receipts',
+        'ingest',
+        'ingest.py',
+      ),
+      'utf8',
+    ),
+  )
 }
 
 describe('what the client refuses before spending an upload', () => {
@@ -82,6 +94,19 @@ describe('what the client refuses before spending an upload', () => {
       expect(rejectionReason({ name: `receipt${suffix}`, size: 1024 })).toBeNull()
       expect(rejectionReason({ name: `RECEIPT${suffix.toUpperCase()}`, size: 1024 })).toBeNull()
     }
+  })
+
+  it('keeps a suffix with a digit or a capital in it, rather than dropping it', () => {
+    // Against a FIXTURE rather than against `ingest.py`: the failure needs a
+    // suffix the server does not declare today, and editing the server's own
+    // list to prove a client-side guard would be testing the mutation.
+    //
+    // Measured 2026-08-24 with the item pattern reverted to `"(\.[a-z]+)"`:
+    // this parses to `['.jpg', '.pdf']` with no throw, so `serverAllowedSuffixes`
+    // would return a SHORTER list, the length guard would not fire, and the set
+    // equality below would go on passing while the client refused `.jp2`.
+    const fixture = '_ALLOWED_SUFFIXES = frozenset({".jpg", ".jp2", ".HEIC", ".pdf"})'
+    expect(parseAllowedSuffixes(fixture)).toEqual(['.jpg', '.jp2', '.HEIC', '.pdf'])
   })
 
   it('lists exactly what the server accepts, minus the PDF that cannot work', () => {

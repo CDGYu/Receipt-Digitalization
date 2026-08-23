@@ -18,7 +18,21 @@ export const ACCEPTED_SUFFIXES: readonly string[] = [
 ]
 
 /** `settings.max_upload_mb`'s default. The server is the authority; this is a
- *  courtesy check so an oversized file does not cost an upload first. */
+ *  courtesy check so an oversized file does not cost an upload first.
+ *
+ *  **A one-way gap, disclosed rather than closed.** This is a literal; the
+ *  server reads `settings.max_upload_mb` (`config/settings.py`), which a
+ *  deployment can override. Lowering the server's bound is harmless -- the file
+ *  is sent, the server refuses it, and `uploadReceipt` surfaces the server's own
+ *  reason. **Raising it is not**: this constant then refuses a file the server
+ *  would have accepted, which is what the design's decision 7 is named for --
+ *  "the client mirrors the server's bounds but never overrules them".
+ *  `upload-api.test.ts` pins this against the literal `25`, so
+ *  a change on THIS side reddens and a change on the server's side does not.
+ *
+ *  Closing it needs the bound to arrive from the server -- a field on a config
+ *  route, or on the upload route's own error -- which is a decision, not a
+ *  tidy-up. Until then the gap is here in writing. */
 export const MAX_UPLOAD_MB = 25
 
 export interface UploadAccepted {
