@@ -1169,7 +1169,6 @@ def test_the_extract_stage_reports_each_attempt(
     # Shape, not cardinality. A healthy repair run reports three details, so
     # `len(details) >= 2` was satisfied by any two of them: each of the three
     # emits could be deleted on its own with the whole suite still green.
-    # Each call site is now pinned by the text only it produces.
     per_attempt = [d for d in details if d.startswith("attempt ")]
     kept = [d for d in details if d.startswith("kept attempt ")]
     assert len(per_attempt) >= 2, f"expected an event per attempt, got {details}"

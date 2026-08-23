@@ -394,12 +394,17 @@ def test_the_job_function_survives_a_writer_it_cannot_build(monkeypatch, deps, c
     :func:`~receipts.worker.make_redis` raises when ``REDIS_URL`` is unset or
     the ``worker`` extra is missing. Unguarded, that aborts the job one line
     before ``process_receipt`` -- so the receipt reaches no terminal state at
-    all, which is the silent drop §18 forbids, caused by a feature the design
-    calls cosmetic.
+    all and nothing is ever extracted from it.
 
-    Reachable today only through ``run_worker(url=...)``: that is a public
-    keyword, so a worker started with an explicit url and no ``REDIS_URL`` in
-    the environment would accept jobs and destroy every receipt it touched.
+    ``run_worker`` takes the connection as a public keyword -- ``url=``, and
+    ``settings=`` beside it -- so a worker can be serving a queue while the
+    ambient environment ``build_deps`` reads inside each job has no
+    ``REDIS_URL``. Unguarded, such a worker would accept jobs and leave every
+    receipt it touched exactly as it was queued -- the ``pending`` row its
+    ingest committed, still there and still re-runnable -- while the job
+    itself fails out of this function the way ``process_receipt``'s one
+    re-raise does. The cost is a worker that extracts nothing while looking
+    healthy, not a lost receipt.
     """
 
     def _cannot_build(_receipt_id):
@@ -430,10 +435,10 @@ def test_build_deps_wires_a_progress_factory_that_writes_where_the_reader_looks(
 ):
     """The seam between the wiring and production, which nothing else covers.
 
-    Every other progress test injects its factory or its reader. Without this
-    one, deleting the ``progress_factory=`` argument from
-    :func:`~receipts.worker.build_deps` leaves all of them green while no key
-    is ever written and the route reports a null stage forever.
+    Measured 2026-08-24, one mutation against the whole suite: deleting the
+    ``progress_factory=`` argument from :func:`~receipts.worker.build_deps`
+    reddens **this test and no other**, while no key is ever written and the
+    route reports a null stage forever.
 
     Two claims, because "it is wired" is not enough on its own: the factory
     exists, *and* what it builds writes under ``progress_key`` -- the only

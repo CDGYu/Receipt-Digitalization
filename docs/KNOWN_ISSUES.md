@@ -2731,9 +2731,16 @@ receipt is visible — so this is loud rather than dangerous. It is still an inp
 type the product advertises and has never been able to process.
 
 **`expand_pdf` is what should bridge the gap, and it has zero callers.**
-`git grep expand_pdf -- src` returns three hits: its own definition, the
-re-export in `ingest/__init__.py`, and one comment. Neither `ingest_file`,
-`ingest_bytes`, `cmd_ingest` nor the `POST /upload` route calls it.
+`git grep expand_pdf -- src`, re-run 2026-08-24, finds its definition in
+`ingest/ingest.py`, its import and its `__all__` entry in `ingest/__init__.py`,
+and the `process_receipt` docstring reference quoted below -- **no call among
+them**. Neither `ingest_file`, `ingest_bytes`, `cmd_ingest` nor the
+`POST /upload` route calls it.
+
+*(This paragraph said "three hits: its own definition, the re-export, and one
+comment" until 2026-08-24. There is no comment hit under `src/`, and the hit it
+omitted is the docstring the next paragraph quotes and calls false. The
+conclusion was right; the evidence for it was never true.)*
 
 **And `process_receipt`'s own docstring states the opposite.** It says *"A PDF
 upload is expanded into one image (and one job) per page by ingest -- see

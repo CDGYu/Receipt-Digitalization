@@ -246,9 +246,7 @@ def process_receipt_job(
     The one ``except`` below is not a second net around the processing: it
     guards *building the narration*, which must never be load-bearing. Failing
     to open a Redis connection would otherwise abort the job before
-    ``process_receipt`` ever ran, and a receipt that reaches no terminal state
-    is the silent drop §18 forbids -- caused by the cosmetic half of the
-    system. Unnarrated is a fine outcome; lost is not.
+    ``process_receipt`` ever ran. Unnarrated is a fine outcome; lost is not.
     """
     deps = deps or build_deps()
     job = job_from_payload(payload)
@@ -263,10 +261,8 @@ def process_receipt_job(
             # Redis connection, and `make_redis` raises when REDIS_URL is unset
             # or the extra is missing -- unguarded, that would abort the job one
             # line before `process_receipt` and leave the receipt in no terminal
-            # state at all. Losing a receipt because nothing could narrate it
-            # inverts what this feature is for. `exc_info` so the cause is still
-            # in the log: an operator has to be able to see why a whole worker
-            # went quiet.
+            # state at all. `exc_info` so the cause is still in the log: an
+            # operator has to be able to see why a whole worker went quiet.
             log.warning(
                 "could not build a progress writer for %s; continuing unnarrated",
                 job.id,
