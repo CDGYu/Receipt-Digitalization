@@ -19,6 +19,7 @@ const ITEMS: LineItem[] = [
     unit: 'L',
     unit_price: '102.04' as Money,
     line_total: '1000.00' as Money,
+    is_template_row: false,
     modifiers: [],
     line_confidence: '0.900' as Money,
   },
@@ -30,6 +31,9 @@ const ITEMS: LineItem[] = [
     unit: null,
     unit_price: null,
     line_total: '80.00' as Money,
+    // Null qty, null unit, null unit price, a printed line total: the blank
+    // pre-printed row shape ISSUE-003 describes, so `true` is the honest value.
+    is_template_row: true,
     modifiers: [],
     line_confidence: null,
   },
@@ -242,7 +246,10 @@ describe('LineItemsTable', () => {
     return onChange
   }
 
-  it('shows the seven columns and fills them from the item', () => {
+  it('shows every column and fills them from the item', () => {
+    // The count moved from seven to eight when `is_template_row` arrived
+    // (ISSUE-006), so it is not in this name any more -- the list below is the
+    // assertion and a name that repeats it is a second copy that can disagree.
     renderTable()
     const headers = screen.getAllByRole('columnheader').map((cell) => cell.textContent)
     expect(headers).toEqual([
@@ -253,6 +260,7 @@ describe('LineItemsTable', () => {
       'Unit',
       'Unit price',
       'Line total',
+      'Template',
     ])
     expect((screen.getByLabelText('Description 0') as HTMLInputElement).value).toBe('DIESEL')
     expect((screen.getByLabelText('Qty 0') as HTMLInputElement).value).toBe('9.800')
@@ -260,7 +268,7 @@ describe('LineItemsTable', () => {
     expect((screen.getByLabelText('SKU 1') as HTMLInputElement).value).toBe('')
   })
 
-  it('keeps position read-only: six editable cells per row, and the number shown', () => {
+  it('keeps position read-only: every other column editable, and the number shown', () => {
     // `position` IS in `_LINE_ITEM_FIELDS` (repository.py:929) and would be
     // accepted, but swapping two of them trips the non-deferrable
     // `uq_line_items_receipt_position` (models.py:248) at flush time -- which
@@ -271,6 +279,10 @@ describe('LineItemsTable', () => {
     expect(rows).toHaveLength(2)
     for (const [index, row] of rows.entries()) {
       expect(within(row).getAllByRole('textbox')).toHaveLength(6)
+      // The seventh editable column is a checkbox, which is not a `textbox`
+      // role -- so the count above would stay 6 whether or not it renders, and
+      // asserting it separately is what makes this row's claim true.
+      expect(within(row).getAllByRole('checkbox')).toHaveLength(1)
       expect(within(row).getAllByRole('cell')[0].textContent).toBe(String(index))
     }
   })
@@ -290,6 +302,47 @@ describe('LineItemsTable', () => {
     expect(onChange).toHaveBeenLastCalledWith('line_items[1].unit_price', '4')
     await userEvent.type(screen.getByLabelText('Description 0'), '!')
     expect(onChange).toHaveBeenLastCalledWith('line_items[0].description_raw', 'DIESEL!')
+  })
+
+  it('shows the template-row flag as an editable control, ticked from stored state', async () => {
+    // ISSUE-006. Until this control existed a flagged row and a purchased row
+    // looked identical on screen, so a reviewer approving a receipt could not
+    // see which rows would be absent from the export's review sheet
+    // (`_purchases`) and excluded from every arithmetic check (`_purchased`).
+    //
+    // Position 1 is the blank pre-printed shape -- null qty, null unit, null
+    // unit price, a printed line total -- and its fixture stores `true`.
+    const onChange = renderTable()
+    const flagged = screen.getByLabelText('Template row 1') as HTMLInputElement
+    const purchase = screen.getByLabelText('Template row 0') as HTMLInputElement
+    expect(flagged.type).toBe('checkbox')
+    expect(flagged.checked).toBe(true)
+    expect(purchase.checked).toBe(false)
+
+    // Flag the purchase: the write path is the dotted grammar the server parses,
+    // and the value is the text `_coerce_bool` reads, never a boolean.
+    await userEvent.click(purchase)
+    expect(onChange).toHaveBeenLastCalledWith('line_items[0].is_template_row', 'true')
+    expect((screen.getByLabelText('Template row 0') as HTMLInputElement).checked).toBe(true)
+
+    // And back off again, because a control that can only be set is half a
+    // control -- the reviewer's job here is to correct a machine's guess in
+    // either direction.
+    await userEvent.click(screen.getByLabelText('Template row 1'))
+    expect(onChange).toHaveBeenLastCalledWith('line_items[1].is_template_row', 'false')
+  })
+
+  it('leaves an undecided flag null, so an untouched row sends no correction', () => {
+    // `boolText`, not `String(...)`. `String(null)` is `"null"`, which differs
+    // from every stored value, and `buildPatch` would then report an edit on
+    // every row nobody touched. Read straight off `fieldsFromReceipt` rather
+    // than off the rendered box, because an unticked box cannot tell `null`
+    // from `false` and that is the whole distinction being pinned.
+    const fields = fieldsFromReceipt({
+      ...RECEIPT,
+      line_items: [{ ...ITEMS[0], is_template_row: null }],
+    })
+    expect(fields['line_items[0].is_template_row']).toBeNull()
   })
 
   it('highlights the whole row when any cell in it takes focus', async () => {

@@ -50,6 +50,7 @@ const RECEIPT: ReceiptDetail = {
       unit: 'L',
       unit_price: '102.04' as Money,
       line_total: '1000.00' as Money,
+      is_template_row: null,
       modifiers: [],
       line_confidence: '0.900' as Money,
     },
@@ -61,6 +62,7 @@ const RECEIPT: ReceiptDetail = {
       unit: null,
       unit_price: null,
       line_total: '80.00' as Money,
+      is_template_row: null,
       modifiers: [],
       line_confidence: null,
     },
@@ -153,7 +155,7 @@ describe('fieldsFromReceipt', () => {
     })
   })
 
-  it('emits exactly the receipt paths _RECEIPT_FIELDS accepts, and six per line item', () => {
+  it('emits exactly the receipt paths _RECEIPT_FIELDS accepts, and every line-item path', () => {
     // Pins the closed set in both directions: an invented path is a 400 naming
     // it, and a missing one is an edit the reviewer cannot make.
     //
@@ -195,12 +197,14 @@ describe('fieldsFromReceipt', () => {
         'line_items[0].unit',
         'line_items[0].unit_price',
         'line_items[0].line_total',
+        'line_items[0].is_template_row',
         'line_items[1].description_raw',
         'line_items[1].sku',
         'line_items[1].qty',
         'line_items[1].unit',
         'line_items[1].unit_price',
         'line_items[1].line_total',
+        'line_items[1].is_template_row',
       ].sort(),
     )
   })

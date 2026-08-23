@@ -1126,10 +1126,20 @@ R051 and by nothing else, so the gap is open on the production path.
 
 ## ISSUE-006 — A reviewer cannot see which rows will vanish from the export
 
-**Status:** OPEN — the readability half is fixed; surfacing the flag in the
-review UI is a design decision, not a bug fix.
-**Owner action required:** yes — whether the review screen should show
-`is_template_row`, and if so as a read-only marker or as an editable control.
+*(Heading kept as written, and it stopped being true on 2026-08-23 — the review
+screen now shows the flag and lets a reviewer change it. Citations name the
+issue number, not the heading. What survives is the arithmetic residual below,
+which the control does not touch.)*
+
+**Status:** OPEN, NARROWED — **the visibility half is CLOSED 2026-08-23** on
+`feat/label-provenance-rule`. `LineItemsTable` renders a `Template` column, a
+per-row checkbox with the accessible name `Template row {position}`, bound to
+`line_items[{position}].is_template_row` and sending the text `_coerce_bool`
+reads. **The silent-arithmetic residual below is untouched and is what keeps
+this issue open.**
+**Owner action required:** no — the ruling was given 2026-08-23: *"I want it to
+be editable so if the result is wrong, they can change it."* Read-only was the
+alternative and was not chosen.
 **Discovered:** 2026-08-19, in the whole-branch review of
 `feat/buyer-and-blank-rows`. **Pre-existing:** no — the flag arrived on this
 branch. **Blocks:** nothing; it bounds what a reviewer's approval means.
@@ -1152,20 +1162,42 @@ failing a count, proven by writing it before the key existed.
 
 ### What is still open
 
-**The review UI does not render the flag.** `LineItemsTable` offers six
-columns plus a read-only `position`; a flagged row and a purchased row look
-identical on screen. So a reviewer approving a receipt cannot see which of its
-rows will be absent from the export's review sheet (`_purchases`,
-`export/xlsx.py`) and excluded from every arithmetic check (`_purchased`,
-`validate/rules.py`).
+*(This section read "The review UI does not render the flag" and set out why
+making it editable was a separate, unanswered question. **The user answered it
+on 2026-08-23: editable.** The original reasoning is deleted rather than kept
+with a caveat — ADR-0032's rule for a sentence whose subject is a decision that
+has since been taken.)*
 
-Making it *readable* was a bug fix, because correctable implies readable.
-Making it *editable* is not the same question and is deliberately unanswered:
-`position` is the worked precedent — in `_LINE_ITEM_FIELDS`, readable, and
-deliberately not offered, with the measurement behind that recorded at
-`frontend/src/review/LineItemsTable.tsx`. Being shown a value you cannot edit
-is safe; overwriting one you were never shown is not. That asymmetry is why no
-allow-list binds the editable set to the correctable one.
+**The visibility half is closed.** `LineItemsTable` renders a `Template` column
+and a per-row checkbox; a flagged row and a purchased row no longer look
+identical, and a reviewer who disagrees with the machine can change it in either
+direction. `position` remains the one read-only correctable column, for the
+reason recorded in that component: it is the addressing key every other edit
+uses.
+
+**Four pins hold it, each proven red by a mutation placed where the component
+computes its answer** (ADR-0051): seeding through `String(...)` instead of
+`boolText(...)` reddens the null pin with `expected 'null' to be null`; sending
+a boolean instead of the text reddens the write-path pin; making the control a
+text box reddens both the type assertion *and* the per-row role count; and
+dropping the `<th>` reddens the column list. One mutation per run, each
+reverted.
+
+**What no pin covers**: nothing joins the editable set to `_LINE_ITEM_FIELDS`,
+so this column being offered is a decision recorded in prose, not a property. The
+asymmetry is deliberate — `position` is correctable and deliberately not offered
+— so an allow-list binding the two sets would be wrong, and the honest statement
+is that the UI's choice of columns is unpinned in both directions.
+
+**And a checkbox cannot carry design section 4's null mark**, so an
+`is_template_row` of `null` renders identically to `false`: ADR-0027 decision 5's
+`null` is not `0` is not empty, defeated by the control type. Found by
+`tests/review-null-rule.test.tsx` going red on the new column rather than by
+anyone predicting it. **Reported, not fixed** — the shape is pre-existing
+(`meta.is_handwritten` and `meta.receipt_is_inconsistent` have had it since the
+form was built, and that pin lists them for the same reason), and a tri-state
+control is an ADR-0027 decision rather than a repair. The pin now names the two
+unmarkable controls explicitly instead of asserting an empty list.
 
 ### The residual, measured
 

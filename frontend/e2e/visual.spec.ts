@@ -173,6 +173,7 @@ function lineItem(position: number, values: Partial<LineItem> = {}): LineItem {
     unit: null,
     unit_price: null,
     line_total: null,
+    is_template_row: null,
     modifiers: [],
     line_confidence: null,
     ...values,

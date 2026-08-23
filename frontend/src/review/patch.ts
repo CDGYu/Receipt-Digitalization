@@ -38,8 +38,9 @@ function boolText(value: boolean | null): string | null {
   return value ? 'true' : 'false'
 }
 
-/** The six correctable fields of one line item. `position` is deliberately
- *  absent -- see `LineItemsTable`. */
+/** Every correctable field of one line item except `position`, which is
+ *  deliberately absent -- see `LineItemsTable`. No count is written here: it
+ *  read "six" until `is_template_row` became the seventh on 2026-08-23. */
 function lineItemFields(fields: FieldMap, receipt: ReceiptDetail): void {
   for (const item of receipt.line_items) {
     // `line_items[i]` addresses the item at *position* `i`, not at index `i`:
@@ -53,6 +54,11 @@ function lineItemFields(fields: FieldMap, receipt: ReceiptDetail): void {
     fields[`${at}.unit`] = item.unit
     fields[`${at}.unit_price`] = item.unit_price
     fields[`${at}.line_total`] = item.line_total
+    // Through `boolText`, not `String(...)`: `null` must stay `null` so an
+    // untouched row sends no correction. `String(null)` is `"null"`, which
+    // differs from every stored value and would make `buildPatch` report an
+    // edit on every row nobody touched.
+    fields[`${at}.is_template_row`] = boolText(item.is_template_row)
   }
 }
 

@@ -132,10 +132,14 @@ def _line_item(item: LineItem) -> dict[str, Any]:
     ``test_every_correctable_line_item_column_is_readable_in_the_detail`` is
     the binding; it names the missing column rather than counting.
 
-    Readable is not editable. The review UI offers six of these and declines
-    ``position`` and ``is_template_row`` on measured grounds (see
-    ``LineItemsTable.tsx`` and ISSUE-006) -- being shown a value you cannot
-    edit is safe, overwriting one you were never shown is not.
+    Readable is not editable, and ``position`` is the one column that stays
+    read-only: it is the addressing key every other edit uses, so changing it
+    invalidates the rest of the form (measured; see ``LineItemsTable.tsx``).
+    **``is_template_row`` is now editable**, on the user's ruling of
+    2026-08-23 closing ISSUE-006 -- a reviewer who cannot correct the flag
+    cannot stop a real purchase silently leaving the export. Being shown a
+    value you cannot edit is safe; overwriting one you were never shown is not,
+    and this column is now both shown and correctable.
 
     ``modifiers``, ``bbox`` and ``line_confidence`` are read-only in the other
     direction: they have no key in ``_LINE_ITEM_FIELDS`` at all, so no

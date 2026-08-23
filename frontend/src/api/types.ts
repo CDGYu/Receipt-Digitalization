@@ -48,6 +48,15 @@ export interface LineItem {
   unit: string | null
   unit_price: Money | null
   line_total: Money | null
+  /** A blank pre-printed row the form supplies, not something bought.
+   *
+   *  It decides whether the row reaches the accounting ledger (`_purchases`,
+   *  `export/xlsx.py`) and whether the totals reconcile against it
+   *  (`_purchased`, `validate/rules.py`), so a reviewer both sees and edits it
+   *  -- see ISSUE-006, and `LineItemsTable` for the control. `null` is a row
+   *  nothing has decided about and renders unticked, exactly as
+   *  `meta.is_handwritten` does. */
+  is_template_row: boolean | null
   /** Not correctable. `_LINE_ITEM_FIELDS` (persist/repository.py) deliberately
    *  omits `modifiers` and `bbox`: "they are documents, not scalars, and a
    *  reviewer edits them through the item they belong to." Render, do not edit. */

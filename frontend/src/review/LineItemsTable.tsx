@@ -65,7 +65,15 @@ function TextCell({
   )
 }
 
-/** The six correctable columns of each line item, plus its position.
+/** Every correctable column of a line item except `position`, plus the
+ * position itself, shown and not editable.
+ *
+ * **No count is written here.** It read "the six correctable columns" until
+ * `is_template_row` became the seventh on 2026-08-23, and a number in a
+ * docblock is a number that moves without its sentence changing (review
+ * standard 5). `_LINE_ITEM_FIELDS` in `persist/repository.py` is the set;
+ * `test_every_correctable_line_item_column_is_readable_in_the_detail` binds
+ * the server's half of it.
  *
  * **No add and no remove.** `line_items[i]` addresses an item that already
  * exists at *position* `i`, not at index `i` -- measured against a receipt whose
@@ -99,7 +107,7 @@ function TextCell({
  * ## The scroller, and why it is a `<section>` rather than a `<div>`
  *
  * Design §5.2 wraps this table in `overflow-x: auto` so a narrow viewport
- * scrolls the table instead of squeezing seven columns into it, and so the page
+ * scrolls the table instead of squeezing every column into it, and so the page
  * body never scrolls horizontally. That needs a real element around the
  * `<table>`, which is why this component's root is no longer the table itself.
  *
@@ -132,6 +140,7 @@ export function LineItemsTable({ items, fields, onChange, errors }: LineItemsTab
             <th>Unit</th>
             <th>Unit price</th>
             <th>Line total</th>
+            <th>Template</th>
           </tr>
         </thead>
         <tbody>
@@ -217,6 +226,33 @@ export function LineItemsTable({ items, fields, onChange, errors }: LineItemsTab
                     value={fields[`${at}.line_total`]}
                     error={errors?.[`${at}.line_total`]}
                     onChange={(value) => onChange(`${at}.line_total`, value)}
+                  />
+                </td>
+                <td>
+                  {/* The one control here that is not a text box, and the
+                      reason it exists is ISSUE-006: a flagged row leaves the
+                      export's review sheet and drops out of every arithmetic
+                      check, and until now a flagged row and a purchased row
+                      looked identical on screen. A reviewer approving a receipt
+                      could not see which rows would vanish.
+
+                      `String(e.target.checked)` rather than a boolean, matching
+                      `meta.is_handwritten` in `ReceiptForm`: every value in
+                      `FieldMap` is the text `_coerce_bool` reads, and a real
+                      boolean here would be the one entry of a different type.
+
+                      An unticked box is `'false'`, never `null`. A row whose
+                      stored flag is `null` renders unticked and stays `null`
+                      until someone clicks, so confirming an untouched receipt
+                      still writes no correction -- the same rule the money and
+                      text cells follow. */}
+                  <input
+                    type="checkbox"
+                    aria-label={`Template row ${item.position}`}
+                    checked={fields[`${at}.is_template_row`] === 'true'}
+                    onChange={(e) =>
+                      onChange(`${at}.is_template_row`, String(e.target.checked))
+                    }
                   />
                 </td>
               </tr>
