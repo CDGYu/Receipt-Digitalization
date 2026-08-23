@@ -965,14 +965,29 @@ the same species as defect 5.
   equality**, so the ruling above does not falsify it: `STAGES` contains
   `normalize` whether or not anything emits it. Equality would have been the
   wrong shape regardless, since `dedupe` and `merchant` are also conditional.
-- **Commits on this branch carry no `Co-Authored-By` trailer**, against the
-  harness's standing instruction. The repository has never used one, and
-  `tests/test_sha_citations.py` requires every backticked seven-hex token in a
-  tracked file to resolve to a commit some ref can reach — four branch commits
-  are already cited in `docs/KNOWN_ISSUES.md`, `IMPLEMENTATION_PLAN.md` and the
-  design document, so rewriting history to add trailers would orphan all four
-  and turn that gate red. *Cost if wrong: authorship attribution is absent from
-  this branch's commits.*
+- **History on this branch will not be rewritten to add `Co-Authored-By`
+  trailers**, though the harness's standing instruction asks for one on every
+  commit. `tests/test_sha_citations.py` requires every backticked seven-hex
+  token in a tracked file to resolve to a commit some ref can reach, and
+  commits of this branch are already cited in tracked documents — a rewrite
+  would orphan those citations and turn that gate red. *Cost if wrong:
+  authorship attribution is absent from the commits that lack the trailer.*
+- **That bullet was wrong three ways when it was written, and the whole-branch
+  review found one of the three.** All three corrected 2026-08-24; the ruling
+  above is what survived it, restated without a count so there is nothing left
+  in it to re-derive.
+  * *"four branch commits are already cited in `docs/KNOWN_ISSUES.md`,
+    `IMPLEMENTATION_PLAN.md` and the design document."* Re-derived by
+    intersecting the gate's own pattern — a backticked `[0-9a-f]{7}` over the
+    output of `git ls-files` — with `git log --format=%h main..HEAD`: **three**,
+    and of the three files named, only the design document carries one of them.
+    `docs/KNOWN_ISSUES.md`'s nine tokens are all ancestors of `main`, and
+    `IMPLEMENTATION_PLAN.md` carries no seven-hex token at all.
+  * *"Commits on this branch carry no `Co-Authored-By` trailer."*
+    `git log main..HEAD --grep="Co-Authored-By" -i` names two of the nineteen
+    branch commits that existed when the bullet was written.
+  * *"The repository has never used one."* The same query run against `main`
+    names hundreds of commits.
 - **A count that does not match its own list, recorded against the
   controller.** A fix message said "seven Minor findings and I have deferred all
   of them" and then listed six. The true split of Task 1's seven Minors is one
