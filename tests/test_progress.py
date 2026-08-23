@@ -25,12 +25,26 @@ def test_an_event_with_no_detail_round_trips_as_none_not_as_empty() -> None:
     assert decode(encode(ProgressEvent(stage="triage"))).detail is None
 
 
-def test_text_that_is_not_an_event_raises_rather_than_returning_a_default() -> None:
+@pytest.mark.parametrize(
+    "bad",
+    [
+        "",
+        "not json",
+        "[]",
+        '{"detail": "no stage"}',
+        '{"stage": 4}',
+        # The only one of these that reaches the `detail` guard -- every other
+        # input is already rejected by the JSON parse, the non-dict check or
+        # the stage check. Without this case that guard is deletable with the
+        # whole file green, which is to say it is not a pin at all.
+        '{"stage": "extract", "detail": 4}',
+    ],
+)
+def test_text_that_is_not_an_event_raises_rather_than_returning_a_default(bad: str) -> None:
     # Silence is the failure mode this whole design is built against: a reader
     # that swallowed a bad record would show a stale stage forever.
-    for bad in ("", "not json", "[]", '{"detail": "no stage"}', '{"stage": 4}'):
-        with pytest.raises(ValueError):
-            decode(bad)
+    with pytest.raises(ValueError):
+        decode(bad)
 
 
 def test_the_key_is_namespaced_and_carries_the_id() -> None:
