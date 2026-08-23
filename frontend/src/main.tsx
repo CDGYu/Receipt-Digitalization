@@ -28,18 +28,25 @@ import { ReceiptsScreen } from './receipts/ReceiptsScreen'
 import { ReviewScreen } from './review/ReviewScreen'
 import { SignOutControl } from './SignOutControl'
 import { ThemeControl } from './ThemeControl'
+import { UploadScreen } from './upload/UploadScreen'
 
-/** Four screens, no routing library -- four paths do not need one.
+/** One screen per route, and no routing library: these paths do not need one.
+ *
+ * (That sentence carried a count of the screens until `/app/upload` moved it.
+ * The count is gone rather than incremented -- `route.ts` is the enumeration,
+ * and a total repeated here is a second one that goes stale on its own.)
  *
  * **Every client-side path must keep its final segment free of a dot.** Task
  * 1's mount only falls back to the shell for requests whose last segment has no
  * file extension (`_names_a_file` in src/receipts/review/api.py); a path like
  * `/app/receipt/inv-2026.01` is read as a missing *file* and gets a 404 rather
- * than the app. `/app/login`, `/app/review`, `/app/admin` and `/app/receipts`
- * are safe. Anything built from receipt data -- an id, a merchant name, an
- * uploaded filename -- is not, so it belongs in a query string, not in a path
- * segment. That is why the results list's rows are not links in v1: a row
- * carries a receipt id, and `/app/receipt/inv-2026.01` would 404 on reload.
+ * than the app. Every literal `route.ts` declares is safe, and
+ * `tests/admin-screen.test.tsx` derives that list from the module's own source
+ * rather than from a copy typed here. Anything built from receipt data -- an id,
+ * a merchant name, an uploaded filename -- is not, so it belongs in a query
+ * string, not in a path segment. That is why the results list's rows are not
+ * links in v1: a row carries a receipt id, and `/app/receipt/inv-2026.01`
+ * would 404 on reload.
  *
  * Session state lives in `./session` rather than in this component's `useState`,
  * and the 401 handler is registered when that module is *imported* -- before
@@ -117,6 +124,13 @@ function App() {
         // screen reads `role` to decide whether to offer the export button, and
         // needs no clock -- it renders no ages.
         <ReceiptsScreen identity={identity} />
+      ) : route === 'upload' ? (
+        // No `identity`: nothing on this screen is decided by who is asking.
+        // `POST /upload` takes `require_upload`, which is the API key or ANY
+        // signed-in user with no role check (review/auth.py), and the screen
+        // offers the one control to all of them -- so passing an identity it
+        // does not read would be a prop that looks like a gate and is not one.
+        <UploadScreen />
       ) : (
         <ReviewScreen />
       )}

@@ -543,6 +543,30 @@ const CENSUS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
     // too, in both directions: the mirrored pair present, the left pair absent.
     '.notExtractedEnd': 'font-family, color, border-right, padding-right',
   },
+  // Derived by running `censusFor` over the file, as the header above requires,
+  // rather than transcribed by eye.
+  'upload/UploadScreen.module.css': {
+    '.screen':
+      'box-sizing: border-box, display: flex, flex-direction: column, align-items: stretch, gap, max-width, margin, padding, color, font-family',
+    '.heading': 'margin, font-size, font-weight, line-height',
+    '.scope': 'margin, color, font-size, line-height',
+    // `border` before `border-left-width`, for the reason `admin/AdminScreen`'s
+    // `.alert` records: the shorthand resets the longhand, so this order is the
+    // thicker left edge and the other order is not.
+    '.alert':
+      'margin, padding, border, border-left-width, border-radius, background, color, font-size, line-height',
+    '.field':
+      'display: flex, flex-direction: column, align-items: center, gap, box-sizing: border-box, padding, border, border-radius, background, cursor: pointer',
+    '.label': 'color, font-size, font-weight, line-height',
+    '.input': 'max-width, color, font-family, font-size, cursor: pointer',
+    // The ring is on the card and not on the control: the `<label>` wraps its
+    // input, so the click target is the whole box and the focus indicator has to
+    // be the same box.
+    '.field:focus-within': 'outline, outline-offset',
+    '.limits': 'margin, color, font-size, line-height, text-align: center',
+    '.sending': 'margin, color, font-size, line-height, text-align: center',
+    '.placeholder': 'margin, color, font-size, line-height',
+  },
 }
 
 describe('the census reads what is there, not what it hopes for', () => {
@@ -604,7 +628,7 @@ describe('the census reads what is there, not what it hopes for', () => {
 
   it('is reading the real tree, not an empty one', () => {
     const files = stylesheets()
-    expect(files.length, 'no stylesheets found -- the whole census is vacuous').toBe(18)
+    expect(files.length, 'no stylesheets found -- the whole census is vacuous').toBe(19)
     let rules = 0
     let declarations = 0
     for (const file of files) {

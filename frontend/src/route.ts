@@ -5,7 +5,9 @@
  * `session.ts`'s signed-in guess; and the backend already serves a history
  * fallback (`_SpaFiles(..., html=True)` in src/receipts/review/api.py), so
  * `/app/admin` survives a reload without one. Adding a router would be a new
- * runtime dependency for four paths (ADR-0027 section 4).
+ * runtime dependency for the handful of paths below (ADR-0027 section 4). That
+ * sentence said "for four paths" until `/app/upload` made it five; the count is
+ * dropped rather than incremented, because it was never the argument.
  *
  * **Every path literal below must keep its last segment free of a dot**, and
  * the rule is pinned in `tests/admin-screen.test.tsx` rather than trusted:
@@ -22,7 +24,7 @@
  * and dropping a signed-in reviewer on the queue is better than telling them a
  * URL they did not type is wrong.
  */
-export type Route = 'login' | 'review' | 'admin' | 'receipts'
+export type Route = 'login' | 'review' | 'admin' | 'receipts' | 'upload'
 
 export function currentRoute(pathname: string = window.location.pathname): Route {
   if (pathname === '/app/login') {
@@ -38,6 +40,18 @@ export function currentRoute(pathname: string = window.location.pathname): Route
   // the slashed form a browser offers is the likelier of the two to arrive.
   if (pathname.startsWith('/app/receipts')) {
     return 'receipts'
+  }
+  // `startsWith`, like its siblings, so the trailing slash a browser adds is
+  // the same route rather than a silent fall-through to the review queue.
+  //
+  // Its position relative to the other branches does not matter -- no two of
+  // these prefixes overlap -- but its position above the `return` does, and that
+  // is the whole hazard: an unrouted `/app/upload` does not throw, it quietly
+  // renders the review queue. Which is why the pin in
+  // `tests/admin-screen.test.tsx` asserts the route BY NAME: "not admin" would
+  // have passed on the day before this branch existed.
+  if (pathname.startsWith('/app/upload')) {
+    return 'upload'
   }
   return 'review'
 }

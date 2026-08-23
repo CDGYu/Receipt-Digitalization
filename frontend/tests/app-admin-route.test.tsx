@@ -23,16 +23,27 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
  * treats as one. The `/app/receipts` case below closes that, and was proved red
  * by exactly that deletion rather than by reasoning about it.
  *
- * All three screens are mocked, and that is the point rather than a shortcut:
- * what is under test is the *switch*, not any one of the components. A real
- * `AdminScreen` here would pass for the wrong reason the day it renders an empty
- * state that happens to look like a review screen, and a real `ReviewScreen`
- * would fire requests that have nothing to do with routing.
+ * **And a third time, for `/app/upload` on 2026-08-24, with this file already
+ * standing.** The upload screen was built, routed, mounted and covered by a test
+ * file of its own; then the `UploadScreen` import and the
+ * `route === 'upload'` branch were deleted from `main.tsx`, and **all 454 tests
+ * in 31 files passed, `tsc -b` exited 0, `oxlint` reported only its pre-existing
+ * fast-refresh warning, and `vite build` succeeded.** Two closed cases in this
+ * very file did not generalise to the next route by themselves -- the guard is
+ * per-route, and a route with no case here is a route that is not guarded. The
+ * `/app/upload` case below closes it, proved red by that same deletion.
+ *
+ * Every screen the switch can reach is mocked, and that is the point rather than
+ * a shortcut: what is under test is the *switch*, not any one of the components.
+ * A real `AdminScreen` here would pass for the wrong reason the day it renders
+ * an empty state that happens to look like a review screen, and a real
+ * `ReviewScreen` would fire requests that have nothing to do with routing.
  *
  * Both directions are asserted for each screen. A switch that renders the admin
  * screen everywhere is as broken as one that renders it nowhere, and only the
- * negative half can tell them apart; the same holds for the results list, whose
- * negative half is the `queryByText` in the default case below.
+ * negative half can tell them apart; the same holds for the results list and for
+ * the upload screen, whose negative halves are the `queryByText` calls in the
+ * default case below.
  *
  * The mocks are file-scoped, which is why this is its own file -- the same
  * reason `app-root.test.tsx` and `app-header.test.tsx` are theirs.
@@ -47,6 +58,10 @@ vi.mock('../src/admin/AdminScreen', () => ({
 
 vi.mock('../src/receipts/ReceiptsScreen', () => ({
   ReceiptsScreen: () => <p>the receipts screen</p>,
+}))
+
+vi.mock('../src/upload/UploadScreen', () => ({
+  UploadScreen: () => <p>the upload screen</p>,
 }))
 
 let consoleError: ReturnType<typeof vi.spyOn>
@@ -98,6 +113,21 @@ describe('the app entry point routes by pathname', () => {
     expect(screen.queryByText('the admin screen')).toBeNull()
   })
 
+  it('renders the upload screen at /app/upload', async () => {
+    window.history.pushState({}, '', '/app/upload')
+
+    await import('../src/main')
+
+    expect(await screen.findByText('the upload screen')).toBeDefined()
+    // `review` is the switch's DEFAULT, so this is the assertion that has any
+    // force: an unmounted `/app/upload` does not blow up, it quietly serves the
+    // review queue. "Not the admin screen" would have passed before the branch
+    // existed.
+    expect(screen.queryByText('the review screen')).toBeNull()
+    expect(screen.queryByText('the admin screen')).toBeNull()
+    expect(screen.queryByText('the receipts screen')).toBeNull()
+  })
+
   it('renders the review screen everywhere else', async () => {
     // jsdom serves "/", which `currentRoute` maps to `review` by default.
     await import('../src/main')
@@ -107,5 +137,7 @@ describe('the app entry point routes by pathname', () => {
     // The negative half for the results list: a switch that mounted it
     // unconditionally would satisfy the positive case above and still be broken.
     expect(screen.queryByText('the receipts screen')).toBeNull()
+    // And for the upload screen, for the same reason.
+    expect(screen.queryByText('the upload screen')).toBeNull()
   })
 })

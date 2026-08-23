@@ -1,0 +1,164 @@
+/* The upload screen. Tokens only; no raw hex, and `tests/upload-screen.test.tsx`
+ * reads this file as text to say so, because the census in
+ * `tests/stylesheets.test.ts` records that a colour declaration exists and never
+ * what its value is.
+ *
+ * ## Placed by class, never by position
+ *
+ * `ReviewScreen.module.css` lays its grid out with `.screen > *`, on the
+ * measured fact that one child is the only direct `<div>` -- and its own
+ * docstring records the cost: a wrapper added in good faith paints the wrong
+ * element with every gate green. This screen owns its markup, so every element
+ * it places carries a class and every selector below names one -- there is no
+ * type selector and no child combinator in this file at all, so no rule here can
+ * follow a wrapper onto the wrong box.
+ *
+ * ## A single column, and the chooser at its centre
+ *
+ * There is one thing to do on this page. The heading and the sentence under it
+ * set the scope, the chooser takes the middle, and the limits sit under it where
+ * a reader looks after deciding to act rather than before.
+ *
+ * ## The dashed card is the results list's empty state, not a new idea
+ *
+ * `ReceiptsScreen.module.css`'s `.empty` already spells "a box waiting for
+ * something that is not here yet" in this vocabulary -- dashed border,
+ * `--radius-lg`, surface, centred. The chooser is the same statement with a
+ * control in it, so it borrows the same shape rather than inventing a second
+ * one. It is deliberately NOT called a drop zone anywhere: nothing here handles
+ * a drag, and a box that looks droppable and is not is a worse lie than a plain
+ * one.
+ *
+ * No new token is introduced. Plan 3 owns the Editorial palette and the display
+ * face and moves token *values*; everything below is written against the names,
+ * so it inherits that change for free. */
+
+.screen {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-2xl);
+  max-width: 44rem;
+  margin: 0 auto;
+  padding: var(--space-2xl);
+  color: var(--color-foreground);
+  font-family: var(--font-sans);
+}
+
+.heading {
+  margin: 0;
+  font-size: var(--text-2xl);
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+/* What the page is for, pulled up under the heading by the same arithmetic
+ * `AdminScreen.module.css` and `ReceiptsScreen.module.css` use for their own
+ * subtitles: `--space-2xl` of flex gap would divorce a line that belongs to the
+ * heading above it. */
+.scope {
+  margin: calc(var(--space-2xl) * -1 + var(--space-xs)) 0 0;
+  color: var(--color-muted-foreground);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
+/* The one alert region (ADR-0024). Error red is legitimate here and nowhere else
+ * on this screen: this IS the severity, not decoration borrowing its colour
+ * (ADR-0027 section 2).
+ *
+ * The left border does the work a background tint would, without inventing a
+ * tint token -- the same move `ui/Value.module.css` makes for the null mark, and
+ * the same rule the other two screens' alerts carry. `border` before
+ * `border-left-width` is load-bearing: the shorthand resets the longhand, so the
+ * other order silently drops the thicker edge. */
+.alert {
+  margin: 0;
+  padding: var(--space-lg) var(--space-xl);
+  border: 1px solid var(--color-severity-error);
+  border-left-width: 4px;
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-severity-error);
+  font-size: var(--text-base);
+  line-height: 1.5;
+}
+
+/* The chooser. A `<label>` wrapping its own control, so the whole card is the
+ * hit target and the association needs no generated id to survive a rename. */
+.field {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-lg);
+  box-sizing: border-box;
+  padding: var(--space-3xl) var(--space-2xl);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  cursor: pointer;
+}
+
+.label {
+  color: var(--color-foreground);
+  font-size: var(--text-lg);
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+/* A file input is barely styleable across engines -- the button half is a
+ * shadow-DOM part with no portable selector -- so this sets the type and the
+ * focus ring and leaves the control's own chrome alone rather than half-painting
+ * something that would look different in each of the three engines this project
+ * tests in. */
+.input {
+  max-width: 100%;
+  color: var(--color-foreground);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+/* The label wraps the input, so a click anywhere on the card reaches the
+ * control -- which means the ring must be drawn on the card, not on the sliver
+ * of a control that has focus. `:focus-within` is what makes the keyboard path
+ * and the pointer path land on the same visible box. */
+.field:focus-within {
+  outline: 2px solid var(--color-ring);
+  outline-offset: 2px;
+}
+
+/* Both facts are printed from the module that enforces them. Under the chooser
+ * rather than over it: a reader looks for the constraint after deciding to
+ * choose a file, and a limit read out before the control is noise on a page with
+ * one action. */
+.limits {
+  margin: 0;
+  color: var(--color-muted-foreground);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  text-align: center;
+}
+
+/* The in-flight line. Quiet and deliberately not an alert: nothing has failed,
+ * the answer has not arrived yet -- the same reading `ReceiptsScreen`'s
+ * `.waiting` gets, and `role="alert"` belongs to the one region above
+ * (ADR-0024). */
+.sending {
+  margin: 0;
+  color: var(--color-muted-foreground);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  text-align: center;
+}
+
+/* The stand-in for `ProcessingView`, which the next task builds. It is quiet on
+ * purpose: it is scaffolding, and scaffolding that looks finished is scaffolding
+ * that gets left in. */
+.placeholder {
+  margin: 0;
+  color: var(--color-muted-foreground);
+  font-size: var(--text-base);
+  line-height: 1.5;
+}
