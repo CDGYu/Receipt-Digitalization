@@ -233,6 +233,126 @@ def test_the_job_function_never_loses_a_receipt_to_a_broken_stage(deps, tmp_path
 
 
 # --------------------------------------------------------------------------- #
+# Progress: the wiring, not the transport
+# --------------------------------------------------------------------------- #
+
+
+class _FakeRedis:
+    """Records ``set`` calls. Stands in for what :func:`make_redis` opens."""
+
+    def __init__(self) -> None:
+        self.sets: list[tuple] = []
+
+    def set(self, key, value, ex=None):
+        self.sets.append((key, value, ex))
+
+
+def test_the_progress_writer_overwrites_one_keyed_record_with_a_ttl(monkeypatch):
+    """Where it writes, what it writes, and how long the record lasts.
+
+    The key has to be ``progress_key``'s, because that is the only place the
+    reader (``receipts.review.api._default_read_progress``) looks: a writer
+    that spelled a key of its own would be silent in a way no other gate sees.
+    The value has to be the wire form the reader decodes -- checked here as
+    JSON rather than by calling ``encode``, so a changed ``encode`` cannot
+    carry this assertion along with it. And ``ex`` has to be set, or an
+    abandoned run leaves its record behind for good.
+
+    One key for both writes is the "current stage, not a history" claim in
+    ``make_progress_writer``'s docstring, stated as something that can fail.
+    """
+    from receipts.progress import ProgressEvent, progress_key
+
+    fake = _FakeRedis()
+    monkeypatch.setattr(worker_module, "make_redis", lambda **kwargs: fake)
+    receipt_id = uuid.uuid4()
+
+    write = worker_module.make_progress_writer(receipt_id)
+    write(ProgressEvent(stage="triage"))
+    write(ProgressEvent(stage="extract", detail="attempt 1"))
+
+    assert {key for key, _value, _ttl in fake.sets} == {progress_key(receipt_id)}
+    assert [json.loads(value) for _key, value, _ttl in fake.sets] == [
+        {"stage": "triage", "detail": None},
+        {"stage": "extract", "detail": "attempt 1"},
+    ]
+    assert {ttl for _key, _value, ttl in fake.sets} == {worker_module.PROGRESS_TTL_S}
+
+
+def _recording_process_receipt(seen: dict):
+    """A ``process_receipt`` stand-in that files away its keyword arguments."""
+
+    def fake(job, **kwargs):
+        seen["kwargs"] = kwargs
+        return worker_module.ProcessResult(
+            receipt_id=job.id,
+            status=ReceiptStatus.AUTO_APPROVED,
+            confidence=D("0.950"),
+            reason="auto-approved",
+        )
+
+    return fake
+
+
+def test_the_job_function_narrates_through_the_sink_its_deps_built(monkeypatch, deps):
+    """The sink ``deps`` built for *this* receipt is the one the pipeline gets.
+
+    This suite cannot reach Redis, so the live path (worker -> Redis ->
+    ``GET /receipts/{id}/progress``) is not what is pinned here. What is pinned
+    is the wiring on either side of it: ``process_receipt_job`` asks
+    ``deps.progress_factory`` for a sink keyed to the receipt it is about to
+    process, and hands *that* sink -- not another one, and not ``None`` -- to
+    ``process_receipt``. Measured, one mutation at a time: replacing
+    ``progress=progress`` with ``progress=None`` reddens the second assertion
+    below and nothing else in this module, and building the writer for some
+    other id reddens the first.
+    """
+
+    def sink(event) -> None:
+        """The identity that has to arrive; what it does is beside the point."""
+
+    asked: list[uuid.UUID] = []
+
+    def factory(receipt_id):
+        asked.append(receipt_id)
+        return sink
+
+    seen: dict = {}
+    monkeypatch.setattr(worker_module, "process_receipt", _recording_process_receipt(seen))
+    deps.progress_factory = factory
+    job = _job(deps.storage)
+
+    process_receipt_job(job_to_payload(job), deps=deps)
+
+    # Keyed to this receipt, and asked for once: a writer built for some other
+    # id would narrate under a key nobody is reading.
+    assert asked == [job.id]
+    assert seen["kwargs"]["progress"] is sink
+
+
+def test_the_job_function_narrates_nothing_when_its_deps_built_no_writer(monkeypatch, deps):
+    """No factory, no sink -- which is what keeps this whole module off Redis.
+
+    :func:`~receipts.worker.build_deps` is the only thing that fills
+    ``progress_factory`` in, and it fills it in with something that opens a
+    Redis connection. A ``process_receipt_job`` that reached for a writer of its
+    own instead would need one right here -- and ``redis`` is not installed in
+    this environment at all, which is what
+    ``test_importing_the_worker_does_not_import_rq_or_redis`` below records.
+    """
+    # Anti-vacuity: the `None` below is the fixture's, not one this test staged.
+    assert deps.progress_factory is None
+
+    seen: dict = {}
+    monkeypatch.setattr(worker_module, "process_receipt", _recording_process_receipt(seen))
+    job = _job(deps.storage)
+
+    process_receipt_job(job_to_payload(job), deps=deps)
+
+    assert seen["kwargs"]["progress"] is None
+
+
+# --------------------------------------------------------------------------- #
 # The optional rq/redis extra
 # --------------------------------------------------------------------------- #
 
@@ -259,3 +379,17 @@ def test_run_worker_without_rq_installed_says_so(monkeypatch):
 
     with pytest.raises(RuntimeError, match="rq"):
         run_worker(url="redis://localhost:6379/0")
+
+
+def test_make_progress_writer_without_redis_installed_says_so(monkeypatch):
+    """Narration is optional, but *asking* for it is not silently optional.
+
+    The connection is opened when the writer is built rather than on the first
+    event, so a worker with no ``worker`` extra says so at once and names the
+    install -- instead of looking healthy until the first receipt reaches the
+    triage stage.
+    """
+    monkeypatch.setitem(sys.modules, "redis", None)
+
+    with pytest.raises(RuntimeError, match="worker"):
+        worker_module.make_progress_writer(uuid.uuid4(), url="redis://localhost:6379/0")

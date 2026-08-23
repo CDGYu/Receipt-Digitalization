@@ -39,7 +39,7 @@ from .extract.clients.factory import make_client
 from .ingest.ingest import ReceiptJob
 from .ingest.storage import LocalStorage, S3Storage, StorageBackend
 from .persist.session import make_engine, make_session_factory
-from .pipeline import ProcessResult, process_receipt
+from .pipeline import ProcessResult, ProgressSink, process_receipt
 from .validate.context import ValidationContext
 
 log = logging.getLogger(__name__)
@@ -47,12 +47,15 @@ log = logging.getLogger(__name__)
 __all__ = [
     "DEFAULT_JOB_TIMEOUT_S",
     "DEFAULT_QUEUE_NAME",
+    "PROGRESS_TTL_S",
     "WorkerDeps",
     "build_deps",
     "enqueue_receipt",
     "job_from_payload",
     "job_to_payload",
+    "make_progress_writer",
     "make_queue",
+    "make_redis",
     "process_receipt_job",
     "run_worker",
 ]
@@ -65,6 +68,10 @@ DEFAULT_QUEUE_NAME = "receipts"
 #: spend minutes on each -- a timeout shorter than the work would kill jobs that
 #: were about to succeed and hand them back as failures.
 DEFAULT_JOB_TIMEOUT_S = 900
+
+#: How long a progress record outlives its last write. Long enough to survive a
+#: slow extract pass, short enough that an abandoned run disappears on its own.
+PROGRESS_TTL_S = 900
 
 
 # --------------------------------------------------------------------------- #
@@ -147,6 +154,13 @@ class WorkerDeps:
     session_factory: Callable[[], Session]
     settings: Settings
     ctx: ValidationContext | None = None
+    #: Builds the progress sink for one receipt, the way ``session_factory``
+    #: builds one session -- per job, because the key is the receipt's. ``None``
+    #: means nothing narrates, which is what the offline suite gets: only
+    #: :func:`build_deps` fills this in, and only with something that talks to
+    #: Redis. Narration is optional by construction, so a test that drives
+    #: :func:`process_receipt_job` still needs no queue.
+    progress_factory: Callable[[uuid.UUID], ProgressSink] | None = None
 
 
 def build_deps(settings: Settings | None = None) -> WorkerDeps:
@@ -178,6 +192,13 @@ def build_deps(settings: Settings | None = None) -> WorkerDeps:
         storage=storage,
         session_factory=make_session_factory(engine),
         settings=settings,
+        # A real worker reached this process through Redis, so the same
+        # connection is available to narrate what it is doing. Bound to these
+        # settings rather than read from the ambient environment later, for the
+        # reason `make_redis` gives.
+        progress_factory=lambda receipt_id: make_progress_writer(
+            receipt_id, settings=settings
+        ),
     )
 
 
@@ -200,11 +221,17 @@ def process_receipt_job(
     written at all -- and that is precisely the case a human must see.
 
     ``deps`` is injected by tests and built from the environment otherwise.
+
+    The progress sink is built here rather than in :func:`build_deps` because
+    its key is the receipt's, and ``deps`` is built once per worker. It stays
+    ``None`` when ``deps.progress_factory`` is -- narration is optional, and
+    that is what lets the offline tests drive this function with no Redis.
     """
     deps = deps or build_deps()
     job = job_from_payload(payload)
     log.info("Processing receipt %s from %s", job.id, job.source)
 
+    progress = None if deps.progress_factory is None else deps.progress_factory(job.id)
     result = process_receipt(
         job,
         client=deps.client,
@@ -212,6 +239,7 @@ def process_receipt_job(
         session_factory=deps.session_factory,
         ctx=deps.ctx,
         settings=deps.settings,
+        progress=progress,
     )
     return result_to_payload(result)
 
@@ -232,15 +260,21 @@ def enqueue_receipt(job: ReceiptJob, queue: Any, *, job_timeout: int | None = No
 
 
 # --------------------------------------------------------------------------- #
-# Live queue wiring (lazy imports -- the extra may not be installed)
+# Live Redis wiring (lazy imports -- the extra may not be installed)
 # --------------------------------------------------------------------------- #
 
 
-def _redis_connection(url: str | None, settings: Settings | None = None):
+def make_redis(*, url: str | None = None, settings: Settings | None = None):
     """A Redis connection from ``url`` or ``REDIS_URL``.
 
     Imported here rather than at module scope so this file stays importable
     without the ``worker`` extra.
+
+    Public, and named for what it builds rather than for the queue, because the
+    queue is no longer its only caller: :func:`make_progress_writer` needs the
+    same connection, and so does the review API's ``_default_read_progress``.
+    A second way to open the same connection would be a second thing to keep in
+    agreement with ``REDIS_URL``.
     """
     # Settings are only read when the caller did not supply a url, so a test (or
     # a CLI flag) never depends on the ambient environment.
@@ -271,7 +305,7 @@ def make_queue(
     installed, so the failure reads as a missing dependency rather than an
     import traceback.
     """
-    connection = _redis_connection(url, settings)
+    connection = make_redis(url=url, settings=settings)
     try:
         from rq import Queue
     except ImportError as exc:  # pragma: no cover - depends on the environment
@@ -280,6 +314,33 @@ def make_queue(
             "(installs rq and redis)."
         ) from exc
     return Queue(name, connection=connection)
+
+
+def make_progress_writer(
+    receipt_id: uuid.UUID,
+    *,
+    url: str | None = None,
+    settings: Settings | None = None,
+    ttl_s: int = PROGRESS_TTL_S,
+) -> Callable[[Any], None]:
+    """A sink for :func:`receipts.pipeline.process_receipt`'s ``progress``.
+
+    Each event overwrites the last: a waiting screen wants the current stage,
+    not a history, and one key per receipt with a TTL means an abandoned run
+    cleans itself up with no sweeper.
+
+    Uses :func:`make_redis`, so a missing optional extra raises the same
+    ``RuntimeError`` naming ``.[worker]`` that the queue does.
+    """
+    from .progress import encode, progress_key
+
+    connection = make_redis(url=url, settings=settings)
+    key = progress_key(receipt_id)
+
+    def write(event: Any) -> None:
+        connection.set(key, encode(event), ex=ttl_s)
+
+    return write
 
 
 def run_worker(
@@ -295,7 +356,7 @@ def run_worker(
     (``receipts process``) wants; the default runs forever, which is what a
     service wants.
     """
-    connection = _redis_connection(url, settings)
+    connection = make_redis(url=url, settings=settings)
     try:
         from rq import Queue, Worker
     except ImportError as exc:  # pragma: no cover - depends on the environment

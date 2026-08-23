@@ -1428,3 +1428,94 @@ def test_the_two_export_routes_declare_the_same_filters(app):
     # Anti-vacuity: two empty sets are equal, and a mistyped path yields them.
     assert workbook, "no query parameters found on /export/xlsx"
     assert listing - {"limit", "offset"} == workbook
+
+
+# --------------------------------------------------------------------------- #
+# GET /receipts/{id}/progress
+# --------------------------------------------------------------------------- #
+
+
+def _progress_client(session_factory, settings, tmp_path, reader) -> TestClient:
+    """A signed-in client whose app reads progress from `reader`.
+
+    Built inline rather than from the `app` fixture, following `empty_client`:
+    this variant needs an argument the shared fixture does not pass. The
+    injected reader is what keeps the suite offline -- `_default_read_progress`
+    is the only thing that touches Redis and no test reaches it.
+    """
+    app = create_app(
+        session_factory=session_factory,
+        storage=LocalStorage(tmp_path / "progress-blobs"),
+        submit=lambda job: None,
+        settings=settings,
+        read_progress=reader,
+    )
+    return _logged_in(app, "alice", "pw-alice")
+
+
+def test_progress_reports_the_stage_a_reader_supplies(
+    session_factory, settings, tmp_path, receipt_id
+) -> None:
+    from receipts.progress import ProgressEvent
+
+    client = _progress_client(
+        session_factory, settings, tmp_path,
+        lambda _id: ProgressEvent(stage="extract", detail="attempt 1"),
+    )
+    reply = client.get(f"/receipts/{receipt_id}/progress")
+
+    assert reply.status_code == 200
+    body = reply.json()
+    assert body["stage"] == "extract"
+    assert body["detail"] == "attempt 1"
+
+
+def test_progress_still_answers_when_there_is_no_record(
+    session_factory, settings, tmp_path, pending_receipt_id
+) -> None:
+    """Silence is not an error, and it is not "still working" either.
+
+    Progress is narration; the receipt's own status is the truth. A missing
+    record answers 200 with a null stage and the real status, so a screen can
+    tell "nothing to narrate" from "nothing happened".
+    """
+    client = _progress_client(session_factory, settings, tmp_path, lambda _id: None)
+    reply = client.get(f"/receipts/{pending_receipt_id}/progress")
+
+    assert reply.status_code == 200
+    body = reply.json()
+    assert body["stage"] is None
+    assert body["detail"] is None
+    assert body["status"] == "pending"
+
+
+def test_progress_for_an_unknown_receipt_is_404(
+    session_factory, settings, tmp_path
+) -> None:
+    from receipts.progress import ProgressEvent
+
+    client = _progress_client(
+        session_factory, settings, tmp_path,
+        lambda _id: ProgressEvent(stage="extract"),
+    )
+    reply = client.get(f"/receipts/{uuid.uuid4()}/progress")
+
+    assert reply.status_code == 404
+
+
+def test_progress_needs_a_signed_in_caller(
+    session_factory, settings, tmp_path, receipt_id
+) -> None:
+    """Same guard as every other receipt route: `require_user`."""
+    from receipts.progress import ProgressEvent
+
+    app = create_app(
+        session_factory=session_factory,
+        storage=LocalStorage(tmp_path / "progress-anon-blobs"),
+        submit=lambda job: None,
+        settings=settings,
+        read_progress=lambda _id: ProgressEvent(stage="extract"),
+    )
+    reply = TestClient(app).get(f"/receipts/{receipt_id}/progress")
+
+    assert reply.status_code == 401

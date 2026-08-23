@@ -1,8 +1,8 @@
 """The review API's app factory and routes (P4.T4/T5, spec §14.9).
 
 :func:`create_app` is the one place that assembles the service: it wires the
-four pieces of state Task 3's guards already read off ``app.state``
-(``session_factory``, ``storage``, ``settings``, ``submit``), installs the
+state Task 3's guards already read off ``app.state`` (``session_factory``,
+``storage``, ``settings``, ``submit``, ``read_progress``), installs the
 signed-cookie session middleware (:func:`~receipts.review.auth.
 install_session_middleware`, which refuses to start without
 ``SESSION_SECRET`` -- see its docstring for why that is a hard failure and
@@ -149,6 +149,34 @@ def _default_submit(job: ReceiptJob) -> Any:
     from ..worker import enqueue_receipt, make_queue
 
     return enqueue_receipt(job, make_queue())
+
+
+def _default_read_progress(receipt_id: uuid.UUID) -> Any:
+    """Read one receipt's progress from the real Redis behind ``REDIS_URL``.
+
+    ``redis`` is imported inside the body, the same way :func:`_default_submit`
+    imports the queue, so importing this module needs neither package. The
+    offline test suite never calls this: every test injects a reader.
+
+    A record that will not decode is treated as no record. The alternative --
+    letting a malformed value 500 the route -- would turn a cosmetic feature
+    into an outage on a screen whose whole job is to look calm.
+    """
+    from ..progress import decode, progress_key
+    from ..worker import make_redis
+
+    raw = make_redis().get(progress_key(receipt_id))
+    # Ahead of `decode` on purpose, and it is not merely tidier: a missing key
+    # is `None`, and `decode(None)` raises `TypeError`, which the `except`
+    # below does not catch. Reordering these two lines turns "no record" into
+    # a 500.
+    if raw is None:
+        return None
+    try:
+        return decode(raw.decode("utf-8") if isinstance(raw, bytes) else raw)
+    except (ValueError, UnicodeDecodeError):
+        logger.warning("undecodable progress record for %s; reporting none", receipt_id)
+        return None
 
 
 # --------------------------------------------------------------------------- #
@@ -307,6 +335,33 @@ def _install_read_routes(app: FastAPI) -> None:
                 raise HTTPException(status_code=404, detail=f"no receipt with id {receipt_id}")
             findings = get_findings(session, receipt_id)
             return receipt_detail(receipt, findings)
+
+    @app.get("/receipts/{receipt_id}/progress")
+    def get_receipt_progress(
+        receipt_id: uuid.UUID,
+        request: Request,
+        user: Annotated[SessionUser, Depends(require_user)],
+    ) -> dict[str, Any]:
+        """What this receipt is doing, if anything is narrating it.
+
+        **Progress is narration; ``status`` is the truth.** A caller decides
+        the work is finished from ``status``, never from ``stage`` going quiet
+        -- a dead worker stops writing progress and a screen that waited for a
+        terminal *stage* would wait forever.
+        """
+        with request.app.state.session_factory() as session:
+            receipt = get_receipt(session, receipt_id)
+            if receipt is None:
+                raise HTTPException(
+                    status_code=404, detail=f"no receipt with id {receipt_id}"
+                )
+            status = receipt.status.value if receipt.status else None
+        event = request.app.state.read_progress(receipt_id)
+        return {
+            "status": status,
+            "stage": event.stage if event else None,
+            "detail": event.detail if event else None,
+        }
 
     @app.get("/receipts/{receipt_id}/corrections", response_model=CorrectionListResponse)
     def list_receipt_corrections(
@@ -1034,14 +1089,16 @@ def create_app(
     session_factory: Any,
     storage: Any,
     submit: Any = None,
+    read_progress: Any = None,
     settings: Settings | None = None,
 ) -> FastAPI:
     """Build the review service.
 
-    Populates the four ``app.state`` attributes Task 3's guards already read
-    (``session_factory``, ``storage``, ``settings``, ``submit``), then wires
-    session auth, the auth router, the error handlers, and the read and
-    write routes, in that order -- and, last of all, the SPA static mount
+    Populates the ``app.state`` attributes Task 3's guards already read
+    (``session_factory``, ``storage``, ``settings``, ``submit``,
+    ``read_progress``), then wires session auth, the auth router, the error
+    handlers, and the read and write routes, in that order -- and, last of
+    all, the SPA static mount
     (:func:`_install_spa`, P5.T0). Registering it last is one of the two
     independent reasons it can never shadow an API path; the other is that
     ``/app`` is a prefix the API itself never uses. Either alone suffices --
@@ -1073,6 +1130,7 @@ def create_app(
     app.state.storage = storage
     app.state.settings = settings
     app.state.submit = submit or _default_submit
+    app.state.read_progress = read_progress or _default_read_progress
     install_session_middleware(app, settings)
     app.include_router(build_auth_router())
     _install_error_handlers(app)
