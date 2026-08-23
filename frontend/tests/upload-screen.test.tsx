@@ -9,6 +9,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../src/api/client'
 import { ACCEPTED_SUFFIXES, MAX_UPLOAD_MB } from '../src/api/upload'
 import type { UploadAccepted } from '../src/api/upload'
+// The real mapping, so the exit link is asserted to REACH the review queue
+// rather than to spell a string this file also spells.
+import { currentRoute } from '../src/route'
 import { ProcessingView } from '../src/upload/ProcessingView'
 import { UploadScreen } from '../src/upload/UploadScreen'
 
@@ -221,12 +224,10 @@ describe('UploadScreen', () => {
     const upload = vi
       .fn()
       .mockResolvedValue({ receipt_id: 'r-1', image_key: 'k', status: 'pending' })
-    render(
-      <UploadScreen
-        upload={upload}
-        progress={vi.fn().mockResolvedValue({ status: 'pending', stage: 'triage', detail: null })}
-      />,
-    )
+    const progress = vi
+      .fn()
+      .mockResolvedValue({ status: 'pending', stage: 'triage', detail: null })
+    render(<UploadScreen upload={upload} progress={progress} />)
 
     choose(field(), jpeg())
 
@@ -235,6 +236,15 @@ describe('UploadScreen', () => {
     // navigation. A page load at this moment is the beat this design avoids.
     await waitFor(() => expect(screen.queryByLabelText(/receipt/i)).toBeNull())
     expect(document.body.textContent).toContain('r-1')
+    // The injected `progress` reached the view, with the id the server just
+    // returned. Without this the forwarding is deletable in silence: the view
+    // falls back to the real `fetchProgress`, which rejects under jsdom straight
+    // into the handler that deliberately swallows it, and `r-1` still renders
+    // from the receipt pane -- so `UploadScreenProps.progress` goes back to
+    // being an unread prop. Measured as a mutation in fix round 1: with the
+    // forwarding deleted this file's other 25 tests all still pass, and this
+    // assertion is the only thing that reddens.
+    await waitFor(() => expect(progress).toHaveBeenCalledWith('r-1'))
   })
 
   it('clears a refusal the moment the next attempt starts, not when it finishes', async () => {
@@ -327,6 +337,139 @@ describe('ProcessingView', () => {
     expect(stopped()).toBe(false)
   })
 
+  it('keeps the whole sequence the active stage narrates, not just its last word', async () => {
+    // Design section 4's hero beat: `extract` says what it is doing as it
+    // repairs its own answer, and the audience watches the system find its own
+    // mistake and then DECLINE a repair that made things worse. A view holding
+    // only the LAST report replaces each line with the next one and there is no
+    // sequence to watch -- which is what this was before the fix round that
+    // added it.
+    //
+    // The three strings are the shapes `extract` really writes, read off
+    // `_report` and the best-attempt event in
+    // src/receipts/extract/extractor.py: `attempt N (pass): M errors`, then
+    // `kept attempt K of T`, with `pass` one of extract, re_extract, repair.
+    // The view treats a detail as opaque text, so the shape changes nothing here
+    // -- but a fixture that looks like production data and is not is a lie a
+    // later reader has to discover.
+    const { poll, fire } = manualPoll()
+    const progress = vi
+      .fn()
+      .mockResolvedValueOnce({
+        status: 'pending',
+        stage: 'extract',
+        detail: 'attempt 1 (extract): 3 errors',
+      })
+      .mockResolvedValueOnce({
+        status: 'pending',
+        stage: 'extract',
+        detail: 'attempt 2 (repair): 5 errors',
+      })
+      .mockResolvedValue({ status: 'pending', stage: 'extract', detail: 'kept attempt 1 of 2' })
+
+    render(
+      <ProcessingView receiptId="r-1" fileName="receipt.jpg" progress={progress} poll={poll} />,
+    )
+
+    expect(await screen.findByText('attempt 1 (extract): 3 errors')).toBeTruthy()
+    fire()
+    expect(await screen.findByText('attempt 2 (repair): 5 errors')).toBeTruthy()
+    fire()
+    // The repair scored worse and the first attempt is the one kept. That beat
+    // is only visible because all three lines are still on screen together.
+    expect(await screen.findByText('kept attempt 1 of 2')).toBeTruthy()
+
+    // All three at once, and in the order they were said. Read structurally --
+    // the details list is the one `<ol>` inside the steps `<ol>` -- because a
+    // class name is unpinnable by rendering under `css: false`.
+    const narrated = Array.from(document.querySelectorAll('ol ol li'), (li) => li.textContent)
+    expect(narrated).toEqual([
+      'attempt 1 (extract): 3 errors',
+      'attempt 2 (repair): 5 errors',
+      'kept attempt 1 of 2',
+    ])
+  })
+
+  it('says a repeated detail once, because an ask is not an event', async () => {
+    // The route reports the CURRENT detail, so an unchanged one arrives again
+    // on every ask. Without this the sequence above repeats one line for as long
+    // as the attempt behind it runs.
+    const { poll, fire } = manualPoll()
+    const progress = vi
+      .fn()
+      .mockResolvedValue({
+        status: 'pending',
+        stage: 'extract',
+        detail: 'attempt 1 (extract): 3 errors',
+      })
+
+    render(
+      <ProcessingView receiptId="r-1" fileName="receipt.jpg" progress={progress} poll={poll} />,
+    )
+    expect(await screen.findByText('attempt 1 (extract): 3 errors')).toBeTruthy()
+    fire()
+    fire()
+    await waitFor(() => expect(progress.mock.calls.length).toBeGreaterThan(2))
+
+    expect(Array.from(document.querySelectorAll('ol ol li'), (li) => li.textContent)).toEqual([
+      'attempt 1 (extract): 3 errors',
+    ])
+  })
+
+  it('drops the previous stage sequence when a new stage starts', async () => {
+    // The sequence belongs to the stage that is running. Carrying `extract`'s
+    // attempts into `score` would put one stage's narration under another's
+    // name, and the completed stage is meant to collapse to its quiet line.
+    const { poll, fire } = manualPoll()
+    const progress = vi
+      .fn()
+      .mockResolvedValueOnce({
+        status: 'pending',
+        stage: 'extract',
+        detail: 'attempt 1 (extract): 3 errors',
+      })
+      .mockResolvedValue({ status: 'pending', stage: 'score', detail: 'weighing' })
+
+    render(
+      <ProcessingView receiptId="r-1" fileName="receipt.jpg" progress={progress} poll={poll} />,
+    )
+    expect(await screen.findByText('attempt 1 (extract): 3 errors')).toBeTruthy()
+    fire()
+    expect(await screen.findByText('weighing')).toBeTruthy()
+
+    expect(Array.from(document.querySelectorAll('ol ol li'), (li) => li.textContent)).toEqual([
+      'weighing',
+    ])
+    // ...and `extract` is still on the timeline, as the quiet line it collapsed
+    // to. Dropping its detail must not drop the stage.
+    expect(screen.getByText('extract')).toBeTruthy()
+  })
+
+  it('renders a null detail as nothing, never as an empty row', async () => {
+    // ADR-0027 decision 5. A styled element rendered unconditionally around a
+    // `null` contributes no text, so every assertion about text is happy while a
+    // browser shows a row with nothing in it. This repository keeps a whole file
+    // -- `tests/review-null-rule.test.tsx` -- for that rule on the review
+    // screen; this is the same rule on this one.
+    const { poll, fire } = manualPoll()
+    const progress = vi
+      .fn()
+      .mockResolvedValue({ status: 'pending', stage: 'triage', detail: null })
+
+    render(
+      <ProcessingView receiptId="r-1" fileName="receipt.jpg" progress={progress} poll={poll} />,
+    )
+    fire()
+
+    const active = await screen.findByText('triage')
+    const row = active.parentElement
+    expect(row, 'the active stage is not inside a row').toBeTruthy()
+    expect(
+      Array.from(row?.children ?? []).length,
+      'the active row carries an element beside the stage when the detail is null',
+    ).toBe(1)
+  })
+
   it('asks again on every tick, and shows what came back', async () => {
     // The four tests around this one are all satisfied by a view that asks once
     // at mount and registers a tick that does nothing: `progress` has been
@@ -374,7 +517,7 @@ describe('ProcessingView', () => {
     // pass against a view that never finishes anything.
     expect(await screen.findByText(/extract/i)).toBeTruthy()
     expect(
-      document.querySelector('a[href="/app/review"]'),
+      document.querySelector('a[href]'),
       'the exit was offered while the receipt was still pending',
     ).toBeNull()
     cleanup()
@@ -388,12 +531,30 @@ describe('ProcessingView', () => {
 
     // The server's own word for what it became, echoed rather than re-worded.
     expect(await screen.findByText(/needs_review/)).toBeTruthy()
-    await waitFor(() =>
-      expect(
-        document.querySelector('a[href="/app/review"]'),
-        'a finished receipt is a dead end',
-      ).toBeTruthy(),
+    // Asserted through `currentRoute` rather than against the literal the
+    // subject writes. `toHaveAttribute('href', '/app/review')` is a string
+    // matching itself: it stays green if the app's review path moves, and green
+    // for a path the backend would 404. This asks the module that owns the
+    // mapping what the URL actually reaches.
+    const exit = await waitFor(() => {
+      const found = document.querySelector('a[href]')
+      expect(found, 'a finished receipt is a dead end').toBeTruthy()
+      return found as HTMLAnchorElement
+    })
+    const href = exit.getAttribute('href') ?? ''
+    expect(currentRoute(href), `the exit points at ${href}, which is not the review queue`).toBe(
+      'review',
     )
+    // `currentRoute` falls back to `review` for anything it does not recognise,
+    // so the line above passes for a typo. The last segment carrying no dot is
+    // what makes the backend serve the app at all rather than look for a file
+    // (`route.ts`, and the rule `admin-screen.test.tsx` pins), so it is checked
+    // separately.
+    const lastSegment = href.slice(href.lastIndexOf('/') + 1)
+    expect(lastSegment, `${href} ends in a segment with a dot, which the SPA mount 404s`).not.toMatch(
+      /\./,
+    )
+    expect(href.startsWith('/app/'), `${href} is not under the app`).toBe(true)
   })
 
   it('keeps narrating when a poll fails, because narration is not the answer', async () => {
@@ -466,7 +627,7 @@ describe('the file input is driven the way a browser drives one', () => {
  *  `.tsx` here that paints nothing would fail on a stylesheet that does not
  *  exist. That is loud and one decision away from fixed, which is the right way
  *  round for a guard. */
-describe('the upload screen is actually painted', () => {
+describe('every component in src/upload is actually painted', () => {
   /** `Name.tsx` and the `Name.module.css` it is expected to paint from. */
   function painted(): { readonly tsx: string; readonly css: string }[] {
     return readdirSync(UPLOAD_DIR)
@@ -493,10 +654,16 @@ describe('the upload screen is actually painted', () => {
     expect(referencedClasses('// styles.ghost\nx = styles.real').has('ghost')).toBe(false)
   })
 
-  it('has a component to guard in the first place', () => {
-    // The enumeration answering `[]` would make both directions below pass over
-    // nothing at all -- green, and guarding nothing.
-    expect(painted().map((pair) => pair.tsx)).toContain('UploadScreen.tsx')
+  it('enumerates both components, so neither can leave the guard silently', () => {
+    // Two failures this closes, not one. The enumeration answering `[]` would
+    // make both directions below pass over nothing at all -- green, and guarding
+    // nothing. And a component MOVED out of `src/upload/` simply stops being
+    // enumerated, which is the same silence one file at a time. Naming them is
+    // the only part of this guard that is a list, and it is a list of two.
+    expect(painted().map((pair) => pair.tsx)).toEqual([
+      'ProcessingView.tsx',
+      'UploadScreen.tsx',
+    ])
   })
 
   it('declares every class each component reaches', () => {

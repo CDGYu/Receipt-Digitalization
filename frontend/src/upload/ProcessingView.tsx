@@ -58,23 +58,53 @@ function everyFewSeconds(fn: () => void): () => void {
  * rather than by a promise to show the pipeline.
  */
 interface Narration {
-  /** Stages in the order they were first seen. Deduplicated, because the
-   *  pipeline enters `persist` more than once and a stage that is still running
-   *  is reported by every ask until it ends. */
+  /** Stages in the order they were first seen. Deduplicated, because a stage
+   *  that is still running is reported by every ask until it ends. */
   readonly seen: readonly string[]
   /** The last report that arrived, or `null` before the first one does. A failed
    *  ask leaves the previous one standing. */
   readonly latest: ProgressReport | null
+  /** What the stage now running has said, oldest first.
+   *
+   * **This is the sequence, and the sequence is the point** (design section 4).
+   * `extract` narrates its own repair loop, and what it writes -- read from
+   * `_report` and the best-attempt event in src/receipts/extract/extractor.py --
+   * is one line per finished attempt, `attempt N (pass): M errors`, and then
+   * `kept attempt K of T`. Watching those accumulate is watching the system find
+   * its own mistake and try again -- and, when the repair scored worse, keep the
+   * earlier answer anyway, since `extract_with_repair` returns the BEST attempt
+   * rather than the last. A view holding only the newest line replaces each of
+   * them with the next and leaves nothing to watch at the one stage where the
+   * wall clock actually goes.
+   *
+   * (Design section 4 sketches a finer sequence -- validate, findings, repair as
+   * separate beats. Those are not separate events today; the error count in each
+   * attempt line is what stands in for them. This renders what is emitted.)
+   *
+   * It belongs to the running stage and starts again when the stage does: one
+   * stage's narration under another's name would be worse than none. */
+  readonly details: readonly string[]
 }
 
-const NOTHING_YET: Narration = { seen: [], latest: null }
+const NOTHING_YET: Narration = { seen: [], latest: null, details: [] }
 
 function watched(previous: Narration, report: ProgressReport): Narration {
   const stage = report.stage
-  if (stage === null || previous.seen.includes(stage)) {
-    return { seen: previous.seen, latest: report }
-  }
-  return { seen: [...previous.seen, stage], latest: report }
+  const seen =
+    stage === null || previous.seen.includes(stage) ? previous.seen : [...previous.seen, stage]
+  // Carried only while the stage is the same one; a new stage starts a new
+  // sequence, and so does the stage going quiet.
+  const carried = stage !== null && stage === previous.latest?.stage ? previous.details : []
+  const detail = report.detail
+  // Deduplicated against the PREVIOUS line only, never against the whole list.
+  // The route reports whatever detail is current, so an unchanged one arrives
+  // again on every ask: consecutive identical lines are one event re-read. A
+  // list-wide check would additionally assume no stage ever says the same thing
+  // twice -- which happens to hold for today's `extract` lines, because each
+  // carries its own attempt number, but that is one emitter's format and not
+  // anything this route promises. The narrow rule does not depend on it.
+  const repeated = detail === null || detail === carried[carried.length - 1]
+  return { seen, latest: report, details: repeated ? carried : [...carried, detail] }
 }
 
 export interface ProcessingViewProps {
@@ -107,18 +137,29 @@ export interface ProcessingViewProps {
  * design's decision 9 -- HEIC degrading to a chip instead of a broken image --
  * has nothing to bite on here.
  *
- * ## No elapsed figure, and no clock
+ * ## No elapsed figure
  *
  * The design asks for an elapsed time beside a completed stage, labelled elapsed
- * and never latency (decision 10). Nothing this view is given can produce one.
+ * and never latency (decision 10). There is none here, and the reason is
+ * narrower than "there is nothing to measure".
+ *
  * `ProgressEvent` carries a stage and a detail and no timestamp
- * (src/receipts/progress.py), and `POST /upload` queues the receipt for a worker
- * to pick up whenever it gets to it -- so the only interval measurable here is
- * how long *this page* has been watching, which for the first stage it sees is
- * not that stage's duration at all. That would be a number about the browser
- * wearing the label of a number about the pipeline -- and decision 10 records
- * one such figure being invented and then deleted in an earlier milestone. So
- * there is none here, and the gap is written down rather than filled.
+ * (src/receipts/progress.py), so any figure here would be built from when this
+ * page ASKED. For a stage whose own first sighting and whose successor's first
+ * sighting were both observed, that difference **is** its dwell, bracketed by
+ * one poll interval -- so the measurement is not impossible, and saying it was
+ * would be false.
+ *
+ * What it is not is uniform, and that is the actual objection. The first stage
+ * seen has no observed start: `POST /upload` queues the receipt and a worker
+ * takes it whenever it gets there, so the pipeline can already be several asks
+ * along when this page first renders. A stage shorter than the poll interval is
+ * never seen at all and can carry nothing. So the column would be a measurement
+ * where both endpoints were observed, a lower bound on the first stage, and
+ * absent for anything too quick to be seen -- three different things under one
+ * heading, which a reader will average.
+ * Decision 10 records one invented figure already deleted here. So: no figure,
+ * and the bound written down instead of a number guessed.
  *
  * ## What a failed ask does
  *
@@ -177,7 +218,6 @@ export function ProcessingView({
 
   const report = narration.latest
   const stage = report?.stage ?? null
-  const detail = report?.detail ?? null
   const finished = terminalStatus(report)
   // The active stage is reported by every ask while it runs, so it is in `seen`
   // as well. It is drawn once, with weight, and the rest collapse behind it.
@@ -211,18 +251,32 @@ export function ProcessingView({
           {stage === null ? null : (
             <li className={styles.active}>
               <span className={styles.stage}>{stage}</span>
-              {detail === null ? null : <span className={styles.detail}>{detail}</span>}
+              {narration.details.length === 0 ? null : (
+                <ol className={styles.details}>
+                  {narration.details.map((said, index) => (
+                    // The list is append-only within a stage -- never reordered,
+                    // never spliced, and replaced wholesale when the stage
+                    // changes -- so the position is a stable identity. The text
+                    // is not used as the key on its own: nothing in the route's
+                    // contract says two details differ.
+                    <li className={styles.detail} key={`${index}:${said}`}>
+                      {said}
+                    </li>
+                  ))}
+                </ol>
+              )}
             </li>
           )}
         </ol>
 
         {finished === null ? (
           stage === null ? (
-            // Quiet, and not an alert: nothing has failed. Said in what is known
-            // -- there is no stage in the last report -- rather than in a guess
-            // at why, which from here is not decidable: a worker that has not
-            // picked the job up yet and a worker that has died look the same
-            // from this side.
+            // Quiet, and not an alert: nothing has failed. It covers two states
+            // that are one state from here -- no report has arrived yet, and a
+            // report arrived carrying no stage -- and says only what is true of
+            // both. A guess at why would not be decidable on this side anyway: a
+            // worker that has not picked the job up and a worker that has died
+            // look identical from here.
             <p className={styles.quiet}>No step is reporting right now.</p>
           ) : null
         ) : (

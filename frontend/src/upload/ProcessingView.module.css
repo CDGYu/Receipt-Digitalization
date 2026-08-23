@@ -12,13 +12,22 @@
  * component places carries a class and every selector below names one. There is
  * no type selector and no child combinator in this file.
  *
- * ## Two columns, in the review screen's proportions
+ * ## Two columns, in the review screen's proportions -- and its breakpoint
  *
  * `grid-template-columns`, `max-width`, `padding` and `gap` are the values
  * `ReviewScreen.module.css` uses, so the left-hand pane occupies the column that
  * screen gives the photograph. That is the whole point of the shape: when
  * processing ends and the review screen takes over, the receipt's column is
  * where it was.
+ *
+ * **Which is a claim about every width, so the breakpoint is mirrored too.** The
+ * review screen collapses to one column under `max-width: 1023px`; the block at
+ * the foot of this file does the same at the same number. The first version of
+ * this file had the proportions and no media query, so the sentence above was
+ * true above 1024px and false below it -- the receipt moved at the hand-over on
+ * exactly the narrow screens where a moving photograph is most disruptive.
+ * Caught in review, not by a gate: nothing in this repository's five gates lays
+ * anything out.
  *
  * ## The stage list carries its weight in type, not in colour
  *
@@ -163,8 +172,20 @@
   line-height: 1.3;
 }
 
-/* The server's own commentary on the active step, which is where the extract
- * loop says what attempt it is on. Absent, not blank, when there is none. */
+/* The sequence the active step has narrated, oldest first -- design section 4's
+ * hero beat, where `extract` shows its repair loop working. A list rather than
+ * one line, because the lines are meant to accumulate under the stage's name and
+ * be read as an order. Absent, not empty, before anything has been said. */
+.details {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* One thing the active step said. Absent, not blank, when there is none. */
 .detail {
   color: var(--color-muted-foreground);
   font-family: var(--font-mono);
@@ -214,4 +235,36 @@
 .next:focus-visible {
   outline: 2px solid var(--color-ring);
   outline-offset: 2px;
+}
+
+/* Below the two-column breakpoint the receipt stops being a column and becomes
+ * the first block after the scope line, in source order.
+ *
+ * **The breakpoint and the collapse are mirrored from `ReviewScreen.module.css`,
+ * and that is the whole point of this block.** That stylesheet drops to
+ * `minmax(0, 1fr)` at exactly this width. Without a matching rule here the
+ * processing view stays two columns while review stacks, so the receipt moves at
+ * the hand-over -- the one thing the shared shape exists to prevent, and true at
+ * every width under 1024px rather than in some edge case.
+ *
+ * `.steps` is the reset that is load-bearing: `grid-column: 2` in a grid with
+ * one explicit column does not clamp, it creates an implicit second column and
+ * the collapse silently does not happen. `.receipt` is reset alongside it
+ * because a rule that resets one of a pair invites the other to drift.
+ * `.heading` and `.scope` need none -- `1 / -1` is column 1 in a one-column
+ * grid.
+ *
+ * `padding` matches too: review tightens to `var(--space-xl) var(--space-lg)` at
+ * this width, and a receipt inset further than the pane replacing it is still a
+ * move. */
+@media (max-width: 1023px) {
+  .screen {
+    grid-template-columns: minmax(0, 1fr);
+    padding: var(--space-xl) var(--space-lg);
+  }
+
+  .receipt,
+  .steps {
+    grid-column: 1;
+  }
 }

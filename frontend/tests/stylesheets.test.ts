@@ -586,6 +586,7 @@ const CENSUS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
     '.active':
       'display: flex, flex-direction: column, gap, box-sizing: border-box, padding, border, border-radius, background, box-shadow',
     '.stage': 'color, font-size, font-weight, line-height',
+    '.details': 'display: flex, flex-direction: column, gap, margin, padding, list-style: none',
     '.detail': 'color, font-family, font-size, line-height',
     '.quiet': 'margin, color, font-size, line-height',
     '.outcome': 'margin, font-size, line-height',
@@ -593,6 +594,14 @@ const CENSUS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
     '.next':
       'align-self: start, padding, border, border-radius, background, color, font-size, font-weight, line-height, text-decoration: none',
     '.next:focus-visible': 'outline, outline-offset',
+    // Mirrored from `review/ReviewScreen.module.css`'s block at the same width.
+    // The pair must agree: if one collapses to a single column and the other
+    // does not, the receipt moves at the hand-over, which is the property the
+    // two-column shape was chosen for. `.steps` resetting to column 1 is the
+    // load-bearing half -- `grid-column: 2` in a one-column grid creates an
+    // implicit second column rather than clamping.
+    '@media (max-width: 1023px) .screen': 'grid-template-columns, padding',
+    '@media (max-width: 1023px) .receipt, .steps': 'grid-column',
   },
 }
 
