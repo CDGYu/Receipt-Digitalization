@@ -279,6 +279,41 @@ def test_the_progress_writer_overwrites_one_keyed_record_with_a_ttl(monkeypatch)
     assert {ttl for _key, _value, ttl in fake.sets} == {worker_module.PROGRESS_TTL_S}
 
 
+def test_the_progress_connection_asks_for_a_bounded_wait(monkeypatch):
+    """The narration never costs the extraction more than a moment.
+
+    A socket call that *blocks* does not raise, so the ``except Exception``
+    around every emit in :mod:`receipts.pipeline` cannot end it: the receipt
+    would sit until RQ's death penalty and reach no terminal state, which is
+    the cosmetic half of the system taking the load-bearing half down with it.
+    A bound on the connection is what makes that impossible, and this asserts
+    the writer asks for one.
+
+    What a green run here does **not** establish: that ``redis`` honours the
+    argument, or that an unreachable Redis blocks rather than failing fast.
+    ``redis`` is not installed in this environment (see
+    ``test_importing_the_worker_does_not_import_rq_or_redis``), so nothing
+    here has watched the failure this bound is for. It pins the argument.
+    """
+    seen: dict = {}
+
+    def _recording_make_redis(**kwargs):
+        seen.update(kwargs)
+        return _FakeRedis()
+
+    monkeypatch.setattr(worker_module, "make_redis", _recording_make_redis)
+
+    worker_module.make_progress_writer(uuid.uuid4())
+
+    assert "socket_timeout" in seen, f"no read bound was asked for: {seen}"
+    assert "socket_connect_timeout" in seen, f"no connect bound was asked for: {seen}"
+    assert seen["socket_timeout"] == worker_module.PROGRESS_SOCKET_TIMEOUT_S
+    assert seen["socket_connect_timeout"] == worker_module.PROGRESS_SOCKET_TIMEOUT_S
+    # Anti-vacuity: a `None` or `0` constant would satisfy both equalities above
+    # while asking for no bound at all.
+    assert worker_module.PROGRESS_SOCKET_TIMEOUT_S > 0
+
+
 def _recording_process_receipt(seen: dict):
     """A ``process_receipt`` stand-in that files away its keyword arguments."""
 

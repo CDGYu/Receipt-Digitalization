@@ -47,6 +47,7 @@ log = logging.getLogger(__name__)
 __all__ = [
     "DEFAULT_JOB_TIMEOUT_S",
     "DEFAULT_QUEUE_NAME",
+    "PROGRESS_SOCKET_TIMEOUT_S",
     "PROGRESS_TTL_S",
     "WorkerDeps",
     "build_deps",
@@ -72,6 +73,21 @@ DEFAULT_JOB_TIMEOUT_S = 900
 #: How long a progress record outlives its last write. Long enough to survive a
 #: slow extract pass, short enough that an abandoned run disappears on its own.
 PROGRESS_TTL_S = 900
+
+#: The bound the narration connection asks for, on connecting and on waiting.
+#:
+#: **Derived from reading, not measured here** -- ``redis`` is not installed in
+#: this environment, so nothing in this repository has watched a hung Redis
+#: stall a receipt. The reasoning: this branch puts a Redis round-trip on the
+#: hot path of every stage of every receipt, where there were none; a socket
+#: call that blocks never raises, so the ``except Exception`` guarding each emit
+#: in :mod:`receipts.pipeline` cannot catch it; and the receipt would then sit
+#: until RQ's death penalty without reaching a terminal state. A bound is the
+#: right shape whether or not that is what an unreachable Redis actually does.
+#:
+#: Small on purpose. Narration is cosmetic, so waiting on it is never worth more
+#: than a moment, and the pipeline swallows whatever a timed-out write raises.
+PROGRESS_SOCKET_TIMEOUT_S = 2.0
 
 
 # --------------------------------------------------------------------------- #
@@ -289,7 +305,13 @@ def enqueue_receipt(job: ReceiptJob, queue: Any, *, job_timeout: int | None = No
 # --------------------------------------------------------------------------- #
 
 
-def make_redis(*, url: str | None = None, settings: Settings | None = None):
+def make_redis(
+    *,
+    url: str | None = None,
+    settings: Settings | None = None,
+    socket_timeout: float | None = None,
+    socket_connect_timeout: float | None = None,
+):
     """A Redis connection from ``url`` or ``REDIS_URL``.
 
     Imported here rather than at module scope so this file stays importable
@@ -300,6 +322,12 @@ def make_redis(*, url: str | None = None, settings: Settings | None = None):
     same connection, and so does the review API's ``_default_read_progress``.
     A second way to open the same connection would be a second thing to keep in
     agreement with ``REDIS_URL``.
+
+    The two timeouts are passed through to ``from_url`` **only when a caller
+    gives one**, rather than forwarded as ``None``. A caller that wants a bound
+    says so; a caller that says nothing gets whatever ``redis.Redis.from_url``
+    does on its own, unchanged -- which is what keeps this a bound added to the
+    narration connection rather than a behaviour change for the queue.
     """
     # Settings are only read when the caller did not supply a url, so a test (or
     # a CLI flag) never depends on the ambient environment.
@@ -315,7 +343,12 @@ def make_redis(*, url: str | None = None, settings: Settings | None = None):
             "The queue needs the optional 'worker' extra: pip install -e '.[worker]' "
             "(installs rq and redis)."
         ) from exc
-    return redis.Redis.from_url(resolved)
+    options: dict[str, Any] = {}
+    if socket_timeout is not None:
+        options["socket_timeout"] = socket_timeout
+    if socket_connect_timeout is not None:
+        options["socket_connect_timeout"] = socket_connect_timeout
+    return redis.Redis.from_url(resolved, **options)
 
 
 def make_queue(
@@ -355,11 +388,21 @@ def make_progress_writer(
     cleans itself up with no sweeper.
 
     Uses :func:`make_redis`, so a missing optional extra raises the same
-    ``RuntimeError`` naming ``.[worker]`` that the queue does.
+    ``RuntimeError`` naming ``.[worker]`` that the queue does -- but **asking
+    for a bounded wait**, which :func:`make_queue`'s connection does not. This
+    one sits on the hot path of every stage of every receipt, so an unbounded
+    wait here would be the extraction paying for the narration. See
+    :data:`PROGRESS_SOCKET_TIMEOUT_S` for which part of that is reasoning and
+    which part is measurement.
     """
     from .progress import encode, progress_key
 
-    connection = make_redis(url=url, settings=settings)
+    connection = make_redis(
+        url=url,
+        settings=settings,
+        socket_timeout=PROGRESS_SOCKET_TIMEOUT_S,
+        socket_connect_timeout=PROGRESS_SOCKET_TIMEOUT_S,
+    )
     key = progress_key(receipt_id)
 
     def write(event: Any) -> None:
