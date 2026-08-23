@@ -1456,6 +1456,17 @@ def _progress_client(session_factory, settings, tmp_path, reader) -> TestClient:
 def test_progress_reports_the_stage_a_reader_supplies(
     session_factory, settings, tmp_path, receipt_id
 ) -> None:
+    """Narration and truth in one reply, in the case that needs both.
+
+    ``status`` is the load-bearing field: a caller decides the work is
+    finished from it, never from ``stage`` going quiet. So the case that has
+    to pin it is the **narrating** one -- here a terminal ``needs_review``
+    receipt beside a live-looking ``extract`` stage, which is what a screen
+    sees when a dead worker's record outlives the run that wrote it. The
+    no-record tests cannot reach it: both have ``event is None``, so a route
+    that dropped ``status`` exactly when it had something to narrate would
+    leave them green.
+    """
     from receipts.progress import ProgressEvent
 
     client = _progress_client(
@@ -1466,6 +1477,7 @@ def test_progress_reports_the_stage_a_reader_supplies(
 
     assert reply.status_code == 200
     body = reply.json()
+    assert body["status"] == "needs_review"
     assert body["stage"] == "extract"
     assert body["detail"] == "attempt 1"
 
@@ -1519,6 +1531,41 @@ def test_progress_needs_a_signed_in_caller(
     reply = TestClient(app).get(f"/receipts/{receipt_id}/progress")
 
     assert reply.status_code == 401
+
+
+def test_an_uninjected_app_reads_progress_through_the_production_reader(
+    session_factory, settings, tmp_path
+) -> None:
+    """The one wire between this route and Redis, and nothing else holds it.
+
+    ``create_app`` is called without ``read_progress`` in production
+    (``receipts.asgi.create_asgi_app`` passes none), so
+    ``read_progress or _default_read_progress`` is what connects this
+    milestone's route to the record the worker writes. Every other progress
+    test injects a reader, which is what keeps this suite offline -- and
+    therefore none of them can see that clause go missing.
+
+    **The route's own guard is why a response assertion cannot see it
+    either.** With the ``or`` deleted, ``app.state.read_progress`` is
+    ``None``, calling it raises into the deliberately bare ``except`` in
+    ``get_receipt_progress``, and the reply is byte-identical to a healthy
+    no-record one: ``200`` with a null stage and the real status. The
+    identity below is the only thing that fails.
+
+    What a green run here does **not** establish: that
+    ``_default_read_progress`` can reach a Redis. Nothing in this suite can
+    -- ``redis`` is not installed in this environment.
+    """
+    from receipts.review.api import _default_read_progress
+
+    app = create_app(
+        session_factory=session_factory,
+        storage=LocalStorage(tmp_path / "progress-default-blobs"),
+        submit=lambda job: None,
+        settings=settings,
+    )
+
+    assert app.state.read_progress is _default_read_progress
 
 
 def test_progress_survives_a_reader_that_cannot_answer(
