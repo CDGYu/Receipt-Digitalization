@@ -565,7 +565,34 @@ const CENSUS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
     '.field:focus-within': 'outline, outline-offset',
     '.limits': 'margin, color, font-size, line-height, text-align: center',
     '.sending': 'margin, color, font-size, line-height, text-align: center',
-    '.placeholder': 'margin, color, font-size, line-height',
+  },
+  // The processing view. Two columns placed by class rather than by position --
+  // `grid-column` on `.receipt` and `.steps` -- so there is no `>` selector here
+  // for a wrapper to be added under.
+  'upload/ProcessingView.module.css': {
+    '.screen':
+      'box-sizing: border-box, display: grid, grid-template-columns, align-content: start, gap, max-width, margin, padding, color, font-family',
+    '.heading': 'grid-column, margin, font-size, font-weight, line-height',
+    '.scope': 'grid-column, margin, color, font-size, line-height',
+    '.receipt':
+      'grid-column, box-sizing: border-box, display: flex, flex-direction: column, gap, min-width, padding, border, border-radius, background',
+    '.steps': 'grid-column, display: flex, flex-direction: column, gap, min-width',
+    '.paneHeading':
+      'margin, color, font-size, font-weight, letter-spacing, line-height, text-transform: uppercase',
+    '.fileName': 'margin, overflow-wrap: anywhere, font-size, font-weight, line-height',
+    '.receiptId': 'margin, overflow-wrap: anywhere, color, font-family, font-size, line-height',
+    '.list': 'display: flex, flex-direction: column, gap, margin, padding, list-style: none',
+    '.past': 'color, font-size, line-height',
+    '.active':
+      'display: flex, flex-direction: column, gap, box-sizing: border-box, padding, border, border-radius, background, box-shadow',
+    '.stage': 'color, font-size, font-weight, line-height',
+    '.detail': 'color, font-family, font-size, line-height',
+    '.quiet': 'margin, color, font-size, line-height',
+    '.outcome': 'margin, font-size, line-height',
+    '.status': 'font-family, font-weight',
+    '.next':
+      'align-self: start, padding, border, border-radius, background, color, font-size, font-weight, line-height, text-decoration: none',
+    '.next:focus-visible': 'outline, outline-offset',
   },
 }
 
@@ -628,7 +655,7 @@ describe('the census reads what is there, not what it hopes for', () => {
 
   it('is reading the real tree, not an empty one', () => {
     const files = stylesheets()
-    expect(files.length, 'no stylesheets found -- the whole census is vacuous').toBe(19)
+    expect(files.length, 'no stylesheets found -- the whole census is vacuous').toBe(20)
     let rules = 0
     let declarations = 0
     for (const file of files) {

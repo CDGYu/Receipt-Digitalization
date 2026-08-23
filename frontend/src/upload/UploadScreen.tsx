@@ -3,6 +3,7 @@ import type { ChangeEvent } from 'react'
 import { ApiError } from '../api/client'
 import { ACCEPTED_SUFFIXES, MAX_UPLOAD_MB, rejectionReason, uploadReceipt } from '../api/upload'
 import type { ProgressReport, UploadAccepted } from '../api/upload'
+import { ProcessingView } from './ProcessingView'
 import styles from './UploadScreen.module.css'
 
 /** The API's own words when it gave us any, and the caller's sentence when not.
@@ -58,12 +59,16 @@ export interface UploadScreenProps {
   /** Injected so tests never touch `fetch`; the same seam `create_app`'s
    *  `submit` uses on the server. Defaults to the real call. */
   readonly upload?: (file: File) => Promise<UploadAccepted>
-  /** `ProcessingView`'s polling seam (the next task), declared here because
-   *  this screen is what holds the accepted receipt and therefore what passes
-   *  it down. **Nothing reads it yet** -- there is no polling on this screen
-   *  until that view exists. It is on these props rather than added to them
-   *  later so that a test injecting it today injects it into the component that
-   *  will use it, and no test has to move when the view arrives. */
+  /** Handed straight to `ProcessingView`, which is what asks with it. It is on
+   *  these props because this screen is what holds the accepted receipt and
+   *  therefore what mounts the view. Left `undefined` -- as `main.tsx` leaves it
+   *  -- the view falls back to `fetchProgress`.
+   *
+   *  `ProcessingView` also takes a `poll` seam, and that one is deliberately NOT
+   *  forwarded: nothing on this screen polls. An unread prop is what `progress`
+   *  itself was until this task, and threading a second one through here would
+   *  be the same seam-that-is-not-a-seam again. A test that needs to drive ticks
+   *  renders `ProcessingView`, which is where the ticks are. */
   readonly progress?: (receiptId: string) => Promise<ProgressReport>
 }
 
@@ -104,13 +109,8 @@ export interface UploadScreenProps {
  * route, no navigation, no document load. The beat where a person hands over a
  * receipt and the page goes blank is the one thing this design exists to
  * remove.
- *
- * The element below is a placeholder that the next task replaces with
- * `ProcessingView` -- it names the receipt so that the hand-off is visible and
- * so that "the chooser went away and something took its place" is testable
- * today rather than on the day the view lands.
  */
-export function UploadScreen({ upload = uploadReceipt }: UploadScreenProps) {
+export function UploadScreen({ upload = uploadReceipt, progress }: UploadScreenProps) {
   const [error, setError] = useState<string | null>(null)
   const [accepted, setAccepted] = useState<Accepted | null>(null)
   const [sending, setSending] = useState(false)
@@ -147,12 +147,11 @@ export function UploadScreen({ upload = uploadReceipt }: UploadScreenProps) {
 
   if (accepted !== null) {
     return (
-      <main className={styles.screen}>
-        <h1 className={styles.heading}>Processing</h1>
-        <p className={styles.placeholder}>
-          {accepted.fileName} is with the pipeline as {accepted.receipt.receipt_id}.
-        </p>
-      </main>
+      <ProcessingView
+        receiptId={accepted.receipt.receipt_id}
+        fileName={accepted.fileName}
+        progress={progress}
+      />
     )
   }
 

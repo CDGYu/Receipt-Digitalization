@@ -152,13 +152,3 @@
   line-height: 1.5;
   text-align: center;
 }
-
-/* The stand-in for `ProcessingView`, which the next task builds. It is quiet on
- * purpose: it is scaffolding, and scaffolding that looks finished is scaffolding
- * that gets left in. */
-.placeholder {
-  margin: 0;
-  color: var(--color-muted-foreground);
-  font-size: var(--text-base);
-  line-height: 1.5;
-}

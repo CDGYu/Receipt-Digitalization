@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
@@ -9,6 +9,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../src/api/client'
 import { ACCEPTED_SUFFIXES, MAX_UPLOAD_MB } from '../src/api/upload'
 import type { UploadAccepted } from '../src/api/upload'
+import { ProcessingView } from '../src/upload/ProcessingView'
 import { UploadScreen } from '../src/upload/UploadScreen'
 
 /** The upload screen: what it refuses, whose words it uses, and what it becomes.
@@ -45,8 +46,10 @@ import { UploadScreen } from '../src/upload/UploadScreen'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 
+const UPLOAD_DIR = join(HERE, '..', 'src', 'upload')
+
 function readUploadFile(name: string): string {
-  const path = join(HERE, '..', 'src', 'upload', name)
+  const path = join(UPLOAD_DIR, name)
   try {
     return readFileSync(path, 'utf8')
   } catch (cause) {
@@ -266,6 +269,149 @@ describe('UploadScreen', () => {
   })
 })
 
+/** A poll seam the test drives by hand: no timers, no flake. */
+function manualPoll() {
+  let tick: (() => void) | null = null
+  const poll = (fn: () => void) => {
+    tick = fn
+    return () => {
+      tick = null
+    }
+  }
+  return { poll, fire: () => tick?.(), stopped: () => tick === null }
+}
+
+describe('ProcessingView', () => {
+  it('narrates the stage the route reports', async () => {
+    const { poll, fire } = manualPoll()
+    const progress = vi
+      .fn()
+      .mockResolvedValue({ status: 'pending', stage: 'extract', detail: 'attempt 1' })
+
+    render(
+      <ProcessingView receiptId="r-1" fileName="receipt.jpg" progress={progress} poll={poll} />,
+    )
+    fire()
+
+    expect(await screen.findByText(/extract/i)).toBeTruthy()
+    expect(await screen.findByText(/attempt 1/i)).toBeTruthy()
+  })
+
+  it('stops polling when status goes terminal, not when the stage goes quiet', async () => {
+    // The load-bearing rule: `status` is truth, `stage` is narration. A dead
+    // worker stops writing progress, and a view that waited for a terminal
+    // STAGE would poll forever.
+    const { poll, fire, stopped } = manualPoll()
+    const progress = vi
+      .fn()
+      .mockResolvedValue({ status: 'needs_review', stage: null, detail: null })
+
+    render(
+      <ProcessingView receiptId="r-1" fileName="receipt.jpg" progress={progress} poll={poll} />,
+    )
+    fire()
+
+    await waitFor(() => expect(stopped()).toBe(true))
+  })
+
+  it('keeps waiting on a null stage while the status is still pending', async () => {
+    const { poll, fire, stopped } = manualPoll()
+    const progress = vi.fn().mockResolvedValue({ status: 'pending', stage: null, detail: null })
+
+    render(
+      <ProcessingView receiptId="r-1" fileName="receipt.jpg" progress={progress} poll={poll} />,
+    )
+    fire()
+
+    await waitFor(() => expect(progress).toHaveBeenCalled())
+    expect(stopped()).toBe(false)
+  })
+
+  it('asks again on every tick, and shows what came back', async () => {
+    // The four tests around this one are all satisfied by a view that asks once
+    // at mount and registers a tick that does nothing: `progress` has been
+    // called, the seam is registered, and `stopped()` is false. Measured by
+    // replacing the tick's callback with `() => {}` -- every other test in this
+    // file passed and this one failed on the second stage never arriving. So
+    // this is the assertion that the waiting actually waits, and it is made on
+    // what reaches the DOM rather than on a call count, because a view that
+    // asked and dropped the answer would satisfy a count.
+    const { poll, fire } = manualPoll()
+    const progress = vi
+      .fn()
+      .mockResolvedValueOnce({ status: 'pending', stage: 'triage', detail: null })
+      .mockResolvedValue({ status: 'pending', stage: 'extract', detail: null })
+
+    render(
+      <ProcessingView receiptId="r-1" fileName="receipt.jpg" progress={progress} poll={poll} />,
+    )
+
+    expect(await screen.findByText(/triage/i)).toBeTruthy()
+    fire()
+    expect(await screen.findByText(/extract/i)).toBeTruthy()
+    // The step that has been and gone is still on screen: the timeline is what
+    // this page watched, not just what it is watching.
+    expect(screen.getByText(/triage/i)).toBeTruthy()
+  })
+
+  it('ends the wait visibly, and only once the status says so', async () => {
+    // A view can stop polling and say nothing about it, and the four tests above
+    // would not notice: `stopped()` is what they read. This is the other half --
+    // the wait has to END on screen, with the word the server ended it on and
+    // the way onward.
+    const { poll, fire } = manualPoll()
+    const stillWorking = vi
+      .fn()
+      .mockResolvedValue({ status: 'pending', stage: 'extract', detail: null })
+
+    render(
+      <ProcessingView receiptId="r-1" fileName="receipt.jpg" progress={stillWorking} poll={poll} />,
+    )
+    fire()
+
+    // Waited for, not assumed: before the first report lands there is nothing on
+    // screen either way, so asserting the absence straight after `render` would
+    // pass against a view that never finishes anything.
+    expect(await screen.findByText(/extract/i)).toBeTruthy()
+    expect(
+      document.querySelector('a[href="/app/review"]'),
+      'the exit was offered while the receipt was still pending',
+    ).toBeNull()
+    cleanup()
+
+    const { poll: poll2, fire: fire2 } = manualPoll()
+    const done = vi.fn().mockResolvedValue({ status: 'needs_review', stage: null, detail: null })
+    render(
+      <ProcessingView receiptId="r-1" fileName="receipt.jpg" progress={done} poll={poll2} />,
+    )
+    fire2()
+
+    // The server's own word for what it became, echoed rather than re-worded.
+    expect(await screen.findByText(/needs_review/)).toBeTruthy()
+    await waitFor(() =>
+      expect(
+        document.querySelector('a[href="/app/review"]'),
+        'a finished receipt is a dead end',
+      ).toBeTruthy(),
+    )
+  })
+
+  it('keeps narrating when a poll fails, because narration is not the answer', async () => {
+    const { poll, fire, stopped } = manualPoll()
+    const progress = vi.fn().mockRejectedValue(new Error('gateway timeout'))
+
+    render(
+      <ProcessingView receiptId="r-1" fileName="receipt.jpg" progress={progress} poll={poll} />,
+    )
+    fire()
+
+    await waitFor(() => expect(progress).toHaveBeenCalled())
+    // A failed poll is not a failed receipt. Stopping here would strand a
+    // receipt that is processing perfectly well.
+    expect(stopped()).toBe(false)
+  })
+})
+
 // --------------------------------------------------------------------------- //
 // How this file drives the input, which is not how the rest of the suite does
 // --------------------------------------------------------------------------- //
@@ -307,8 +453,28 @@ describe('the file input is driven the way a browser drives one', () => {
 /** `css: false` makes a class name unpinnable by rendering: the CSS-module proxy
  *  answers for any key, so a renamed class ships unpainted with every gate
  *  green. These read both files as text instead. The same guard
- *  `receipts-screen.test.tsx` carries, for the same measured reason. */
+ *  `receipts-screen.test.tsx` carries, for the same measured reason.
+ *
+ *  Both directions run over every component in `src/upload/`, paired with the
+ *  stylesheet beside it. Enumerated from the directory rather than listed, so a
+ *  component added here later is guarded by the fact that it exists rather than
+ *  by somebody remembering to add it. `stylesheets.test.ts` enumerates the whole
+ *  tree for the same reason, and records the stylesheet that shipped unguarded
+ *  when no guard in the repository knew it existed.
+ *
+ *  The bound: this pairs `Name.tsx` with `Name.module.css` unconditionally, so a
+ *  `.tsx` here that paints nothing would fail on a stylesheet that does not
+ *  exist. That is loud and one decision away from fixed, which is the right way
+ *  round for a guard. */
 describe('the upload screen is actually painted', () => {
+  /** `Name.tsx` and the `Name.module.css` it is expected to paint from. */
+  function painted(): { readonly tsx: string; readonly css: string }[] {
+    return readdirSync(UPLOAD_DIR)
+      .filter((name) => name.endsWith('.tsx'))
+      .sort()
+      .map((tsx) => ({ tsx, css: `${tsx.slice(0, -'.tsx'.length)}.module.css` }))
+  }
+
   function declaredClasses(css: string): Set<string> {
     const source = css.replace(/\/\*[\s\S]*?\*\//g, '')
     return new Set(Array.from(source.matchAll(/\.([A-Za-z][\w-]*)/g), (m) => m[1]))
@@ -327,15 +493,20 @@ describe('the upload screen is actually painted', () => {
     expect(referencedClasses('// styles.ghost\nx = styles.real').has('ghost')).toBe(false)
   })
 
-  it('declares every class the component reaches', () => {
-    const declared = declaredClasses(readUploadFile('UploadScreen.module.css'))
-    const referenced = referencedClasses(readUploadFile('UploadScreen.tsx'))
-    expect(referenced.size, 'UploadScreen.tsx references no styles.*').toBeGreaterThan(0)
-    const missing = [...referenced].filter((name) => !declared.has(name))
-    expect(
-      missing,
-      'UploadScreen.tsx reaches classes UploadScreen.module.css does not declare',
-    ).toEqual([])
+  it('has a component to guard in the first place', () => {
+    // The enumeration answering `[]` would make both directions below pass over
+    // nothing at all -- green, and guarding nothing.
+    expect(painted().map((pair) => pair.tsx)).toContain('UploadScreen.tsx')
+  })
+
+  it('declares every class each component reaches', () => {
+    for (const { tsx, css } of painted()) {
+      const declared = declaredClasses(readUploadFile(css))
+      const referenced = referencedClasses(readUploadFile(tsx))
+      expect(referenced.size, `${tsx} references no styles.*`).toBeGreaterThan(0)
+      const missing = [...referenced].filter((name) => !declared.has(name))
+      expect(missing, `${tsx} reaches classes ${css} does not declare`).toEqual([])
+    }
   })
 
   // The other direction, and not symmetry for its own sake: the check above can
@@ -347,23 +518,25 @@ describe('the upload screen is actually painted', () => {
   //
   // The bound: `referencedClasses` matches `styles.NAME` only, so a class
   // reached by dynamic indexing is invisible to it and would fail here.
-  // Measured when this was written: `UploadScreen.tsx` does not index `styles`.
+  // Measured when this was written, and again when `ProcessingView` joined:
+  // neither component indexes `styles`.
   it('reaches every class its stylesheet declares, so a rule cannot be left dead', () => {
-    const declared = declaredClasses(readUploadFile('UploadScreen.module.css'))
-    const referenced = referencedClasses(readUploadFile('UploadScreen.tsx'))
-    expect(declared.size, 'UploadScreen.module.css declares no classes').toBeGreaterThan(0)
-    const dead = [...declared].filter((name) => !referenced.has(name))
-    expect(
-      dead,
-      'UploadScreen.module.css declares classes UploadScreen.tsx never reaches',
-    ).toEqual([])
+    for (const { tsx, css } of painted()) {
+      const declared = declaredClasses(readUploadFile(css))
+      const referenced = referencedClasses(readUploadFile(tsx))
+      expect(declared.size, `${css} declares no classes`).toBeGreaterThan(0)
+      const dead = [...declared].filter((name) => !referenced.has(name))
+      expect(dead, `${css} declares classes ${tsx} never reaches`).toEqual([])
+    }
   })
 
   it('paints from tokens, with no raw hex', () => {
     // The Global Constraint, and a thing no rendering test can see. The census
     // in `stylesheets.test.ts` records that a colour declaration exists; it does
     // not care what the value is.
-    const css = readUploadFile('UploadScreen.module.css').replace(/\/\*[\s\S]*?\*\//g, '')
-    expect(css.match(/#[0-9A-Fa-f]{3,8}\b/g) ?? []).toEqual([])
+    for (const { css } of painted()) {
+      const source = readUploadFile(css).replace(/\/\*[\s\S]*?\*\//g, '')
+      expect(source.match(/#[0-9A-Fa-f]{3,8}\b/g) ?? [], `${css} has a raw hex`).toEqual([])
+    }
   })
 })
