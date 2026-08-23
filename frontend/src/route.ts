@@ -5,9 +5,7 @@
  * `session.ts`'s signed-in guess; and the backend already serves a history
  * fallback (`_SpaFiles(..., html=True)` in src/receipts/review/api.py), so
  * `/app/admin` survives a reload without one. Adding a router would be a new
- * runtime dependency for the handful of paths below (ADR-0027 section 4). That
- * sentence said "for four paths" until `/app/upload` made it five; the count is
- * dropped rather than incremented, because it was never the argument.
+ * runtime dependency for the handful of paths below (ADR-0027 section 4).
  *
  * **Every path literal below must keep its last segment free of a dot**, and
  * the rule is pinned in `tests/admin-screen.test.tsx` rather than trusted:
@@ -48,8 +46,8 @@ export function currentRoute(pathname: string = window.location.pathname): Route
   // these prefixes overlap -- but its position above the `return` does, and that
   // is the whole hazard: an unrouted `/app/upload` does not throw, it quietly
   // renders the review queue. Which is why the pin in
-  // `tests/admin-screen.test.tsx` asserts the route BY NAME: "not admin" would
-  // have passed on the day before this branch existed.
+  // `tests/admin-screen.test.tsx` asserts the route BY NAME: "not admin" passes
+  // with no branch here at all.
   if (pathname.startsWith('/app/upload')) {
     return 'upload'
   }

@@ -1,7 +1,12 @@
+import { readFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { currentRoute } from '../src/route'
+import type { Route } from '../src/route'
 
-/** Is the admin surface actually reachable from the tree `main.tsx` renders?
+/** Is every screen actually reachable from the tree `main.tsx` renders?
  *
  * `admin-screen.test.tsx` proves `AdminScreen` works and that `currentRoute`
  * maps `/app/admin`; neither says anything about whether the entry point ever
@@ -17,33 +22,71 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
  * answer had not changed: with the `ReceiptsScreen` import and the
  * `route === 'receipts'` branch removed from `main.tsx`, `tsc -b` exits 0 and
  * **all 422 tests in 29 files pass**. Task 6 had built the results list -- a
- * paginated table, an export button, its own stylesheet, 22 tests of its own --
- * and nothing in the suite could tell that no user could reach it. The compile
+ * paginated table, an export button, its own stylesheet, tests of its own -- and
+ * nothing in the suite could tell that no user could reach it. The compile
  * staying clean is what makes it damning: the deletion is not a mistake any gate
- * treats as one. The `/app/receipts` case below closes that, and was proved red
- * by exactly that deletion rather than by reasoning about it.
+ * treats as one.
  *
  * **And a third time, for `/app/upload` on 2026-08-24, with this file already
- * standing.** The upload screen was built, routed, mounted and covered by a test
- * file of its own; then the `UploadScreen` import and the
+ * standing and two cases closed in it.** The `UploadScreen` import and the
  * `route === 'upload'` branch were deleted from `main.tsx`, and **all 454 tests
  * in 31 files passed, `tsc -b` exited 0, `oxlint` reported only its pre-existing
- * fast-refresh warning, and `vite build` succeeded.** Two closed cases in this
- * very file did not generalise to the next route by themselves -- the guard is
- * per-route, and a route with no case here is a route that is not guarded. The
- * `/app/upload` case below closes it, proved red by that same deletion.
+ * fast-refresh warning, and `vite build` succeeded.**
  *
- * Every screen the switch can reach is mocked, and that is the point rather than
- * a shortcut: what is under test is the *switch*, not any one of the components.
- * A real `AdminScreen` here would pass for the wrong reason the day it renders
- * an empty state that happens to look like a review screen, and a real
- * `ReviewScreen` would fire requests that have nothing to do with routing.
+ * ## Why this file is one property and not a list of cases
  *
- * Both directions are asserted for each screen. A switch that renders the admin
- * screen everywhere is as broken as one that renders it nowhere, and only the
- * negative half can tell them apart; the same holds for the results list and for
- * the upload screen, whose negative halves are the `queryByText` calls in the
- * default case below.
+ * The first answer to that measurement was one more hand-written case, which
+ * reproduces the defect it was written for: the next route ships unguarded until
+ * somebody remembers, which is precisely how `/app/upload` shipped unguarded --
+ * *here*, with `/app/admin` and `/app/receipts` already closed above it. An
+ * enumerated defence never converges.
+ *
+ * So the claim below is one sentence over a derived list:
+ *
+ * > **Every `/app/` path literal `route.ts` declares mounts the screen
+ * > `currentRoute` names for it, and mounts no other screen.**
+ *
+ * Neither half is retyped here. The literals are read out of `route.ts`'s own
+ * source with the same regex `admin-screen.test.tsx` uses for the no-dot rule --
+ * that file applies it to path *shape*, this one applies it to *mounting*. The
+ * expected screen comes from `SCREEN`, which is a `Record<Route, string>`: a
+ * sixth member on the `Route` union fails `tsc -b` here until it has an entry,
+ * so the mapping is held by the compiler rather than by memory. A route added to
+ * `route.ts` is therefore covered on the day its literal is declared, with
+ * nothing here to remember to add.
+ *
+ * **What this does not claim.** It says a literal mounts the screen the route
+ * mapping names; it does not say the mapping is right. That is
+ * `admin-screen.test.tsx`'s property, asserted there by name, and the division
+ * is deliberate: this file would otherwise re-derive the switch it is testing.
+ *
+ * Path literals inside comments are stripped before matching, because a path
+ * written in prose is not a route this switch can mount. `admin-screen.test.tsx`
+ * deliberately does *not* strip them -- the no-dot rule is about anything that
+ * looks like a declared path -- so the two lists can differ, and that is fine.
+ *
+ * `/app/review` is not among the literals: `review` is the switch's *default*
+ * and `route.ts` declares no string for it. The last case below covers it, and
+ * that default is why every case here asserts the expected screen **by name**
+ * rather than asserting "not the admin screen" -- an unmounted route does not
+ * throw, it quietly serves the review queue.
+ *
+ * Every screen is mocked, and that is the point rather than a shortcut: what is
+ * under test is the *switch*, not any one of the components. A real
+ * `AdminScreen` here would pass for the wrong reason the day it renders an empty
+ * state that happens to look like a review screen, and a real `ReviewScreen`
+ * would fire requests that have nothing to do with routing.
+ *
+ * `LoginPage` is mocked too, and it is the one screen the route chain never
+ * reaches: `session.ts:23` seeds `signedIn` from the pathname, so `/app/login`
+ * takes `App`'s early return instead. Leaving it real would have made the
+ * `/app/login` row assert against a live form; including it in `SCREEN` is what
+ * lets the property cover all five routes with no carve-out.
+ *
+ * Both directions are asserted for every row: a switch that renders one screen
+ * everywhere is as broken as one that renders it nowhere, and only the negative
+ * half tells them apart. The negative half here is every *other* value of
+ * `SCREEN`, so it grows with the union too.
  *
  * The mocks are file-scoped, which is why this is its own file -- the same
  * reason `app-root.test.tsx` and `app-header.test.tsx` are theirs.
@@ -63,6 +106,35 @@ vi.mock('../src/receipts/ReceiptsScreen', () => ({
 vi.mock('../src/upload/UploadScreen', () => ({
   UploadScreen: () => <p>the upload screen</p>,
 }))
+
+vi.mock('../src/login/LoginPage', () => ({
+  LoginPage: () => <p>the login page</p>,
+}))
+
+/** What each route must put on the page, one entry per `Route` member.
+ *
+ * `Record<Route, string>` and not a partial: a sixth member on the union is a
+ * `tsc -b` failure here until it is given a screen, which is the half of this
+ * property a test run cannot enforce on its own. */
+const SCREEN: Record<Route, string> = {
+  login: 'the login page',
+  review: 'the review screen',
+  admin: 'the admin screen',
+  receipts: 'the receipts screen',
+  upload: 'the upload screen',
+}
+
+/** Every `/app/` path literal `route.ts` declares, read from its source.
+ *
+ *  Comments are stripped first; see the header. The regex is the one
+ *  `admin-screen.test.tsx` uses on the same file for the no-dot rule. */
+const LITERALS: readonly string[] = (() => {
+  const source = readFileSync(
+    join(dirname(fileURLToPath(import.meta.url)), '..', 'src', 'route.ts'),
+    'utf8',
+  ).replace(/\/\*[\s\S]*?\*\//g, '')
+  return [...source.matchAll(/'(\/app\/[^']*)'/g)].map((match) => match[1])
+})()
 
 let consoleError: ReturnType<typeof vi.spyOn>
 let root: HTMLDivElement
@@ -93,51 +165,54 @@ afterEach(() => {
   window.history.pushState({}, '', '/')
 })
 
+/** The one assertion, both directions: this screen and no other. */
+async function expectOnly(route: Route): Promise<void> {
+  expect(await screen.findByText(SCREEN[route])).toBeDefined()
+  for (const [other, text] of Object.entries(SCREEN)) {
+    if (other !== route) {
+      expect(screen.queryByText(text), `${text} rendered as well`).toBeNull()
+    }
+  }
+}
+
 describe('the app entry point routes by pathname', () => {
-  it('renders the admin screen at /app/admin', async () => {
-    window.history.pushState({}, '', '/app/admin')
-
-    await import('../src/main')
-
-    expect(await screen.findByText('the admin screen')).toBeDefined()
-    expect(screen.queryByText('the review screen')).toBeNull()
+  it('reaches every route the union declares, from the literals alone', () => {
+    // The anti-vacuity control, and the half that makes the property below
+    // converge rather than merely pass. A regex that stopped matching would
+    // leave the `it.each` with nothing to run and this file would still be
+    // green -- the failure mode of every derived list.
+    //
+    // Stated as coverage rather than as a count, because a count is what this
+    // file is getting away from: `review` aside, every member of `Route` must be
+    // the route of some literal `route.ts` declares. So a sixth member that is
+    // typed but never routed fails HERE, and a sixth member with no screen fails
+    // `tsc -b` on `SCREEN` -- measured 2026-08-24 by adding `'settings'` to the
+    // union: `TS2741: Property 'settings' is missing in type ... but required in
+    // type 'Record<Route, string>'`.
+    expect(LITERALS.length, 'no /app/ path literal was found in route.ts at all').toBeGreaterThan(0)
+    // `review` has no literal by design: it is the fall-through, covered by the
+    // last case below rather than by a declared path.
+    const reached = new Set<string>(['review', ...LITERALS.map((literal) => currentRoute(literal))])
+    expect(
+      Object.keys(SCREEN).filter((route) => !reached.has(route)),
+      'a Route member is declared and no /app/ literal reaches it, so nothing below mounts it',
+    ).toEqual([])
   })
 
-  it('renders the receipts screen at /app/receipts', async () => {
-    window.history.pushState({}, '', '/app/receipts')
+  it.each(LITERALS)('mounts the screen %s asks for, and nothing else', async (literal) => {
+    window.history.pushState({}, '', literal)
 
     await import('../src/main')
 
-    expect(await screen.findByText('the receipts screen')).toBeDefined()
-    expect(screen.queryByText('the review screen')).toBeNull()
-    expect(screen.queryByText('the admin screen')).toBeNull()
-  })
-
-  it('renders the upload screen at /app/upload', async () => {
-    window.history.pushState({}, '', '/app/upload')
-
-    await import('../src/main')
-
-    expect(await screen.findByText('the upload screen')).toBeDefined()
-    // `review` is the switch's DEFAULT, so this is the assertion that has any
-    // force: an unmounted `/app/upload` does not blow up, it quietly serves the
-    // review queue. "Not the admin screen" would have passed before the branch
-    // existed.
-    expect(screen.queryByText('the review screen')).toBeNull()
-    expect(screen.queryByText('the admin screen')).toBeNull()
-    expect(screen.queryByText('the receipts screen')).toBeNull()
+    await expectOnly(currentRoute(literal))
   })
 
   it('renders the review screen everywhere else', async () => {
-    // jsdom serves "/", which `currentRoute` maps to `review` by default.
+    // jsdom serves "/", which `currentRoute` maps to `review` by default. This
+    // is the one route with no literal to derive, because it is the fall-through
+    // rather than a declared path.
     await import('../src/main')
 
-    expect(await screen.findByText('the review screen')).toBeDefined()
-    expect(screen.queryByText('the admin screen')).toBeNull()
-    // The negative half for the results list: a switch that mounted it
-    // unconditionally would satisfy the positive case above and still be broken.
-    expect(screen.queryByText('the receipts screen')).toBeNull()
-    // And for the upload screen, for the same reason.
-    expect(screen.queryByText('the upload screen')).toBeNull()
+    await expectOnly('review')
   })
 })

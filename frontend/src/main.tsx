@@ -30,11 +30,7 @@ import { SignOutControl } from './SignOutControl'
 import { ThemeControl } from './ThemeControl'
 import { UploadScreen } from './upload/UploadScreen'
 
-/** One screen per route, and no routing library: these paths do not need one.
- *
- * (That sentence carried a count of the screens until `/app/upload` moved it.
- * The count is gone rather than incremented -- `route.ts` is the enumeration,
- * and a total repeated here is a second one that goes stale on its own.)
+/** No routing library: these paths do not need one.
  *
  * **Every client-side path must keep its final segment free of a dot.** Task
  * 1's mount only falls back to the shell for requests whose last segment has no

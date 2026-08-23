@@ -99,6 +99,35 @@ describe('UploadScreen', () => {
     expect(field().getAttribute('accept')).toBe(ACCEPTED_SUFFIXES.join(','))
   })
 
+  it('prints the limits from the module that enforces them, not from copy', async () => {
+    // The sentence under the chooser claims to be derived. Asserting it against
+    // the real `MAX_UPLOAD_MB` would not test that claim -- `25` typed into the
+    // markup renders identically. So the module is replaced with different
+    // values and the screen is re-imported: a literal in the copy cannot follow.
+    //
+    // `doMock` + `resetModules` + a dynamic import, the shape
+    // `app-admin-route.test.tsx` already uses. The statically imported
+    // `UploadScreen` every other test in this file holds is a different module
+    // object and is untouched by this.
+    vi.resetModules()
+    vi.doMock('../src/api/upload', async (importOriginal) => ({
+      ...(await importOriginal<typeof import('../src/api/upload')>()),
+      ACCEPTED_SUFFIXES: ['.aaa', '.bbb'],
+      MAX_UPLOAD_MB: 7,
+    }))
+    try {
+      const { UploadScreen: Rewired } = await import('../src/upload/UploadScreen')
+      render(<Rewired upload={vi.fn()} />)
+
+      const text = document.body.textContent ?? ''
+      expect(text, 'the size limit is typed into the copy').toContain('7 MB')
+      expect(text, 'the suffix list is typed into the copy').toContain('.aaa, .bbb')
+    } finally {
+      vi.doUnmock('../src/api/upload')
+      vi.resetModules()
+    }
+  })
+
   it('refuses a PDF without spending an upload, and says why', () => {
     const upload = vi.fn()
     render(<UploadScreen upload={upload} />)
@@ -226,6 +255,12 @@ describe('UploadScreen', () => {
     await waitFor(() => expect(upload).toHaveBeenCalledTimes(1))
     expect(screen.getByLabelText(/receipt/i), 'the chooser left before anything settled').toBeTruthy()
     expect(screen.queryByRole('alert')).toBeNull()
+    // The control is shut for as long as the request is out. One photograph per
+    // request is what the route takes, and a second choice while the first is
+    // in flight would start a second upload against a screen that can only show
+    // one. Asserted here rather than in its own test because this is the only
+    // moment the suite holds the in-flight state still.
+    expect(field().hasAttribute('disabled'), 'the chooser stayed open mid-flight').toBe(true)
   })
 })
 
@@ -286,6 +321,33 @@ describe('the upload screen is actually painted', () => {
       dead,
       'UploadScreen.module.css declares classes UploadScreen.tsx never reaches',
     ).toEqual([])
+  })
+
+  // A gate where the header has an argument. Measured across `tests/` on
+  // 2026-08-24: eleven files import user-event, and this is the ONLY file that
+  // simulates an interaction without it -- every other file using `fireEvent`,
+  // `.click()` or `dispatchEvent` imports it too. So the house reflex points
+  // squarely the wrong way in here, where user-event would deliver nothing for
+  // any file `accept` does not name and pass for that reason.
+  //
+  // (The review that asked for this gate said this was the only file in the
+  // suite not using user-event. Re-derived before being repeated: twenty files
+  // do not import it, four of them rendering files. The narrower claim above is
+  // the one that holds.)
+  //
+  // The package name is assembled at run time so that naming it here does not
+  // make the check fail on itself.
+  it('drives its input with fireEvent, and does not reach for the picker faker', () => {
+    const source = readFileSync(fileURLToPath(import.meta.url), 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/(^|[^:])\/\/[^\n]*/g, '$1')
+    expect(
+      source.includes(['@testing-library', 'user-event'].join('/')),
+      'this file imports user-event. It must not: user-event enforces the input ' +
+        "`accept` attribute and delivers nothing when a file does not match, which no " +
+        'browser does, so the PDF refusal would be asserted against a file that ' +
+        'never arrived. The header carries the measurement.',
+    ).toBe(false)
   })
 
   it('paints from tokens, with no raw hex', () => {

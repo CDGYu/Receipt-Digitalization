@@ -151,10 +151,6 @@ function bodyRows(table: HTMLElement): HTMLTableRowElement[] {
 // --------------------------------------------------------------------------- //
 
 describe('the route switch, which is deliberately not a router', () => {
-  // No count in this name. It said "the four paths" until the upload route made
-  // it five, which is a number that goes false without its own sentence
-  // changing (review standard 5) -- the same defect as the comment in the
-  // no-dot test below, and it is fixed the same way rather than incremented.
   it('maps each of the declared paths', () => {
     expect(currentRoute('/app/login')).toBe('login')
     expect(currentRoute('/app/admin')).toBe('admin')
@@ -193,10 +189,6 @@ describe('the route switch, which is deliberately not a router', () => {
     // is served as a missing *file* and 404s. Quantified over the literal paths
     // the module actually declares rather than over a list retyped here, so a
     // new route is covered the day it is added.
-    //
-    // This said "so a FOURTH route is covered" until `/app/upload` made it five.
-    // The count is gone rather than incremented: it was never the point of the
-    // sentence, and it would go false again at the sixth.
     const source = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'src', 'route.ts'), 'utf8')
     const paths = [...source.matchAll(/'(\/app\/[^']*)'/g)].map((match) => match[1])
     expect(paths.length, 'route.ts declares no /app/ path literal at all').toBeGreaterThan(0)
