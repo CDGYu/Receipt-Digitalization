@@ -2700,3 +2700,77 @@ decision 3 if it paginates anything.
 
 - ADR-0046 decision 5 — a screen nothing mounts is not delivered.
 - `IMPLEMENTATION_PLAN.md` P5.T2.
+
+---
+
+## ISSUE-027 — A PDF is accepted at the door and always fails at `preprocess`
+
+**Status:** OPEN — a live defect, and the only one on this board where an
+advertised input type never works.
+**Owner action required:** **yes** — wire `expand_pdf`, or stop accepting PDFs.
+Both are defensible and §19 advertises PDF support, so it is a decision.
+**Discovered:** 2026-08-23, designing the upload screen — a screen has to tell a
+user what happens when they drop a PDF, and the answer turned out to be "it is
+accepted and then it dies".
+**Pre-existing:** yes, on every path. **Blocks:** nothing mechanically; it bounds
+what the upload screen may accept.
+
+### What is wrong, measured
+
+`.pdf` is in `_ALLOWED_SUFFIXES`, and `validate_upload` accepts one. Measured
+2026-08-23 against a minimal valid one-page PDF:
+
+```
+validate_upload -> ACCEPTED | content_type: application/pdf
+load_image      -> UnsupportedFormat: Unsupported file extension: '.pdf'
+```
+
+So the file is stored, a `pending` row is written, the job is queued, and the run
+fails at `preprocess`. Nothing is silently dropped — `failed_stage` is set and the
+receipt is visible — so this is loud rather than dangerous. It is still an input
+type the product advertises and has never been able to process.
+
+**`expand_pdf` is what should bridge the gap, and it has zero callers.**
+`git grep expand_pdf -- src` returns three hits: its own definition, the
+re-export in `ingest/__init__.py`, and one comment. Neither `ingest_file`,
+`ingest_bytes`, `cmd_ingest` nor the `POST /upload` route calls it.
+
+**And `process_receipt`'s own docstring states the opposite.** It says *"A PDF
+upload is expanded into one image (and one job) per page by ingest -- see
+`expand_pdf` -- because one job maps to one receipt id here; a PDF that reached
+this function would fail cleanly at `preprocess` rather than silently extracting
+only its first page."* The safety net is real and works. The premise is false:
+**every** PDF reaches that function, because nothing expands any of them. That is
+ADR-0048's shape — a correct sentence about the failure mode, resting on a claim
+about the tree that is not true.
+
+### A correction under my own name
+
+`IMPLEMENTATION_PLAN.md`'s definition-of-done row **"`receipts ingest` handles
+JPEG, PNG, HEIC, PDF" was ticked on 2026-08-23 during the plan audit, by me, and
+it is wrong.** `receipts ingest` *accepts* a PDF — it validates, stores and rows
+it — and processing it fails every time. Under any honest reading of a
+definition-of-done row that is not "handles". Corrected in the same commit that
+files this issue.
+
+### How to resume
+
+Two options, and they are a decision rather than a fix:
+
+- **Wire `expand_pdf` into the ingest path**, one job per page. This is what the
+  pipeline docstring already assumes and what §19 advertises. It needs
+  `make_image_key` to disambiguate pages, one `ReceiptJob` per page rather than
+  per upload, and an answer for what the *upload response* returns when one file
+  becomes twelve receipts — today it returns a single `receipt_id`.
+- **Drop `.pdf` from `_ALLOWED_SUFFIXES`** and reject it at the door with a
+  reason. One line, immediately honest, and it makes the README and §19 wrong
+  until they are edited too.
+
+Whichever is chosen, `process_receipt`'s docstring must lose the sentence that
+asserts the expansion already happens.
+
+### Related
+
+- `IMPLEMENTATION_PLAN.md` P1.T3 (`ingest/`), and its definition-of-done row.
+- ADR-0013 — ingest does not enqueue.
+- ADR-0048 — a rationale is a second claim.

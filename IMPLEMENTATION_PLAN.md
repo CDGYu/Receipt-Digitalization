@@ -500,7 +500,11 @@ ticked by inspection, because what they claim is a measurement nobody has taken
 — that is the honest state, not an oversight.)*
 
 - [ ] Golden set of >= 50 labelled receipts committed — **3 of 50** (P0.T1)
-- [x] `receipts ingest` handles JPEG, PNG, HEIC, PDF
+- [ ] `receipts ingest` handles JPEG, PNG, HEIC, PDF — **JPEG/PNG/HEIC yes;
+      PDF no** (ISSUE-027). A PDF is accepted, stored and rowed, then fails
+      every time at `preprocess`, because `expand_pdf` has no callers.
+      *(This row was ticked in the 2026-08-23 audit and the tick was wrong;
+      measured and corrected the same day.)*
 - [ ] Every rule implemented and unit-tested + tall-receipt cross-check — the
       rules ship and are tested; **the cross-check does not exist** (P2.T3 /
       ISSUE-024). *(This row said "all 28 rules"; the count has moved and is not
