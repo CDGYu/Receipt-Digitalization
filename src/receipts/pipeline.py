@@ -81,12 +81,17 @@ from .preprocess.image_ops import (
     to_base64,
     to_rgb,
 )
+from .progress import ProgressEvent
 from .review.queue import close_review_for_receipt, enqueue_review
 from .score.confidence import ReceiptStatus, explain_confidence, route, score_confidence
 from .validate.context import ValidationContext
 from .validate.report import ValidationReport
 
 log = logging.getLogger(__name__)
+
+#: A callable the pipeline hands progress to. ``None`` everywhere by default:
+#: the sink is for a waiting screen, and no existing caller wants one.
+ProgressSink = Callable[[ProgressEvent], None]
 
 #: Extensions the eval adapter searches, in order, to match a label by stem.
 DEFAULT_IMAGE_SUFFIXES: tuple[str, ...] = (".jpg", ".jpeg", ".png", ".webp")
@@ -491,12 +496,21 @@ class _StageFailure(Exception):
 
 
 @contextlib.contextmanager
-def _stage(name: str):
-    """Tag anything raised inside the block with ``name``.
+def _stage(name: str, progress: "ProgressSink | None" = None):
+    """Tag anything raised inside the block with ``name``, and report entry.
 
     An inner :class:`_StageFailure` passes through untouched, so the innermost
     (most specific) stage wins.
+
+    ``progress`` is optional and defaults to ``None``. A sink that raises must
+    not take the receipt down with it: a waiting screen is a nicety and the
+    extraction is not.
     """
+    if progress is not None:
+        try:
+            progress(ProgressEvent(stage=name))
+        except Exception:  # pragma: no cover - a sink is never load-bearing
+            log.warning("progress sink raised on stage %s; continuing", name)
     try:
         yield
     except _StageFailure:
@@ -515,6 +529,7 @@ def process_receipt(
     settings: Settings | None = None,
     gate: VLMGate | None = None,
     cost_guard: CostGuard | None = None,
+    progress: "ProgressSink | None" = None,
 ) -> ProcessResult:
     """The whole thing, end to end. The only function the queue worker calls.
 
@@ -613,27 +628,27 @@ def process_receipt(
 
     phash = ""
     try:
-        with _stage("load"):
+        with _stage("load", progress):
             data = storage.get(job.image_key)
 
-        with _stage("preprocess"):
+        with _stage("preprocess", progress):
             image, phash = prepare_image_bytes(
                 data, max_edge=settings.max_image_edge_px
             )
 
-        with _stage("dedupe"):
+        with _stage("dedupe", progress):
             duplicate_id = _find_duplicate_image(session_factory, job, phash)
         if duplicate_id is not None:
             # §18 cost control: a re-upload costs nothing beyond the hash.
-            with _stage("persist"):
+            with _stage("persist", progress):
                 return _persist_duplicate(
                     session_factory, job, phash, duplicate_id, cost_guard.spent
                 )
 
-        with _stage("triage"):
+        with _stage("triage", progress):
             triage_result, triage_response = triage(image, guarded)
 
-        with _stage("merchant"):
+        with _stage("merchant", progress):
             hints: P.MerchantHints | None = None
             merchant_currency: str | None = None
             with session_factory() as session:
@@ -653,7 +668,7 @@ def process_receipt(
             # (spec §10), so there is no Cloud tier here to attach images to.
             few_shots: list[P.FewShot] = []
 
-        with _stage("extract"):
+        with _stage("extract", progress):
             outcome = extract_with_repair(
                 image,
                 guarded,
@@ -663,9 +678,10 @@ def process_receipt(
                 few_shots=few_shots,
                 max_repairs=max(0, settings.max_repair_attempts),
                 normalize_fn=_normalizer(settings.default_currency, merchant_currency),
+                progress=progress,
             )
 
-        with _stage("score"):
+        with _stage("score", progress):
             # consistency stays None until self-consistency lands (M6).
             confidence = score_confidence(
                 outcome.extraction, outcome.report, triage_result, consistency=None
@@ -683,7 +699,7 @@ def process_receipt(
                 review_threshold=settings.review_threshold,
             )
 
-        with _stage("persist"):
+        with _stage("persist", progress):
             return _persist_outcome(
                 session_factory,
                 job,

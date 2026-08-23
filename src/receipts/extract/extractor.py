@@ -12,7 +12,9 @@ import logging
 from collections import Counter
 from dataclasses import dataclass, field, replace
 from decimal import Decimal
+from typing import Callable
 
+from ..progress import ProgressEvent
 from ..validate.context import ValidationContext
 from ..validate.report import ValidationReport
 from ..validate.validator import validate
@@ -192,6 +194,27 @@ def repair(
 # --------------------------------------------------------------------------- #
 
 
+def _report(progress, attempts: list[Attempt]) -> None:
+    """Describe the attempt that just finished.
+
+    Counted from `attempts` rather than from a counter variable, so the number
+    cannot disagree with the list it describes. A sink that raises is swallowed:
+    narration is never load-bearing.
+    """
+    if progress is None:
+        return
+    last = attempts[-1]
+    errors = last.report.error_count
+    detail = (
+        f"attempt {len(attempts)} ({last.pass_name}): "
+        f"{errors} error{'' if errors == 1 else 's'}"
+    )
+    try:
+        progress(ProgressEvent(stage="extract", detail=detail))
+    except Exception:  # pragma: no cover - a sink is never load-bearing
+        log.warning("progress sink raised during extract; continuing")
+
+
 def extract_with_repair(
     image: PreparedImage,
     client: VLMClient,
@@ -203,6 +226,7 @@ def extract_with_repair(
     max_repairs: int = 1,
     normalize_fn=None,
     cache: ResponseCache | None = None,
+    progress: "Callable[[ProgressEvent], None] | None" = None,
 ) -> ExtractionOutcome:
     """Extract, validate, and repair. Returns the BEST attempt, not the last.
 
@@ -224,6 +248,7 @@ def extract_with_repair(
     )
     responses.append(response)
     attempts.append(_evaluate(response, ctx, normalize_fn, "extract"))
+    _report(progress, attempts)
 
     for round_index in range(max_repairs):
         current = attempts[-1]
@@ -246,12 +271,21 @@ def extract_with_repair(
 
         responses.append(response)
         attempts.append(_evaluate(response, ctx, normalize_fn, pass_name))
+        _report(progress, attempts)
         log.info(
             "Repair round %d: %s -> %s",
             round_index + 1, current.report.summary(), attempts[-1].report.summary(),
         )
 
     best = min(attempts, key=lambda a: a.rank())
+    if progress is not None:
+        kept = attempts.index(best) + 1
+        try:
+            progress(ProgressEvent(
+                stage="extract", detail=f"kept attempt {kept} of {len(attempts)}"
+            ))
+        except Exception:  # pragma: no cover - a sink is never load-bearing
+            log.warning("progress sink raised choosing best attempt; continuing")
     _mark_resolved(attempts[0].report, best.report)
 
     return ExtractionOutcome(

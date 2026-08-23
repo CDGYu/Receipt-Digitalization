@@ -1116,3 +1116,92 @@ def test_a_reprocess_that_auto_approves_closes_the_open_review_task(
         task = session.scalars(select(ReviewTask)).one()
         assert task.state is ReviewState.DONE
         assert task.closed_at is not None
+
+
+def test_progress_reports_only_real_pipeline_stages(
+    session_factory, storage, settings
+) -> None:
+    """The vocabulary is bound to `STAGES`, not re-typed beside it.
+
+    Those strings also land in `review_tasks.reason` and in the logs, so a
+    progress name that is not a stage name would be a second vocabulary that
+    can drift from the first.
+    """
+    from receipts.pipeline import STAGES
+
+    seen: list = []
+    job = _job(storage)
+    process_receipt(
+        job,
+        client=_Client([_triage(), _good()]),
+        storage=storage,
+        session_factory=session_factory,
+        settings=settings,
+        progress=seen.append,
+    )
+
+    assert seen, "no progress was reported at all"
+    assert [e.stage for e in seen if e.stage not in STAGES] == []
+    # The stages a healthy run must pass through, in order of first sighting.
+    order = [e.stage for e in seen]
+    for name in ("load", "preprocess", "triage", "extract", "score", "persist"):
+        assert name in order, f"{name} never reported"
+    assert order.index("load") < order.index("extract") < order.index("persist")
+
+
+def test_the_extract_stage_reports_each_attempt(
+    session_factory, storage, settings
+) -> None:
+    """The repair loop is the only stage worth narrating, so it must say more
+    than its own name. A broken first pass then a good repair is two attempts."""
+    seen: list = []
+    job = _job(storage)
+    process_receipt(
+        job,
+        client=_Client([_triage(), _broken_totals(), _good()]),
+        storage=storage,
+        session_factory=session_factory,
+        settings=settings,
+        progress=seen.append,
+    )
+
+    details = [e.detail for e in seen if e.stage == "extract" and e.detail]
+    assert len(details) >= 2, f"expected an event per attempt, got {details}"
+
+
+def test_passing_no_sink_changes_nothing(tmp_path, settings) -> None:
+    """The property that makes this safe on the hot path.
+
+    Same inputs, same client script, with and without a sink: the outcome must
+    be identical. Asserted rather than assumed, because `progress` is threaded
+    through the one function every receipt goes through.
+
+    **Each run gets its own database and blob store.** Sharing one would not
+    hold the sink as the only difference: `_png_bytes` is deterministic, so the
+    two jobs carry byte-identical images and the second run would take the
+    dedupe short-circuit and come back `rejected` without ever extracting. The
+    comparison would then measure accumulated database state instead of the
+    sink, and would fail identically with no sink passed at all.
+    """
+    def run(label, progress):
+        world = tmp_path / label
+        world.mkdir()
+        engine = make_engine(f"sqlite:///{(world / 'receipts.db').as_posix()}")
+        Base.metadata.create_all(engine)
+        storage = LocalStorage(world / "blobs")
+        return process_receipt(
+            _job(storage),
+            client=_Client([_triage(), _good()]),
+            storage=storage,
+            session_factory=make_session_factory(engine),
+            settings=settings,
+            progress=progress,
+        )
+
+    without = run("without-sink", None)
+    with_sink = run("with-sink", [].append)
+    # Guards the comparison itself: two runs that both failed would agree
+    # trivially and pin nothing.
+    assert without.status is ReceiptStatus.AUTO_APPROVED
+    assert without.status == with_sink.status
+    assert without.failed_stage == with_sink.failed_stage
