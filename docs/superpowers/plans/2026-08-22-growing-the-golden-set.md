@@ -474,6 +474,47 @@ does, stop: the ignore rule failed and Task 1's pin should have caught it.
 **This plan does not self-amend.** Everything above is the text as written; this
 log is what was wrong with it and when.
 
+### 2026-08-23 — caught before Task 3, by the session that would have run it
+
+**Defect 8 — the self-review declares §5's gap closed, on a reason that does not
+close it.** The spec-coverage line reads "§5 (not seeded from model output) →
+**gap, now closed**: it is not a code change, so it lives in Task 3 Step 2's
+instruction to follow the README's four steps, and the README's own step 3 says
+'replace every value with exactly what the image shows'."
+
+**Both halves of that reason were true and the conclusion was still false.** Task
+3 Step 2 does say to follow the README, and the README did say that. But that
+sentence constrains *the values you end up with*, not *where you started*.
+Someone who runs the extractor and corrects its output satisfies it as far as
+they checked — which is precisely the failure §5 names, where the fields the
+corrector does not catch are enshrined as truth and scored as correct. An
+accuracy rule was read as covering a provenance rule.
+
+Two further things made it unreachable in practice rather than merely
+under-argued:
+
+- **`eval/golden/README.md` carried no seeding rule at all.** Measured
+  2026-08-23: no word of the "seed" family appeared in either that file or
+  `TEMPLATE.json`, so the only tracked statement of the rule was design §5
+  itself.
+- **Task 3's reading table does not send you to §5.** The handoff's table names
+  design §3, §7a and §7b. The one section the design calls "the decision most
+  worth stating" was in neither the procedure a labeller follows nor the list of
+  what to read before following it.
+
+That is review standard 28 / ADR-0048 in its exact shape: a correct instruction
+(do follow the README) carrying a reason that reads as coverage, and the reason
+is what a reader generalises.
+
+**Closed 2026-08-23** by giving `eval/golden/README.md` a "Where a label may come
+from" section stating the rule, its reason and §5's r003 worked example, with a
+forward pointer from step 3 — the same shape step 2 already uses for "Public or
+private?". **The rule remains enforced by nothing**, which is what §5 says and
+is not a defect in this closure: no gate can see where a value came from.
+
+*(The handoff's reading table is not corrected here. ADR-0033 keeps the pair off
+any commit that touches something else, so it rides the end-of-session refresh.)*
+
 ### 2026-08-22 — caught after the merge, closing ISSUE-020
 
 **Defect 7 — Task 3 Step 3 tells the labeller the wrong thing to conclude, and

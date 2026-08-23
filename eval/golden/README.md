@@ -32,7 +32,9 @@ Keep each image next to its label by filename stem — `images/{id}.jpg` pairs w
    privacy decision** — `p` for a real third party's receipt, `r` for one you may
    publish. Read "Public or private?" below before you name the file.
 3. Replace **every** value with exactly what the image shows. Transcribe the
-   printed values even if they do not add up — do not "fix" the receipt.
+   printed values even if they do not add up — do not "fix" the receipt. Read
+   "Where a label may come from" below first: where you got a value is as much
+   a rule as what the value is.
    - **Money is a JSON string**, e.g. `"761.60"` (not `761.60`). The string keeps
      the Decimal scale; a bare number collapses `761.60` to `761.6`.
    - Use `null` for anything the receipt does not show or you cannot read. A
@@ -41,6 +43,26 @@ Keep each image next to its label by filename stem — `images/{id}.jpg` pairs w
      when it is ambiguous.
 4. Record the receipt's category and holdout flag in `manifest.json`
    (see `manifest.example.json`).
+
+## Where a label may come from
+
+**Decide this before you start typing, not after.** A label is never seeded
+from the pipeline's own output for any field being measured. Do not produce one
+by running the extractor and correcting what it returns.
+
+The shortcut is obvious, and that is exactly the danger, because its failure is
+silent: every field the corrector does not catch is enshrined as truth *and*
+scored as correct. The measurement would certify itself.
+
+`r003` is the worked example. In the committed `2026-08-22-cloud-only` baseline
+the model reads **2 of its 18 fields** — 11.11%, on all five repeats. A label
+seeded from that output would be near-empty, and the model would then score
+**100%** against it: a perfect figure describing nothing.
+
+**Nothing checks this, and no gate can.** Nothing checks a label against its
+photograph either — a known and accepted gap — and seeding from model output is
+what would turn that gap from latent into load-bearing. See the 2026-08-22
+growing-the-golden-set design, section 5.
 
 ## Public or private?
 
