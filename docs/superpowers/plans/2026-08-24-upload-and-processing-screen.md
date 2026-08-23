@@ -626,3 +626,262 @@ git commit -m "feat(upload): the wait is narrated, and status is what ends it"
 2. **No test renders the two-pane layout as a layout.** jsdom lays nothing out. The receipt-does-not-move property — the whole reason for this shape — is invisible to every gate here and belongs to the same browser pass.
 3. **Task 2 Step 10's mutation may pass for the wrong reason.** If the screen's own tests import `UploadScreen` directly, deleting the `main.tsx` branch leaves them green and only a mount-level test reddens. If nothing reddens, that is the finding — report it rather than inventing an assertion to cover it.
 4. **The route default is `review`**, so every "wrong route" assertion in this plan must assert the *positive* — `toBe('upload')` — never "not review". A negative assertion there passes before the route exists.
+
+---
+
+## Dated defect log
+
+**This plan does not self-amend.** Everything above is the text as written; this
+log is what was wrong with it and when. Transcribed 2026-08-24 from
+`.superpowers/sdd/2026-08-24-upload-and-processing-screen/progress.md`, which is
+gitignored (`.gitignore` excludes `.superpowers/`) and therefore reaches no one
+who clones this repository. It follows the log `d397506` added to
+`2026-08-23-pipeline-progress.md`, for the same reason and in the same shape.
+
+**Every defect this plan produced was a sentence or a test, and none was a
+behavioural bug.** Three tasks, four fix rounds, four scoped re-reviews. The
+ledger's own closing line: *"Zero behavioural defects survived; every defect
+found after the first review of each task was a sentence."*
+
+### Still wrong in the text above, and not corrected there
+
+Things a reader following this plan today would be misled by. They are listed
+rather than fixed, because a dated plan is a record of what was written.
+
+- **The File Structure calls `UploadScreen.tsx` "The drop zone, the list", the
+  Architecture line opens with "A drop zone produces a list of files", and the
+  Self-Review maps §3 decision 5 to "Task 2 Step 7" as covered.** None of that
+  shipped: there is no drop zone, no list, and no `multiple` attribute. The
+  design document now carries a dated correction on its §3 saying so, with the
+  greps it was derived from. **A plan-3 implementer reading this plan alone
+  would restore a decision that was deliberately dropped**, which is why the
+  correction lives in two places.
+- **The Self-Review's soft spot 1 gives the wrong reason for the decision 9
+  gap.** It says HEIC-degrades-to-a-chip is unpinnable because jsdom cannot tell
+  a broken image from a good one. True, and not why it is absent: **neither
+  screen renders a thumbnail at all**, so there is nothing for a chip to degrade
+  from. The gap is real; the reason stated for it describes a test problem where
+  the actual state is that the feature has no host. (ADR-0048: a correct
+  instruction carrying a false reason.)
+- **The ruling that `userEvent.upload` is "verified to exist and is unexercised
+  in this repository" was too weak, and the correction is a repo-wide fact.**
+  See the next section.
+
+### 2026-08-24 — the plan's own defects, in the order they were found
+
+**Plan defect 1 — `ACCEPTED_SUFFIXES` shipped unpinned against the server.**
+Reported by the Task 1 implementer. The brief's test, named *"accepts every
+suffix the server accepts"*, iterates the **client's** own list — so deleting
+`'.webp'` deletes its own assertion and every test stays green. That is
+ADR-0051's shape exactly, a guard sharing its derivation with its subject, and
+the name claims a comparison the body never makes (review standard 25).
+
+The task review then **corrected both the implementer's framing and the
+controller's**: `MAX_UPLOAD_MB` is *not* the same shape, because `toBe(25)` is a
+literal — client drift there does redden, and only server drift escapes.
+`ACCEPTED_SUFFIXES` escaped in **both** directions. That distinction changed the
+fix. It also refuted the proposed deferral: reading `_ALLOWED_SUFFIXES` out of
+`ingest.py` is not a separate task, because other tests in this suite already
+read repo files with `node:fs`.
+
+Closed in `653e7ec` in the preferred form rather than the fallback — the test
+reads the Python source and asserts set equality with the client's list minus
+`.pdf`, so drift reddens both ways. **The one-way gap on `MAX_UPLOAD_MB` was
+recorded rather than papered over**, and the whole-branch review's fix wave put
+it in the constant's own docstring.
+
+**Plan defect 2 — the size bound's edge was untested.** `>` to `>=` passed every
+test in the brief. `ingest.py` computes `max_bytes = max_mb * 1024 * 1024` and
+refuses on `>`, so the server **accepts** a file exactly at the bound; a `>=`
+here would have made the client refuse what the server takes. Closed in the same
+round, with the equality case asserted by name.
+
+**Plan defect 3 — the brief's four tests for Task 3 all passed under a tick
+whose callback does nothing. This is the largest defect of the session.**
+
+The `manualPoll` seam in the brief was designed to avoid fake timers, and it
+produced four tests that could not fail: `progress` had been called, the seam
+was registered, and `stopped()` was false — all true of a view that asks once at
+mount and then does nothing forever. **The entire feature was deletable green as
+the plan specified it.** Found by mutation, not by reading. The implementer
+added two tests: one for the vacuous-tick hole (asserted on what reaches the
+DOM after a tick, because a view that asked and dropped the answer would satisfy
+a call count), and one because none of the four read the screen at the moment
+the wait ends.
+
+**`userEvent.upload` is not merely unexercised here — it is wrong for this
+suite, and that is a repository-wide testing fact.** The pre-flight ruling said
+it was "verified to exist and unexercised", with an instruction to check it
+drove the input before building on it. The Task 2 implementer measured it, and
+it does drive the input under this jsdom. **It was rejected anyway: it enforces
+the input's `accept` attribute and silently delivers nothing when a file does
+not match** — an `<input accept=".jpg,...">` given a `scan.pdf` fires no
+`change` at all and ends with `files.length === 0`.
+
+**No browser behaves that way.** `accept` filters the picker's default view, a
+person can switch it to "all files", and a drag-and-drop ignores it outright, so
+a file `accept` does not name really does arrive at the element. Driving the PDF
+refusal test with `userEvent.upload` would have asserted against a file that
+never reached the component — green for the wrong reason, and green again the
+day somebody deleted the refusal. `fireEvent.change` with a shadowed `files`
+property is used for every file instead.
+
+This is recorded here because **it is currently reachable only from the header
+of `frontend/tests/upload-screen.test.tsx`**, and it applies to any future test
+in this repository that needs to hand a file to an input the component is
+supposed to refuse.
+
+### Rulings taken during execution, which lived only in the ledger
+
+- **This plan builds in the existing visual language and introduces no token.**
+  Plan 3 owns the Editorial palette and the display face and moves token
+  *values*; a screen written against the existing names inherits that for free,
+  where one written against new names would have to be redone. *Cost if wrong:
+  the screen looks like the rest of today's app until plan 3 lands, which is
+  correct.*
+- **From this plan on, the controller's own commits carry the `Co-Authored-By`
+  trailer.** Plan 1's ledger ruled that they should not, on a premise
+  re-derived as false: most of `main`'s commits carry one. **History is still
+  not rewritten**, on the independent and verified ground that
+  `tests/test_sha_citations.py` requires cited short SHAs to stay reachable.
+- **The per-route mount guard was put to the reviewer rather than ruled on by
+  the controller**, deliberately, because it concerned a pre-existing guard's
+  shape and the controller did not want its framing to set the severity.
+- **`app-admin-route.test.tsx` is now misnamed** — it is no longer about the
+  admin route. Correctly not renamed inside a fix round; deferred to plan 3's
+  browser pass by the whole-branch review.
+- **`event.target.value = ''` is left unpinned**, genuinely hard to observe in
+  jsdom because the shadowed `files` property defeats it. The reason is stated
+  in the source rather than hidden.
+
+### What the tasks found that the plan had not
+
+- **A screen nothing mounts, for the third recorded time (ADR-0046 decision 5).**
+  Task 2's Step 10 mutation came back **green**: with the `route === 'upload'`
+  branch and its import deleted from `main.tsx`, every gate passed. In a
+  repository that already had `app-admin-route.test.tsx`, written to close
+  exactly this for two other routes. The implementer's diagnosis — that guard is
+  **per-route and does not generalise** — was right, and its first fix answered
+  the diagnosis by adding a fourth hand-written case, which reproduces the
+  enumeration it had just identified.
+
+  The review ruled that an enumerated defence never converges, and fix round 1
+  replaced the enumeration with **one property over a list derived from
+  `route.ts`'s own source**, the expected screen coming from a
+  `Record<Route, string>` so a sixth union member fails `tsc -b`. The proof it
+  generalises: deleting `/app/receipts`'s branch reddened **a row nobody wrote
+  by hand**. The whole-branch review called it "the first thing in the repo's
+  record to close ADR-0046's class rather than its instance".
+- **The implementer's self-review caught one of its own tests being vacuous.**
+  "Clears a refusal" passed with `setError(null)` deleted, because a successful
+  upload swaps the whole screen for the processing view, which has no alert
+  region at all. Rewritten to observe mid-flight, against a promise that never
+  settles.
+- **The elapsed figure was dropped, and the deviation was declared rather than
+  quietly complied with.** Section 4 asks for an elapsed time beside a completed
+  stage. Nothing reaching the view carries a timestamp and the worker is
+  asynchronous, so the only interval a browser can measure is between its own
+  asks. The review endorsed the omission and **rejected the reason**: the
+  measurement is not impossible, it is not *uniform* — for a stage whose first
+  sighting and whose successor's first sighting were both observed, the gap
+  between them is its dwell, bracketed by one poll. A true special case had been
+  generalised into a false universal. Closed by deleting the over-broad clause
+  and writing the real bound.
+- **The layout premise was falsified by the review.** `ReviewScreen.module.css`
+  collapses to one column under `@media (max-width: 1023px)`; the new stylesheet
+  had no media query at all, so below 1024px the processing view stayed
+  two-column while review stacked — **and the receipt moved**, which is the one
+  property the shared shape was chosen for. Mirrored in fix round 1, verified
+  declaration by declaration by the re-reviewer.
+- **Section 4 of the design describes a sequence nothing emits.** Found by the
+  Task 3 implementer reading the emitter instead of the design. There are three
+  `ProgressEvent(...)` constructions that narrate; `validate`, `findings` and
+  `repair` emit nothing, and only `stage="extract"` ever carries a detail. The
+  design now carries a dated correction (`492be85`), and **plan 3 inherits that
+  section**.
+
+### The prose defects, which are the pattern
+
+**Fix rounds on this plan repeatedly wrote false claims into sentences written
+to correct sentences.** That is ADR-0032 and ADR-0042's shape, and it recurred
+here from inside the loop rather than being imported — one re-reviewer marked
+the convergence point on Task 2 by naming a round that finally did not do it.
+The instances below are what the ledger records; no count is written here,
+because the ledger is also where the counts about the counts live.
+
+- **A false count written inside the correction of a false count.**
+  `upload-screen.test.tsx` read "twenty files do not import it, **four of them
+  rendering files**". Twenty was right; four was wrong under every reading the
+  re-reviewer could construct, and **the implementer's own report named five
+  files for its count of four**. Closed by **deleting the sub-clause**, not by
+  correcting the number — writing a fourth number into a sentence about a wrong
+  number is how it gets a fifth.
+- **A third-order instance, caught by the implementer before committing.** While
+  fixing a rider it wrote "`route.ts` documents **every one** of its branches
+  with them" — false, the `/app/login` branch carries no comment. It dropped the
+  quantifier rather than writing a smaller number, and replaced the claim with a
+  measurement. Its own words: *"the second round running where the defect I
+  introduced was in a sentence written to correct a sentence."*
+- **The controller relayed two wrong citations from a review without checking
+  them**, both caught by the implementer: `file: UploadFile` is at a different
+  line than stated, and `review.ts` encodes at four sites rather than three.
+  Neither touched a load-bearing claim. The species is a relayed claim becoming
+  the relayer's own.
+- **A review's universal was refuted before it was repeated.** The claim "this
+  is the only test file in the suite that does not use user-event" is false. The
+  implementer re-derived it rather than transcribing it, and the narrower claim
+  that survived is stated with its measurement in the test file itself.
+- **A pin that was not a pin, proposed inside a fix message about a pin that was
+  not a pin.** The controller's rider asked for `expect(...).toContain('25 MB')`,
+  which passes against a hard-coded literal — the exact drift the rider existed
+  to catch. The implementer rewired the module with `doMock` and a dynamic
+  import instead, which reddens on a literal.
+- **A defect in a report rather than in a diff.** An implementer's report
+  explained a mutation's survival by a `/app/review` branch that does not exist;
+  it survived via the switch's default. **The committed test comment states it
+  correctly** — only the report was wrong, and it was caught before anyone
+  relayed it onward.
+
+### An operational incident worth carrying beyond this plan
+
+**Reverting a mutation with `git checkout -- <file>` restored the file to its
+committed state and silently discarded four unrelated edits the implementer had
+made in it.** Caught by grepping for the mutation marker, not by trusting the
+revert. The controller had used `git checkout --` for the same purpose earlier
+in the same session and was lucky the file held nothing else. **The safe revert
+is the inverse edit plus a grep, never a checkout.**
+
+### 2026-08-24 — the whole-branch review, and what it left
+
+Verdict **MERGE AFTER FIXES**: no Critical, four Important, and a run of Minors
+that were mostly deletions. The review re-derived every claim on the checkout
+and relayed none, reproducing the gates itself.
+
+The four Important:
+
+1. **The polled route opened an unbounded Redis connection per ask.**
+   `_default_read_progress` called `make_redis()` with no timeouts, and this
+   plan is what made that route hot — a poll per open screen. **Explicitly a
+   hypothesis rather than a measurement**: `redis` is not installed in this
+   environment, so neither the reviewer nor the controller could watch it. The
+   bound was taken anyway, because it is correct whether or not the hypothesis
+   holds, and the reader-side docstring says which half is which — the same
+   handling `PROGRESS_SOCKET_TIMEOUT_S` already carries.
+2. **This plan had no dated defect log.** This section is the fix.
+3. **An invented timing figure, in two places.** `~25-60s` in the design's §0
+   and in `ProcessingView.tsx`'s opening line. There is no source for it: the
+   only measured pipeline timing in the tree is 25 seconds for `gemma4:cloud` on
+   r002, and no "60s" anywhere in the tree is a pipeline time. Deleted from the
+   code, corrected by a dated note in the design.
+4. **§3 describes a screen that was not built** — the first entry in *Still
+   wrong in the text above*.
+
+**Deferred to plan 3's browser pass**, because each needs eyes on a screen
+rather than a gate: raw stage identifiers shown to an audience (`dedupe`,
+`persist` are operational vocabulary); the production `setInterval` body being
+unexercised by any test; and `app-admin-route.test.tsx` being misnamed for what
+it now covers.
+
+**Still open, and the same residual plan 1 left:** the end-to-end path (worker →
+Redis → route → browser) is verified by no gate here. Each half is pinned; the
+join needs a live stack.
