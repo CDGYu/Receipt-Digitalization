@@ -166,6 +166,54 @@ Browsers cannot render HEIC in an `<img>`. The thumbnail falls back to a
 filename and a type chip. iPhone photos are HEIC by default, so this is likelier
 in a live demo than it sounds.
 
+
+### Dated correction (2026-08-24) — §3 describes a screen that was not built
+
+Decisions 5 and 9 above describe a drop zone, a list and a thumbnail. **None of
+the three shipped**, and **plan 3 inherits this section**, so what was actually
+built is recorded here rather than left for a reader to restore.
+
+**What shipped instead**, re-derived on the checkout:
+
+| §3 says | the tree |
+|---|---|
+| "the drop zone" (decisions 5 and 6) | No drop zone. Nothing under `frontend/src` handles a drag. |
+| "always produces a list" | `UploadScreen` holds a single nullable value, not a list. |
+| "Multiple files upload sequentially" | The input carries no `multiple`. One file per choice; the chooser is gone the moment there is something to watch. |
+| "the thumbnail falls back to a filename and a type chip" (decision 9) | Neither screen renders a thumbnail at all. `ProcessingView`'s inputs are a receipt id and a file name; the image is a separate signed-URL call it never makes. |
+
+Row 1 was derived by running, rather than by reading:
+
+```
+grep -rE "onDrop|onDragOver|dataTransfer" frontend/src   # nothing
+grep -rniE "drop zone|dropzone" frontend/src             # one line
+```
+
+and that one line is the stylesheet comment saying there deliberately is not
+one.
+
+**Why — and it is a reason rather than an omission.** It lives
+in `UploadScreen.module.css`: the chooser is *"deliberately NOT called a drop
+zone anywhere: nothing here handles a drag, and a box that looks droppable and
+is not is a worse lie than a plain one."* The list went the same way — the
+input disappears the moment a receipt is accepted, so a second file cannot be
+chosen and a length-two branch would be a screen nobody can reach, which this
+project has shipped green before. Decision 9 then has nothing to attach to,
+because a chip needs a thumbnail to degrade from.
+
+**This correction exists because the reasoning lives in a stylesheet and the
+plan still says otherwise.** `docs/superpowers/plans/2026-08-24-upload-and-processing-screen.md`
+maps decision 5 to "Task 2 Step 7" as covered in its Self-Review, calls
+`UploadScreen.tsx` "The drop zone, the list" in its File Structure, and opens
+with "A drop zone produces a list of files". Those plans do not self-amend; a
+plan-3 implementer reading them would restore a decision that was deliberately
+dropped. The same note is in that plan's own defect log.
+
+**Decision 9 is a gap rather than a rejection.** Nothing here decided HEIC
+should render badly — there is no thumbnail on either screen to render it. If
+plan 3's browser pass adds one, the chip is still the right fallback and this
+decision is still live.
+
 ---
 
 ## §4. The processing screen
@@ -244,6 +292,40 @@ written from the pipeline's source, describing what the code *does*, and then
 read as a description of what the code *reports*. Both were caught by an
 implementer reading the emitter instead of the design, and confirmed
 independently twice.
+
+### Dated correction (2026-08-24) — §0's "~25–60s" is a figure nobody measured
+
+§0 says the brief "makes the ~25–60s of silence in the middle a first-class
+design problem". **There is no source for that range.** It is recorded here,
+next to the argument it contradicts: the correction above says an invented
+figure is worse than a missing one, and decision 10 below records one such
+figure already invented and deleted in this repository.
+
+Re-derived 2026-08-24 across the tree:
+
+- The only measured pipeline timing is **25 seconds**, for `gemma4:cloud` on
+  r002, against 30–39 minutes for granite locally — `docs/KNOWN_ISSUES.md`'s
+  *Measurement (2026-08-18) — `gemma4:cloud` READS THE RECEIPT*, and the same
+  measurement in `docs/MEMORY.md`.
+- `VLM_AND_DATA.md` says 3–8 seconds is typical.
+- **No "60s" in the tree is a pipeline time.** Enumerated 2026-08-24 with
+  `git grep -nEI "60 ?s"` over every tracked file: sixteen lines outside this
+  document, in six files. Fifteen are the review acceptance criterion for a
+  human correction, or the argument that a scripted run makes it
+  non-discriminating. The sixteenth is an e2e suite's own runtime
+  (`2026-08-05-review-ui-browser-pass.md`) — **so the reviewer's phrasing,
+  "every 60s in the tree is the review acceptance criterion", is not true and
+  is not what is claimed here.**
+
+So the 25 has a source, the 60 has none, and a range implies a distribution
+nobody measured. **The figure is deleted rather than replaced**: the
+implementation's copy of it, in `ProcessingView.tsx`'s opening line, now reads
+"what a person watches while a receipt is processed", which costs nothing and
+cannot rot. §0's body is left as written, the way §4's body above is — these
+documents are dated records and are corrected here rather than amended.
+
+**Plan 3 must not restore it.** Any elapsed or duration copy on these screens
+needs a measurement taken at the time, not this range.
 
 ### Decision 10 — elapsed time is labelled as elapsed, never as latency
 
