@@ -507,10 +507,16 @@ def _stage(name: str, progress: "ProgressSink | None" = None):
     extraction is not.
     """
     if progress is not None:
+        # Built before the ``try`` on purpose: a failure constructing the event
+        # is a bug in this module, and reporting it as a broken sink would send
+        # an operator looking in the wrong place.
+        event = ProgressEvent(stage=name)
         try:
-            progress(ProgressEvent(stage=name))
-        except Exception:  # pragma: no cover - a sink is never load-bearing
-            log.warning("progress sink raised on stage %s; continuing", name)
+            progress(event)
+        except Exception:
+            log.warning(
+                "progress sink raised on stage %s; continuing", name, exc_info=True
+            )
     try:
         yield
     except _StageFailure:

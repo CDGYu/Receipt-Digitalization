@@ -1166,7 +1166,14 @@ def test_the_extract_stage_reports_each_attempt(
     )
 
     details = [e.detail for e in seen if e.stage == "extract" and e.detail]
-    assert len(details) >= 2, f"expected an event per attempt, got {details}"
+    # Shape, not cardinality. A healthy repair run reports three details, so
+    # `len(details) >= 2` was satisfied by any two of them: each of the three
+    # emits could be deleted on its own with the whole suite still green.
+    # Each call site is now pinned by the text only it produces.
+    per_attempt = [d for d in details if d.startswith("attempt ")]
+    kept = [d for d in details if d.startswith("kept attempt ")]
+    assert len(per_attempt) >= 2, f"expected an event per attempt, got {details}"
+    assert len(kept) == 1, f"expected exactly one kept-attempt event, got {details}"
 
 
 def test_passing_no_sink_changes_nothing(tmp_path, settings) -> None:
@@ -1205,3 +1212,30 @@ def test_passing_no_sink_changes_nothing(tmp_path, settings) -> None:
     assert without.status is ReceiptStatus.AUTO_APPROVED
     assert without.status == with_sink.status
     assert without.failed_stage == with_sink.failed_stage
+
+
+def test_a_sink_that_raises_never_takes_the_receipt_down(
+    session_factory, storage, settings
+) -> None:
+    """Narration is a nicety; the extraction is not.
+
+    Every emit is wrapped, so a sink that raises on *every* event must leave
+    the outcome exactly as it would have been with no sink at all. A single
+    raising sink reaches all three swallow sites: the one in `_stage`, the
+    per-attempt one in `_report`, and the kept-attempt one in
+    `extract_with_repair`.
+    """
+    def _boom(_event):
+        raise RuntimeError("sink")
+
+    result = process_receipt(
+        _job(storage),
+        client=_Client([_triage(), _good()]),
+        storage=storage,
+        session_factory=session_factory,
+        settings=settings,
+        progress=_boom,
+    )
+
+    assert result.status is ReceiptStatus.AUTO_APPROVED
+    assert result.failed_stage is None

@@ -209,10 +209,11 @@ def _report(progress, attempts: list[Attempt]) -> None:
         f"attempt {len(attempts)} ({last.pass_name}): "
         f"{errors} error{'' if errors == 1 else 's'}"
     )
+    event = ProgressEvent(stage="extract", detail=detail)
     try:
-        progress(ProgressEvent(stage="extract", detail=detail))
-    except Exception:  # pragma: no cover - a sink is never load-bearing
-        log.warning("progress sink raised during extract; continuing")
+        progress(event)
+    except Exception:
+        log.warning("progress sink raised during extract; continuing", exc_info=True)
 
 
 def extract_with_repair(
@@ -280,12 +281,15 @@ def extract_with_repair(
     best = min(attempts, key=lambda a: a.rank())
     if progress is not None:
         kept = attempts.index(best) + 1
+        event = ProgressEvent(
+            stage="extract", detail=f"kept attempt {kept} of {len(attempts)}"
+        )
         try:
-            progress(ProgressEvent(
-                stage="extract", detail=f"kept attempt {kept} of {len(attempts)}"
-            ))
-        except Exception:  # pragma: no cover - a sink is never load-bearing
-            log.warning("progress sink raised choosing best attempt; continuing")
+            progress(event)
+        except Exception:
+            log.warning(
+                "progress sink raised choosing best attempt; continuing", exc_info=True
+            )
     _mark_resolved(attempts[0].report, best.report)
 
     return ExtractionOutcome(
