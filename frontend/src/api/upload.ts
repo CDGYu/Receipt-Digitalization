@@ -70,5 +70,5 @@ export function uploadReceipt(file: File): Promise<UploadAccepted> {
  * writing progress, and a screen waiting for a terminal *stage* waits forever.
  */
 export function fetchProgress(receiptId: string): Promise<ProgressReport> {
-  return request<ProgressReport>(`/receipts/${receiptId}/progress`)
+  return request<ProgressReport>(`/receipts/${encodeURIComponent(receiptId)}/progress`)
 }
