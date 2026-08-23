@@ -163,11 +163,34 @@ def _default_read_progress(receipt_id: uuid.UUID) -> Any:
     A record that will not decode is treated as no record. The alternative --
     letting a malformed value 500 the route -- would turn a cosmetic feature
     into an outage on a screen whose whole job is to look calm.
+
+    **Asks for the same bounded wait the writer asks for**
+    (:data:`~receipts.worker.PROGRESS_SOCKET_TIMEOUT_S`), and for the same
+    reasoning rather than the same measurement. **Derived from reading, not
+    measured here** -- ``redis`` is not installed in this environment
+    (``python -c "import redis"`` is a ``ModuleNotFoundError``), so nothing in
+    this repository has watched a hung Redis stall this route. The reasoning:
+    the processing screen asks every ``POLL_MS`` per open view
+    (frontend/src/upload/ProcessingView.tsx), :func:`get_receipt_progress` is a
+    sync ``def`` and therefore runs in the AnyIO threadpool, and a socket call
+    that blocks never raises -- so that route's deliberately bare ``except``
+    cannot end one, and blocked workers would accumulate at the poll rate. A
+    bound is the right shape whether or not that is what an unreachable Redis
+    actually does; nothing here claims what ``redis.Redis.from_url`` does when
+    it is given neither.
+
+    A fresh connection per ask, which this still is. Bounding the wait is a
+    separate question from pooling, and only the first one has a failure mode
+    worth guessing at from here.
     """
     from ..progress import decode, progress_key
-    from ..worker import make_redis
+    from ..worker import PROGRESS_SOCKET_TIMEOUT_S, make_redis
 
-    raw = make_redis().get(progress_key(receipt_id))
+    connection = make_redis(
+        socket_timeout=PROGRESS_SOCKET_TIMEOUT_S,
+        socket_connect_timeout=PROGRESS_SOCKET_TIMEOUT_S,
+    )
+    raw = connection.get(progress_key(receipt_id))
     # Ahead of `decode` on purpose, and it is not merely tidier: a missing key
     # is `None`, and `decode(None)` raises `TypeError`, which the `except`
     # below does not catch. Reordering these two lines turns "no record" into

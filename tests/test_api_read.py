@@ -1568,6 +1568,52 @@ def test_an_uninjected_app_reads_progress_through_the_production_reader(
     assert app.state.read_progress is _default_read_progress
 
 
+def test_the_production_reader_asks_for_a_bounded_wait(monkeypatch) -> None:
+    """The polled route opens its connection with both bounds, or this reddens.
+
+    ``_default_read_progress`` runs on the one route a browser asks over and
+    over -- ``ProcessingView`` polls it per open screen -- so an unbounded wait
+    here is paid at the poll rate rather than once. It asks for the same bound
+    the writer asks for, and this pins the ask the same way
+    ``tests/test_worker.py``'s
+    ``test_the_progress_connection_asks_for_a_bounded_wait`` pins the writer's:
+    by standing in for ``make_redis`` and reading what it was handed.
+
+    ``make_redis`` is imported inside the reader's body, so patching the
+    attribute on :mod:`receipts.worker` is what the call resolves to.
+
+    What a green run here does **not** establish: that ``redis`` honours either
+    argument, that an unreachable Redis blocks rather than failing fast, or
+    what ``from_url`` does when given neither. ``redis`` is not installed in
+    this environment, so nothing here has watched the failure this bound is
+    for. It pins the argument.
+    """
+    from receipts import worker as worker_module
+    from receipts.review.api import _default_read_progress
+
+    seen: dict = {}
+
+    class _Answering:
+        def get(self, _key):
+            return None
+
+    def _recording_make_redis(**kwargs):
+        seen.update(kwargs)
+        return _Answering()
+
+    monkeypatch.setattr(worker_module, "make_redis", _recording_make_redis)
+
+    assert _default_read_progress(uuid.uuid4()) is None
+
+    assert "socket_timeout" in seen, f"no read bound was asked for: {seen}"
+    assert "socket_connect_timeout" in seen, f"no connect bound was asked for: {seen}"
+    assert seen["socket_timeout"] == worker_module.PROGRESS_SOCKET_TIMEOUT_S
+    assert seen["socket_connect_timeout"] == worker_module.PROGRESS_SOCKET_TIMEOUT_S
+    # Anti-vacuity: a `None` or `0` constant would satisfy both equalities
+    # above while asking for no bound at all.
+    assert worker_module.PROGRESS_SOCKET_TIMEOUT_S > 0
+
+
 def test_progress_survives_a_reader_that_cannot_answer(
     session_factory, settings, tmp_path, pending_receipt_id, caplog
 ) -> None:
