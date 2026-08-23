@@ -337,11 +337,11 @@ def test_make_redis_forwards_the_bounds_it_is_given(monkeypatch):
 
     ``test_the_progress_connection_asks_for_a_bounded_wait`` pins what
     ``make_progress_writer`` hands to ``make_redis``, and it monkeypatches
-    ``make_redis`` itself -- so it never runs this body. Every other test that
-    touches ``make_redis`` replaces it too, and the one that runs it aborts at
-    ``import redis``. Without this test the forwarding is deletable and the
-    writer opens an unbounded connection with every gate green, which is the
-    hung-Redis failure the bound exists for.
+    ``make_redis`` itself -- so it never reaches this body. Measured 2026-08-24,
+    before this test was written: reverting the forwarding to a bare
+    ``redis.Redis.from_url(resolved)`` left ``tests/test_worker.py`` green at 16
+    tests, so the bound the writer asks for was discardable in silence -- which
+    is the hung-Redis failure it exists for.
 
     What a green run here does **not** establish: that ``redis`` honours either
     argument, or that an unreachable Redis fails fast rather than blocking.
