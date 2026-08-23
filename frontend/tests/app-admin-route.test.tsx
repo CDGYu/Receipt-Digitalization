@@ -60,10 +60,14 @@ import type { Route } from '../src/route'
  * `admin-screen.test.tsx`'s property, asserted there by name, and the division
  * is deliberate: this file would otherwise re-derive the switch it is testing.
  *
- * Path literals inside comments are stripped before matching, because a path
- * written in prose is not a route this switch can mount. `admin-screen.test.tsx`
- * deliberately does *not* strip them -- the no-dot rule is about anything that
- * looks like a declared path -- so the two lists can differ, and that is fine.
+ * Path literals inside BLOCK comments are stripped before matching, because a
+ * path written in prose is not a route this switch can mount. Line comments are
+ * NOT stripped, and `route.ts` uses them throughout `currentRoute` -- so a
+ * single-quoted `/app/` path written in a `//` comment would become a row here.
+ * None is: stripping line comments as well yields the identical list, checked
+ * rather than assumed. `admin-screen.test.tsx` strips nothing at all, so its
+ * list can differ from this one; that file states no intent either way, and
+ * this sentence is not one on its behalf.
  *
  * `/app/review` is not among the literals: `review` is the switch's *default*
  * and `route.ts` declares no string for it. The last case below covers it, and
@@ -81,7 +85,7 @@ import type { Route } from '../src/route'
  * reaches: `session.ts:23` seeds `signedIn` from the pathname, so `/app/login`
  * takes `App`'s early return instead. Leaving it real would have made the
  * `/app/login` row assert against a live form; including it in `SCREEN` is what
- * lets the property cover all five routes with no carve-out.
+ * lets the property cover the login route like any other, with no carve-out.
  *
  * Both directions are asserted for every row: a switch that renders one screen
  * everywhere is as broken as one that renders it nowhere, and only the negative
@@ -126,8 +130,9 @@ const SCREEN: Record<Route, string> = {
 
 /** Every `/app/` path literal `route.ts` declares, read from its source.
  *
- *  Comments are stripped first; see the header. The regex is the one
- *  `admin-screen.test.tsx` uses on the same file for the no-dot rule. */
+ *  Block comments are stripped first, and only those; see the header. The
+ *  regex is the one `admin-screen.test.tsx` uses on the same file for the
+ *  no-dot rule. */
 const LITERALS: readonly string[] = (() => {
   const source = readFileSync(
     join(dirname(fileURLToPath(import.meta.url)), '..', 'src', 'route.ts'),

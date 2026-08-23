@@ -105,10 +105,12 @@ describe('UploadScreen', () => {
     // markup renders identically. So the module is replaced with different
     // values and the screen is re-imported: a literal in the copy cannot follow.
     //
-    // `doMock` + `resetModules` + a dynamic import, the shape
-    // `app-admin-route.test.tsx` already uses. The statically imported
-    // `UploadScreen` every other test in this file holds is a different module
-    // object and is untouched by this.
+    // `doMock` + `resetModules` + a dynamic import. New here: nothing else in
+    // this repository calls `vi.doMock`. The hoisted `vi.mock` that
+    // `app-admin-route.test.tsx` uses would not do -- it is file-scoped, so it
+    // would rewire every test in this file rather than this one. The statically
+    // imported `UploadScreen` the others hold is a different module object and
+    // is untouched by this.
     vi.resetModules()
     vi.doMock('../src/api/upload', async (importOriginal) => ({
       ...(await importOriginal<typeof import('../src/api/upload')>()),
@@ -265,6 +267,40 @@ describe('UploadScreen', () => {
 })
 
 // --------------------------------------------------------------------------- //
+// How this file drives the input, which is not how the rest of the suite does
+// --------------------------------------------------------------------------- //
+
+describe('the file input is driven the way a browser drives one', () => {
+  // A gate where the header has an argument, and it is nothing to do with
+  // painting -- which is why it lives here rather than in the stylesheet
+  // block below. Measured across `tests/` on 2026-08-24: eleven files
+  // import user-event, and this is the ONLY file that simulates an
+  // interaction without it -- every other file using `fireEvent`, `.click()`
+  // or `dispatchEvent` imports it too. So the house reflex points squarely
+  // the wrong way in here, where user-event would deliver nothing for any
+  // file `accept` does not name and pass for that reason.
+  //
+  // (The review that asked for this gate said this was the only file in the
+  // suite not using user-event. Re-derived before being repeated: twenty files
+  // do not import it. The narrower claim above is the one that holds.)
+  //
+  // The package name is assembled at run time so that naming it here does not
+  // make the check fail on itself.
+  it('does not reach for the picker faker', () => {
+    const source = readFileSync(fileURLToPath(import.meta.url), 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/(^|[^:])\/\/[^\n]*/g, '$1')
+    expect(
+      source.includes(['@testing-library', 'user-event'].join('/')),
+      'this file imports user-event. It must not: user-event enforces the input ' +
+        "`accept` attribute and delivers nothing when a file does not match, which no " +
+        'browser does, so the PDF refusal would be asserted against a file that ' +
+        'never arrived. The header carries the measurement.',
+    ).toBe(false)
+  })
+})
+
+// --------------------------------------------------------------------------- //
 // The stylesheet, which no rendering test in this repository can see
 // --------------------------------------------------------------------------- //
 
@@ -321,33 +357,6 @@ describe('the upload screen is actually painted', () => {
       dead,
       'UploadScreen.module.css declares classes UploadScreen.tsx never reaches',
     ).toEqual([])
-  })
-
-  // A gate where the header has an argument. Measured across `tests/` on
-  // 2026-08-24: eleven files import user-event, and this is the ONLY file that
-  // simulates an interaction without it -- every other file using `fireEvent`,
-  // `.click()` or `dispatchEvent` imports it too. So the house reflex points
-  // squarely the wrong way in here, where user-event would deliver nothing for
-  // any file `accept` does not name and pass for that reason.
-  //
-  // (The review that asked for this gate said this was the only file in the
-  // suite not using user-event. Re-derived before being repeated: twenty files
-  // do not import it, four of them rendering files. The narrower claim above is
-  // the one that holds.)
-  //
-  // The package name is assembled at run time so that naming it here does not
-  // make the check fail on itself.
-  it('drives its input with fireEvent, and does not reach for the picker faker', () => {
-    const source = readFileSync(fileURLToPath(import.meta.url), 'utf8')
-      .replace(/\/\*[\s\S]*?\*\//g, '')
-      .replace(/(^|[^:])\/\/[^\n]*/g, '$1')
-    expect(
-      source.includes(['@testing-library', 'user-event'].join('/')),
-      'this file imports user-event. It must not: user-event enforces the input ' +
-        "`accept` attribute and delivers nothing when a file does not match, which no " +
-        'browser does, so the PDF refusal would be asserted against a file that ' +
-        'never arrived. The header carries the measurement.',
-    ).toBe(false)
   })
 
   it('paints from tokens, with no raw hex', () => {
