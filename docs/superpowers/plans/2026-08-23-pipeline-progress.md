@@ -834,3 +834,191 @@ in `pipeline.py`.
    verified by neither task. It is the same class of gap ADR-0047 recorded for
    the escalation, and closing it needs the live stack — which the design's §9
    already flags as an unscheduled dry run.
+
+---
+
+## Dated defect log
+
+**This plan does not self-amend.** Everything above is the text as written; this
+log is what was wrong with it and when. Transcribed 2026-08-24 from
+`.superpowers/sdd/2026-08-23-pipeline-progress/progress.md`, which is
+gitignored (`.gitignore` excludes `.superpowers/`) and therefore reaches no one
+who clones this repository. Nine defects were found during execution and every
+one of them lived only there until this section existed.
+
+### Still wrong in the text above, and not corrected there
+
+Three things a reader following this plan today would be misled by. They are
+listed rather than fixed, because a dated plan is a record of what was written.
+
+- **Global Constraints, "copy the shape of `worker.py`'s `make_redis`"
+  (Optional-import discipline).** There was no `make_redis`. At the plan's BASE
+  the function was `def _redis_connection(url: str | None, settings: Settings |
+  None = None)` — **private, and `url` positional** — so the name and the call
+  form in Task 3's code blocks were both wrong. See defect 6.
+- **Task 2 Step 2's "Confirm the selection is 3 tests."** `python -m pytest
+  tests/test_process_receipt.py -k progress` selects **1**: only
+  `test_progress_reports_only_real_pipeline_stages` carries the substring, and
+  the other two are named `..._each_attempt` and `..._no_sink`. Re-measured
+  2026-08-24 with `--collect-only -q`; still 1. See defect 3.
+- **Every `Run:` line that names a module uses `-v`** — nine of them, in all
+  three tasks. `pyproject.toml` sets `addopts = "-q"`, so `-v` nets to
+  verbosity 0 and prints a dot line with no test names; `-vv` is what shows
+  per-test IDs. This document's own Global Constraints explains that exact
+  interaction for `-q`/`-qq`, and then the steps use `-v` as though it worked.
+  See defect 1. *(The whole-branch review listed six of the nine,
+  omitting Task 1's three — a list in prose read as complete, in a finding about
+  lists in prose.)*
+
+### 2026-08-23 — the nine defects, in the order they were found
+
+**Defect 1 — `-v` nets to verbosity 0 in this repository.** Found by the Task 1
+implementer. As above. **Ruling:** Tasks 2 and 3 were dispatched with `-vv`
+spelled out rather than amending this document. *Cost if wrong: an implementer
+reads a bare dot line and cannot see which test failed, costing one extra run.*
+
+**Defect 2 — Task 2's third test could not have passed as written.** Found by
+the Task 2 implementer. `test_passing_no_sink_changes_nothing` called
+`_job(storage)` twice against one storage, and `_png_bytes` is deterministic —
+so both jobs carry the same image and the same phash, the second run takes the
+**image-dedupe** short circuit and comes back `rejected` without ever
+extracting. The test compared `rejected` against `auto_approved` and would have
+failed with or without a sink. The implementer proved the sink was not the cause
+before touching anything: both runs with `progress=None` failed identically.
+**Ruling:** the repair is accepted. Each run now gets its own database and blob
+store, so the sink is the only difference between them — which is the property
+the test exists to isolate. *Cost if wrong: the behaviour-preservation pin
+measures something narrower than intended.*
+
+**Defect 3 — `-k progress` selects 1 test, not 3.** As above. The plan's own
+step told the implementer to confirm the selection first, and it did, which is
+the only reason this was caught rather than silently under-running.
+`-k "progress or each_attempt or no_sink"` is the working filter. This is the
+species `docs/MEMORY.md` records: **a `-k` filter in a plan is a claim about the
+names in that same plan**, and it has now bitten a third plan.
+
+**Defect 4 — an annotation with no import in scope.** The brief's annotation on
+`extract_with_repair` used `Callable` without importing it in `extractor.py`;
+ruff's `F` ruleset would have caught it. The implementer added
+`from typing import Callable`. **Ruling:** accepted, the minimal correct fix.
+
+**Defect 5 — a wrong prediction about a mutation's failure message.** The brief
+predicted Task 2's mutation 1 would fail with a specific message; it fails on
+"load never reported" instead, because `_report` still emits from inside
+`extract`. The prediction was wrong; the mutation still reddens the right test
+for the right reason.
+
+**Defect 6 — `make_redis` never existed, and this is the worst of the nine.**
+At BASE the function was `_redis_connection`, private and positional, so
+Task 3's `make_redis(url=url, settings=settings)` was wrong on the name *and*
+on the call form. The controller produced that name by reading the function's
+**body** during pre-flight — the lazy `import redis`, the `RuntimeError` naming
+the extra, the `return redis.Redis.from_url` — and inferring the name from
+context, never reading its `def` line. It then repeated the name in the
+dispatch as "copy the shape of `worker.py`'s existing `make_redis`", turning a
+relayed guess into an instruction. **Ruling:** the implementer's rename
+(`_redis_connection` → `make_redis`, keyword-only to match `make_queue`, added
+to `__all__`, both call sites updated) is accepted — a second module now
+legitimately needs the connection, and importing a private cross-module name is
+the worse of the two options. *Cost if wrong: a public name where a private one
+would have done, and two call sites the brief did not list.*
+
+**Defect 7 — a reasoning defect, not a factual one: the brief declared the
+worker wiring unpinnable offline.** Soft spot 3 in the Self-Review above said
+the worker→Redis→route path could not be verified without a live stack, and
+Task 3's brief treated that as covering the wiring too. The implementer showed
+this conflates **transport**
+with **wiring**: the Redis round trip does need a live stack, but
+`progress=progress`, the `progress_factory` field, the key, the wire form and
+the TTL do not. As the brief specified it, **all five were deletable with five
+green gates.** It added `tests/test_worker.py` to close them. **Ruling:**
+accepted, and the added file is in scope. The soft spot was not a limitation
+that was discovered, it was one that was assumed; `make_progress_writer` would
+otherwise have shipped with zero coverage. *This is the shape ADR-0048 names —
+a correct instruction (the end-to-end path does need a live stack) carrying a
+reason that reads as coverage of more than it covers.*
+
+**Defect 8 — Task 3 Step 5 says "3 tests"; the filter selected 4.** Same
+species as defect 3, one task later. *(The number moves as tests are added; 4
+is what it selected on 2026-08-23.)*
+
+**Defect 9 — a wrong prediction about a RED phase's reason.** Task 3 Step 2
+predicted the red would be a FastAPI 404 on an unregistered path. It is a
+`create_app` **TypeError**, because the test passes `read_progress=` before the
+parameter exists. The RED is honest either way; the predicted reason was wrong —
+the same species as defect 5.
+
+### Rulings taken during execution, which lived only in the ledger
+
+- **No new git worktree; the feature branch is the isolation.** Standing
+  practice is one worktree (ADR-0023), the three tasks are strictly serial, and
+  the work is not on `main`. *Cost if wrong: none while serial.*
+- **The `normalize` stage is not reported, and that is accepted.** All nine
+  `_stage` calls the plan threads are inside `process_receipt`. The tenth,
+  `_stage("normalize")`, lives in `_normalizer` — a closure `process_receipt`
+  hands to `extract_with_repair` — so `progress` cannot reach it without
+  changing that helper's signature. Normalization runs *inside* `extract`, which
+  is already narrated per attempt, and the design never asked for a separate
+  beat. *Cost if wrong: the screen cannot show "normalising" as its own row;
+  adding it later is a one-signature change to one helper.*
+- **Task 2's "every emitted stage is in `STAGES`" is a subset relation, not
+  equality**, so the ruling above does not falsify it: `STAGES` contains
+  `normalize` whether or not anything emits it. Equality would have been the
+  wrong shape regardless, since `dedupe` and `merchant` are also conditional.
+- **Commits on this branch carry no `Co-Authored-By` trailer**, against the
+  harness's standing instruction. The repository has never used one, and
+  `tests/test_sha_citations.py` requires every backticked seven-hex token in a
+  tracked file to resolve to a commit some ref can reach — four branch commits
+  are already cited in `docs/KNOWN_ISSUES.md`, `IMPLEMENTATION_PLAN.md` and the
+  design document, so rewriting history to add trailers would orphan all four
+  and turn that gate red. *Cost if wrong: authorship attribution is absent from
+  this branch's commits.*
+- **A count that does not match its own list, recorded against the
+  controller.** A fix message said "seven Minor findings and I have deferred all
+  of them" and then listed six. The true split of Task 1's seven Minors is one
+  absorbed into the Important fix (the `parametrize` conversion) and six
+  deferred. The mismatch started in the controller's message and was inherited
+  by the implementer's report before a re-review caught it.
+- **The tracked plan diverging from the implemented file is not a defect.**
+  After Task 1's review-driven fix the plan still showed the loop form of a test
+  that had become `pytest.mark.parametrize`. These plans are dated historical
+  records that do not self-amend; this log is where that gets corrected.
+
+### What the fix waves found that the reviews had not
+
+Recorded because in both cases the review had established *less* than was true:
+
+- **Task 2's Important 1 was worse than the review stated.** The review showed
+  that one of the three per-attempt emits was individually deletable under
+  `assert len(details) >= 2`. The implementer ran all three deletions before
+  fixing: **all three passed**, with the whole suite green. Every emit in the
+  task's headline deliverable was individually deletable.
+- **Task 3's implementer found a further instance unprompted.** `exc_info=True`
+  was mandated on both new logs and **nothing asserted it** — the same
+  never-pinned shape as the finding it was fixing, one level down. It also
+  reworded `process_receipt_job`'s docstring, which claimed the function "adds
+  no error handling of its own on purpose": true before the fix, false after.
+
+### 2026-08-24 — the whole-branch review, and what it left
+
+Verdict **MERGE AFTER FIXES**: no Critical, eleven Important. Two findings were
+reproduced by mutation with the whole suite green — the production reader was
+unpinned, and `status` was deletable exactly in the narrating case, which is the
+one case the field exists for. **Five of the eleven were false claims in prose**,
+four of them written by the fix rounds that closed real defects. That is this
+repository's most-recorded defect (ADR-0032, ADR-0042) and it recurred here.
+
+One finding was explicitly **not** a measurement: that a hung Redis could stall
+the pipeline, reasoned from `from_url` being built with no socket timeouts and a
+blocked call never returning, so `except Exception` cannot catch it. **Neither
+the reviewer nor the controller could measure it — `redis` is not installed on
+this machine.** The defensive fix was taken anyway, because a bound is correct
+whether or not the hypothesis holds, and the constant carries that distinction
+in its own docstring rather than asserting what redis-py does by default
+(review standard 27).
+
+**Still open after the fix wave**, and deliberately: the end-to-end path
+(worker → Redis → route) is verified by neither task. Each half is pinned; the
+join is not, and closing it needs a live stack. The design's §9 flags it as an
+unscheduled dry run, and soft spot 3 above states it — correctly, once the
+wiring it wrongly covered was pinned separately.
