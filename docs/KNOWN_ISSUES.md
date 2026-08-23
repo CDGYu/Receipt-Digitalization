@@ -2463,3 +2463,208 @@ pydantic, so it cannot rot when the schema library changes.
 
 - ISSUE-021 — the fix whose own description claimed this already worked.
 - The 2026-08-22 growing-the-golden-set plan, Defect 7.
+
+---
+
+## ISSUE-023 — Consistency voting has neither tolerance nor shared alignment
+
+**Status:** OPEN — recorded, not fixed. It is `IMPLEMENTATION_PLAN.md` P2.T1,
+which was never built.
+**Owner action required:** no. **Discovered:** 2026-08-23, auditing
+`IMPLEMENTATION_PLAN.md` against the tree.
+**Pre-existing:** yes — `run_consistency` has had this shape since Phase 0.
+**Blocks:** nothing today, because `run_consistency` has no caller. **It blocks
+P7.T1**: wiring consistency into the pipeline without fixing this puts both
+defects on a live path at once.
+
+### What is wrong
+
+`_vote` (`src/receipts/extract/extractor.py`) decides agreement by **exact
+string equality**. It flattens each run and tallies
+`json.dumps(v, sort_keys=True, default=str)` per path. P2.T1 was written to fix
+the two consequences, and both are still live:
+
+- **No money tolerance.** `949.20` and `949.21` serialise to different strings
+  and count as disagreement, so cent-level rounding between runs reads as
+  uncertainty. `within_tolerance` is defined in `src/receipts/validate/rules.py`
+  and appears **nowhere** under `src/receipts/extract/`.
+- **Line items are compared positionally.** The flattened paths are
+  `line_items[0].qty`, `line_items[1].qty`, … so one inserted or dropped row
+  shifts every later index and every later row disagrees — the "differing count
+  -> all disputed" cascade `align_line_items` was built to end.
+
+**`align_line_items` shipped and consistency never adopted it.** Tree-wide its
+only callers are `eval/metrics.py` and `tests/test_lineitem_align.py`; nothing
+under `src/receipts/extract/` references it. **P0.T3's acceptance names two
+consumers** — `line_item_f1` and the consistency diff — **and only the first
+exists**, so that task is half-met rather than done.
+
+### How to resume
+
+Both halves are one change in `_vote`: compare money paths through
+`within_tolerance` instead of by serialisation, and diff `line_items` through
+`align_line_items` instead of by flattened index. **Do it before P7.T1**, not
+after.
+
+**The import is already there and costs nothing** — `extract/extractor.py`
+imports `..validate.{context,report,validator}` and `extract/lineitem_align.py`
+already imports `normalize_desc` from `..validate.rules`, the same module
+`within_tolerance` lives in. *(An earlier draft of this entry warned that
+reaching for `validate/` would be a new dependency edge. It is not, and the
+warning was deleted rather than softened — ADR-0048.)*
+
+### Related
+
+- P7.T1 — `run_consistency` is unwired, which is the only reason this is latent.
+- `IMPLEMENTATION_PLAN.md` P0.T3 (acceptance half-met) and P2.T1.
+
+---
+
+## ISSUE-024 — Nothing cross-checks the triage line-count against what was extracted
+
+**Status:** OPEN — recorded, not fixed. It is `IMPLEMENTATION_PLAN.md` P2.T3,
+which was never built.
+**Owner action required:** no. **Discovered:** 2026-08-23, auditing
+`IMPLEMENTATION_PLAN.md` against the tree.
+**Pre-existing:** yes. **Blocks:** nothing, but it leaves the spec §18
+tall-receipt trap open — the failure the rule was specified to catch.
+
+### What is wrong
+
+Spec §18 names a silent failure: a tall receipt is split into strips, some rows
+are lost, and **nothing notices** when no subtotal is printed to make the
+arithmetic disagree. P2.T3 specifies the guard — triage estimated 12 line items,
+6 were extracted, raise a WARN — and it does not exist.
+
+Measured 2026-08-23 over `src/receipts/validate/rules.py`:
+
+- **30 rules are registered** (anchor: lines matching `id = "R[0-9]{3}"`), and
+  the highest id is **R070**. P2.T3 asked for the next free id after R070;
+  nothing was added.
+- **`estimated_line_item_count` appears exactly twice, both inside R013**
+  (`LineItemsPresent`): once as a *suppressor* — `if ctx.triage and
+  ctx.triage.estimated_line_item_count == 0: return False` — and once to build a
+  hint string. R013 fires only when **zero** rows were extracted.
+- No rule compares the estimate against `len(r.line_items)` when rows *are*
+  present, and no rule in the file mentions truncation.
+
+So the estimate is read, and never used to detect the loss it exists to detect.
+
+### How to resume
+
+A new rule at the next free id after R070, `applies` when
+`ctx.triage.estimated_line_item_count` is present and non-zero, `check` raising
+WARN on a large mismatch against `len(r.line_items)`. **"Large" is the decision**
+— the estimate is a model's guess about a photograph, so a tight threshold will
+fire on correct extractions.
+
+**Its RED must be proven the right way** (ADR-0051): put the mutation where the
+*rule* computes its answer, not where the test computes its expectation.
+
+### Related
+
+- `IMPLEMENTATION_PLAN.md` P2.T3; `RECEIPT_SYSTEM_SPEC.md` §18.
+- ISSUE-005 — the other open rule defect.
+
+---
+
+## ISSUE-025 — Best-attempt selection is proven only in isolation
+
+**Status:** OPEN — recorded, not fixed. It is `IMPLEMENTATION_PLAN.md` P2.T4,
+whose acceptance is unmet although the mechanism ships.
+**Owner action required:** no. **Discovered:** 2026-08-23, auditing
+`IMPLEMENTATION_PLAN.md` against the tree.
+**Pre-existing:** yes. **Blocks:** nothing. It is a coverage gap in a guarantee
+the pipeline depends on, not a defect in behaviour.
+
+### What is wrong
+
+`extract_with_repair` promises "Returns the BEST attempt, not the last" — so a
+repair that makes an extraction *worse* must lose to the original. P2.T4's
+acceptance is explicit that this must be **"proven under the pipeline, not just
+in isolation."**
+
+Measured 2026-08-23:
+
+- The adversarial direction is pinned **only in isolation**, by
+  `test_best_attempt_wins_even_when_repair_makes_it_worse`
+  (`tests/test_extractor.py`), which drives `extract_with_repair` directly.
+- The pipeline-level repair test,
+  `test_repair_resolved_findings_are_kept_as_history`
+  (`tests/test_process_receipt.py`), exercises the repair **improving** the
+  extraction — broken totals, then good — and asserts findings survive as
+  history.
+- `git grep -in worse -- tests/test_process_receipt.py` returns **nothing**: no
+  pipeline-level test drives a worse repair at all.
+
+So the direction that matters — the pipeline keeping the original when the
+repair regresses — is asserted by no test that runs through
+`process_receipt`.
+
+*(This entry was nearly filed as DONE off a case-insensitive grep for
+"best attempt" that matched two **prose comments** in `pipeline.py` and
+`tests/test_process_receipt.py`. Substring evidence answered for a symbol —
+review standard 18.)*
+
+### How to resume
+
+One test in `tests/test_process_receipt.py` driving a `_Client` sequence whose
+repair pass returns a strictly worse extraction, asserting the persisted receipt
+carries the **original** values. Prove it red by making the pipeline keep the
+last attempt rather than the best — the mutation belongs where `process_receipt`
+selects, not where the test states its expectation (ADR-0051).
+
+### Related
+
+- `IMPLEMENTATION_PLAN.md` P2.T4.
+- Review standard 18 — a substring can answer for a declaration.
+
+---
+
+## ISSUE-026 — A receipt cannot enter the system from a browser
+
+**Status:** OPEN — recorded, not fixed. It is the unbuilt half of
+`IMPLEMENTATION_PLAN.md` P5.T2.
+**Owner action required:** **yes** — whether the upload screen gets built is a
+scope decision, not a bug fix.
+**Discovered:** 2026-08-23, auditing `IMPLEMENTATION_PLAN.md` against the tree.
+**Pre-existing:** yes — no upload UI has ever existed.
+**Blocks:** nothing mechanical. It bounds who can use the product: today, only
+someone with a shell.
+
+### What is wrong
+
+P5.T2 asks for four things — **upload (drag-drop, progress)**, a receipts list
+with filters, a review queue by priority, and an export trigger. Three shipped
+(ADR-0046 and the review milestones). **The upload half has no component and
+nothing mounts one.**
+
+Measured 2026-08-23:
+
+- `frontend/src/main.tsx` mounts exactly `LoginPage`, `AdminScreen`,
+  `ReceiptsScreen` and `ReviewScreen`.
+- `find frontend/src -iname "*upload*"` returns **nothing** — there is no
+  unmounted component either.
+- The only `upload` reference under `frontend/src/api/` is a comment in
+  `client.ts` about `POST /upload` being unparseable if a header is set.
+
+**The backend half is complete.** `POST /upload` is registered in
+`review/api.py` at `status_code=202`, guarded by `require_upload`, size-bounded
+by `settings.max_upload_mb`. It is reachable — by `python -m receipts.cli
+ingest`, or by any HTTP client. Just not from the app.
+
+This is one step past **ADR-0046 decision 5** ("a screen nothing mounts is not
+delivered"): there is no screen to mount.
+
+### How to resume
+
+It needs a ruling first, because the answer may legitimately be "no". The CLI is
+the intended ingestion path for a batch of scanned receipts, and a drag-drop
+page is a different product decision from a reviewer's queue. If it is built it
+inherits ADR-0027's tokens, ADR-0024's error-recovery contract, and ADR-0046
+decision 3 if it paginates anything.
+
+### Related
+
+- ADR-0046 decision 5 — a screen nothing mounts is not delivered.
+- `IMPLEMENTATION_PLAN.md` P5.T2.
