@@ -207,9 +207,10 @@ scripted responses, so the whole pipeline can be exercised offline at zero API
 cost. No count here: run `python -m pytest`.
 
 *(This paragraph opened "Roughly 6,100 lines across specs, implementation, and
-tests. 103 tests pass" until 2026-08-24. Measured that day: 98,280 lines across
-`src/**/*.py`, `tests/*.py` and the tracked `*.md`, and a suite of 1,378. Both
-numbers move every milestone and neither sentence moved with them.)*
+tests. 103 tests pass" until 2026-08-24. No replacement counts here either:
+`git ls-files` answers the first and `python -m pytest` the second, at whichever
+commit you are reading. Both move every milestone and this sentence never moved
+with them.)*
 
 ### Documents
 
@@ -471,7 +472,7 @@ in auto-approval rate.
 ```bash
 cd receipt-digitizer
 pip install -e ".[dev]"     # installs pydantic + pyyaml + pytest
-python -m pytest            # 103 passed; pyproject sets pythonpath=src and testpaths=tests
+python -m pytest            # no count here either; pyproject sets pythonpath=src and testpaths=tests
 ```
 
 ---
