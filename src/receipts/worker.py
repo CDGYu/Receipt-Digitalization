@@ -214,10 +214,10 @@ def process_receipt_job(
 
     Rebuilds the job, calls :func:`receipts.pipeline.process_receipt`, and
     returns a JSON-safe summary for the result store. It adds no error handling
-    of its own on purpose: ``process_receipt`` already guarantees a terminal
-    state for every stage failure, and a second, weaker net here would only make
-    it unclear which one was doing the work. What does reach the queue as a
-    failed job is the case ``process_receipt`` re-raises -- nothing could be
+    around *the processing* on purpose: ``process_receipt`` already guarantees a
+    terminal state for every stage failure, and a second, weaker net here would
+    only make it unclear which one was doing the work. What does reach the queue
+    as a failed job is the case ``process_receipt`` re-raises -- nothing could be
     written at all -- and that is precisely the case a human must see.
 
     ``deps`` is injected by tests and built from the environment otherwise.
@@ -226,12 +226,37 @@ def process_receipt_job(
     its key is the receipt's, and ``deps`` is built once per worker. It stays
     ``None`` when ``deps.progress_factory`` is -- narration is optional, and
     that is what lets the offline tests drive this function with no Redis.
+
+    The one ``except`` below is not a second net around the processing: it
+    guards *building the narration*, which must never be load-bearing. Failing
+    to open a Redis connection would otherwise abort the job before
+    ``process_receipt`` ever ran, and a receipt that reaches no terminal state
+    is the silent drop §18 forbids -- caused by the cosmetic half of the
+    system. Unnarrated is a fine outcome; lost is not.
     """
     deps = deps or build_deps()
     job = job_from_payload(payload)
     log.info("Processing receipt %s from %s", job.id, job.source)
 
-    progress = None if deps.progress_factory is None else deps.progress_factory(job.id)
+    progress = None
+    if deps.progress_factory is not None:
+        try:
+            progress = deps.progress_factory(job.id)
+        except Exception:
+            # Narration is never load-bearing. Building the writer opens a
+            # Redis connection, and `make_redis` raises when REDIS_URL is unset
+            # or the extra is missing -- unguarded, that would abort the job one
+            # line before `process_receipt` and leave the receipt in no terminal
+            # state at all. Losing a receipt because nothing could narrate it
+            # inverts what this feature is for. `exc_info` so the cause is still
+            # in the log: an operator has to be able to see why a whole worker
+            # went quiet.
+            log.warning(
+                "could not build a progress writer for %s; continuing unnarrated",
+                job.id,
+                exc_info=True,
+            )
+
     result = process_receipt(
         job,
         client=deps.client,

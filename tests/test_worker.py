@@ -352,6 +352,82 @@ def test_the_job_function_narrates_nothing_when_its_deps_built_no_writer(monkeyp
     assert seen["kwargs"]["progress"] is None
 
 
+def test_the_job_function_survives_a_writer_it_cannot_build(monkeypatch, deps, caplog):
+    """A receipt is never lost because nothing could narrate it.
+
+    ``deps.progress_factory(job.id)`` opens a Redis connection, and
+    :func:`~receipts.worker.make_redis` raises when ``REDIS_URL`` is unset or
+    the ``worker`` extra is missing. Unguarded, that aborts the job one line
+    before ``process_receipt`` -- so the receipt reaches no terminal state at
+    all, which is the silent drop §18 forbids, caused by a feature the design
+    calls cosmetic.
+
+    Reachable today only through ``run_worker(url=...)``: that is a public
+    keyword, so a worker started with an explicit url and no ``REDIS_URL`` in
+    the environment would accept jobs and destroy every receipt it touched.
+    """
+
+    def _cannot_build(_receipt_id):
+        raise RuntimeError("A Redis connection needs REDIS_URL to be set")
+
+    seen: dict = {}
+    monkeypatch.setattr(worker_module, "process_receipt", _recording_process_receipt(seen))
+    deps.progress_factory = _cannot_build
+    job = _job(deps.storage)
+
+    summary = process_receipt_job(job_to_payload(job), deps=deps)
+
+    # The receipt was processed, and processed *unnarrated* -- not processed
+    # with some half-built sink that would raise again on the first stage.
+    assert summary["receipt_id"] == str(job.id)
+    assert seen["kwargs"]["progress"] is None
+
+    # An operator has to be able to see *why* a whole worker went quiet, so the
+    # traceback has to survive the swallow.
+    swallowed = [record for record in caplog.records if record.name == "receipts.worker"]
+    assert swallowed, "the swallowed failure was never logged"
+    assert swallowed[-1].levelname == "WARNING"
+    assert swallowed[-1].exc_info is not None, "logged without the traceback"
+
+
+def test_build_deps_wires_a_progress_factory_that_writes_where_the_reader_looks(
+    monkeypatch, tmp_path
+):
+    """The seam between the wiring and production, which nothing else covers.
+
+    Every other progress test injects its factory or its reader. Without this
+    one, deleting the ``progress_factory=`` argument from
+    :func:`~receipts.worker.build_deps` leaves all of them green while no key
+    is ever written and the route reports a null stage forever.
+
+    Two claims, because "it is wired" is not enough on its own: the factory
+    exists, *and* what it builds writes under ``progress_key`` -- the only
+    place ``receipts.review.api._default_read_progress`` looks.
+    """
+    from receipts.progress import ProgressEvent, progress_key
+
+    settings = Settings(_env_file=None, storage_root=str(tmp_path / "blobs"))
+    # `build_deps` resolves both of these from the environment. Patched here so
+    # the test needs no provider and no database file; the engine is real but
+    # in-memory, so `make_session_factory` still gets something it can bind to.
+    # (The module-level `make_engine` this lambda calls is the unpatched one --
+    # `monkeypatch.setattr` rebinds the name in `worker_module`, not here.)
+    monkeypatch.setattr(worker_module, "make_client", lambda _settings: object())
+    monkeypatch.setattr(worker_module, "make_engine", lambda _url: make_engine("sqlite://"))
+
+    deps = worker_module.build_deps(settings)
+
+    assert deps.progress_factory is not None
+
+    fake = _FakeRedis()
+    monkeypatch.setattr(worker_module, "make_redis", lambda **kwargs: fake)
+    receipt_id = uuid.uuid4()
+
+    deps.progress_factory(receipt_id)(ProgressEvent(stage="triage"))
+
+    assert [key for key, _value, _ttl in fake.sets] == [progress_key(receipt_id)]
+
+
 # --------------------------------------------------------------------------- #
 # The optional rq/redis extra
 # --------------------------------------------------------------------------- #

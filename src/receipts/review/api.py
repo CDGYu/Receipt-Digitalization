@@ -348,6 +348,14 @@ def _install_read_routes(app: FastAPI) -> None:
         the work is finished from ``status``, never from ``stage`` going quiet
         -- a dead worker stops writing progress and a screen that waited for a
         terminal *stage* would wait forever.
+
+        Which is why *reading* the narration cannot fail this route. A Redis
+        outage, an unset ``REDIS_URL``, a missing ``worker`` extra or a bug in
+        an injected reader would otherwise propagate after ``status`` has
+        already been read -- costing the caller a 500 and the one field here
+        that is the truth. The guard sits at this boundary rather than inside
+        ``_default_read_progress`` precisely so it covers every reader, not
+        just that one.
         """
         with request.app.state.session_factory() as session:
             receipt = get_receipt(session, receipt_id)
@@ -356,7 +364,18 @@ def _install_read_routes(app: FastAPI) -> None:
                     status_code=404, detail=f"no receipt with id {receipt_id}"
                 )
             status = receipt.status.value if receipt.status else None
-        event = request.app.state.read_progress(receipt_id)
+        try:
+            event = request.app.state.read_progress(receipt_id)
+        except Exception:
+            # Deliberately bare: on a cosmetic feature, "answer with the status
+            # and no stage" beats "500" for every cause, including a
+            # programming error in a custom reader. ``exc_info`` is what keeps
+            # that trade honest -- the traceback survives the swallow, so a
+            # bug here is still findable in the logs rather than erased.
+            logger.warning(
+                "could not read progress for %s; reporting none", receipt_id, exc_info=True
+            )
+            event = None
         return {
             "status": status,
             "stage": event.stage if event else None,

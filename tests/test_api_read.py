@@ -1519,3 +1519,41 @@ def test_progress_needs_a_signed_in_caller(
     reply = TestClient(app).get(f"/receipts/{receipt_id}/progress")
 
     assert reply.status_code == 401
+
+
+def test_progress_survives_a_reader_that_cannot_answer(
+    session_factory, settings, tmp_path, pending_receipt_id, caplog
+) -> None:
+    """A Redis outage costs the narration, never the status.
+
+    ``_default_read_progress`` catches a record it cannot decode, but not a
+    ``ConnectionError`` from redis and not the ``RuntimeError`` ``make_redis``
+    raises when ``REDIS_URL`` is unset or the ``worker`` extra is missing --
+    the rare failure was guarded and the common one was not. Unguarded, those
+    propagate *after* ``status`` has been read, so the caller gets a 500 and
+    never learns the receipt's real state: precisely the outcome the ``status``
+    field exists to prevent.
+
+    The guard is at the route rather than inside the reader, so it also covers
+    an injected reader -- which is what this test is.
+    """
+
+    def _cannot_answer(_id):
+        raise RuntimeError("redis is unreachable")
+
+    client = _progress_client(session_factory, settings, tmp_path, _cannot_answer)
+    reply = client.get(f"/receipts/{pending_receipt_id}/progress")
+
+    assert reply.status_code == 200
+    body = reply.json()
+    assert body["status"] == "pending"
+    assert body["stage"] is None
+    assert body["detail"] is None
+
+    # A bare `except` is only an acceptable trade if the cause survives it.
+    # Without `exc_info`, this guard would silently erase a bug in a custom
+    # reader, and nothing else in the suite would notice it had.
+    swallowed = [record for record in caplog.records if record.name == "receipts.review.api"]
+    assert swallowed, "the swallowed failure was never logged"
+    assert swallowed[-1].levelname == "WARNING"
+    assert swallowed[-1].exc_info is not None, "logged without the traceback"
