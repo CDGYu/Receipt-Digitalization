@@ -64,18 +64,125 @@ three receipts, all handwritten, against a 20% handwritten target.
 set, never a single figure. **Compare only to a run over the same
 `scored_receipts`.**
 
-## 2. Optional, and none of it blocks Task 3
+**But neither committed baseline HAS a `scored_receipts` field** — measured
+2026-08-23. It was added by `3ca4ec4`, inside step 7's machinery, which merged
+*after* the baseline landed at `62eefa3`; `eval/results/2026-08-22-cloud-only/`
+and `eval/results/ladder-probe/` both predate it. **The set is still recoverable**
+— each repeat file's `results[].receipt_id` gives `r001, r002, r003` — so this is
+one derivation step, not a wall. Derive it and say you did; do not report the
+field as absent-and-therefore-incomparable, and do not backfill the committed
+artifacts.
 
-Nineteen issues are open; `docs/KNOWN_ISSUES.md` is the list and each carries its
-own resume steps. The ones that bear on accuracy work specifically:
+## 2. EVERY REMAINING TASK — the whole board, grouped by what it costs you
 
-- **ISSUE-017** — the variance is across receipts, not repeats. It is why Task 3
-  outranks any model choice.
-- **ISSUE-012 / ISSUE-013** — the escalation's per-rung counts never reach the
-  committed results file, and are keyed so two tiers on one model collapse.
-- **ISSUE-018 / ISSUE-015** — the escalation records that it escalated, never why;
-  `PassAttempt.rung` is still write-only.
-- **ISSUE-006** — still the only issue where a user gets a confidently wrong answer.
+**This is a pointer, not a second source.** `docs/KNOWN_ISSUES.md` is the register
+for every `ISSUE-` row and carries each diagnosis and its resume steps;
+`IMPLEMENTATION_PLAN.md` is the phase/task reference. **Where a line here and its
+source disagree, the source wins** (ADR-0030). **No issue count is written in this
+section** — count `^## ISSUE-` headings in the register, and note that its
+`**Status:**` lines are one per heading by design, so the two answers must agree.
+
+### 2a. FIRST — decide what happens to the branch in flight
+
+`feat/label-provenance-rule` is **unmerged, unreviewed, and pushed**, with five
+gates passing on it, controller-run. Two documentation commits: `1ee87e2` (the
+no-seeding rule reaches `eval/golden/README.md`, plus the plan's Defect 8) and
+`c1cd404` (ISSUE-023 through ISSUE-026). **No whole-branch review has run on it**,
+and this repository has never run one that found nothing. Review and ff-merge it,
+or consciously leave it — but do not stack new work on an unreviewed branch
+without deciding which.
+
+### 2b. THE ONE THAT UNBLOCKS EVERYTHING ELSE — ISSUE-001
+
+- **Step 7, Task 3 — collect and label real receipts.** Section 1 above is the
+  whole briefing. It needs a person and a camera and no code removes it.
+  **ISSUE-017 is why it outranks every model choice**: three receipts spanning
+  11% to 96%, so the headline describes none of them.
+- **Step 8 — calibrate thresholds** (P3.T6 / P8.T1) on a held-out split. Blocked
+  on step 7.
+
+**Five further tasks are blocked on that number and on nothing else**, and the
+plan does not say so anywhere: P3.T6's calibration report, P6.T1's "measure
+top-10-merchant accuracy before/after few-shot", P8.T1's fitted weights, P8.T2's
+statistically valid held-out set, and P9.T1's self-hosted benchmark. **None of
+them is startable today.**
+
+### 2c. WHERE THE SYSTEM CAN STILL BE WRONG
+
+- **ISSUE-006** — **the only issue on the board where a user gets a confidently
+  wrong answer.** A reviewer who mis-flags the *sole* purchase gets zero findings
+  at any severity and the row silently leaves the export; all three golden
+  receipts have that shape. **Needs your ruling first**: does the review screen
+  show `is_template_row`, and read-only or editable?
+- **ISSUE-024** *(new 2026-08-23)* — nothing cross-checks the triage line-count
+  against what was extracted, so spec §18's silent tall-receipt truncation goes
+  undetected. `IMPLEMENTATION_PLAN.md` P2.T3, never built.
+- **ISSUE-023** *(new 2026-08-23)* — consistency voting compares by exact string
+  equality, so `949.20` and `949.21` disagree, and line items are compared
+  positionally so one lost row cascades into every later one. P2.T1, never built.
+  **Fix it before P7.T1**, not after.
+- **ISSUE-005** — `R051`'s message promises printed order; its check accepts any
+  permutation. One line, and it needs its own RED.
+- **ISSUE-025** *(new 2026-08-23)* — best-attempt selection is proven only in
+  isolation; no pipeline-level test drives a repair that makes things worse.
+- **ISSUE-002 / ISSUE-003** — recorded, deliberately not fixed. Read the entries
+  before reopening either.
+
+### 2d. THE ESCALATION IS UNOBSERVABLE — four issues, one shape
+
+Worth taking as one milestone rather than four line-fixes, because **ISSUE-015's
+missing reader is ISSUE-013's natural fix**:
+
+- **ISSUE-012** — the per-rung counts never reach the committed results JSON.
+- **ISSUE-013** — they are keyed by `model_id`, but a tier is `(model, use_tools)`.
+- **ISSUE-015** — `PassAttempt.rung` is write-only in production.
+- **ISSUE-018** — the escalation records *that* it escalated, never *why*.
+
+**Two of these were once called gates on step 6's number; step 6 committed one
+without them.** Read them as caveats on that figure rather than as blockers.
+**And they will not bite the next baseline either** — today's config is one rung
+and granite is too slow on this box for a laddered run, so a re-baseline after
+Task 3 will be cloud-only again. *(Do not use "fix these first so the new baseline
+records its provenance" as the reason to do them. That reason was checked on
+2026-08-23 and it does not hold.)*
+
+- **ISSUE-014 / ISSUE-016** — the other two ADR-0047 residuals. **ISSUE-016 is
+  report-don't-fix**: do not enumerate fields, and do not change `is_filled` —
+  `field_accuracy` shares it by design.
+
+### 2e. SPECIFIED, NEVER BUILT
+
+- **ISSUE-026** *(new 2026-08-23)* — **a receipt cannot enter the system from a
+  browser.** No upload component exists and nothing mounts one; `POST /upload` is
+  complete, guarded and size-bounded. Today only someone with a shell can ingest.
+  **Needs your ruling**: is the CLI the intended ingestion path, or does the
+  screen get built?
+- **P5.T1's bounding-box highlighting** — never built, and gated on the R060/R061
+  grounding decision, because nothing produces the text layer it would key off.
+- **P7.T1 self-consistency** — `run_consistency` lives in `extract/extractor.py`
+  with **zero callers**. Gate on `triage.is_handwritten`, **never
+  `document_type`**; consistency runs are never cached. **Close ISSUE-023 first**
+  or you wire two known defects onto a live path.
+
+### 2f. RECORDED, HARMLESS, CHEAP
+
+**ISSUE-008** (a `LineItem.is_purchase` on the schema is the single source),
+**ISSUE-009** (declarations plus a docstring), **ISSUE-011** (four deletions — say
+the class *ships unpainted*, do not describe the mechanism), **ISSUE-007** (needs
+a contract decision first), **ISSUE-004** and **ISSUE-019** (both structural — a
+rule no gate holds, recorded rather than fixable), **ISSUE-010** (all that remains
+is the collapsed-table `border-radius`, a repo-wide question nobody has ruled on).
+
+### 2g. WAITING ON YOU, NOT ON ANYONE'S TIME
+
+The full list is under "BLOCKED ON THE USER" below. The ones that block work
+rather than merely tidy it: **ISSUE-006's flag decision**, **ISSUE-026's upload
+ruling**, **R060/R061 grounding** (which also gates bbox), and **what happens to
+`IMPLEMENTATION_PLAN.md`**. On the last: its checkboxes are **93 unticked out of
+93**, and its "Current state" still lists fourteen things as "Specified but not
+built" that all shipped, so it competes with the register instead of
+complementing it. **You ruled 2026-08-23 that the boxes stay unticked for now**;
+whether the file is corrected or retired is still open.
 
 ## 3. How to work here, and why it is not optional
 
@@ -112,7 +219,7 @@ sentence (ADR-0028 §1):
 ```
 git status --short                                # must be empty
 git log --oneline -6
-git branch --no-merged main                       # must name NOTHING
+git branch --no-merged main                       # names feat/label-provenance-rule
 git rev-parse main                                # merged tip
 git ls-remote --heads origin main                 # authoritative on what is pushed
 git log --oneline refs/remotes/origin/main..main  # what the pending push would send
@@ -265,9 +372,13 @@ git log --oneline <STAMP>..main -- ":(top,exclude)docs/MEMORY.md" ":(top,exclude
 it was written. **Read the stamp for the SHA** — it is not written here, because
 a SHA in two places is a SHA that can disagree with itself.
 
-*(The `HEAD`-for-`main` substitution that stood here while a branch was in flight
-is **deleted**, not kept with a caveat. Nothing is unmerged; the stamp's command
-is right as written.)*
+*(The `HEAD`-for-`main` substitution is **restored**, because a branch is in
+flight again. `feat/label-provenance-rule` is unmerged and this pair was written
+on it, so the anchor is not on `main` yet — **substitute `HEAD` for `main` in the
+stamp's command until the branch lands.** The command in `docs/MEMORY.md` is
+deliberately NOT edited: `tests/test_freshness_check.py` parses it and requires
+the literal `<seven-hex>..main` form. This note goes again when the branch
+merges, on the same terms it went last time.)*
 
 **Gates on `main` at the merged tip, controller-run: `python scripts/verify.py` —
 all five PASS.** **No pytest count and no delta is given** — the number moves
@@ -367,7 +478,7 @@ where a user gets a confidently wrong answer.
 
 ## THE COMPLETE ISSUE REGISTER
 
-**Every issue, as of 2026-08-21.** `docs/KNOWN_ISSUES.md` is the source for
+**Every issue, as of 2026-08-23.** `docs/KNOWN_ISSUES.md` is the source for
 every row and **is not to be re-derived** — each entry there records the
 diagnosis, what was already fixed, and the exact steps to resume. **This table
 is a pointer; where it and an entry disagree, the entry wins.**
@@ -392,6 +503,14 @@ is a pointer; where it and an entry disagree, the entry wins.**
 | ISSUE-016 | `read_nothing` still counts vacuous values as content: `merchant.name=""`, `totals.total=0`, `prices_include_tax=False`. The **third** never-fires shape in this predicate's history. **It gates a ladder configuration**, which its own "does not gate anything" filing denies. | OPEN — **report-don't-fix**; do not enumerate fields, do not change `is_filled` |
 | **ISSUE-017** | **The baseline's variance is across receipts, not repeats.** r001 60.71-64.29%, r002 91.67-95.83%, **r003 11.11% on all five repeats**. The headline averages receipts spanning 11% to 96% and describes none of them. | **OPEN — read before quoting any figure** |
 | **ISSUE-018** | **The escalation records that it escalated, never why.** ADR-0047 decision 3 discards on two clauses — raised, or read nothing — and `PassAttempt` has no field for which. A timeout and an unreadable page are different facts. | **OPEN — a decision, and ISSUE-015's missing reader** |
+| ISSUE-019 | "A label is committed whole or not at all" is a rule **no gate holds**, and the obvious pin is not writable — the README tells you to use `null` for what a receipt does not show, so redacted and absent look the same. | OPEN — structural |
+| ~~ISSUE-020~~ | A frozen `GOLDEN_TODAY` reddened the suite for any receipt dated after 2026-07-29. | **CLOSED 2026-08-22** |
+| ~~ISSUE-021~~ | One unloadable label silently took the whole real-corpus check to `{}` while the suite stayed green. | **CLOSED 2026-08-22** |
+| ~~ISSUE-022~~ | That abort named no file; it now prints `while loading golden label <name>`. | **CLOSED 2026-08-23** |
+| **ISSUE-023** | **Consistency voting has neither tolerance nor shared alignment.** `_vote` compares by exact string equality over `json.dumps(...)`, so `949.20` and `949.21` disagree and line items are compared positionally. `align_line_items` shipped for this and its only callers are `eval/metrics.py` and its own tests. | **OPEN — `IMPLEMENTATION_PLAN.md` P2.T1, never built. Fix before P7.T1** |
+| **ISSUE-024** | **Nothing cross-checks the triage line-count against what was extracted.** 30 rules registered, highest id R070, and both uses of `estimated_line_item_count` sit inside R013, which fires only at zero rows. Spec §18's silent truncation is undetected. | **OPEN — P2.T3, never built** |
+| ISSUE-025 | Best-attempt selection is proven only in isolation; no pipeline-level test drives a repair that makes things worse, which is exactly the direction P2.T4's acceptance names. | OPEN — coverage gap, not a behavioural defect |
+| **ISSUE-026** | **A receipt cannot enter the system from a browser.** No upload component exists and nothing mounts one; `POST /upload` is complete and guarded. Only a shell can ingest. | **OPEN — needs your ruling: CLI-only, or build the screen?** |
 
 ---
 
@@ -2119,17 +2238,36 @@ and was measured not to need it.)*
 
 ## Today's goal
 
-# NOTHING IS IN FLIGHT. ISSUE-001 **step 7's MACHINERY** merged on 2026-08-22 — AND THE GOLDEN SET IS STILL THREE RECEIPTS.
+# A BRANCH IS IN FLIGHT AND UNREVIEWED. THE GOLDEN SET IS STILL THREE RECEIPTS.
 
-**`git branch --no-merged main` must name nothing.** Run it rather than
-believing this sentence — it has been wrong in **both** directions, announcing
-no branch while one existed for three days, and announcing one after it landed.
+**`git branch --no-merged main` names `feat/label-provenance-rule`.** Run it
+rather than believing this sentence — it has been wrong in **both** directions,
+announcing no branch while one existed for three days, and announcing one after
+it landed.
 
-**You are starting, not finishing.** ISSUE-001 step 7's machinery ran — the
-private-label convention and `scored_receipts`. Merged by true fast-forward
-`7afafcf` -> `e58a13f`, **15 commits, single parent each, zero merge commits**.
-Decision: **ADR-0050**. **It collected no receipt**, which is the whole of what
-remains. **No push state is written here** — run the command below, and every
+**The branch, and what it is not.** Two documentation commits, pushed, five gates
+PASS controller-run: `1ee87e2` puts design §5's no-seeding rule into
+`eval/golden/README.md`, where a labeller actually meets it, and records the
+plan's Defect 8; `c1cd404` files **ISSUE-023 through ISSUE-026**, four gaps found
+by auditing `IMPLEMENTATION_PLAN.md` against the tree. **It has had no
+whole-branch review**, and on 2026-08-22/23 four branches got four reviews and
+every one found something real with five gates green. **Deciding what happens to
+this branch is task 2a, and it comes before new work.**
+
+**What that audit found, and it changes how you read that file.**
+`IMPLEMENTATION_PLAN.md` has **93 checkboxes and none of them is ticked**,
+including for whole phases that shipped; its "Current state" still lists
+`ingest/`, `normalize/`, `persist/`, `review/`, `export/`, `pipeline.py`,
+`cli.py`, `eval/harness.py`, migrations and the frontend as "Specified but not
+built". It says "all 28 rules"; `rules.py` registers **30**. **A checkbox in that
+file is evidence of nothing.** The user ruled 2026-08-23 that the boxes stay
+unticked; whether the file is corrected or retired is still open.
+
+**Section 2 above is now the complete remaining-task list** — every open issue,
+every unbuilt plan task, grouped by what it costs you, with the four blocked on a
+ruling from the user called out. Read it instead of reconstructing the board.
+
+**No push state for `main` is written here** — run the command below, and every
 `main` push needs its own fresh ask. *(This clause said "`main` is NOT pushed"
 until 2026-08-23, by which point it had been pushed. Twice now. The hedge telling
 you to run the command did not stop either rot, which is ADR-0042's point about a
@@ -2173,7 +2311,7 @@ suggests**: a standalone triage call alone exceeded 10 minutes and was killed at
 ```
 git branch --show-current                         # expect main
 git status --short                                # must be empty
-git branch --no-merged main                       # must name NOTHING
+git branch --no-merged main                       # names feat/label-provenance-rule
 git log --oneline refs/remotes/origin/main..main  # what a push would send
 python scripts/verify.py                          # background it; exceeds a 2-min timeout
 ```

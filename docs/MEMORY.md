@@ -42,25 +42,29 @@ moves, and this file has carried a wrong issue count before.
 **No count of refreshes is written here** — it is a number that moves without its
 sentence changing, which is review standard 5.
 
-**Freshness anchor `92a54ed`** — the last commit that is not this handoff pair.
+**Freshness anchor `c1cd404`** — the last commit that is not this handoff pair.
 **It is written twice below — here and inside the command.** Moving one and not
 the other is what happened on this file's previous refresh, and the gate caught
 it because it parses the anchor out of the *command*.
 
-**Nothing is in flight.** The paragraph that stood here between 2026-08-15 and
-this refresh — telling you to substitute `HEAD` for `main` while a branch was
-unmerged — is **deleted rather than kept with a caveat**, on that paragraph's own
-instruction, because the branch landed. The command below is now exactly right as
-written.
-**`git rev-parse main` will be AHEAD of it**, by the pair commit and nothing
-else: a stamp cannot name the commit that writes it. The test is a command,
-not a commit and not a count:
+**A BRANCH IS IN FLIGHT, so substitute `HEAD` for `main` in the first command
+below.** `feat/label-provenance-rule` is unmerged, and this pair was written on
+it — so the anchor is not on `main` yet and `<anchor>..main` names a range git
+cannot resolve from `main`'s side. **The command itself is not edited**, because
+`tests/test_freshness_check.py` parses it and requires the literal
+`<seven-hex>..main` form; the substitution is a reader's instruction, not a
+rewrite. *(This paragraph was deleted at the previous refresh, correctly, because
+nothing was unmerged then. It is restored on the same terms: it goes again the
+moment the branch lands.)*
+**`git rev-parse HEAD` will be AHEAD of the anchor**, by the pair commit and
+nothing else: a stamp cannot name the commit that writes it. The test is a
+command, not a commit and not a count:
 
 ```
-git log --oneline 92a54ed..main -- ":(top,exclude)docs/MEMORY.md" ":(top,exclude)docs/NEXT_SESSION_PROMPT.md"
+git log --oneline c1cd404..main -- ":(top,exclude)docs/MEMORY.md" ":(top,exclude)docs/NEXT_SESSION_PROMPT.md"
 git log --oneline refs/remotes/origin/main..main   # what a push would send
 git ls-remote --heads origin main                  # authoritative on what is pushed
-git branch --no-merged main                        # must name NOTHING
+git branch --no-merged main                        # names feat/label-provenance-rule
 ```
 
 **Empty means this pair is current.** Anything listed means the tree moved
@@ -123,12 +127,36 @@ stays reachable — ADR-0042. `git log --oneline -- docs/MEMORY.md` is the list.
 
 ## Snapshot
 
-- **`git branch --no-merged main` must name NOTHING.** The suspension of this
-  instruction, which stood while `feat/merchant-fingerprinting` was in flight, is
-  over. Run the command rather than believing any sentence — this bullet read
-  "NO BRANCH IN FLIGHT" for three days while one existed, in 2026-08, and then
-  announced one for three days after it landed would have been the same defect
-  in the other direction.
+- **`git branch --no-merged main` names `feat/label-provenance-rule`.** Run the
+  command rather than believing this sentence — this bullet read "NO BRANCH IN
+  FLIGHT" for three days while one existed, in 2026-08, and announcing one for
+  three days after it landed would be the same defect in the other direction.
+  **The branch is UNREVIEWED and UNMERGED.** Two commits, both documentation:
+  `1ee87e2` (the no-seeding rule reaches `eval/golden/README.md`, plus the plan's
+  Defect 8) and `c1cd404` (ISSUE-023 through ISSUE-026). Five gates PASS on it,
+  controller-run. It is pushed. **No whole-branch review has run**, which this
+  repository's own record says is where the defect will be.
+- **The golden-set labelling rule is now where a labeller meets it.** Design §5's
+  "labels are not seeded from the pipeline's own output" existed only in the
+  design; `eval/golden/README.md` and `TEMPLATE.json` contained no word of the
+  "seed" family, and Task 3's reading table names §3, §7a and §7b — not §5. The
+  plan's self-review had declared that gap closed on the reason that the README
+  says "replace every value with exactly what the image shows", which constrains
+  the values you end up with and not where you started. **It stays enforced by
+  nothing**, which is what §5 says of it.
+- **`IMPLEMENTATION_PLAN.md` was audited against the tree, and its own state
+  markers are worthless in both directions.** 93 checkboxes, **none ticked**,
+  including for work merged months of milestones ago; and its "Current state"
+  still lists `ingest/`, `preprocess/`, `normalize/`, `score/`, `merchants/`,
+  `persist/`, `review/`, `export/`, `pipeline.py`, `cli.py`, `config/settings.py`,
+  `eval/harness.py`, migrations and the frontend as "Specified but not built".
+  All of them exist. It also says "all 28 rules"; `rules.py` registers **30**
+  (anchor: lines matching `id = "R[0-9]{3}"`). **Do not read a checkbox in that
+  file as evidence of anything.** The audit found four gaps nothing was tracking,
+  now **ISSUE-023 through ISSUE-026**, and the user ruled 2026-08-23 that the
+  checkboxes stay unticked for now. Phases 0, 1, 3 and 4 are otherwise complete;
+  Phase 2 has three open items; Phase 5 is missing bbox highlighting and the
+  upload screen; Phases 7, 8 and 9 are unstarted.
 - **ISSUE-001 step 7's MACHINERY is DONE and merged — and the golden set is
   NOT grown** (2026-08-22, **ADR-0050**). Merged by true fast-forward
   `7afafcf` -> `e58a13f`, **15 commits, single parent each, zero merge
