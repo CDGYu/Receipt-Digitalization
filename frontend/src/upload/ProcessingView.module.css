@@ -216,9 +216,10 @@
   font-weight: 500;
 }
 
-/* The deliberate exit, and the only navigation this flow performs. Styled as a
- * secondary control rather than as a link in a sentence -- it is the thing to do
- * next, and it stands alone under the outcome. */
+/* The exit, and the only navigation this flow performs. Styled as a secondary
+ * control rather than as a link in a sentence -- it is the thing to do next, and
+ * it stands alone at the foot of the steps pane. Present in every state, so it
+ * is also the way off a receipt whose worker never started. */
 .next {
   align-self: start;
   padding: var(--space-md) var(--space-xl);

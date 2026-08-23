@@ -69,17 +69,22 @@ interface Narration {
    * **This is the sequence, and the sequence is the point** (design section 4).
    * `extract` narrates its own repair loop, and what it writes -- read from
    * `_report` and the best-attempt event in src/receipts/extract/extractor.py --
-   * is one line per finished attempt, `attempt N (pass): M errors`, and then
+   * is one line per finished attempt, `attempt N (pass): M error(s)`, and then
    * `kept attempt K of T`. Watching those accumulate is watching the system find
    * its own mistake and try again -- and, when the repair scored worse, keep the
    * earlier answer anyway, since `extract_with_repair` returns the BEST attempt
    * rather than the last. A view holding only the newest line replaces each of
-   * them with the next and leaves nothing to watch at the one stage where the
-   * wall clock actually goes.
+   * them with the next and leaves nothing to watch.
    *
    * (Design section 4 sketches a finer sequence -- validate, findings, repair as
    * separate beats. Those are not separate events today; the error count in each
    * attempt line is what stands in for them. This renders what is emitted.)
+   *
+   * **This is what was observed, not what ran** -- the caveat `seen` states
+   * above, and it bites harder here. Each write overwrites the last
+   * (`make_progress_writer`), so several attempts finishing between two asks
+   * leave only the newest, and a line the extractor emitted is simply absent.
+   * The sequence is the one this page saw.
    *
    * It belongs to the running stage and starts again when the stage does: one
    * stage's narration under another's name would be worse than none. */
@@ -120,7 +125,7 @@ export interface ProcessingViewProps {
   readonly poll?: (fn: () => void) => () => void
 }
 
-/** The wait, narrated -- what a person watches for the ~25-60s a receipt takes.
+/** The wait, narrated -- what a person watches while a receipt is processed.
  *
  * ## Two panes, in the review screen's positions
  *
@@ -156,7 +161,7 @@ export interface ProcessingViewProps {
  * along when this page first renders. A stage shorter than the poll interval is
  * never seen at all and can carry nothing. So the column would be a measurement
  * where both endpoints were observed, a lower bound on the first stage, and
- * absent for anything too quick to be seen -- three different things under one
+ * absent for anything too quick to be seen -- different things under one
  * heading, which a reader will average.
  * Decision 10 records one invented figure already deleted here. So: no figure,
  * and the bound written down instead of a number guessed.
@@ -280,22 +285,27 @@ export function ProcessingView({
             <p className={styles.quiet}>No step is reporting right now.</p>
           ) : null
         ) : (
-          <>
-            <p className={styles.outcome}>
-              The pipeline is done with it. The server now calls it{' '}
-              <span className={styles.status}>{finished}</span>.
-            </p>
-            {/* The one real navigation in this flow, and it is deliberate (the
-                design's decision 6). It goes to the queue, which claims whatever
-                task is next -- not necessarily this receipt -- so it is named as
-                the queue. A plain `href`: there is no client-side routing here,
-                and the last path segment has no dot, which is what keeps the
-                backend serving the app rather than a 404 (`route.ts`). */}
-            <a className={styles.next} href="/app/review">
-              Open the review queue
-            </a>
-          </>
+          <p className={styles.outcome}>
+            The pipeline is done with it. The server now calls it{' '}
+            <span className={styles.status}>{finished}</span>.
+          </p>
         )}
+
+        {/* Rendered in EVERY state, not only the finished one, and that is the
+            whole point of it. Decision 3 says the wait never ends on silence, so
+            a receipt whose worker never starts is narrated forever -- and while
+            this link lived inside the finished branch, forever came with no way
+            off the screen at all. That is the failure a live demo is likeliest
+            to hit.
+
+            It goes to the queue, which claims whatever task is next -- not
+            necessarily this receipt -- so it is named as the queue. A plain
+            `href`: there is no client-side routing here, and the last path
+            segment has no dot, which is what keeps the backend serving the app
+            rather than a 404 (`route.ts`). */}
+        <a className={styles.next} href="/app/review">
+          Open the review queue
+        </a>
       </section>
     </main>
   )

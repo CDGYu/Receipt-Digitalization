@@ -130,6 +130,15 @@ describe('UploadScreen', () => {
       const text = document.body.textContent ?? ''
       expect(text, 'the size limit is typed into the copy').toContain('7 MB')
       expect(text, 'the suffix list is typed into the copy').toContain('.aaa, .bbb')
+      // The `accept` attribute belongs here rather than beside its own test.
+      // `toBe(ACCEPTED_SUFFIXES.join(','))` up there is a string identity a
+      // retyped literal satisfies -- the same hole `toContain('25 MB')` had --
+      // and only the rewired module can tell a derived attribute from a copied
+      // one.
+      expect(
+        field().getAttribute('accept'),
+        "the accept attribute is a second list, not the module's",
+      ).toBe('.aaa,.bbb')
     } finally {
       vi.doUnmock('../src/api/upload')
       vi.resetModules()
@@ -256,7 +265,7 @@ describe('UploadScreen', () => {
     // **vacuous** -- success swaps the entire screen for the processing view,
     // which has no alert region at all, so `queryByRole('alert')` was null for a
     // reason that had nothing to do with the clear. Measured on 2026-08-24 by
-    // deleting `setError(null)` from `offer`: all 13 tests in this file passed.
+    // deleting `setError(null)` from `offer`: the whole file passed.
     // A promise that never settles keeps the chooser on screen, so the absence
     // of the alert is an assertion about the state and not about the branch.
     const upload = vi.fn().mockReturnValue(new Promise<UploadAccepted>(() => {}))
@@ -395,24 +404,41 @@ describe('ProcessingView', () => {
     // on every ask. Without this the sequence above repeats one line for as long
     // as the attempt behind it runs.
     const { poll, fire } = manualPoll()
+    const repeated = {
+      status: 'pending',
+      stage: 'extract',
+      detail: 'attempt 1 (extract): 3 errors',
+    }
     const progress = vi
       .fn()
+      .mockResolvedValueOnce(repeated)
+      .mockResolvedValueOnce(repeated)
       .mockResolvedValue({
         status: 'pending',
         stage: 'extract',
-        detail: 'attempt 1 (extract): 3 errors',
+        detail: 'attempt 2 (repair): 0 errors',
       })
 
     render(
       <ProcessingView receiptId="r-1" fileName="receipt.jpg" progress={progress} poll={poll} />,
     )
     expect(await screen.findByText('attempt 1 (extract): 3 errors')).toBeTruthy()
-    fire()
-    fire()
-    await waitFor(() => expect(progress.mock.calls.length).toBeGreaterThan(2))
+    fire() // the repeat
+    fire() // a genuinely new line, which is the barrier
+    // Barriered on the DOM, not on `progress.mock.calls.length`. `fire()` runs
+    // `ask` synchronously, so by this point the count is already past any
+    // threshold two `fire()`s can be given -- measured 2026-08-24 by putting
+    // `expect(progress.mock.calls.length).toBeGreaterThan(2)` right here, with
+    // no `await` before it, where it passed. Nothing can have rendered yet: no
+    // microtask has run. So a count barrier gates on the asks rather than on the
+    // answers. A line that can only be on screen once the THIRD answer landed
+    // waits for the second one too.
+    expect(await screen.findByText('attempt 2 (repair): 0 errors')).toBeTruthy()
 
+    // Two lines, not three: the repeat in the middle contributed nothing.
     expect(Array.from(document.querySelectorAll('ol ol li'), (li) => li.textContent)).toEqual([
       'attempt 1 (extract): 3 errors',
+      'attempt 2 (repair): 0 errors',
     ])
   })
 
@@ -516,9 +542,12 @@ describe('ProcessingView', () => {
     // screen either way, so asserting the absence straight after `render` would
     // pass against a view that never finishes anything.
     expect(await screen.findByText(/extract/i)).toBeTruthy()
+    // The exit is offered in every state now -- the test below is why -- so an
+    // absent link no longer tells the two states apart. The OUTCOME sentence
+    // does: it exists only once the server ended the wait.
     expect(
-      document.querySelector('a[href]'),
-      'the exit was offered while the receipt was still pending',
+      screen.queryByText(/the pipeline is done with it/i),
+      'the wait was declared over while the receipt was still pending',
     ).toBeNull()
     cleanup()
 
@@ -538,7 +567,7 @@ describe('ProcessingView', () => {
     // mapping what the URL actually reaches.
     const exit = await waitFor(() => {
       const found = document.querySelector('a[href]')
-      expect(found, 'a finished receipt is a dead end').toBeTruthy()
+      expect(found, 'the finished screen offers no exit').toBeTruthy()
       return found as HTMLAnchorElement
     })
     const href = exit.getAttribute('href') ?? ''
@@ -555,6 +584,31 @@ describe('ProcessingView', () => {
       /\./,
     )
     expect(href.startsWith('/app/'), `${href} is not under the app`).toBe(true)
+  })
+
+  it('offers a way off the screen while the receipt is still pending', async () => {
+    // Decision 3 says the wait never ends on silence, so a receipt whose worker
+    // never starts is narrated for as long as the tab is open. While the exit
+    // lived inside the `finished` branch that state had no navigation off the
+    // screen at all -- a dead end on the failure a live demo is likeliest to
+    // hit. Measured 2026-08-24 by putting the link back inside that branch: this
+    // test failed and every other test in this file passed.
+    const { poll, fire } = manualPoll()
+    const progress = vi.fn().mockResolvedValue({ status: 'pending', stage: null, detail: null })
+
+    render(
+      <ProcessingView receiptId="r-1" fileName="receipt.jpg" progress={progress} poll={poll} />,
+    )
+    fire()
+
+    // The bleakest state this view has: pending, and nothing narrating.
+    expect(await screen.findByText(/no step is reporting/i)).toBeTruthy()
+    const exit = document.querySelector('a[href]')
+    expect(exit, 'a receipt whose worker never started is a dead end').toBeTruthy()
+    // Where it points is pinned by the test above, against `currentRoute`. This
+    // one is about the link existing at all in a state that is not finished.
+    const href = exit?.getAttribute('href') ?? ''
+    expect(href.startsWith('/app/'), `the escape points at ${href}`).toBe(true)
   })
 
   it('keeps narrating when a poll fails, because narration is not the answer', async () => {
