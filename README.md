@@ -202,9 +202,14 @@ failing stage as the reason.
 
 ## 4. What exists right now
 
-Roughly 6,100 lines across specs, implementation, and tests. **103 tests pass,
-with no network access required** — a fake client replays scripted responses,
-so the whole pipeline can be exercised offline at zero API cost.
+**The suite passes with no network access required** — a fake client replays
+scripted responses, so the whole pipeline can be exercised offline at zero API
+cost. No count here: run `python -m pytest`.
+
+*(This paragraph opened "Roughly 6,100 lines across specs, implementation, and
+tests. 103 tests pass" until 2026-08-24. Measured that day: 98,280 lines across
+`src/**/*.py`, `tests/*.py` and the tracked `*.md`, and a suite of 1,378. Both
+numbers move every milestone and neither sentence moved with them.)*
 
 ### Documents
 
@@ -404,7 +409,7 @@ optimisation).
 - Self-consistency voting for handwriting
 - Two real client implementations plus a fake for offline work
 - Retry with backoff, cost accounting, response caching
-- 103 passing tests
+- A test suite that runs entirely offline
 
 ### Specified but not yet written
 

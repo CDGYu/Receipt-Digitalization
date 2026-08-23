@@ -20,15 +20,25 @@ import react from '@vitejs/plugin-react'
 // three of them, which is what a list in prose costs when it is trusted
 // instead of re-derived (review standards 17 and 20).
 //
-// Measured 2026-08-11 with DOCS_ENABLED unset: 17 routes plus the /app mount.
+// Re-derived 2026-08-24 with DOCS_ENABLED unset and SERVE_SPA=false, so the
+// number below is routes only: 19. Serving the SPA adds the /app mount and
+// nothing else.
 //   GET  /health          GET  /metrics
 //   GET  /receipts        GET  /receipts/{id}       PATCH /receipts/{id}
 //   GET  /receipts/{id}/image                       GET   /receipts/{id}/image/blob
-//   GET  /receipts/{id}/corrections
-//   POST /upload          GET  /export/xlsx
+//   GET  /receipts/{id}/corrections                 GET   /receipts/{id}/progress
+//   POST /upload          GET  /export/xlsx         GET   /export/receipts
 //   GET  /review/next     GET  /review/tasks
 //   POST /review/{id}/complete                      POST  /review/{id}/release
 //   POST /auth/login      POST /auth/logout         GET   /auth/me
+//
+// This block said 17 and omitted /export/receipts and /receipts/{id}/progress
+// until 2026-08-24. It was correct on 2026-08-11 when it was written and then
+// rotted twice: /export/receipts landed 2026-08-19 and /receipts/{id}/progress
+// on 2026-08-23. Second time this list has been overtaken by new routes --
+// which is why the method and the date are recorded above, and why the fix is
+// to re-run the enumeration rather than to patch the list by hand.
+//
 // The SPA itself lives under /app/, which no API route uses, so nothing here
 // can collide with a client-side route.
 const API_PREFIXES = [
@@ -41,8 +51,8 @@ const API_PREFIXES = [
   '/metrics',
   // FastAPI's own, registered by `create_app` only when DOCS_ENABLED is true
   // (config/settings.py defaults it to false). **Three prefixes, four route
-  // paths** -- the same enumeration run with DOCS_ENABLED=true returns 22
-  // rather than 18, because /docs also registers /docs/oauth2-redirect. Three
+  // paths** -- the same enumeration run with DOCS_ENABLED=true returns 23
+  // rather than 19, because /docs also registers /docs/oauth2-redirect. Three
   // entries still cover all four, since this array matches by prefix. The SPA
   // never fetches them, but "every prefix the API owns" includes the ones a
   // developer opens by hand, and a dev server that answers /docs with the SPA

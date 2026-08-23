@@ -8,9 +8,11 @@ install_session_middleware`, which refuses to start without
 ``SESSION_SECRET`` -- see its docstring for why that is a hard failure and
 not a generated default), mounts the auth router
 (:func:`~receipts.review.auth.build_auth_router`), installs the error
-handlers, and installs the read routes (Task 4: ``GET /health``,
-``GET /receipts``, ``GET /receipts/{id}``, ``GET /metrics``; plus
-``GET /review/tasks``, the admin UI's queue listing) and the write
+handlers, and installs the read routes (:func:`_install_read_routes` is the
+authority; as of 2026-08-24 that is ``GET /health``, ``GET /receipts``,
+``GET /receipts/{id}``, ``GET /receipts/{id}/progress``,
+``GET /receipts/{id}/corrections``, ``GET /metrics``, ``GET /export/receipts``
+and ``GET /review/tasks``) and the write
 routes (Task 5: ``POST /upload``, ``PATCH /receipts/{id}``, the signed image
 routes, the review queue routes, ``GET /export/xlsx``), and finally -- after
 every one of those -- the SPA static mount (P5.T0: ``_install_spa``), which

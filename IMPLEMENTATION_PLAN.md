@@ -25,7 +25,7 @@ These apply to every task. Values copied from `RECEIPT_SYSTEM_SPEC.md` and `.kir
 - **Excel is output only; the database is the source of truth.**
 - **Secrets via environment (`pydantic-settings`) only.** Tolerances and penalty weights live in `config/rules.yaml`. No secrets in `rules.yaml` or code.
 - **Store `txn_date` as a naive date; system timestamps as `timestamptz`.** Store only `card_last4`; redact any full PAN before writing `extraction_runs.raw_response`.
-- **Tests:** `python -m pytest` (pyproject sets `pythonpath=src`, `testpaths=tests`). Baseline: 103 passing.
+- **Tests:** `python -m pytest` (pyproject sets `pythonpath=src`, `testpaths=tests`). **No count here — run it.** *(This read "Baseline: 103 passing" from the file's first commit until 2026-08-24, and was missed by the 2026-08-23 sweep that closed the same rot under **Current state** and again on Phase 0's acceptance line — in the block that says it binds every task.)*
 
 ---
 

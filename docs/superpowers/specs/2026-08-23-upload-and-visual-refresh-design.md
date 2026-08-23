@@ -232,9 +232,16 @@ that already exists rather than expressing a preference.
 
 ### What changes in `tokens.css`
 
-The file declares **36 tokens** — 15 colours, 2 faces, 3 radii, 2 shadows, 7
+The file declares **35 tokens** — 15 colours, 2 faces, 3 radii, 2 shadows, 7
 spaces, 6 type sizes. Most of this refresh is **values on names that already
 exist**, which is why it touches almost nothing downstream.
+
+*Measured 2026-08-24*: strip `/* … */` from `frontend/src/styles/tokens.css`,
+match `--name:` declarations, count the **distinct names** — 35, in exactly the
+six groups above. (Counting *declarations* instead answers 65, because the two
+dark blocks redeclare 15 colours each; `color-scheme` is not a custom property
+and is not among either number.) This said **36** until 2026-08-24, against a
+breakdown in its own sentence that sums to 35.
 
 | change | why |
 |---|---|
@@ -249,9 +256,12 @@ exist**, which is why it touches almost nothing downstream.
 
 All five of its decisions stand: light default, CSS Modules plus one
 `tokens.css`, `@fontsource` never a CDN, a pathname switch not React Router, and
-`null` ≠ `0` ≠ empty. What changes is **values**, plus five new token names. The
-correct form is therefore **a new ADR extending 0027, with a dated correction on
-0027 itself** — the shape ADR-0043→0011 and ADR-0044→0040 already use here.
+`null` ≠ `0` ≠ empty. What changes is **values**, plus the new token names the
+table above adds: `--space-4xl`, `--space-5xl`, `--text-3xl`, and one for the
+display face. (This said "five new token names" until 2026-08-24, against that
+same table.) The correct form is therefore **a new ADR extending 0027, with a
+dated correction on 0027 itself** — the shape ADR-0043→0011 and ADR-0044→0040
+already use here.
 
 ---
 
