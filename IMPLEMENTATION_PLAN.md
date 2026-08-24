@@ -53,12 +53,15 @@ admin and receipts screens. Deployment is complete too — entry point
 (ADR-0035), container (ADR-0036), CI (ADR-0037).
 
 **What is genuinely NOT built**, each with its status note on the task below:
-the golden set (P0.T1 — three receipts of a documented 50), consistency
-tolerance and shared alignment (P2.T1 / ISSUE-023), the tall-receipt
-cross-check (P2.T3 / ISSUE-024), the pipeline-level worse-repair pin (P2.T4 /
-ISSUE-025), bounding-box highlighting (P5.T1, gated on P2.T2), the upload
-screen (P5.T2 / ISSUE-026), self-consistency wiring (P7.T1), and all of
-Phases 8 and 9.
+the golden set (P0.T1 — three receipts of a documented 50), bounding-box
+highlighting (P5.T1, gated on P2.T2), the upload screen (P5.T2 / ISSUE-026),
+self-consistency wiring (P7.T1), and all of Phases 8 and 9.
+
+*(P2.T1, P2.T3 and P2.T4 stood in that list until 2026-08-25, when all three
+were built at `aa65a2b`. **The `P5.T2 / ISSUE-026` entry is left as written and
+is probably stale** — ISSUE-026 is marked RESOLVED 2026-08-24 in the register,
+but whether P5.T2's whole scope landed with it was not re-derived here, and a
+list of what is unbuilt is the wrong place to guess.)*
 
 **The single blocking fact:** nothing in Phases 8 or 9, and no acceptance
 phrased as "measure X before and after", can start until the golden set grows.
@@ -239,14 +242,24 @@ The rules and the repair loop exist. This phase wires them into the pipeline and
 
 ### Task P2.T1 — Consistency uses tolerance for money (review fix)
 
-> **STATUS 2026-08-23 — NOT DONE. Filed as ISSUE-023.** `_vote` compares by exact
-> string equality over `json.dumps(...)`, so `949.20` and `949.21` disagree and
-> line items are compared by flattened index. Both bugs this task was written to
-> fix are live. **Close it before P7.T1.**
+> **STATUS 2026-08-25 — DONE at `aa65a2b`.** Money agrees through
+> `within_tolerance`, and line items are matched by description through
+> `align_line_items` against the longest run. Both mechanisms proven red by
+> mutation. *(This read NOT DONE from 2026-08-23: `_vote` compared by exact
+> string equality over `json.dumps(...)`, so `949.20` and `949.21` disagreed and
+> line items were compared by flattened index.)*
+>
+> **P0.T3's acceptance is now fully met**, having been half-met since: it named
+> two consumers of `align_line_items` — `line_item_f1` and the consistency diff
+> — and only the first existed.
 
 **Files:** Modify `src/receipts/extract/extractor.py` (consistency diff) / `consistency` code; `tests/test_extractor.py`
-- [ ] Failing test: two runs with totals `949.20` and `949.21` agree (within floor); `949.20` vs `945.20` disagree.
-- [ ] Implement: numeric field agreement uses `within_tolerance`; reuse `align_line_items` (P0.T3) for line-item diffing. Commit.
+- [x] Failing test: two runs whose totals differ by one cent agree; a difference
+      beyond the floor still disputes. *(Driven at `224.00`/`224.01` against
+      `224.50` rather than the `949.20`/`945.20` written here — the same two
+      directions on the fixture this module already has.)*
+- [x] Implement: numeric field agreement uses `within_tolerance`; `align_line_items`
+      (P0.T3) does the line-item diffing. Commit.
 **Acceptance:** consistency no longer flags cent-level rounding as disagreement, and no longer disputes all rows on a single count mismatch.
 
 ### Task P2.T2 — Resolve R060/R061 OCR-grounding gap (review fix — decision required)
@@ -267,26 +280,38 @@ The rules and the repair loop exist. This phase wires them into the pipeline and
 
 ### Task P2.T3 — Tall-receipt line-count cross-check (spec §18 trap)
 
-> **STATUS 2026-08-23 — NOT DONE. Filed as ISSUE-024.** Highest rule id is R070
-> and both uses of `estimated_line_item_count` sit inside R013, which fires only
-> when *zero* rows were extracted. Nothing compares the estimate against
-> `len(line_items)` when rows are present, so spec §18's silent truncation is
-> undetected.
+> **STATUS 2026-08-25 — DONE at `aa65a2b`.** R071 compares the triage estimate
+> against `len(line_items)` and raises WARN when at most half survived and at
+> least three rows are missing. *(This read NOT DONE from 2026-08-23, when both
+> uses of `estimated_line_item_count` sat inside R013, which fires only when
+> ZERO rows were extracted.)*
+>
+> **"Large" was the decision this task left open, and its blind spot is written
+> into the rule:** 4 estimated against 2 extracted is half a receipt lost and
+> does not fire. A test pins that, so lowering the floor is a decision rather
+> than a tweak.
 
 **Files:** new rule in `src/receipts/validate/rules.py` (next free ID after R070, never renumber), `tests/test_rules.py`
-- [ ] Failing test: triage `estimated_line_item_count = 12` but 6 extracted -> WARN.
-- [ ] Implement `applies` (triage estimate present) + `check` (large mismatch -> WARN). Commit.
+- [x] Failing test: the estimate against half as many extracted rows -> WARN, on
+      the same boundary as the `12`/`6` written here.
+- [x] Implement `applies` (triage estimate present, rows present) + `check`
+      (large shortfall -> WARN). Commit.
 **Acceptance:** the silent tall-receipt truncation failure now raises a finding even when no subtotal is printed.
 
 ### Task P2.T4 — Confirm repair loop + best-attempt wired end-to-end
 
-> **STATUS 2026-08-23 — acceptance NOT MET. Filed as ISSUE-025.** The worse-repair
-> direction is pinned only in isolation (`tests/test_extractor.py`). The
-> pipeline-level repair test exercises the repair *improving* the extraction, and
-> no test under `process_receipt` drives a worse one — which is the exact
-> direction this acceptance names.
+> **STATUS 2026-08-25 — acceptance MET at `aa65a2b`.**
+> `test_the_pipeline_keeps_the_best_attempt_when_the_repair_is_worse` drives a
+> strictly worse repair through `process_receipt` and asserts the PERSISTED row
+> carries the extract's values. Proven red by mutating the selection where it
+> happens — `min(attempts, key=rank)` in `extract_with_repair` — not where the
+> test states its expectation (ADR-0051).
+>
+> It also asserts the repair was attempted at all. Without that it passes on a
+> pipeline that never repairs, where the extract's values survive for a reason
+> that has nothing to do with selection.
 
-- [ ] Test (fake client): a repair that returns a strictly worse attempt -> the original survives; every attempt is recorded. (Confirm existing coverage; extend if missing.) Commit.
+- [x] Test (fake client): a repair that returns a strictly worse attempt -> the original survives; every attempt is recorded. Commit.
 **Acceptance:** best-attempt selection proven under the pipeline, not just in isolation.
 
 ---
@@ -507,10 +532,11 @@ ticked by inspection, because what they claim is a measurement nobody has taken
       `preprocess`, because `expand_pdf` had no callers. It was measured and
       un-ticked the same day, and stayed un-ticked until the code caught up
       with it. This is the tick the audit should have been able to make.)*
-- [ ] Every rule implemented and unit-tested + tall-receipt cross-check — the
-      rules ship and are tested; **the cross-check does not exist** (P2.T3 /
-      ISSUE-024). *(This row said "all 28 rules"; the count has moved and is not
-      written down any more.)*
+- [x] Every rule implemented and unit-tested + tall-receipt cross-check — the
+      cross-check is R071, added 2026-08-25 at `aa65a2b`. *(This row said "all 28
+      rules"; the count has moved and is not written down here on purpose. It is
+      asserted in `tests/test_rules.py`, which is where a count can be kept
+      honest.)*
 - [ ] Repair loop demonstrably improves golden-set accuracy — **unmeasurable
       today.** The loop ships and best-attempt selection is pinned, but
       "demonstrably improves" is a measurement over a golden set of three.
