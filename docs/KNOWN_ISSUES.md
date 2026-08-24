@@ -804,9 +804,21 @@ slightly pessimistic.
 
 ## ISSUE-002 — A repair attempt's recorded `prompt_hash` names a prompt that was never sent
 
-**Status:** OPEN — deliberately not fixed. The one-line code change is not the
-hard part; see "Why it is not being fixed".
-**Owner action required:** yes — the migration decision, not the code.
+**Status:** **RESOLVED 2026-08-25** on `fix/prompt-hash-and-template-unit`.
+The repair branch of `_attempt_prompt_hash` now appends `P.SYSTEM_EXTRACTION`
+exactly as the extract branch does, pinned by a repair twin of
+`test_the_recorded_hash_describes_the_prompt_that_was_actually_sent`. Everything
+below describes the defect as it stood until then.
+**The migration decision this entry deferred was never taken, because it had no
+subject.** Measured 2026-08-25 against the local `receipts.db`: `extraction_runs`
+holds **0 rows**. Leave / backfill / version is a choice about historical repair
+rows and there were none, so the fix was free. That was only true because it was
+done before ISSUE-001 step 7 started writing runs. *Bound: that is the local dev
+SQLite file, which is gitignored; nobody has confirmed whether a deployed
+instance exists, and if one holds rows the decision comes back.*
+**The other half of this entry is NOT resolved and is now ISSUE-034** — the eval
+path extracting unhinted while `process_receipt` sends hints.
+**Owner action required:** no, for the hash. See ISSUE-034 for the rest.
 **Discovered:** 2026-08-15, by the Phase 6 merchant-fingerprinting milestone,
 which found it and left it alone. **Pre-existing:** present at `8f0b413`, before
 that branch existed. **Blocks:** nothing today, because nothing reads the column
@@ -910,10 +922,23 @@ results file says so.
 
 ## ISSUE-003 — A blank pre-printed row drops the unit the form prints on it
 
-**Status:** OPEN — deliberately not fixed. The fix is in `schema.py` or
-`prompts.py`, both closed when this was found.
-**Owner action required:** yes — whether a template row should carry `unit`
-at all. Until that is answered the labelling rule below stands.
+**Status:** **RESOLVED 2026-08-25** on `fix/prompt-hash-and-template-unit`.
+**The ruling is: a blank pre-printed row transcribes its printed product name
+and nothing else** — `unit` stays null even where the form pre-prints one. That
+was already the shipped contract rather than a new one: `is_template_row`'s own
+`description` says "the row itself is still checked, so transcribe the printed
+product name", singular, and is silent on the other cells. `r001` is not
+relabelled; doing so would create five permanently unearnable paths.
+Now enforced: `test_every_flagged_row_carries_a_printed_name_and_no_amounts`
+gained an `item.unit is None` assertion, which reddens on the exact edit that
+previously left the whole suite green. The labelling rule below stands and is
+also in `eval/golden/RUN_SHEET.md`.
+**Deliberately not done:** making the rule explicit in `is_template_row`'s
+`description=`. `prompts.py` rule 5 makes that a prompt change — bump
+`PROMPT_VERSION`, re-run eval before merging — and this entry's own resume step
+for this branch said "nothing to do in code". The natural place to spend that
+re-baseline is ISSUE-001 step 7 Task 3 step 4.
+**Owner action required:** no.
 **Discovered:** 2026-08-18, labelling the golden set for the buyer-and-blank-rows
 milestone, by reading `eval/golden/images/r001.jpg`. **Pre-existing:** the
 contract gap arrived with `is_template_row` itself. **Blocks:** nothing today.
@@ -3430,3 +3455,73 @@ answer is what certifies the tests.
 - ISSUE-019 — "committed whole or not at all" is a rule no gate holds. Untouched.
 - ISSUE-021, ISSUE-022 — the two earlier defects in this same handler.
 - ISSUE-001 step 7, Task 3 — the work this was found in front of.
+
+---
+
+## ISSUE-034 — Eval measures a different prompt than production sends
+
+**Status:** OPEN — split out of ISSUE-002 on 2026-08-25, where it had been
+recorded since 2026-08-15 as "the related divergence" under a heading about
+`prompt_hash`. It is not a hash defect and nobody reading about accuracy would
+have found it there.
+**Owner action required:** yes — whether the eval path should send the prompt
+production sends. Both answers are defensible and the choice changes what every
+accuracy figure means.
+**Discovered:** 2026-08-15. **Pre-existing:** yes.
+**Blocks:** the meaning of ISSUE-001's baseline, and of the re-baseline in step
+7 Task 3 step 4.
+
+### What is wrong, measured
+
+`run_receipt` — the `build_eval_pipeline` path — calls `extract_with_repair`
+with **no `hints` and no `few_shots`**. `process_receipt` passes `hints=` at
+three call sites. So eval measures the unhinted prompt and production sends the
+hinted one.
+
+Verified 2026-08-25 by reading the call in `run_receipt` (the argument list is
+`image, rung, triage_result, ctx, max_repairs` — no hints) against
+`process_receipt`'s three `hints=` sites, and the chain
+`run_repeats -> run_baseline -> build_eval_pipeline -> run_receipt`.
+
+### ISSUE-002 predicted this would matter, and the condition has fired
+
+Its words: *"It will matter the moment ISSUE-001's baseline runs: the accuracy
+figure will describe the unhinted prompt while `process_receipt` sends the
+hinted one, and nothing in the results file says so."*
+
+**The baseline ran on 2026-08-22** (`eval/results/2026-08-22-cloud-only/`, five
+repeats, ADR-0049). Nothing updated the entry. So ADR-0049's 60.00-61.43%
+already describes a prompt the product does not send, and the results file does
+not record that. This is a claim that was true when written, became false by
+events, and was read as still-pending for three days.
+
+### Why it is a decision rather than a fix
+
+Threading hints into the eval path makes the measurement describe production,
+which is what a baseline is for. It also makes the figure depend on the merchant
+registry's contents at run time, so a baseline stops being reproducible from the
+golden set alone — two runs over identical images could differ because a
+merchant gained a hint in between. Leaving it keeps eval hermetic and keeps the
+number describing something the product never does.
+
+`prompts.prompt_bundle_hash()` hashes only static templates, so **eval grouping
+is unaffected either way** and no committed baseline is mis-grouped. The defect
+is in what the number means, not in where it is filed.
+
+### How to resume
+
+1. Decide: hermetic eval, or eval that mirrors production.
+2. Whichever is chosen, **record it in the results artifact** so a figure carries
+   its own meaning. Today nothing in `aggregate.json` says which prompt was
+   measured.
+3. If eval is to mirror production, the hints must be the identical objects
+   `_attempt_prompt_hash` is handed — that coupling is what ISSUE-002 was about,
+   and it is now pinned on both the extract and repair sides.
+
+### Related
+
+- ISSUE-002 — where this lived until 2026-08-25, and the hash coupling it names.
+- ISSUE-001 — the baseline whose number this changes the meaning of; step 7 Task
+  3 step 4 will produce another one.
+- ADR-0049 — the 60.00-61.43% spread this qualifies.
+- ISSUE-017 — the other reason that spread must not be read as a single number.
