@@ -20,7 +20,7 @@ from receipts.persist.models import Base, ReviewTask
 from receipts.persist.repository import create_pending_receipt, get_receipt
 from receipts.persist.session import make_engine, make_session_factory
 from receipts.score.confidence import ReceiptStatus
-from receipts.sweep import strand_receipt, sweep_stranded
+from receipts.sweep import strand_if_cold, strand_receipt, sweep_stranded
 
 NOW = datetime(2026, 8, 24, 12, 0, tzinfo=UTC)
 
@@ -231,3 +231,26 @@ def test_the_two_attempt_constants_cannot_drift() -> None:
     from receipts import sweep, worker
 
     assert sweep._SDK_ATTEMPTS == worker._SDK_ATTEMPTS
+
+
+def test_a_naive_stored_timestamp_is_read_as_utc(session_factory) -> None:
+    """SQLite stores these columns naive; the comparison must still work.
+
+    Measured rather than assumed: an aware `12:00+00:00` written to
+    `progress_at` comes back from SQLite as a naive `12:00`, and comparing it
+    with an aware cutoff raises
+    `TypeError: can't compare offset-naive and offset-aware datetimes`. So
+    without `_as_utc` this test errors rather than failing an assertion --
+    louder than a wrong answer, and on SQLite only, which means it would pass
+    review on Postgres and redden the suite.
+    """
+    with session_factory() as session:
+        receipt_id = _make(
+            session, status=ReceiptStatus.PENDING,
+            progress_at=datetime(2026, 8, 24, 10, 0),  # deliberately naive
+            created_at=NOW - timedelta(hours=3),
+        )
+        session.commit()
+    with session_factory() as session:
+        receipt = get_receipt(session, receipt_id)
+        assert strand_if_cold(receipt=receipt, session=session, settings=_settings(), now=NOW)

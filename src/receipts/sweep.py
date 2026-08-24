@@ -32,7 +32,7 @@ from .persist.repository import find_stranded, redact_pan
 from .review.queue import enqueue_review
 from .score.confidence import ReceiptStatus
 
-__all__ = ["STRAND_MARGIN", "strand_receipt", "sweep_stranded"]
+__all__ = ["STRAND_MARGIN", "strand_if_cold", "strand_receipt", "sweep_stranded"]
 
 log = logging.getLogger(__name__)
 
@@ -72,6 +72,27 @@ def _cutoffs(settings: Settings, now: datetime) -> tuple[datetime, datetime]:
     return started, unstarted
 
 
+def _as_utc(value: datetime) -> datetime:
+    """Read a stored timestamp as the UTC instant it is.
+
+    **Measured, not assumed:** SQLite hands these columns back with
+    ``tzinfo=None`` -- ``12:00+00:00`` goes in and a naive ``12:00`` comes out,
+    because SQLite has no native timezone type. Postgres hands back an aware
+    value. Everything this system writes to these columns is UTC, so a naive
+    value *is* UTC, and this says so.
+
+    Without it the comparisons in :func:`strand_if_cold` raise
+    ``TypeError: can't compare offset-naive and offset-aware datetimes`` -- on
+    SQLite only. That would pass review on Postgres and fail the suite, which
+    runs on SQLite.
+
+    :func:`~receipts.persist.repository.find_stranded` needs no equivalent: it
+    compares in SQL, where the dialect's own bind processing keeps both sides
+    in one representation.
+    """
+    return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
+
+
 def strand_receipt(session: Session, receipt: Receipt) -> bool:
     """Land one interrupted receipt in ``needs_review``. Flushes; does not commit.
 
@@ -91,6 +112,30 @@ def strand_receipt(session: Session, receipt: Receipt) -> bool:
     enqueue_review(session, receipt.id, reason, _STRANDED_PRIORITY)
     session.flush()
     return True
+
+
+def strand_if_cold(
+    session: Session,
+    receipt: Receipt,
+    *,
+    settings: Settings,
+    now: datetime | None = None,
+) -> bool:
+    """Strand one already-loaded receipt if its heartbeat has gone cold.
+
+    The single-row counterpart of :func:`sweep_stranded`, for a caller that has
+    the row and the session in hand and must not pay for a table scan.
+    Flushes; does not commit.
+    """
+    now = now or datetime.now(UTC)
+    started_cutoff, unstarted_cutoff = _cutoffs(settings, now)
+    if receipt.status is not ReceiptStatus.PENDING:
+        return False
+    if receipt.progress_at is not None:
+        cold = _as_utc(receipt.progress_at) < started_cutoff
+    else:
+        cold = _as_utc(receipt.created_at) < unstarted_cutoff
+    return strand_receipt(session, receipt) if cold else False
 
 
 def sweep_stranded(
