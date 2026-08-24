@@ -38,7 +38,8 @@ import { UploadScreen } from '../src/upload/UploadScreen'
  * filters the file picker's default view, and a person can switch it to "all
  * files"; a drag-and-drop ignores it outright. So a file that `accept` does not
  * name really does arrive at the element, and refusing it is the whole job of
- * the branch the PDF test below exercises.
+ * the branch the unknown-suffix test below exercises. (That sentence named the
+ * PDF test until ISSUE-027 was fixed and a PDF stopped being refused.)
  *
  * Driving that test with `userEvent.upload` would therefore assert against a
  * file that never reached the component -- green for the wrong reason, and green
@@ -145,37 +146,36 @@ describe('UploadScreen', () => {
     }
   })
 
-  it('refuses a PDF without spending an upload, and says why', () => {
-    const upload = vi.fn()
+  it('sends a PDF now that ingest expands one into a receipt per page', () => {
+    // The inverse of what this file asserted until ISSUE-027 was fixed: the
+    // screen used to refuse a PDF client-side because the server accepted one
+    // and then every PDF died at `preprocess`. Both halves are pinned -- no
+    // alert, and the upload actually spent -- because a screen that silently
+    // did nothing would also raise no alert.
+    const upload = vi.fn().mockReturnValue(new Promise<UploadAccepted>(() => {}))
     render(<UploadScreen upload={upload} />)
 
     choose(field(), new File([new Uint8Array(1)], 'scan.pdf', { type: 'application/pdf' }))
 
-    const alert = screen.getByRole('alert')
-    expect(alert.textContent).toContain('PDF')
-    expect(upload).not.toHaveBeenCalled()
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(upload).toHaveBeenCalledTimes(1)
   })
 
   it('names no internal tracker id in any refusal it renders', () => {
-    // The screen owns this, not `upload.ts`: `rejectionReason`'s PDF branch
-    // cites ISSUE-027 and `upload-api.test.ts` pins that string, so the citation
-    // is correct where it is written and wrong where it is read out. Measured
-    // 2026-08-24: strip every comment from every `.ts`, `.tsx` and `.css` file
-    // under `frontend/src` and search what is left for `[A-Z]{2,}-\d+`, and
-    // exactly ONE line matches -- that `return`.
+    // The screen owns this, not `upload.ts`. **No refusal carries a citation
+    // today**: the one that did was `rejectionReason`'s PDF branch, and
+    // ISSUE-027's fix deleted it along with the refusal. The scrub and this test
+    // stay because the defence is against the NEXT citation somebody writes into
+    // a refusal, not against the one that used to be there -- deleting the guard
+    // with the instance it guarded is how a class of defect comes back.
     //
-    // Quantified over every refusal `rejectionReason` can produce -- the three
-    // branches, one file each -- rather than over the one that carries a
-    // citation today, and asserted on what the ALERT REGION renders rather than
-    // on the function's return value, because a scrub applied anywhere but the
-    // last step before the DOM is a scrub that can be walked around.
+    // Quantified over every refusal `rejectionReason` can still produce -- the
+    // two remaining branches, one file each -- and asserted on what the ALERT
+    // REGION renders rather than on the function's return value, because a scrub
+    // applied anywhere but the last step before the DOM can be walked around.
     const oversized = jpeg('huge.jpg', 1)
     Object.defineProperty(oversized, 'size', { value: MAX_UPLOAD_MB * 1024 * 1024 + 1 })
-    const refused = [
-      new File([new Uint8Array(1)], 'scan.pdf', { type: 'application/pdf' }),
-      new File([new Uint8Array(1)], 'notes.txt', { type: 'text/plain' }),
-      oversized,
-    ]
+    const refused = [new File([new Uint8Array(1)], 'notes.txt', { type: 'text/plain' }), oversized]
 
     for (const file of refused) {
       const upload = vi.fn()
@@ -191,15 +191,20 @@ describe('UploadScreen', () => {
     }
   })
 
-  it('still says what a PDF is and what to do instead, having dropped the id', () => {
+  it('still says what is wrong and what is accepted, having dropped the id', () => {
     // The other half of the scrub: a refusal stripped down to nothing would pass
     // the check above and tell the reader less than the raw string did.
+    //
+    // This asserted the PDF refusal's wording until ISSUE-027 was fixed. It is
+    // re-pointed at the unknown-suffix refusal rather than deleted: the scrub it
+    // balances still runs, and a scrub with nothing checking that it left
+    // something behind is how an alert becomes an empty box.
     render(<UploadScreen upload={vi.fn()} />)
-    choose(field(), new File([new Uint8Array(1)], 'scan.pdf', { type: 'application/pdf' }))
+    choose(field(), new File([new Uint8Array(1)], 'notes.txt', { type: 'text/plain' }))
 
     const text = screen.getByRole('alert').textContent ?? ''
-    expect(text).toContain('PDFs cannot be processed yet')
-    expect(text).toContain('Upload a photograph instead')
+    expect(text).toContain('Accepted types are')
+    expect(text).toContain('.pdf')
   })
 
   it('shows the words the server itself used when the server refuses', async () => {
@@ -232,7 +237,10 @@ describe('UploadScreen', () => {
   it('hands one accepted file to the processing view, in place', async () => {
     const upload = vi
       .fn()
-      .mockResolvedValue({ receipt_id: 'r-1', image_key: 'k', status: 'pending' })
+      .mockResolvedValue({
+        receipts: [{ receipt_id: 'r-1', image_key: 'k' }],
+        status: 'pending',
+      })
     const progress = vi
       .fn()
       .mockResolvedValue({ status: 'pending', stage: 'triage', detail: null })
@@ -272,7 +280,10 @@ describe('UploadScreen', () => {
     render(<UploadScreen upload={upload} />)
 
     const input = field()
-    choose(input, new File([new Uint8Array(1)], 'scan.pdf', { type: 'application/pdf' }))
+    // A `.txt`, not the `.pdf` this used until ISSUE-027 was fixed: a PDF is
+    // accepted now, so it would raise no alert and this test would assert the
+    // clearing of a message that was never shown.
+    choose(input, new File([new Uint8Array(1)], 'notes.txt', { type: 'text/plain' }))
     expect(screen.getByRole('alert')).toBeTruthy()
 
     choose(input, jpeg())

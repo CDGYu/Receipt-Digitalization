@@ -277,7 +277,10 @@ def empty_reviewer_client(tmp_path) -> TestClient:
 def test_upload_writes_a_pending_row_then_queues(reviewer_client, session_factory, submitted):
     response = reviewer_client.post("/upload", files={"file": ("r.jpg", JPEG_BYTES, "image/jpeg")})
     assert response.status_code == 202
-    receipt_id = uuid.UUID(response.json()["receipt_id"])
+    # One image is still exactly one receipt. The reply is a list because a PDF
+    # is one receipt per page (ISSUE-027); a photograph did not change.
+    (accepted,) = response.json()["receipts"]
+    receipt_id = uuid.UUID(accepted["receipt_id"])
     with session_factory() as session:
         row = session.get(Receipt, receipt_id)
     # The row exists BEFORE the worker runs: a job the queue loses is visible
@@ -1478,3 +1481,79 @@ def test_a_configured_api_key_cannot_read_a_correction_history(key_client, recei
     )
 
     assert response.status_code == 401
+
+
+def _pdf_bytes(*colors: tuple[int, int, int]) -> bytes:
+    """A PDF with one visibly different page per colour."""
+    from io import BytesIO
+
+    from PIL import Image
+
+    pages = [Image.new("RGB", (40, 30), color) for color in colors]
+    buffer = BytesIO()
+    pages[0].save(buffer, "PDF", save_all=True, append_images=pages[1:])
+    return buffer.getvalue()
+
+
+def test_uploading_a_pdf_creates_one_receipt_per_page(
+    reviewer_client, session_factory, submitted
+):
+    """ISSUE-027 at the door it was discovered at.
+
+    A PDF used to be stored, rowed, queued and then killed at `preprocess`.
+    Every page is now its own receipt, and every one of them is queued -- a
+    reply naming only the first page would be the silent drop this system
+    forbids, so the count is asserted on all three of the reply, the database
+    and the queue.
+    """
+    pdf = _pdf_bytes((10, 20, 30), (200, 100, 50), (0, 128, 255))
+
+    response = reviewer_client.post(
+        "/upload", files={"file": ("invoice.pdf", pdf, "application/pdf")}
+    )
+
+    assert response.status_code == 202
+    accepted = response.json()["receipts"]
+    assert len(accepted) == 3
+    ids = [uuid.UUID(item["receipt_id"]) for item in accepted]
+    assert len(set(ids)) == 3
+    with session_factory() as session:
+        rows = [session.get(Receipt, receipt_id) for receipt_id in ids]
+    assert all(row is not None and row.status is ReceiptStatus.PENDING for row in rows)
+    assert [job.id for job in submitted] == ids
+
+
+def test_a_pdf_that_cannot_be_queued_still_leaves_its_rows_visible(
+    session_factory, settings, tmp_path
+):
+    """The 503 names each receipt, because a count cannot be retried.
+
+    Rows are committed before anything is queued, so a queue failure leaves
+    visible `pending` rows rather than blobs nobody knows about -- the same
+    contract as when one upload was one receipt.
+    """
+    def _refuse(job):
+        raise RuntimeError("queue is down")
+
+    app = create_app(
+        session_factory=session_factory,
+        storage=LocalStorage(tmp_path / "pdf-blobs"),
+        submit=_refuse,
+        settings=settings,
+    )
+    client = _logged_in(app, "alice", "pw-alice")
+
+    response = client.post(
+        "/upload",
+        files={"file": ("invoice.pdf", _pdf_bytes((1, 2, 3), (4, 5, 6)), "application/pdf")},
+    )
+
+    assert response.status_code == 503
+    with session_factory() as session:
+        pending = session.query(Receipt).filter(
+            Receipt.status == ReceiptStatus.PENDING
+        ).all()
+    assert len(pending) == 2
+    detail = response.json()["error"]["message"]
+    for row in pending:
+        assert str(row.id) in detail

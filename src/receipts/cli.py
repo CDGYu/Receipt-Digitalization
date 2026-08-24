@@ -662,13 +662,19 @@ def cmd_ingest(
     rejected = 0
     for file in files:
         try:
-            job = ingest_file(file, storage, source=args.source, max_mb=settings.max_upload_mb)
+            # A PDF becomes one job per page, so one file can print several
+            # ids. stdout stays one id per line, which is what keeps
+            # `receipts ingest ./batch > ids.txt` machine-readable.
+            new_jobs = ingest_file(
+                file, storage, source=args.source, max_mb=settings.max_upload_mb
+            )
         except ValueError as exc:
             print(f"REJECTED  {file.name}: {exc}", file=sys.stderr)
             rejected += 1
             continue
-        jobs.append(job)
-        print(f"{job.id}  {file.name}")
+        jobs.extend(new_jobs)
+        for job in new_jobs:
+            print(f"{job.id}  {job.original_filename}")
 
     if jobs:
         with session_factory() as session:

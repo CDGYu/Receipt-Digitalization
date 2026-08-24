@@ -1387,7 +1387,7 @@ def process_batch(
     for path in paths:
         path = Path(path)
         try:
-            jobs.append(ingest_file(path, storage))
+            jobs.extend(ingest_file(path, storage))
         except Exception as exc:
             log.warning("Rejected %s at ingest: %s", path, exc)
             rejected.append((str(path), f"ingest: {type(exc).__name__}: {exc}"))

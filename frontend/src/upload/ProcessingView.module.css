@@ -139,6 +139,17 @@
   line-height: 1.5;
 }
 
+/* The other pages a PDF became. Muted like `.receiptId` because it is context
+ * rather than the thing being watched, but prose rather than an identifier, so
+ * it keeps the body face. */
+.alsoQueued {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--color-muted-foreground);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
 .list {
   display: flex;
   flex-direction: column;

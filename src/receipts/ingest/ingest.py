@@ -13,6 +13,7 @@ backend is injected so tests (and dev) can use a local temp directory.
 
 from __future__ import annotations
 
+import tempfile
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
@@ -38,6 +39,13 @@ _HEADER_BYTES = 32
 #: downstream VLM without producing needlessly huge bitmaps. pypdfium2 renders
 #: at 72 DPI per unit of ``scale``.
 _PDF_RENDER_DPI = 200
+
+#: The most pages one PDF may become. Each page becomes a receipt, a database
+#: row and a queued job, so an unbounded expansion turns one upload into
+#: unbounded work -- and the size ceiling above does not bound it, because a
+#: few megabytes of PDF can hold hundreds of pages. Refusing past the bound is
+#: loud; silently keeping the first N would be the drop this system forbids.
+_MAX_PDF_PAGES = 50
 
 
 @dataclass
@@ -200,18 +208,66 @@ def expand_pdf(path: Path, out_dir: Path) -> list[Path]:
         pdf.close()
 
 
+def _pdf_pages(data: bytes, stem: str) -> list[tuple[bytes, str]]:
+    """Rasterise PDF bytes into ``(png_bytes, filename)`` per page, in page order.
+
+    A bytes-oriented wrapper over :func:`expand_pdf`, which works in files
+    because ``pypdfium2`` does. The temporary directory is torn down before this
+    returns, so nothing survives the call but the bytes.
+
+    **The page count is checked before anything is rendered.** Counting opens the
+    document a second time, which is the cost of not rasterising four hundred
+    pages in order to discover there were four hundred.
+
+    ``pypdfium2`` is imported in the body for the reason :func:`expand_pdf`
+    documents: it belongs to the optional ``pipeline`` extra, and a module-top
+    import would make every importer of this module -- ``receipts.cli``, and so
+    ``receipts users list`` -- require it.
+    """
+    import pypdfium2
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        pdf_path = root / "upload.pdf"
+        pdf_path.write_bytes(data)
+
+        document = pypdfium2.PdfDocument(pdf_path)
+        try:
+            page_count = len(document)
+        finally:
+            document.close()
+        if page_count > _MAX_PDF_PAGES:
+            raise ValueError(
+                f"PDF has {page_count} pages; the limit is {_MAX_PDF_PAGES}"
+            )
+
+        rendered = expand_pdf(pdf_path, root / "pages")
+        if not rendered:
+            raise ValueError("PDF has no pages to process")
+        return [
+            (page.read_bytes(), f"{stem}-page-{number}.png")
+            for number, page in enumerate(rendered, start=1)
+        ]
+
+
 def ingest_file(
     path: Path,
     storage: StorageBackend,
     source: str = "upload",
     max_mb: int = _DEFAULT_MAX_MB,
-) -> ReceiptJob:
-    """Validate a file, store its original bytes, and return a :class:`ReceiptJob`.
+) -> list[ReceiptJob]:
+    """Validate a file, store its bytes, and return one job per receipt.
+
+    **A list because one upload is not always one receipt.** A photograph is one
+    job; a PDF is one job per page, because one job maps to one receipt id
+    downstream and :func:`~receipts.pipeline.process_receipt` requires a blob
+    holding a single image. Returning a scalar here is what left `expand_pdf`
+    without a caller and every PDF dying at ``preprocess`` (ISSUE-027).
 
     Raises ``ValueError`` with the validation reason when the upload is rejected
-    (so callers cannot accidentally proceed on a bad file). On success the bytes
-    are written under :func:`make_image_key` and a job describing them is returned.
-    No database write happens (Phase 3). ``max_mb`` defaults to
+    (so callers cannot accidentally proceed on a bad file), and never returns an
+    empty list -- zero receipts from an accepted upload would be a silent drop.
+    No database write happens here. ``max_mb`` defaults to
     :data:`_DEFAULT_MAX_MB`; the API passes ``settings.max_upload_mb`` so the
     ceiling is one configured value, not a literal duplicated at every call site.
     """
@@ -219,7 +275,7 @@ def ingest_file(
     check = validate_upload(path, max_mb)
     if not check.ok:
         raise ValueError(check.reason)
-    return _store_original(
+    return _store_upload(
         data=path.read_bytes(),
         original_filename=path.name,
         content_type=check.content_type,
@@ -234,13 +290,14 @@ def ingest_bytes(
     storage: StorageBackend,
     source: str = "upload",
     max_mb: int = _DEFAULT_MAX_MB,
-) -> ReceiptJob:
+) -> list[ReceiptJob]:
     """Byte-oriented twin of :func:`ingest_file` (e.g. an HTTP upload body).
 
-    Validates the in-memory bytes with the same rules, then stores and returns a
-    :class:`ReceiptJob`. Raises ``ValueError`` on a rejected upload. ``max_mb``
-    defaults to :data:`_DEFAULT_MAX_MB`; the API passes ``settings.max_upload_mb``
-    so the ceiling is one configured value, not a literal duplicated at every call
+    Validates the in-memory bytes with the same rules, then stores and returns
+    one :class:`ReceiptJob` per receipt -- one for an image, one per page for a
+    PDF. Raises ``ValueError`` on a rejected upload. ``max_mb`` defaults to
+    :data:`_DEFAULT_MAX_MB`; the API passes ``settings.max_upload_mb`` so the
+    ceiling is one configured value, not a literal duplicated at every call
     site.
     """
     check = _check_upload(
@@ -248,7 +305,7 @@ def ingest_bytes(
     )
     if not check.ok:
         raise ValueError(check.reason)
-    return _store_original(
+    return _store_upload(
         data=data,
         original_filename=filename,
         content_type=check.content_type,
@@ -257,17 +314,57 @@ def ingest_bytes(
     )
 
 
-def _store_original(
+def _store_upload(
+    data: bytes,
+    original_filename: str,
+    content_type: str | None,
+    storage: StorageBackend,
+    source: str,
+) -> list[ReceiptJob]:
+    """Store one validated upload as one or more receipts.
+
+    The single place that decides how many receipts an upload becomes, so the
+    file and bytes entry points cannot drift apart on it. A PDF is rasterised
+    here and its pages stored individually; the PDF itself is not kept, because
+    every downstream stage wants an image and the page images are what the rest
+    of the system reads. The source filename survives in each page's
+    ``original_filename``, which is the only provenance a reviewer looking at
+    twelve receipts has.
+    """
+    if content_type == "application/pdf":
+        stem = Path(original_filename).stem
+        return [
+            _store_one(
+                data=page,
+                original_filename=name,
+                content_type="image/png",
+                storage=storage,
+                source=source,
+            )
+            for page, name in _pdf_pages(data, stem)
+        ]
+    return [
+        _store_one(
+            data=data,
+            original_filename=original_filename,
+            content_type=content_type,
+            storage=storage,
+            source=source,
+        )
+    ]
+
+
+def _store_one(
     data: bytes,
     original_filename: str,
     content_type: str | None,
     storage: StorageBackend,
     source: str,
 ) -> ReceiptJob:
-    """Write validated original bytes to storage and build the job record.
+    """Write one receipt's bytes to storage and build its job record.
 
-    Factored out so the file and bytes entry points cannot drift apart in how
-    they mint the id, choose the key, or populate the job.
+    One receipt id, one blob key, one job. Every receipt in the system is minted
+    here, whether it arrived as a photograph or as page nine of a PDF.
     """
     # A validated upload always has a sniffed type; the fallback only guards the
     # type checker and never fires on the happy path.

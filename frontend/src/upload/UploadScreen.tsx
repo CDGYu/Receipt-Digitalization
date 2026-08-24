@@ -18,15 +18,18 @@ function messageOf(caught: unknown, fallback: string): string {
 
 /** This client's own refusal, with an internal tracker citation taken out of it.
  *
- * `rejectionReason`'s PDF branch reads "PDFs cannot be processed yet
- * (ISSUE-027). Upload a photograph instead." The citation is right where it is
- * written -- it is the handle for why the suffix the *server* accepts is refused
- * here -- and wrong where it is read out: a tracker id is a thing a person
- * cannot look up. Measured 2026-08-24 by stripping every comment from every
- * `.ts`, `.tsx` and `.css` file under `frontend/src` and searching what is left
- * for `[A-Z]{2,}-\d+`: **one line matches**, and it is that `return`. So it is
- * removed at the last step before the DOM, and `upload.ts` is left exactly as
- * its own tests pin it.
+ * **No refusal carries a citation today, and this stays anyway.** The one that
+ * did was `rejectionReason`'s PDF branch -- "PDFs cannot be processed yet
+ * (ISSUE-027). Upload a photograph instead." -- and ISSUE-027's fix deleted the
+ * branch along with the refusal, because ingest now expands a PDF into one
+ * receipt per page. The reasoning it recorded is what survives: a citation is
+ * right where it is written, and wrong where it is read out, because a tracker
+ * id is a thing a person cannot look up. So the scrub runs at the last step
+ * before the DOM and `upload.ts` is left exactly as its own tests pin it.
+ *
+ * Retiring the guard with the instance that prompted it is how a class of defect
+ * comes back. What keeps this honest is that it defends against the *next*
+ * citation somebody writes into a refusal, not the one that used to be here.
  *
  * **Only this module's own copy goes through here.** A message from the server
  * is rendered untouched: the client shows the server's own words for anything
@@ -110,6 +113,18 @@ export interface UploadScreenProps {
  * receipt and the page goes blank is the one thing this design exists to
  * remove.
  */
+/** What the processing view should call the receipt it is following.
+ *
+ * For a photograph that is the file the person chose. For a PDF it is the file
+ * plus which page, because "invoice.pdf" would name three receipts at once and
+ * the view follows one.
+ */
+function pageNameFor(accepted: Accepted): string {
+  return accepted.receipt.receipts.length === 1
+    ? accepted.fileName
+    : `${accepted.fileName} (page 1)`
+}
+
 export function UploadScreen({ upload = uploadReceipt, progress }: UploadScreenProps) {
   const [error, setError] = useState<string | null>(null)
   const [accepted, setAccepted] = useState<Accepted | null>(null)
@@ -148,8 +163,9 @@ export function UploadScreen({ upload = uploadReceipt, progress }: UploadScreenP
   if (accepted !== null) {
     return (
       <ProcessingView
-        receiptId={accepted.receipt.receipt_id}
-        fileName={accepted.fileName}
+        receiptId={accepted.receipt.receipts[0].receipt_id}
+        fileName={pageNameFor(accepted)}
+        alsoQueued={accepted.receipt.receipts.length - 1}
         progress={progress}
       />
     )
@@ -162,8 +178,9 @@ export function UploadScreen({ upload = uploadReceipt, progress }: UploadScreenP
           stage arrives with `ProcessingView`; promising it here first would be
           this screen making a claim the next task has to come true. */}
       <p className={styles.scope}>
-        One photograph at a time. It is stored and queued straight away, and this page stays with
-        it -- there is nothing to reload and nowhere to come back to.
+        One file at a time -- a photograph, or a PDF that becomes one receipt per page. It is
+        stored and queued straight away, and this page stays with it -- there is nothing to
+        reload and nowhere to come back to.
       </p>
 
       {/* Always rendered when there is an error, and absent when there is not

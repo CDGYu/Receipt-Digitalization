@@ -619,6 +619,7 @@ const CENSUS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
       'margin, color, font-size, font-weight, letter-spacing, line-height, text-transform: uppercase',
     '.fileName': 'margin, overflow-wrap: anywhere, font-size, font-weight, line-height',
     '.receiptId': 'margin, overflow-wrap: anywhere, color, font-family, font-size, line-height',
+    '.alsoQueued': 'margin, overflow-wrap: anywhere, color, font-size, line-height',
     '.list': 'display: flex, flex-direction: column, gap, margin, padding, list-style: none',
     '.past': 'color, font-size, line-height',
     '.active':

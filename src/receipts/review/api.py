@@ -639,7 +639,7 @@ def _install_write_routes(app: FastAPI) -> None:
         data = await file.read(max_bytes + 1)
 
         try:
-            job = ingest_bytes(
+            jobs = ingest_bytes(
                 data,
                 file.filename or "upload",
                 storage,
@@ -650,24 +650,42 @@ def _install_write_routes(app: FastAPI) -> None:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
         with request.app.state.session_factory() as session:
-            create_pending_receipt(session, job)
+            for job in jobs:
+                create_pending_receipt(session, job)
             session.commit()
 
-        try:
-            request.app.state.submit(job)
-        except Exception:
-            logger.exception(
-                "receipt %s was accepted and stored but could not be queued", job.id
-            )
+        # Every row is committed before anything is queued, exactly as when one
+        # upload was one receipt: a page whose job the queue loses must be a
+        # visible stuck `pending` row rather than a blob nobody knows about.
+        unqueued: list[uuid.UUID] = []
+        for job in jobs:
+            try:
+                request.app.state.submit(job)
+            except Exception:
+                logger.exception(
+                    "receipt %s was accepted and stored but could not be queued",
+                    job.id,
+                )
+                unqueued.append(job.id)
+        if unqueued:
+            # Named individually rather than counted. A PDF that queued nine of
+            # its twelve pages leaves three stuck rows, and "three failed" does
+            # not tell an operator which three to retry.
+            listed = ", ".join(str(receipt_id) for receipt_id in unqueued)
             raise HTTPException(
                 status_code=503,
                 detail=(
-                    f"receipt {job.id} was accepted and stored, but could not be "
-                    "queued for processing; it is safe to retry"
+                    f"receipt(s) {listed} were accepted and stored, but could not "
+                    "be queued for processing; it is safe to retry"
                 ),
             ) from None
 
-        return {"receipt_id": str(job.id), "image_key": job.image_key, "status": "pending"}
+        return {
+            "receipts": [
+                {"receipt_id": str(job.id), "image_key": job.image_key} for job in jobs
+            ],
+            "status": "pending",
+        }
 
     @app.patch("/receipts/{receipt_id}")
     def patch_receipt(

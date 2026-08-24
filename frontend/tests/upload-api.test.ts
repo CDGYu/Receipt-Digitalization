@@ -109,24 +109,22 @@ describe('what the client refuses before spending an upload', () => {
     expect(parseAllowedSuffixes(fixture)).toEqual(['.jpg', '.jp2', '.HEIC', '.pdf'])
   })
 
-  it('lists exactly what the server accepts, minus the PDF that cannot work', () => {
+  it('lists exactly what the server accepts, with nothing subtracted', () => {
     const server = serverAllowedSuffixes()
-    // The premise the whole exclusion rests on. If the server ever stops
-    // accepting `.pdf`, the module's comment about being deliberately stricter
-    // is stale, and the set equality below would go on passing without this.
+    // The premise this equality is worth anything for. `.pdf` used to be
+    // subtracted here (ISSUE-027) because the server accepted one and then
+    // every PDF died at `preprocess`; ingest now expands it into one receipt
+    // per page, so the two lists agree exactly and this asserts that they do.
     expect(server).toContain('.pdf')
-    expect([...ACCEPTED_SUFFIXES].sort()).toEqual(
-      server.filter((suffix) => suffix !== '.pdf').sort(),
-    )
+    expect([...ACCEPTED_SUFFIXES].sort()).toEqual([...server].sort())
   })
 
-  it('refuses a PDF, which the server accepts and then always fails to process', () => {
-    // ISSUE-027: `.pdf` is in the server's accepted suffixes, so this refusal
-    // is deliberately STRICTER than the server. Accepting a file guaranteed to
-    // die at `preprocess` is the worst of the options.
-    const reason = rejectionReason({ name: 'receipt.pdf', size: 1024 })
-    expect(reason).not.toBeNull()
-    expect(reason).toMatch(/pdf/i)
+  it('accepts a PDF, now that ingest expands one into a receipt per page', () => {
+    // The inverse of what this file asserted until ISSUE-027 was fixed. Kept as
+    // its own case rather than folded into the equality above: the equality
+    // would still pass if `rejectionReason` grew a special case that refused a
+    // suffix its own list contains, which is exactly the shape that was here.
+    expect(rejectionReason({ name: 'receipt.pdf', size: 1024 })).toBeNull()
   })
 
   it('refuses an unknown suffix and says what it accepts', () => {
@@ -153,12 +151,15 @@ describe('what the client refuses before spending an upload', () => {
 
 describe('uploadReceipt', () => {
   it('sends the file as multipart and lets the browser set the boundary', async () => {
-    const calls = stubFetch(202, { receipt_id: 'r-1', image_key: 'k', status: 'pending' })
+    const calls = stubFetch(202, {
+      receipts: [{ receipt_id: 'r-1', image_key: 'k' }],
+      status: 'pending',
+    })
     const file = new File([new Uint8Array([1, 2, 3])], 'receipt.jpg', { type: 'image/jpeg' })
 
     const accepted = await uploadReceipt(file)
 
-    expect(accepted.receipt_id).toBe('r-1')
+    expect(accepted.receipts).toEqual([{ receipt_id: 'r-1', image_key: 'k' }])
     const [path, init] = calls[0]
     expect(path).toBe('/upload')
     expect(init?.method).toBe('POST')

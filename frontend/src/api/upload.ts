@@ -1,18 +1,21 @@
 import { request } from './client'
 
-/** The suffixes `validate_upload` accepts, minus the one that cannot work.
+/** Exactly the suffixes `validate_upload` accepts.
  *
- * `.pdf` is deliberately ABSENT. The server accepts it -- it is in
- * `_ALLOWED_SUFFIXES` -- and then every PDF dies at `preprocess`, because
- * `expand_pdf` has no caller and `load_image` refuses the suffix (ISSUE-027).
- * Refusing here is stricter than the server on purpose: accepting a file that
- * is guaranteed to fail is the worst of the available behaviours.
+ * **`.pdf` is present again as of ISSUE-027's fix.** It used to be deliberately
+ * absent: the server accepted a PDF and then every one of them died at
+ * `preprocess`, because `expand_pdf` had no caller. Ingest now rasterises a PDF
+ * into one receipt per page, so accepting one here is no longer accepting a file
+ * that is guaranteed to fail. `upload-api.test.ts` pins this list against the
+ * server's own `_ALLOWED_SUFFIXES`, parsed out of the Python source, so the two
+ * cannot drift apart in either direction.
  */
 export const ACCEPTED_SUFFIXES: readonly string[] = [
   '.jpg',
   '.jpeg',
   '.png',
   '.webp',
+  '.pdf',
   '.heic',
   '.heif',
 ]
@@ -35,9 +38,22 @@ export const ACCEPTED_SUFFIXES: readonly string[] = [
  *  tidy-up. Until then the gap is here in writing. */
 export const MAX_UPLOAD_MB = 25
 
-export interface UploadAccepted {
+/** One receipt the server minted from an upload. */
+export interface AcceptedReceipt {
   receipt_id: string
   image_key: string
+}
+
+/** What `POST /upload` answers.
+ *
+ * **A list, because one upload is not always one receipt.** A photograph is one;
+ * a PDF is one per page (ISSUE-027). It stayed a scalar for as long as PDFs
+ * could not work, and a scalar naming only the first page would hide the rest --
+ * which is the silent drop this system forbids, so the shape carries all of
+ * them and the screen shows that it did.
+ */
+export interface UploadAccepted {
+  receipts: readonly AcceptedReceipt[]
   status: string
 }
 
@@ -56,9 +72,6 @@ export interface ProgressReport {
 export function rejectionReason(file: { name: string; size: number }): string | null {
   const dot = file.name.lastIndexOf('.')
   const suffix = dot === -1 ? '' : file.name.slice(dot).toLowerCase()
-  if (suffix === '.pdf') {
-    return 'PDFs cannot be processed yet (ISSUE-027). Upload a photograph instead.'
-  }
   if (!ACCEPTED_SUFFIXES.includes(suffix)) {
     return `Accepted types are ${ACCEPTED_SUFFIXES.join(', ')}.`
   }
@@ -68,7 +81,10 @@ export function rejectionReason(file: { name: string; size: number }): string | 
   return null
 }
 
-/** Store one receipt and queue it. One file per request: the route takes one. */
+/** Store one file and queue what it becomes. One file per request.
+ *
+ * One *file*, not one receipt: a PDF comes back as one accepted receipt per
+ * page. */
 export function uploadReceipt(file: File): Promise<UploadAccepted> {
   const body = new FormData()
   body.append('file', file)

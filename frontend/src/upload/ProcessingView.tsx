@@ -118,6 +118,15 @@ export interface ProcessingViewProps {
    *  a person watching wants to see which of their photographs is in the
    *  pipeline rather than an id they have never seen before. */
   readonly fileName: string
+  /** How many OTHER receipts the same upload became -- `0` for a photograph,
+   *  `n - 1` for an n-page PDF.
+   *
+   *  This view follows one receipt, and a PDF makes several (ISSUE-027). Saying
+   *  so is the whole point of the prop: a person who handed over a twelve-page
+   *  invoice and watched one receipt process would otherwise have no way to know
+   *  the other eleven exist. Disclosed rather than followed -- eleven more
+   *  pollers on one screen is not a design anyone chose. */
+  readonly alsoQueued?: number
   /** Injected so tests never touch `fetch`. Defaults to the real call. */
   readonly progress?: (receiptId: string) => Promise<ProgressReport>
   /** Takes a callback, returns its cancel. Injected for the reason
@@ -176,6 +185,7 @@ export interface ProcessingViewProps {
 export function ProcessingView({
   receiptId,
   fileName,
+  alsoQueued = 0,
   progress = fetchProgress,
   poll = everyFewSeconds,
 }: ProcessingViewProps) {
@@ -241,6 +251,16 @@ export function ProcessingView({
         <h2 className={styles.paneHeading}>Receipt</h2>
         <p className={styles.fileName}>{fileName}</p>
         <p className={styles.receiptId}>{receiptId}</p>
+        {/* Absent at zero rather than rendered empty (ADR-0024), and absent is
+            the photograph case -- which is every upload that is not a PDF. */}
+        {alsoQueued < 1 ? null : (
+          <p className={styles.alsoQueued}>
+            {alsoQueued === 1
+              ? '1 more page of this file was queued as its own receipt.'
+              : `${alsoQueued} more pages of this file were queued as their own receipts.`}{' '}
+            This view follows the first; the rest are in the review queue when they finish.
+          </p>
+        )}
       </section>
 
       <section className={styles.steps}>

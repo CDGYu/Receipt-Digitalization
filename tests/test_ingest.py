@@ -46,6 +46,7 @@ from receipts.ingest import (  # noqa: E402
     phash_distance,
     validate_upload,
 )
+from receipts.ingest import ingest as ingest_module  # noqa: E402
 
 # --------------------------------------------------------------------------- #
 # helpers -- synthetic images with known horizontal structure so dHash bits are
@@ -364,7 +365,7 @@ def test_ingest_bytes_stores_original_and_returns_job(tmp_path):
     storage = LocalStorage(tmp_path)
     data = _png_bytes()
 
-    job = ingest_bytes(data, "receipt.png", storage)
+    (job,) = ingest_bytes(data, "receipt.png", storage)
 
     assert isinstance(job, ReceiptJob)
     assert isinstance(job.id, uuid.UUID)
@@ -379,7 +380,7 @@ def test_ingest_file_stores_original_and_returns_job(tmp_path):
     src = tmp_path / "receipt.png"
     Image.new("RGB", (12, 10), (5, 6, 7)).save(src)
 
-    job = ingest_file(src, storage, source="folder-watch")
+    (job,) = ingest_file(src, storage, source="folder-watch")
 
     assert job.source == "folder-watch"
     assert job.content_type == "image/png"
@@ -397,3 +398,103 @@ def test_ingest_bytes_honours_an_explicit_max_mb(tmp_path):
     data = b"\xff\xd8" + b"\x00" * (2 * 1024 * 1024)  # a 2 MB "JPEG"
     with pytest.raises(ValueError, match="too large"):
         ingest_bytes(data, "r.jpg", storage, max_mb=1)
+
+
+# --------------------------------------------------------------------------- #
+# ingest: a PDF becomes one receipt per page (ISSUE-027)
+# --------------------------------------------------------------------------- #
+
+
+def _pdf_bytes(*colors: tuple[int, int, int]) -> bytes:
+    """A PDF with one page per colour, each page visibly different."""
+    pages = [Image.new("RGB", (40, 30), color) for color in colors]
+    buffer = io.BytesIO()
+    pages[0].save(buffer, "PDF", save_all=True, append_images=pages[1:])
+    return buffer.getvalue()
+
+
+def test_a_pdf_becomes_one_receipt_per_page(tmp_path):
+    """ISSUE-027: a PDF was accepted at the door and always died at preprocess.
+
+    `expand_pdf` was written, tested and never called; this is the caller. One
+    page is one receipt because one job maps to one receipt id downstream --
+    `process_receipt`'s docstring has asserted exactly this the whole time.
+    """
+    storage = LocalStorage(tmp_path)
+    src = tmp_path / "invoice.pdf"
+    src.write_bytes(_pdf_bytes((10, 20, 30), (200, 100, 50)))
+
+    jobs = ingest_file(src, storage)
+
+    assert len(jobs) == 2
+    # Distinct ids AND distinct keys: one shared key would overwrite page 1 with
+    # page 2 in storage and leave two rows pointing at one image.
+    assert len({job.id for job in jobs}) == 2
+    assert len({job.image_key for job in jobs}) == 2
+    for job in jobs:
+        assert job.content_type == "image/png"
+        assert storage.get(job.image_key)[:8] == b"\x89PNG\r\n\x1a\n"
+    # The pages must differ. Storing page 1 twice would satisfy every assertion
+    # above, and is exactly the shape a wrong loop index produces.
+    assert storage.get(jobs[0].image_key) != storage.get(jobs[1].image_key)
+    # Provenance survives: a reviewer seeing twelve receipts needs to know which
+    # file they came from and in what order.
+    assert [job.original_filename for job in jobs] == [
+        "invoice-page-1.png",
+        "invoice-page-2.png",
+    ]
+
+
+def test_a_single_page_pdf_is_one_receipt(tmp_path):
+    storage = LocalStorage(tmp_path)
+    src = tmp_path / "one.pdf"
+    src.write_bytes(_pdf_bytes((1, 2, 3)))
+
+    jobs = ingest_file(src, storage)
+
+    assert len(jobs) == 1
+    assert jobs[0].content_type == "image/png"
+
+
+def test_an_image_upload_is_still_exactly_one_receipt(tmp_path):
+    """The non-PDF path must not grow a page loop.
+
+    A PDF branch that also ran for images would double-store every photograph.
+    """
+    storage = LocalStorage(tmp_path)
+    data = _png_bytes()
+
+    jobs = ingest_bytes(data, "receipt.png", storage)
+
+    assert len(jobs) == 1
+    assert jobs[0].content_type == "image/png"
+    assert storage.get(jobs[0].image_key) == data
+
+
+def test_a_pdf_past_the_page_bound_is_refused(tmp_path):
+    """A bound, not an enumeration.
+
+    One 25 MB PDF can hold hundreds of pages, and each becomes a receipt, a row
+    and a queued job -- so an unbounded expansion turns one upload into
+    unbounded work. Refusing is loud; truncating silently would be the drop this
+    system forbids.
+    """
+    storage = LocalStorage(tmp_path)
+    over = ingest_module._MAX_PDF_PAGES + 1
+    src = tmp_path / "many.pdf"
+    src.write_bytes(_pdf_bytes(*[(i % 256, 0, 0) for i in range(over)]))
+
+    with pytest.raises(ValueError, match="pages"):
+        ingest_file(src, storage)
+
+
+def test_a_pdf_with_no_pages_is_refused_rather_than_returning_nothing(tmp_path):
+    """Zero jobs from an accepted upload is a silent drop.
+
+    The caller commits rows and queues jobs from what it gets back; an empty
+    list would store a file, report success and process nothing.
+    """
+    storage = LocalStorage(tmp_path)
+    with mock.patch.object(ingest_module, "expand_pdf", return_value=[]):
+        with pytest.raises(ValueError, match="no pages"):
+            ingest_bytes(_pdf_bytes((9, 9, 9)), "empty.pdf", storage)
