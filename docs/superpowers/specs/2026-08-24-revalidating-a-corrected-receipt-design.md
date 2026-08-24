@@ -184,12 +184,24 @@ One migration on `receipts`, on top of head `f3ae0f86e0e6`:
 |---|---|---|
 | `is_refund` | `BOOLEAN NOT NULL DEFAULT false` | R040 inverts without it (§1, measured) |
 | `prices_include_tax` | `BOOLEAN NULL` | R020/R024 silently loosen without it |
-| `tax_breakdown` | `_jsonb() NOT NULL DEFAULT '[]'` | R025 silently skips without it |
+| `tax_breakdown` | `_jsonb()`, NULL, no server default | R025 silently skips without it |
 
 `_jsonb()` is `models.py`'s own helper -- `JSONB` on Postgres, `JSON` on
 SQLite -- so the migration works under the test engine as well as production.
 `Subject` follows `Severity`'s `(str, Enum)` shape, which is what `_token_enum`
 expects if it is ever persisted.
+
+**`tax_breakdown` is nullable, not `NOT NULL DEFAULT '[]'`.** This row said
+`NOT NULL DEFAULT '[]'` until 2026-08-24; Task 1 shipped it nullable and the
+shipped code is the correct one, so the table above is the side that was fixed.
+It follows `receipts.confidence_reasons`, this repo's own precedent for a JSON
+column added by migration: **ADR-0012** makes that column nullable on purpose so
+`NULL` ("not recorded" -- a row written before the column existed) stays
+distinct from `[]` ("the model read no bands"). `NOT NULL DEFAULT '[]'` would
+collapse the two and claim a reading nothing made, and it would additionally
+need a JSON server default portable across SQLite and Postgres, which nullable
+sidesteps entirely. `is_refund` stays NOT NULL with `server_default=sa.false()`
+because it has no third state to preserve -- the asymmetry is deliberate.
 
 `save_extraction` writes all three; `_export_extraction` reads them.
 
@@ -199,11 +211,23 @@ readers rely on; leaving it as-is would make it false. `meta.is_refund` is added
 to that list at the same time — it belonged there before this change and was
 missing.
 
-Backfill is deliberately not attempted. Existing rows get the defaults, which is
-correct for `prices_include_tax` (null already means "either convention") and
-for `tax_breakdown` (an empty list makes R025 skip, which is what it does today).
-For `is_refund` the default `false` matches what `_export_extraction` already
-assumes, so no existing receipt's behaviour changes.
+Backfill is deliberately not attempted, and what an existing row gets differs
+per column. Both nullable columns get **NULL**, not a default: for
+`prices_include_tax` null already means "either convention", and for
+`tax_breakdown` null is the *true* statement about a row written before the
+column existed -- it was never recorded, which is not the same claim as "the
+model read no bands".
+
+That NULL has teeth for `_export_extraction`. `Totals.tax_breakdown` is
+`list[TaxBand] = Field(default_factory=list)` (`src/receipts/extract/schema.py:170`)
+-- **not** optional -- so the rebuild must coalesce `NULL -> []` rather than
+pass the column through. Read that way, R025 still skips on an old row, which
+is what it does today; read naively, pydantic gets a `None` for a non-optional
+field. `prices_include_tax` needs no coalesce (`bool | None` on both sides) and
+`is_refund` is NOT NULL, so it is always a real `bool`.
+
+For `is_refund` the server default `false` matches what `_export_extraction`
+already assumes, so no existing receipt's behaviour changes.
 
 ---
 

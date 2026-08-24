@@ -368,9 +368,19 @@ def test_save_extraction_redacts_a_pan_inside_tax_breakdown(engine: sa.Engine) -
 
     ``save_extraction``'s redaction pass is ``type(value) is str`` over its
     ``fields`` dict; a list value is skipped whole, and ``TaxBand.label`` is
-    model text. This is ``LineItem.modifiers``' hazard one column over, and it
-    is invisible to the ``String``-typed-column walk in
-    ``test_every_text_column_save_extraction_writes_is_redacted``.
+    model text. This is ``LineItem.modifiers``' hazard one column over.
+
+    **Kept deliberately once the class-level walk grew a ``receipt_json`` arm
+    on 2026-08-24 -- this is not a duplicate of it.** The two fail
+    independently, because this test carries its own seed:
+    ``test_every_text_column_save_extraction_writes_is_redacted`` only sees a
+    PAN in this column because its large shared fixture happens to seed
+    ``Totals.tax_breakdown[].label``, and that fixture has already been found
+    short twice (see its own docstring for both). Measured -- trim the
+    ``{pan}`` out of that fixture's tax band and drop ``redact_pan`` from
+    ``save_extraction``, and the walk PASSES while this test still fails. The
+    walk closes the class; this closes the instance against the walk's own
+    fixture rotting.
     """
     pan = "4111111111111111"
     extraction = _extraction()
@@ -382,6 +392,67 @@ def test_save_extraction_redacts_a_pan_inside_tax_breakdown(engine: sa.Engine) -
         )
         session.commit()
         assert pan not in str(receipt.tax_breakdown)
+
+
+def test_save_extraction_distinguishes_a_false_tax_convention_from_an_absent_one(
+    engine: sa.Engine,
+) -> None:
+    """``False`` and NULL are different readings, and R020/R024 act on the difference.
+
+    The helper at ``rules.py:198-200`` branches on ``prices_include_tax is not
+    True`` and ``is not False`` *separately*, so ``False`` ("the amounts are net
+    of tax") selects one comparison while NULL ("the document does not state a
+    convention") accepts either. ``True`` alone is not enough to pin here:
+    storing ``False`` as NULL would not fail loudly, it would silently widen
+    what R020 permits -- which is the failure this column exists to prevent,
+    and the reason the column is nullable rather than NOT NULL DEFAULT false.
+    """
+    stated_net = _extraction()
+    stated_net.totals.prices_include_tax = False
+    read_nothing = _extraction()  # the document states no convention
+
+    with Session(engine) as session:
+        recorded = save_extraction(
+            session, _job(), stated_net, ValidationReport(),
+            Decimal("0.9"), ReceiptStatus.NEEDS_REVIEW,
+        )
+        unrecorded = save_extraction(
+            session, _job(), read_nothing, ValidationReport(),
+            Decimal("0.9"), ReceiptStatus.NEEDS_REVIEW,
+        )
+        session.commit()
+        assert recorded.prices_include_tax is False
+        assert unrecorded.prices_include_tax is None
+
+
+def test_an_empty_tax_breakdown_and_a_missing_one_are_different(engine: sa.Engine) -> None:
+    """``[]`` means "the model read no tax bands"; NULL means "not recorded".
+
+    This is ``test_empty_reasons_and_missing_reasons_are_different`` one column
+    over, and it is the premise the nullable column rests on: ``models.py``
+    keeps ``tax_breakdown`` nullable *precisely* so the two stay distinct
+    (following ``confidence_reasons``), rather than NOT NULL DEFAULT '[]'.
+
+    So a receipt the model read no bands off must store ``[]``, and only a row
+    that never reached extraction may hold NULL. Nothing else in this file
+    pins that: a later tidy of ``save_extraction`` to ``redact_pan(...) or
+    None`` collapses the two meanings and is green against every other
+    assertion here.
+    """
+    no_bands = _extraction()
+    assert no_bands.totals.tax_breakdown == [], "the fixture must start with no bands"
+
+    never_extracted = _job()
+    with Session(engine) as session:
+        extracted = save_extraction(
+            session, _job(), no_bands, ValidationReport(),
+            Decimal("0.9"), ReceiptStatus.NEEDS_REVIEW,
+        )
+        pending = create_pending_receipt(session, never_extracted)
+        session.commit()
+        # [] = "the model read no tax bands"; NULL = "never recorded".
+        assert extracted.tax_breakdown == []
+        assert pending.tax_breakdown is None
 
 
 def test_save_extraction_falls_back_to_list_order_on_duplicate_positions(
@@ -838,9 +909,17 @@ def test_every_text_column_save_extraction_writes_is_redacted(engine: sa.Engine)
     mechanism can observe. ``Enum`` columns are excluded by *type*:
     ``sa.Enum`` subclasses ``sa.String``, and ``Legibility`` is a ``str``
     enum, so both would otherwise be swept in and neither can hold free text.
-    ``JSON`` columns are walked separately -- a ``String`` walk is
-    structurally blind to them, which is exactly how ``modifiers`` stored a
-    whole PAN while every scalar text column was covered.
+    ``JSON`` columns are walked separately, **on both tables** -- a ``String``
+    walk is structurally blind to them, which is exactly how ``modifiers``
+    stored a whole PAN while every scalar text column was covered. The JSON
+    walk was itself short for a while: it collected ``LineItem`` columns only,
+    so when ``receipts.tax_breakdown`` was added on 2026-08-24 -- model text in
+    a JSON column, the ``modifiers`` hazard one table over -- this test stayed
+    GREEN with the redaction removed and only a bespoke test caught it. That is
+    the same shape as the two hand-maintained-list misses above, one level up:
+    the walk was the guarantee, and the walk had a table-shaped hole. Both
+    tables are collected now, so the *next* JSON column on either is covered
+    without anyone remembering.
 
     **Every ``str``/``str | None`` field reachable from ``ReceiptExtraction``
     is seeded, found by walking the pydantic model classes programmatically
@@ -898,14 +977,21 @@ def test_every_text_column_save_extraction_writes_is_redacted(engine: sa.Engine)
         Receipt.__table__, exclude=frozenset({"card_last4", "currency"})
     )
     item_text = text_columns(LineItem.__table__)
-    item_json = [c.name for c in LineItem.__table__.columns if isinstance(c.type, sa.JSON)]
+
+    def json_columns(table: sa.Table) -> list[str]:
+        return [c.name for c in table.columns if isinstance(c.type, sa.JSON)]
+
+    item_json = json_columns(LineItem.__table__)
+    receipt_json = json_columns(Receipt.__table__)
     # The walk is the guarantee, so a filter that quietly matched nothing would
-    # make this test pass forever. Measured contents on 2026-08-18, after
-    # ``buyer_name_raw``/``buyer_tax_id`` were added (``currency`` joined
+    # make this test pass forever. Measured contents on 2026-08-24, after
+    # ``tax_breakdown``/``prices_include_tax``/``is_refund`` were added
+    # (``buyer_name_raw``/``buyer_tax_id`` on 2026-08-18; ``currency`` joined
     # ``card_last4`` as a named exclusion on 2026-08-02):
     # receipts -> merchant_name_raw, buyer_name_raw, buyer_tax_id,
     # receipt_number, date_raw, payment_method, image_key,
     # processed_image_key, image_phash;
+    # receipts JSON -> confidence_reasons, tax_breakdown;
     # line_items -> description_raw, sku, unit; JSON -> modifiers, bbox.
     assert {
         "receipt_number",
@@ -916,6 +1002,11 @@ def test_every_text_column_save_extraction_writes_is_redacted(engine: sa.Engine)
     } <= set(receipt_text)
     assert {"description_raw", "sku", "unit"} <= set(item_text)
     assert "modifiers" in item_json
+    # The anchor for the receipts-side JSON walk, for the same reason
+    # ``modifiers`` anchors the line_items one: ``tax_breakdown`` is the column
+    # whose absence from this walk let an unredacted PAN through, so a filter
+    # that stopped matching it must fail here rather than pass silently.
+    assert "tax_breakdown" in receipt_json
 
     # Every str-typed field on Merchant, Buyer, ReceiptMeta, Payment,
     # ExtractionMeta, LineItem and Modifier that could plausibly feed a future
@@ -984,6 +1075,9 @@ def test_every_text_column_save_extraction_writes_is_redacted(engine: sa.Engine)
             assert value is None or pan not in value, (
                 f"receipts.{column} still holds the raw PAN: {value!r}"
             )
+        for column in receipt_json:
+            dumped = json.dumps(getattr(receipt, column))
+            assert pan not in dumped, f"receipts.{column} still holds the raw PAN: {dumped!r}"
         for item in receipt.line_items:
             for column in item_text:
                 value = getattr(item, column)
@@ -1024,6 +1118,11 @@ def test_every_text_column_save_extraction_writes_is_redacted(engine: sa.Engine)
             for name in receipt_text
             if isinstance(getattr(receipt, name, None), str)
             and pan in getattr(receipt, name)
+        ]
+        leaked += [
+            f"receipts.{name}"
+            for name in receipt_json
+            if pan in json.dumps(getattr(receipt, name, None) or [])
         ]
         item = receipt.line_items[0]
         leaked += [
