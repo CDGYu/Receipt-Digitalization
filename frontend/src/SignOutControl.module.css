@@ -67,8 +67,10 @@
 }
 
 /* `ui/Button.module.css`'s `.danger`, and the contrast is the measurement
- * recorded there: light `#F8FAFC` on `#DC2626` is 4.7:1, dark `#020617` on
- * `#EF4444` is 5.3:1. Discarding a reviewer's edits is the one destructive
+ * recorded there: light `#FAFAF9` on `#DC2626` is 4.62:1, dark `#020617` on
+ * `#EF4444` is 5.36:1 -- and see that file for why the light figure was
+ * imprecise before this refresh rather than made so by it. Discarding a
+ * reviewer's edits is the one destructive
  * action this control offers, and it is the only place Task 3 paints a severity
  * colour on a control rather than on a message. */
 .danger {

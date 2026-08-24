@@ -287,7 +287,7 @@ const CENSUS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
   'admin/AdminScreen.module.css': {
     '.screen':
       'box-sizing: border-box, display: flex, flex-direction: column, align-items: stretch, gap, max-width, margin, padding, color, font-family',
-    '.heading': 'margin, font-size, font-weight, line-height',
+    '.heading': 'margin, font-family, font-size, font-weight, line-height',
     '.who': 'margin, color, font-size, line-height',
     // `border` before `border-left-width`: the shorthand resets the longhand, so
     // this order is the thicker left edge and the other order is not.
@@ -331,8 +331,8 @@ const CENSUS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
   },
   'login/LoginPage.module.css': {
     '.form':
-      'box-sizing: border-box, display: flex, flex-direction: column, gap, width, max-width, margin, padding, border, border-radius, background, font-family, color',
-    '.heading': 'margin, font-size, font-weight, line-height',
+      'box-sizing: border-box, display: flex, flex-direction: column, gap, width, max-width, margin, padding, border, border-radius, background, box-shadow, font-family, color',
+    '.heading': 'margin, font-family, font-size, font-weight, line-height',
     '.field': 'display: flex, flex-direction: column, gap, min-width, color, font-family, font-size',
     '.input':
       'min-height, box-sizing: border-box, padding, border, border-radius, background, color, font-family, font-size',
@@ -345,7 +345,7 @@ const CENSUS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
   'receipts/ReceiptsScreen.module.css': {
     '.screen':
       'box-sizing: border-box, display: flex, flex-direction: column, align-items: stretch, gap, max-width, margin, padding, color, font-family',
-    '.heading': 'margin, font-size, font-weight, line-height',
+    '.heading': 'margin, font-family, font-size, font-weight, line-height',
     '.who': 'margin, color, font-size, line-height',
     '.scope': 'margin, color, font-size, line-height',
     '.alert':

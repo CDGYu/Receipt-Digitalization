@@ -56,28 +56,36 @@
   width: calc(100% - 2 * var(--space-xl));
   max-width: 24rem;
   margin: var(--space-3xl) auto;
-  padding: var(--space-2xl);
+  padding: var(--space-4xl);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
-  background: var(--color-surface);
+  background: var(--color-surface-raised);
+  box-shadow: var(--shadow-md);
   font-family: var(--font-sans);
   color: var(--color-foreground);
 }
 
-/* §3.1's `--text-2xl` is "page title only", and this page's title is the whole of
- * its content. `margin: 0` because the flex `gap` above owns the rhythm; the UA's
- * 0.67em margin would collapse against nothing here and just add a second,
- * inconsistent gap. */
+/* `margin: 0` because the flex `gap` above owns the rhythm; the UA's 0.67em
+ * margin would collapse against nothing here and just add a second,
+ * inconsistent gap.
+ *
+ * This comment opened by citing §3.1's `--text-2xl` as "page title only". That
+ * sentence explained the rule by naming the token the rule used, so adopting
+ * `--text-3xl` falsified it. It is deleted rather than restated: §3.1 says
+ * "page title only" about `--text-2xl`, and nothing in `tokens.css` or the
+ * design says it about `--text-3xl`, so rewriting would invent a claim about a
+ * spec section instead of correcting one. */
 .heading {
   margin: 0;
-  font-size: var(--text-2xl);
+  font-family: var(--font-display);
+  font-size: var(--text-3xl);
   font-weight: 600;
   line-height: 1.3;
 }
 
 /* `ReceiptForm.module.css`'s `.field`, to the declaration: label above, control
  * below, one column. `--color-muted-foreground` is the darkened light value
- * ADR-0027 §2 records (#475569, ~8:1 on white). */
+ * ADR-0027 §2 records (#57534E, ~8:1 on white). */
 .field {
   display: flex;
   flex-direction: column;
@@ -136,7 +144,7 @@
 }
 
 /* `ui/Button.module.css`'s `.button` + `.primary`. `--color-primary` and
- * `--color-background` invert together across the two themes (#0F172A on #F8FAFC
+ * `--color-background` invert together across the two themes (#1C1B19 on #FAFAF9
  * light, #F8FAFC on #020617 dark), so one pair of declarations reads correctly in
  * both without a dark override.
  *

@@ -30,7 +30,7 @@
 }
 
 /* `--color-primary` and `--color-background` invert together across the two
- * themes (#0F172A on #F8FAFC light, #F8FAFC on #020617 dark), so one pair of
+ * themes (#1C1B19 on #FAFAF9 light, #F8FAFC on #020617 dark), so one pair of
  * declarations reads correctly in both instead of needing a dark override. */
 .primary {
   background: var(--color-primary);
@@ -45,8 +45,15 @@
 
 /* Contrast measured against the token values in both themes, since this is the
  * one variant that paints a severity colour rather than a neutral:
- * light #F8FAFC on #DC2626 is 4.7:1, dark #020617 on #EF4444 is 5.3:1 -- both
- * over the 4.5:1 the accessibility contract sets. */
+ * light #FAFAF9 on #DC2626 is 4.62:1, dark #020617 on #EF4444 is 5.36:1 -- both
+ * over the 4.5:1 the accessibility contract sets.
+ *
+ * The light figure read "4.7:1" and was imprecise **before** the Editorial ramp,
+ * not because of it: the old `--color-background` #F8FAFC and the new #FAFAF9
+ * are within 0.002 of each other in luminance, so this pair measures 4.62:1
+ * under both. Only the hex moved. That 0.002 is the constraint the whole ramp
+ * was built under -- `--color-severity-error` is reserved and sits this close to
+ * the floor, so the background could change hue but not brightness. */
 .danger {
   background: var(--color-severity-error);
   color: var(--color-background);

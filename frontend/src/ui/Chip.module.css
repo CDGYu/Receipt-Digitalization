@@ -6,9 +6,17 @@
  * severity pill competes with the row it is describing, and tinting a background
  * without a token for the tint would mean inventing hex. Contrast measured
  * against `--color-surface` for all five tones in light (the tighter theme):
- * error 4.8:1, warn 4.7:1, info 6.7:1, positive 5.0:1, neutral 7.6:1. Dark is
- * looser -- every tone's dark value is the lighter of the pair against a
- * near-black surface. */
+ * error 4.83:1, warn 5.02:1, info 6.70:1, positive 5.02:1, neutral 4.80:1. Dark
+ * is looser -- every tone's dark value is the lighter of the pair against a
+ * near-black surface.
+ *
+ * Two of those figures read 4.7 (warn) and 7.6 (neutral) until 2026-08-24, and
+ * **both were wrong when written rather than made wrong by the Editorial ramp**
+ * -- checked against `2042d49^` before saying so. `--color-severity-warn`
+ * `#B45309` is a reserved severity colour that Task 1 did not touch: it measured
+ * 5.02 then and measures 5.02 now. `--color-null` went `#64748B` -> `#78716C`,
+ * which is **4.76 -> 4.80**, so the ramp moved that one the right way by 0.04
+ * while the claim of 7.6 was never close to either value. */
 
 .chip {
   display: inline-flex;
