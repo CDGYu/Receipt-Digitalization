@@ -265,13 +265,35 @@ where the real finding was something else. This is accepted rather than fixed:
 in the genuine stranded case, which is the case this exists for, both the
 priority and the reason are correct.
 
-### 6.3 The reviewed-row refusal is structural
+### 6.3 The reviewed-row refusal, and the claim this section used to make
 
-A machine run never overwrites a `reviewed` row. Here `reviewed` is excluded by
-`status='pending'` -- *the same clause that defines the work set*. There is no
-separate check that could drift out of agreement with the selection. This is
-the one-property-enforced-at-both-ends shape rather than two rules that must
-agree.
+A machine run never overwrites a `reviewed` row. `find_stranded` excludes every
+terminal status, `reviewed` included, with `status='pending'` -- *the same
+clause that defines the work set*.
+
+**This section claimed more than that and was wrong.** It said there was "no
+separate check that could drift out of agreement with the selection". There
+is one: `strand_receipt`'s own `if receipt.status is not ReceiptStatus.PENDING`
+guard, which this design's own plan introduces for the direct-call path that
+`strand_if_cold` uses. So the property is enforced **twice**, on two paths.
+
+That is not a defect in the code -- both guards are needed, because
+`find_stranded` and `strand_receipt` have different callers -- but it has two
+consequences the original claim denied:
+
+- **The two mask each other under mutation.** Deleting either leaves the sweep
+  tests green, because on the `sweep_stranded` write path the survivor still
+  refuses. Measured: both mutations survived a ten-test module.
+- **They can genuinely disagree, and one path shows it.** `sweep_stranded`'s
+  dry run appends straight from `find_stranded` without calling
+  `strand_receipt`, so with the SQL clause removed a dry run reports a
+  `reviewed` receipt as sweepable -- exactly the drifted state the sentence
+  said could not exist.
+
+**What follows for the tests:** each rule must be pinned on a path where it is
+the only thing standing -- the SQL clause via the dry run, and
+`strand_receipt`'s guard via a direct call. Section 9.2's fixture is necessary
+for that and is not sufficient on its own.
 
 ### 6.4 The write
 

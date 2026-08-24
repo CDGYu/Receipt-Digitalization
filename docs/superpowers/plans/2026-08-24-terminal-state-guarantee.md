@@ -1151,7 +1151,7 @@ from receipts.persist.models import Base, ReviewTask
 from receipts.persist.repository import create_pending_receipt, get_receipt
 from receipts.persist.session import make_engine, make_session_factory
 from receipts.score.confidence import ReceiptStatus
-from receipts.sweep import sweep_stranded
+from receipts.sweep import strand_receipt, sweep_stranded
 
 NOW = datetime(2026, 8, 24, 12, 0, tzinfo=UTC)
 
@@ -1193,8 +1193,10 @@ def six_shapes(session_factory):
         unstarted_cutoff= one_call x calls x UNSTARTED_MARGIN
                         = 1800 x 3 x 12                             = 18h
 
-    So: 2h and 48h are cold; 1 minute and 1h are warm. If you change
-    STRAND_MARGIN or UNSTARTED_MARGIN, these ages must move with them.
+    So: 2h and 48h are cold; 1 minute is warm; and 6h is the discriminating
+    one -- past `started` but short of `unstarted`, which is the only age that
+    can tell the two thresholds apart. If you change STRAND_MARGIN or
+    UNSTARTED_MARGIN, every age here must move with them.
     """
     ids: dict[str, uuid.UUID] = {}
     with session_factory() as session:
@@ -1210,9 +1212,13 @@ def six_shapes(session_factory):
             session, status=ReceiptStatus.PENDING,
             progress_at=None, created_at=NOW - timedelta(days=2),
         )
+        # 6h is deliberately BETWEEN the two cutoffs: older than started (1h),
+        # younger than unstarted (18h). At exactly 1h it sat on the started
+        # boundary and discriminated nothing -- collapsing the two thresholds
+        # left it unswept either way, so the mutation survived.
         ids["recent_never_started"] = _make(
             session, status=ReceiptStatus.PENDING,
-            progress_at=None, created_at=NOW - timedelta(hours=1),
+            progress_at=None, created_at=NOW - timedelta(hours=6),
         )
         ids["terminal"] = _make(
             session, status=ReceiptStatus.AUTO_APPROVED,
@@ -1283,12 +1289,48 @@ def test_a_terminal_receipt_is_never_touched(session_factory, six_shapes) -> Non
 def test_a_reviewed_receipt_is_never_touched(session_factory, six_shapes) -> None:
     """A machine run never overwrites a reviewed row.
 
-    Structural here: `reviewed` is excluded by the same status='pending'
-    clause that selects the work, so there is no second rule that could drift
-    out of agreement with the selection.
+    This pins the end-to-end outcome. It does NOT pin either rule that
+    produces it: `find_stranded`'s status clause and `strand_receipt`'s own
+    guard each refuse a reviewed row, so on this path deleting either leaves
+    the other refusing and this test green. The two tests below pin them
+    separately, each on the path where it is the only thing standing.
     """
     swept = sweep_stranded(session_factory, settings=_settings(), now=NOW)
     assert six_shapes["reviewed"] not in swept
+    with session_factory() as session:
+        assert get_receipt(session, six_shapes["reviewed"]).status is ReceiptStatus.REVIEWED
+
+
+def test_the_query_alone_refuses_every_non_pending_row(session_factory, six_shapes) -> None:
+    """`find_stranded`'s status clause, on the one path where it stands alone.
+
+    A dry run reports straight from the query without calling
+    `strand_receipt`, so nothing else can refuse on its behalf. Asserting the
+    exact SET rather than one id is what makes it discriminate: deleting the
+    status clause admits the terminal and reviewed rows, and this is the only
+    test that would see it.
+    """
+    swept = set(
+        sweep_stranded(session_factory, settings=_settings(), now=NOW, dry_run=True)
+    )
+    assert swept == {six_shapes["stranded_started"], six_shapes["old_never_started"]}
+
+
+def test_strand_receipt_alone_refuses_a_non_pending_row(
+    session_factory, six_shapes
+) -> None:
+    """`strand_receipt`'s own guard, called directly -- its other caller's path.
+
+    `strand_if_cold` hands it a row it loaded itself, never one already
+    filtered by `find_stranded`, so on that path this guard is the only thing
+    standing. Going through `sweep_stranded` would let the query refuse first
+    and prove nothing.
+    """
+    with session_factory() as session:
+        receipt = get_receipt(session, six_shapes["reviewed"])
+        assert strand_receipt(session, receipt) is False
+        session.commit()
+
     with session_factory() as session:
         assert get_receipt(session, six_shapes["reviewed"]).status is ReceiptStatus.REVIEWED
 
@@ -1337,9 +1379,12 @@ def find_stranded(
     waiting behind a backlog, which is healthy -- so it needs a much longer
     clock, and nothing on the row can tell the two apart without asking Redis.
 
-    ``status == PENDING`` is the whole safety story: every terminal status,
-    ``reviewed`` included, is excluded by the same clause that selects the
-    work, so no second rule can drift out of agreement with this one.
+    ``status == PENDING`` excludes every terminal status, ``reviewed``
+    included, from the work set. It is not the only rule enforcing that --
+    :func:`~receipts.sweep.strand_receipt` guards the direct-call path with its
+    own check -- so the two are pinned separately, each on the path where it is
+    the only thing standing. For this clause that path is the dry run, which
+    reports straight from this query without calling ``strand_receipt``.
 
     A pure read. The caller decides what to do with the rows.
     """
