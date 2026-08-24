@@ -275,19 +275,19 @@ def test_job_timeout_is_derived_from_the_model_budget_not_a_constant() -> None:
     120 s per HTTP attempt x 3 attempts x (triage + extract + 1 repair) = 1080,
     plus a 180 s non-model budget.
     """
-    settings = Settings(vlm_timeout_s=120, max_repair_attempts=1)
+    settings = Settings(_env_file=None, vlm_timeout_s=120, max_repair_attempts=1)
     assert worker.job_timeout_for(settings) == 1260
 
 
 def test_job_timeout_tracks_the_configured_timeout() -> None:
     """600 s per attempt x 3 x 3 calls = 5400, plus 180."""
-    settings = Settings(vlm_timeout_s=600, max_repair_attempts=1)
+    settings = Settings(_env_file=None, vlm_timeout_s=600, max_repair_attempts=1)
     assert worker.job_timeout_for(settings) == 5580
 
 
 def test_job_timeout_tracks_the_repair_budget() -> None:
     """Two repairs is four calls, not three: 120 x 3 x 4 = 1440, plus 180."""
-    settings = Settings(vlm_timeout_s=120, max_repair_attempts=2)
+    settings = Settings(_env_file=None, vlm_timeout_s=120, max_repair_attempts=2)
     assert worker.job_timeout_for(settings) == 1620
 
 
@@ -298,7 +298,7 @@ def test_the_old_constant_was_below_its_own_worst_case() -> None:
     constant used to be. This is why a fixed constant was wrong on any
     hardware, not merely on the box where it was noticed.
     """
-    settings = Settings(vlm_timeout_s=120, max_repair_attempts=1)
+    settings = Settings(_env_file=None, vlm_timeout_s=120, max_repair_attempts=1)
     assert worker.job_timeout_for(settings) > 900
 
 
@@ -319,7 +319,7 @@ def test_enqueue_uses_the_derived_ceiling_when_none_is_given() -> None:
         content_type="image/jpeg",
     )
     worker.enqueue_receipt(
-        job, RecordingQueue(), settings=Settings(vlm_timeout_s=120, max_repair_attempts=1)
+        job, RecordingQueue(), settings=Settings(_env_file=None, vlm_timeout_s=120, max_repair_attempts=1)
     )
     assert calls[0]["job_timeout"] == 1260
 
@@ -449,9 +449,32 @@ def enqueue_receipt(
     )
 ```
 
-Remove `"DEFAULT_JOB_TIMEOUT_S"` from `__all__` and delete the constant. If any
-other module or test references it, **stop and report** rather than leaving a
-second source of this number.
+Remove `"DEFAULT_JOB_TIMEOUT_S"` from `__all__` and delete the constant.
+
+**One existing test asserts that constant, and you are authorised to change
+that one assertion — this is the single exception to the permitted-edits bound
+in Global Constraints.** Pre-flighted: `tests/test_worker.py`, inside
+`test_enqueue_receipt_dispatches_only_process_receipt_job`, ends with
+
+```python
+    assert kwargs["job_timeout"] == worker_module.DEFAULT_JOB_TIMEOUT_S
+```
+
+That assertion *is* the pin on the behaviour this task replaces, so it cannot
+survive. Replace it, and pass explicit settings so the test stops depending on
+whatever `.env` happens to hold:
+
+```python
+    handle = enqueue_receipt(
+        job, queue, settings=Settings(_env_file=None, vlm_timeout_s=120, max_repair_attempts=1)
+    )
+    ...
+    assert kwargs["job_timeout"] == 1260
+```
+
+Change **nothing else** in that test and no other existing test. If you find a
+second existing test that references the constant, **stop and report** -- the
+pre-flight found exactly one.
 
 - [ ] **Step 4: Run the tests**
 
@@ -1031,7 +1054,7 @@ def six_shapes(session_factory):
 
 
 def _settings() -> Settings:
-    return Settings(vlm_timeout_s=600, max_repair_attempts=1)
+    return Settings(_env_file=None, vlm_timeout_s=600, max_repair_attempts=1)
 
 
 def test_a_stranded_receipt_reaches_needs_review(session_factory, six_shapes) -> None:
@@ -1200,9 +1223,10 @@ from sqlalchemy.orm import Session
 
 from config.settings import Settings
 
-from .persist.models import Receipt, ReceiptStatus
+from .persist.models import Receipt
 from .persist.repository import find_stranded, redact_pan
 from .review.queue import enqueue_review
+from .score.confidence import ReceiptStatus
 
 __all__ = ["STRAND_MARGIN", "strand_receipt", "sweep_stranded"]
 
@@ -1383,12 +1407,19 @@ def test_sweep_accepts_dry_run() -> None:
     assert args.dry_run is True
 
 
-def test_cmd_sweep_reports_nothing_to_do(session_factory, settings, capsys) -> None:
+def test_cmd_sweep_reports_nothing_to_do(session_factory, capsys) -> None:
     args = build_parser().parse_args(["sweep"])
-    code = cmd_sweep(args, session_factory=session_factory, settings=settings)
+    code = cmd_sweep(
+        args, session_factory=session_factory, settings=Settings(_env_file=None)
+    )
     assert code == 0
     assert "0" in capsys.readouterr().out
 ```
+
+**Pre-flighted:** `tests/test_cli_core.py` has `session_factory`, `storage` and
+`tty_stdin` fixtures and **no `settings` fixture**. Its established pattern is
+`Settings(_env_file=None)` constructed inline at the call site, which is what
+the test above follows. `Settings` is already imported in that module.
 
 - [ ] **Step 2: Run them and watch them fail**
 
