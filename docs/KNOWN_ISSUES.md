@@ -2890,7 +2890,13 @@ fake client, so this was unreachable until both were true at once.
 
 ---
 
-## ISSUE-030 — A killed work-horse leaves a receipt with no terminal state, ever
+## ISSUE-030 — An interrupted receipt has no terminal state, ever
+
+*(Heading corrected 2026-08-24, hours after filing. It read "A killed
+work-horse leaves a receipt with no terminal state, ever", which named the
+first instance as though it were the mechanism and made this look
+RQ-specific. It is not — see "Reproduced on a second, unrelated path" below.
+Citations name the issue number, not the heading.)*
 
 **Status:** OPEN. **This one breaks a stated guarantee**, and raising ISSUE-029's
 ceiling hides it without closing it.
@@ -2929,14 +2935,38 @@ correct, and it was proved on two independent failure paths. But it assumes
 forever.** The defect is not in the screen; the screen is right. The pipeline
 has a reachable path to no terminal state at all.
 
+### Reproduced on a second, unrelated path — and this is the real mechanism
+
+Later the same day, a **synchronous `receipts reprocess`** run was stopped.
+**No RQ, no work-horse, no job ceiling** — a CLI process that simply ended. The
+receipt was still `pending` minutes later, exactly as after the work-horse kill.
+
+`cli.py:982` calls `process_receipt(...)` with **no `try`/`except` around it at
+all**; the code after it only inspects the *returned* result. So on that path
+there is not even a handler to fail to run.
+
+**The general form, which the first filing obscured by naming its first
+instance:** the terminal-state guarantee is carried by normal return and by
+exception handling, and **an interruption is neither.** Timeout, OOM, SIGKILL, a
+container restart mid-receipt, an operator's Ctrl-C, a harness stopping a
+background task — all of them strand the receipt at `pending`, on every path.
+
+**Two instances, two unrelated causes, one hole.** A reader of the first version
+could reasonably have concluded that raising ISSUE-029's ceiling closes this.
+**It does not**, and that misreading is the reason the heading was corrected.
+
 ### Resume
 
-1. The **parent** process, not the horse, must mark a receipt whose job died
-   without reaching a terminal status. RQ's failed-job registry is where that
-   lives.
-2. Any kill reaches this, not just a timeout: OOM, a container restart, a
-   deploy. That is why it is filed apart from ISSUE-029.
-3. Separately, decide whether the screen should say "this receipt has stopped
+1. The **surviving** process — the parent for a queue job, something outside the
+   CLI process for an inline run — must mark a receipt whose processing ended
+   without a terminal status. RQ's failed-job registry covers only the first of
+   those.
+2. Consider instead making the *receipt row itself* carry enough to be swept:
+   a started-at stamp plus a reaper is path-independent, and every fix that
+   hooks a particular runner is not.
+3. Any interruption reaches this, not just a timeout. That is why it is filed
+   apart from ISSUE-029.
+4. Separately, decide whether the screen should say "this receipt has stopped
    making progress" rather than polling indefinitely.
 
 ### Related
