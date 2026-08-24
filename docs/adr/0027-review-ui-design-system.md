@@ -418,6 +418,7 @@ rather than rewritten above:
 |---|---|
 | "**`--color-muted-foreground` is `#475569` in light**" | **`#57534E`** — 7.63:1 on `#FFFFFF`, against `#475569`'s 7.58:1. The *argument* that sentence makes is untouched: the generated `#94A3B8` still fails the body-text rule, and the replacement still clears it comfortably. |
 | "one file with **35 custom properties** in three blocks" | **39**, over **69** declarations. The four new names above, declared once each. The 2026-08-07 correction's method still re-derives it: strip comments, match `--name:`, count distinct. |
+| "that value measures **~2.8:1 on white**", of the generated `#94A3B8` | **2.56:1.** Not stale — **wrong when written**, and unrelated to ADR-0052: `#94A3B8` and `#FFFFFF` both read the same today as in 2026-08-05. Re-derived 2026-08-24 with the WCAG arithmetic `frontend/tests/stylesheets.test.ts` runs, with that file's own pinned control reproducing first (`#64748B` on `#FFFFFF` = 4.76). **The conclusion is strengthened, not weakened**: the generated value misses the 4.5:1 body-text floor by more than decision 2 claimed, so every ruling resting on it stands. The figure is corrected here rather than above because the sentence's argument is sound and only its number is not. |
 
 **Decision 2's reasoning is what forced the new ramp's shape, and is the reason
 ADR-0052 exists in the form it does.** *Severity colours are reserved* — "if
