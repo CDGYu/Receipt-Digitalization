@@ -521,82 +521,81 @@ git commit -m "fix(worker): derive the job ceiling from the model budget (ISSUE-
 
 - [ ] **Step 1: Write the failing tests**
 
-Add to `tests/test_repository.py`. Use whatever session fixture that module
-already provides; if it has none, build one exactly as
-`tests/test_pipeline_merchant_hints.py` does (a file-backed SQLite under
-`tmp_path`, `Base.metadata.create_all`, `make_session_factory`).
+Add to `tests/test_repository.py`.
+
+**Pre-flighted, so use these and do not invent alternatives:** that module
+provides an **`engine`** fixture (in-memory SQLite with FK enforcement, at
+`:89`) — there is **no** `session_factory` fixture — and a **`_job()`** helper
+at `:109` that builds a `ReceiptJob`. Use both. Inlining your own
+`ReceiptJob(...)` would repeat the duplication finding Task 2 already paid for.
+
+The module imports `uuid`, `Session`, `sa`, `ReceiptJob`,
+`create_pending_receipt` and `get_receipt` already. It imports
+`from datetime import date, time` but **not** `datetime` or `UTC` — extend that
+existing import line rather than adding a second one.
 
 ```python
-def test_record_progress_stamps_stage_and_time(session_factory) -> None:
-    job = ReceiptJob(
-        id=uuid.uuid4(), image_key="k", source="t",
-        original_filename="r.jpg", content_type="image/jpeg",
-    )
-    with session_factory() as session:
+def test_record_progress_stamps_stage_and_time(engine: sa.Engine) -> None:
+    job = _job()
+    with Session(engine) as session:
         create_pending_receipt(session, job)
         session.commit()
 
     stamped = datetime(2026, 8, 24, 12, 0, tzinfo=UTC)
-    with session_factory() as session:
+    with Session(engine) as session:
         record_progress(session, job.id, "extract", now=stamped)
         session.commit()
 
-    with session_factory() as session:
+    with Session(engine) as session:
         receipt = get_receipt(session, job.id)
         assert receipt.progress_stage == "extract"
         assert receipt.progress_at is not None
 
 
-def test_record_progress_overwrites_the_previous_beat(session_factory) -> None:
+def test_record_progress_overwrites_the_previous_beat(engine: sa.Engine) -> None:
     """A heartbeat is the LAST time seen alive, not a log."""
-    job = ReceiptJob(
-        id=uuid.uuid4(), image_key="k", source="t",
-        original_filename="r.jpg", content_type="image/jpeg",
-    )
-    with session_factory() as session:
+    job = _job()
+    with Session(engine) as session:
         create_pending_receipt(session, job)
         session.commit()
 
-    with session_factory() as session:
+    with Session(engine) as session:
         record_progress(session, job.id, "triage")
         session.commit()
-    with session_factory() as session:
+    with Session(engine) as session:
         record_progress(session, job.id, "extract")
         session.commit()
 
-    with session_factory() as session:
+    with Session(engine) as session:
         assert get_receipt(session, job.id).progress_stage == "extract"
 
 
-def test_record_progress_does_not_commit(session_factory) -> None:
+def test_record_progress_does_not_commit(engine: sa.Engine) -> None:
     """ADR-0006: the caller owns the transaction.
 
     Rolling back after the call must lose the write. If record_progress
     committed, the stage would survive the rollback.
     """
-    job = ReceiptJob(
-        id=uuid.uuid4(), image_key="k", source="t",
-        original_filename="r.jpg", content_type="image/jpeg",
-    )
-    with session_factory() as session:
+    job = _job()
+    with Session(engine) as session:
         create_pending_receipt(session, job)
         session.commit()
 
-    with session_factory() as session:
+    with Session(engine) as session:
         record_progress(session, job.id, "extract")
         session.rollback()
 
-    with session_factory() as session:
+    with Session(engine) as session:
         assert get_receipt(session, job.id).progress_stage is None
 
 
-def test_record_progress_on_an_unknown_receipt_writes_nothing(session_factory) -> None:
+def test_record_progress_on_an_unknown_receipt_writes_nothing(engine: sa.Engine) -> None:
     """A heartbeat for a row that is gone is a no-op, not an error.
 
     Narration must never be load-bearing, and a receipt deleted mid-run is not
     a reason to take an extraction down.
     """
-    with session_factory() as session:
+    with Session(engine) as session:
         record_progress(session, uuid.uuid4(), "extract")
         session.commit()
 ```
