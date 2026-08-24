@@ -1055,16 +1055,36 @@ cost:
 ### Related
 
 - ISSUE-003 — found only by reading the image; unguarded for the same reason.
-- ISSUE-005 — the production-side ordering guard that does not guard.
+- ISSUE-005 — the production-side ordering guard that did not guard, resolved
+  2026-08-24 at `5c72af5`.
 
 ---
 
 ## ISSUE-005 — R051's message promises printed order; its check accepts any permutation
 
-**Status:** OPEN — deliberately not fixed. `src/receipts/validate/rules.py` was
-closed when this was found.
-**Owner action required:** no — the fix is small and uncontroversial, it simply
-had no owner in this milestone.
+**Status:** **RESOLVED 2026-08-24** at `5c72af5`. Everything below describes the
+defect as it stood until then; the code quoted is the *old* code, kept because
+it is what the diagnosis rests on.
+**Owner action required:** none. It was fixed when a session finally had it in
+scope — `src/receipts/validate/rules.py` was closed to the milestone that found
+it, which is why it sat open for six days.
+
+### Resolution, 2026-08-24 — measured, not asserted
+
+- The check is now `positions == expected`, not `sorted(positions) == expected`.
+- The rule's `description` moved from "no gaps or repeats" — which described the
+  *old* check and would have understated the new one — to "0..n-1, in array
+  order, no gaps or repeats".
+- **The pin is a permutation, not a gap.** `test_R051_permuted_positions_are_not_printed_order`
+  swaps two positions and **asserts `sorted(...) == list(range(len(positions)))`
+  before checking the finding** — so the fixture provably passes under the old
+  implementation, and the test can only be red because of the ordering clause. A
+  gap or a repeat would have failed under *both* implementations and proved
+  nothing.
+- It is a **behaviour change**, not a message fix: a permuted extraction that
+  validated clean now yields an INFO finding. That issue's own resume step 2 —
+  confirm no fixture relies on the looser rule — was satisfied by execution:
+  full pytest **1381 → 1382**, the +1 being exactly the new test.
 **Discovered:** 2026-08-18, while pinning the golden labels' array order.
 **Pre-existing:** yes, since R051 was written. **Blocks:** nothing today; it
 means one operator-facing sentence is not true.
@@ -2677,7 +2697,10 @@ screen — and it was carried out.
   (**:61**), so `/app/upload` resolves.
 - It is **pinned as mounted**, not merely present: deleting the import and the
   `route === 'upload'` branch reds a test, measured 2026-08-24 and recorded in
-  `frontend/tests/app-admin-route.test.tsx:30-32`. That closes ADR-0046
+  `app-admin-route.test.tsx`'s `mounts the screen %s asks for, and nothing else`
+  — cited by test name, not by line, because the lines around :30 record the
+  *hole* this pin closes (454 tests green with the branch deleted) rather than
+  the pin itself. That closes ADR-0046
   decision 5 for this screen rather than leaving it to memory.
 
 **This entry said "OPEN — recorded, not fixed" until 2026-08-24**, and the
@@ -2809,7 +2832,9 @@ asserts the expansion already happens.
 
 ## ISSUE-028 — The containerised worker can only ever run the `fake` VLM client
 
-**Status:** OPEN. The image fix is one word and is in flight on
+**Status:** **RESOLVED 2026-08-24** at `45b5329` (image only). What stays open
+is the consequence, recorded below: every compose run before that date was a
+`fake`-client run. This said the fix was "in flight" until it landed on
 `feat/editorial-refresh`; what stays open is the consequence — **every
 compose-based run this project has ever done was silently a `fake`-client run**,
 whatever `VLM_PROVIDER` it was given.

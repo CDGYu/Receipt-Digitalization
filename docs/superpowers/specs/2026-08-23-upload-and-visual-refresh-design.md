@@ -465,6 +465,13 @@ for. Three surfaces are also outside the floor check: `--color-surface-raised`,
 `--color-surface-active` and `--color-surface-sunken` are not in
 `INHERITABLE_SURFACES`.
 
+> **Superseded the same day, by this design's own browser pass.** Plan 3's Task 3
+> put severity text on `--color-surface-raised`, the browser measured it at
+> **4.39:1** in dark, and `0fe6be5` both darkened that token and **moved it
+> inside `INHERITABLE_SURFACES`**. **Two** surfaces are outside now, not three.
+> The paragraph above was true when written and is the reasoning that made the
+> gap findable; it is annotated rather than edited for that reason.
+
 **This constrains decision 12 more than decision 12 knew.** The reserved
 severity colours already sit near the floor — `--color-severity-error`
 `#DC2626` measures **4.62:1** on today's `--color-background` `#F8FAFC`, and

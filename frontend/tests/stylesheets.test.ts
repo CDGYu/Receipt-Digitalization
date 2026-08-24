@@ -15,7 +15,8 @@ import { describe, expect, it } from 'vitest'
  *
  * The whole-branch review measured it and the controller reproduced it: **every
  * one of Task 5's four fixes reverted with all five gates green.** Across the
- * sixteen stylesheets under `src/`, exactly three rules had any declaration
+ * sixteen stylesheets `src/` held **at that time** (22 today), exactly three
+ * rules had any declaration
  * asserted anywhere -- `tokens.css`'s token block, `ui/Value.module.css`'s
  * `.notExtracted`, and `LineItemsTable.module.css`'s `.scroller`. Every other
  * declaration in the tree was deletable in silence. The class-*name* guard in
@@ -138,8 +139,13 @@ interface Rule {
  *  reaches the network, not that none exists.
  *
  *  What this is **not** is a CSS parser. It assumes a value carries no braces
- *  and no semicolons, which holds for these sixteen files -- the only `content`
- *  values in the tree are `'+'` and `'\2212'` -- and is not claimed beyond them.
+ *  and no semicolons, which holds for every file in the tree -- the only
+ *  `content` values are `'+'` and `'\2212'`, both in `FindingsPanel`, and
+ *  `MoneyInput`'s `content: '$'` is inside a comment -- and is not claimed
+ *  beyond them. **No count is stated here on purpose:** this said "these
+ *  sixteen files" while the tree held 22, and a count in prose rots on the next
+ *  stylesheet somebody adds. The claim is about every file, checked by
+ *  re-reading the `content` declarations, not about a number.
  *
  *  **A value that breaks the assumption is SILENT, not loud.** Corrected
  *  2026-08-07; this said such a value "would split a declaration in two and show
@@ -738,6 +744,27 @@ describe('every declaration the app ships is accounted for', () => {
         `CENSUS and say in the commit what a browser showed you, because nothing ` +
         `in the five gates can see what it looks like.`,
     ).toEqual(CENSUS[file])
+    // **Rule order, which the assertion above cannot see.** `toEqual` compares
+    // objects by key/value and ignores key order, so until 2026-08-24 the whole
+    // census was blind to a rule being MOVED. Found by mutation in the
+    // whole-branch review: hoisting `.current` above `.link` in
+    // `Nav.module.css` reverses a cascade that file calls load-bearing -- the
+    // current-page link loses its underline and its colour -- and the census
+    // stayed green, as did `nav.test.tsx` and `value.test.tsx`.
+    //
+    // That is the same hazard the docblock above already names for
+    // DECLARATIONS inside a rule ("a shorthand resets every longhand it
+    // covers"), one level up: between rules, later wins at equal specificity.
+    // The census recorded declaration order and sorted rule order away.
+    expect(
+      Object.keys(censusFor(file)),
+      `${file}'s rules are the right rules in the wrong ORDER. At equal ` +
+        `specificity the later rule wins, so moving one past another changes ` +
+        `what paints without changing any declaration -- which the comparison ` +
+        `above cannot see, because it compares objects and objects have no ` +
+        `order. If the move is deliberate, reorder CENSUS to match and say in ` +
+        `the commit what a browser showed you.`,
+    ).toEqual(Object.keys(CENSUS[file]))
   })
 })
 
@@ -818,53 +845,45 @@ function soleToken(value: string): string | null {
   return match === null ? match : match[1]
 }
 
-/** The two surfaces any text in this app can be inherited onto: the page and a
- *  panel.
+/** The surfaces an inherited `color` is checked against: the page, a panel, and
+ *  a raised panel.
  *
- *  **The three narrower surfaces are deliberately outside this bound, and the
- *  reason is a measurement rather than an oversight.** `--color-surface-raised`,
- *  `--color-surface-active` and `--color-surface-sunken` are the floating
- *  confirm, the current table row and the image surround, and several live
- *  tokens do not clear the floor on them today:
+ *  **`--color-surface-raised` joined this list on 2026-08-24, because a browser
+ *  found what its absence hid.** The Editorial refresh gave `FindingsPanel`'s
+ *  `.panel` a raised background, which moved severity text onto a surface no
+ *  check covered: `--color-severity-error` measured **4.39:1 on it in dark**,
+ *  under design §6's floor, with all five gates green. The fix darkened dark
+ *  `--color-surface-raised` to `#161925`; that pair is **4.65:1** now and the
+ *  surface is inside the bound, so it cannot drift back unnoticed.
  *
- *    --color-severity-error on --color-surface-raised   dark 4.39
+ *  **`--color-surface-active` and `--color-surface-sunken` are still outside**,
+ *  and that is a gap rather than a clean bound -- the same gap that hid the one
+ *  above. Live tokens do not clear the floor on them, re-derived at HEAD with
+ *  this file's own `contrastRatio`:
+ *
  *    --color-severity-error on --color-surface-active   dark 3.89, light 4.44
  *    --color-severity-error on --color-surface-sunken   light 4.35
  *    --color-null           on --color-surface-active   dark 4.27, light 4.41
  *    --color-null           on --color-surface-sunken   light 4.32
  *
- *  Re-derived 2026-08-24, when the Editorial ramp moved the light surfaces, by
- *  running this file's own `contrastRatio` over both ramps and diffing the two
- *  tables. **The same five pairs are under the floor before and after** -- the
- *  refresh widens this list by nothing -- and only light digits moved:
- *  error/sunken 4.41 to 4.35, null/active 4.37 to 4.41, null/sunken 4.34 to
- *  4.32. The dark digits are unchanged because the dark blocks are. The
- *  error-on-sunken row is new to *this list* and not to the tree: it was 4.41
- *  at the previous ramp and was simply missing from the four rows recorded
- *  here, which is worth knowing about a list nothing executes.
+ *  Four rows, **six pairs** -- state both, because a row can carry a dark
+ *  number and a light one and counting rows as pairs is how this list was
+ *  miscounted once already. Every one of them predates the Editorial refresh;
+ *  widening the bound to cover them is a source change, not a test change.
  *
- *  Whether any of those pairs is *reached* is a cascade question this file
- *  cannot answer, and the browser half can only answer it for a state somebody
- *  captured. The first one is reached: `SignOutControl.module.css`'s `.error`
- *  sits inside `.confirm`, which paints `--color-surface-raised`, so a failed
- *  sign-out in the dark theme is 4.39:1. It is recorded here as a finding, and
- *  the surface set stays at two rather than being widened to a set this tree
- *  does not satisfy -- widening it is a source change, which the round that
- *  wrote this file was not permitted to make. */
-/** The surfaces an inherited `color` is checked against.
+ *  **Whether any pair is *reached* is a cascade question this file cannot
+ *  answer.** One was: `SignOutControl.module.css`'s `.error` sits inside
+ *  `.confirm`, which paints `--color-surface-raised`, so a failed sign-out in
+ *  dark was the 4.39:1 above. **It now measures 4.65:1** -- resolved as a side
+ *  effect of the fix rather than by anyone aiming at it, which is worth saying
+ *  out loud so nobody re-files it.
  *
- *  `--color-surface-raised` joined this list on 2026-08-24, **because a browser
- *  found what its absence hid.** The Editorial refresh gave `FindingsPanel`'s
- *  `.panel` a raised background, which moved severity text onto a surface no
- *  check covered: `--color-severity-error` on it measured **4.39:1 in dark**,
- *  under design §6's floor, with all five gates green. The browser pass
- *  reported exactly 4.39 and this file's own arithmetic agrees.
- *
- *  `--color-surface-active` and `--color-surface-sunken` are deliberately still
- *  outside. Both carry known sub-floor pairs recorded in the table below, all
- *  predating this refresh, and adding them would red this suite for defects
- *  nobody has decided to fix. **That is a gap, not a clean bound** -- the same
- *  gap that hid this one. */
+ *  This block replaced two stacked docblocks on 2026-08-24: the commit that
+ *  added the second left the first in place, and the first went on asserting
+ *  two surfaces, five under-floor pairs and unchanged dark digits -- all three
+ *  falsified by that same commit. A fix wave leaving its own predecessor
+ *  standing is this project's most-repeated defect, and it happened here inside
+ *  the fix for a defect a browser had just found. */
 const INHERITABLE_SURFACES = [
   '--color-background',
   '--color-surface',

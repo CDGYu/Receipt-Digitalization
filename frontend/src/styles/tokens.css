@@ -65,9 +65,13 @@
    * `LineItemsTable.tsx:109`" and "Task 3 owns the swap" for a day after Task 3
    * did it, in a file the documentation sweep itself edited.
    *
-   * `--color-surface-sunken` is the ImagePane surround, which design §5.5
-   * specifies as #F1F5F9 without naming a token for it. Sunken rather than
-   * raised: the photograph sits *in* the page, below the panel surfaces. */
+   * `--color-surface-sunken` is the ImagePane surround. Design §5.5 specifies it
+   * as #F1F5F9 without naming a token for it; **the Editorial refresh warmed the
+   * token to #F4F3F0 on 2026-08-24**, so the value two lines below no longer
+   * matches the number §5.5 wrote down. `ImagePane.module.css` carries the same
+   * note; it was added there and not here, which is why this one says it now.
+   * Sunken rather than raised: the photograph sits *in* the page, below the
+   * panel surfaces. */
   --color-surface-active: #EFF6FF;
   --color-surface-sunken: #F4F3F0;
   --color-foreground: #1C1B19;

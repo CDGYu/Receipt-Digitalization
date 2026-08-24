@@ -34,7 +34,8 @@ Design §7 says `frontend/tests/stylesheets.test.ts` "pins declarations by name 
 | a colour token that is not `#RRGGBB` | **yes** | `stylesheets.test.ts`, explicit assertion |
 | `color` + `background` **in one rule**, below 4.5:1 | **yes**, in all three theme blocks | "clears the floor for every colour painted on a background in the same rule" |
 | a `color` token with no background, on `--color-background` or `--color-surface` | **yes**, in all three theme blocks | `INHERITABLE_SURFACES` |
-| the same token on `--color-surface-raised`, `--color-surface-active` or `--color-surface-sunken` | **NO** | those three are not in `INHERITABLE_SURFACES` |
+| the same token on `--color-surface-active` or `--color-surface-sunken` | **NO** | neither is in `INHERITABLE_SURFACES` |
+| ~~the same token on `--color-surface-raised`~~ | **gated since `0fe6be5`** | it joined `INHERITABLE_SURFACES` after the browser pass found severity text at 4.39:1 on it — the row above is what this plan believed, and Task 6 is what corrected it |
 | spacing, radii, type sizes, shadows — any quantity | **no** | nothing reads them |
 | how any of it looks | **no** | `css: false`, jsdom lays nothing out |
 
