@@ -206,6 +206,20 @@ class Receipt(Base):
         sa.Boolean, nullable=False, default=False
     )
 
+    #: What the run was doing when it was last known alive, and when that was.
+    #: Written by the heartbeat sink on every stage entry and once per model
+    #: call inside extract, so the largest gap between two writes is one model
+    #: call -- which is what lets a sweep tell a slow receipt from a stranded
+    #: one.
+    #:
+    #: NULL means no run has ever reported on this receipt. That is a
+    #: *different* failure mode from "started and went cold", on a different
+    #: timescale, and `receipts.sweep` must not collapse the two: a receipt
+    #: queued behind a backlog is healthy and has no heartbeat either.
+    progress_stage: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
+    progress_at: Mapped[datetime | None] = mapped_column(
+        sa.DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()
     )
