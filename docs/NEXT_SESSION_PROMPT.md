@@ -118,14 +118,15 @@ read the issue, they are not equivalent:**
 **Two more await you and are older:** **ISSUE-027** (a PDF is accepted at the
 door and always dies at `preprocess`), and **ISSUE-006's arithmetic residual**.
 
-**Held, not lost — two things a session deliberately did not commit.**
+**Held, not lost — one thing a session deliberately did not commit.**
 
-- **The compose `VLM_*` env.** The image can now reach Ollama (ISSUE-028 fixed
-  at `45b5329`), but pointing the dev worker at a real model **while ISSUE-029
-  is open** turns every dev upload into a ~15-minute hang that ends by stranding
-  the receipt — strictly worse than today's fast, honest `FakeVLMClient
-  exhausted`. **It should land after the ceiling, not before.** The change sits
-  uncommitted in `docker-compose.yml`.
+- ~~**The compose `VLM_*` env.**~~ **LANDED 2026-08-25 at `dbc1365`.** It was
+  held because pointing the dev worker at a real model **while ISSUE-029 was
+  open** turned every dev upload into a long hang that ended by stranding the
+  receipt — so **"it should land after the ceiling, not before"**. ISSUE-029
+  and ISSUE-030 both closed on 2026-08-25, so the condition was met: a hang now
+  ends in `needs_review` instead of in silence. The values it derives are
+  recorded beside the setting in the file.
 - **The `docs/` prose sweep.** A sample of six falsifiable claims in the
   high-traffic docs found **two false, both in this handoff pair** — including
   one telling the owner to rule on whether to build a screen that had shipped
@@ -278,36 +279,39 @@ the wrong push state twice, in both directions. Run the commands rather than the
 sentence (ADR-0028 §1):
 
 ```
-git status --short                                # docker-compose.yml is HELD, see below
+git status --short                                # must be empty; nothing is held now
 git log --oneline -6
-git branch --no-merged main                       # named FIVE on 2026-08-25, not one
-git rev-parse main                                # merged tip, BEHIND the branch
+git branch --no-merged main                       # named FOUR on 2026-08-25
+git rev-parse main                                # merged tip
 git ls-remote --heads origin main                 # authoritative on what is pushed
 git log --oneline refs/remotes/origin/main..main  # what the pending push would send
 ```
 
-## A COMPLETE BRANCH IS WAITING ON YOU, AND IT IS NOT MERGED.
+## THE TERMINAL-STATE GUARANTEE IS MERGED AND PUSHED.
 
-**`feat/terminal-state-guarantee` is finished** (2026-08-25, **ADR-0054**):
-seven tasks, **all five gates PASS at `5c1e8eb`** (the last commit before the
-handoff pair — named rather than "the tip", which the pair commit moves),
-suite **1430**, working tree clean apart from the deliberately-held
-`docker-compose.yml`. It closes
-**ISSUE-029**, **ISSUE-030** and **ISSUE-031**.
+**`feat/terminal-state-guarantee` landed on 2026-08-25** (**ADR-0054**): seven
+tasks, suite **1430**, closing **ISSUE-029**, **ISSUE-030** and **ISSUE-031**.
+Merged by **true fast-forward** `b7ef275` -> `79d9db7` — **30 commits, zero
+merge commits** — with **all five gates PASS at the merged tip**, run there
+rather than inferred from the branch. Pushed to `origin/main`, which needed no
+force: it was at `b7ef275`, exactly where local `main` was.
 
-**Two things are owed by the user and by nobody else:**
-1. **The merge.** The plan's close ends in a fast-forward merge to `main`. It
-   was deliberately not taken: `main` waits for the user on this project.
-2. **The push.** The remote is at `e91bad8`, the **pre-rebuild lineage**, so
-   this is a force-with-lease and **not** a fast-forward. The
-   destructive-commands hook blocks the assistant from running it, which is
-   why it has sat owed across sessions.
+**One ref is still stale, and it is not `main`.**
+`origin/feat/terminal-state-guarantee` sits at `e91bad8`, the pre-rebuild
+lineage. Updating it is a force-with-lease that the destructive-commands hook
+blocks the assistant from running. **Nothing depends on it** — every commit it
+would carry is already on `main` — so this is tidiness, not work. The branch
+itself is kept locally per the repo rule on merged `feat/*`.
 
-**`docker-compose.yml` carries an uncommitted 28-line change and must stay
-uncommitted.** It is the worker's `VLM_*` environment. Its
-`VLM_TIMEOUT_S: "3600"` implies a **nine-hour** derived job ceiling under
-ADR-0054 decision 5, which is worth deciding before it lands. Do not `git add
--A` anywhere near it.
+**`docker-compose.yml` is committed** (`dbc1365`) and the working tree is clean;
+it no longer needs holding. It points the worker at the Docker Ollama. Its
+`VLM_TIMEOUT_S: "3600"` derives, **measured by calling the functions rather than
+by arithmetic**: `one_call` 10800s, job ceiling **32580s (9.05h)**, sweep
+`started_cutoff` 21600s, sweep `unstarted_cutoff` **388800s = 4.5 days**. The
+ceiling is fine — with the sweep carrying the guarantee it is only a resource
+guard on a worker slot. **The 4.5-day unstarted window is the one to watch**,
+and it is UNSTARTED_MARGIN's stated trade rather than a defect. **No gate covers
+that file**; `docker compose config` is the only check that reads it.
 
 **What that milestone does NOT buy, because no gate can say it:** nothing
 schedules `receipts sweep`, so the guarantee holds only where an operator
