@@ -2579,8 +2579,21 @@ pydantic, so it cannot rot when the schema library changes.
 
 ## ISSUE-023 — Consistency voting has neither tolerance nor shared alignment
 
-**Status:** OPEN — recorded, not fixed. It is `IMPLEMENTATION_PLAN.md` P2.T1,
-which was never built.
+**Status:** **RESOLVED 2026-08-25** at `aa65a2b`. `_vote` compares money through
+`within_tolerance` and matches line items through `align_line_items` against the
+longest run. Everything after this block describes the defect as it stood until
+then.
+
+**P0.T3's acceptance is now met in substance, and the wording matters.** It named
+*two* consumers of `align_line_items` — `eval.metrics.line_item_f1` and
+`consistency.diff_extractions` — and only the first existed. There are two now,
+but **`consistency.diff_extractions` still does not exist**: verified
+2026-08-25, that symbol appears nowhere in code, only in P0.T3's acceptance line
+and in `RECEIPT_SYSTEM_SPEC.md`'s signature block. The second consumer is `_vote`
+in `src/receipts/extract/extractor.py`, which P2.T1's own **Files** line calls
+"(consistency diff)". So the property the acceptance was reaching for holds —
+one alignment strategy, two callers — while the module it names was never built
+under that name.
 **Owner action required:** no. **Discovered:** 2026-08-23, auditing
 `IMPLEMENTATION_PLAN.md` against the tree.
 **Pre-existing:** yes — `run_consistency` has had this shape since Phase 0.
@@ -2627,14 +2640,20 @@ warning was deleted rather than softened — ADR-0048.)*
 ### Related
 
 - P7.T1 — `run_consistency` is unwired, which is the only reason this is latent.
-- `IMPLEMENTATION_PLAN.md` P0.T3 (acceptance half-met) and P2.T1.
+- `IMPLEMENTATION_PLAN.md` P0.T3 (acceptance met in substance since `aa65a2b`;
+  the `consistency.diff_extractions` it names still does not exist) and P2.T1.
 
 ---
 
 ## ISSUE-024 — Nothing cross-checks the triage line-count against what was extracted
 
-**Status:** OPEN — recorded, not fixed. It is `IMPLEMENTATION_PLAN.md` P2.T3,
-which was never built.
+**Status:** **RESOLVED 2026-08-25** at `aa65a2b`. R071 compares the triage
+estimate against `len(line_items)` and WARNs when at most half survived and at
+least three rows are missing — so this entry's own worked example, 12 counted
+against 6 extracted, lands exactly on the boundary. **"Large" was the decision
+this entry left open, and its blind spot is deliberate and pinned:** 4 estimated
+against 2 extracted is half a receipt lost and does NOT fire. Everything after
+this block describes the defect as it stood until then.
 **Owner action required:** no. **Discovered:** 2026-08-23, auditing
 `IMPLEMENTATION_PLAN.md` against the tree.
 **Pre-existing:** yes. **Blocks:** nothing, but it leaves the spec §18
@@ -2681,8 +2700,12 @@ fire on correct extractions.
 
 ## ISSUE-025 — Best-attempt selection is proven only in isolation
 
-**Status:** OPEN — recorded, not fixed. It is `IMPLEMENTATION_PLAN.md` P2.T4,
-whose acceptance is unmet although the mechanism ships.
+**Status:** **RESOLVED 2026-08-25** at `aa65a2b`.
+`test_the_pipeline_keeps_the_best_attempt_when_the_repair_is_worse` drives a
+strictly worse repair through `process_receipt` and asserts the PERSISTED row
+carries the extract's values. It also asserts the repair was attempted, without
+which it passes on a pipeline that never repairs at all. Everything after this
+block describes the gap as it stood until then.
 **Owner action required:** no. **Discovered:** 2026-08-23, auditing
 `IMPLEMENTATION_PLAN.md` against the tree.
 **Pre-existing:** yes. **Blocks:** nothing. It is a coverage gap in a guarantee
