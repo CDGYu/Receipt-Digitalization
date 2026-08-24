@@ -603,6 +603,49 @@ def test_the_three_added_fields_are_null_when_the_column_is(reviewer_client, pen
     assert body["payment_method"] is None
 
 
+# --------------------------------------------------------------------------- #
+# The detail re-checks the receipt as it now stands (Task 4)
+# --------------------------------------------------------------------------- #
+
+
+def test_the_detail_returns_current_findings_beside_the_extraction_run_ones(
+    reviewer_client, receipt_id
+):
+    """Two lists, never merged. The whole point is that they mean different things.
+
+    ``findings`` is what the extraction run recorded and is history.
+    ``current_findings`` is recomputed from the receipt as it stands now.
+    Merging them would destroy the distinction and re-create the defect.
+    """
+    body = reviewer_client.get(f"/receipts/{receipt_id}").json()
+    assert "current_findings" in body
+    assert "not_rechecked" in body
+    assert body["not_rechecked"] == ["R001", "R013", "R060", "R061", "R070"]
+    assert isinstance(body["findings"], list)
+
+
+def test_the_two_finding_lists_disagree_about_this_receipt(reviewer_client, receipt_id):
+    """The stronger half of the test above, which "both keys are present" cannot see.
+
+    ``RECEIPT_B``'s two stored findings (``R020``, ``R011``) were written by
+    ``_seed`` as a history and are not what the row says today; recomputing the
+    content rules over the row instead yields ``R022`` -- 900 + 80 - 5 is 975,
+    not the printed 1000. Measured 2026-08-25 through ``GET /receipts/{id}``.
+    The two lists share **no** rule id, so an implementation that merged them,
+    or that returned the stored list under both keys, fails here.
+
+    The keys are asserted to match because ``receipt_detail`` promises a client
+    one ``Finding`` shape for both lists; ``resolved_by_repair`` is the one that
+    cannot be read off a fresh report and is pinned to ``False``.
+    """
+    body = reviewer_client.get(f"/receipts/{receipt_id}").json()
+
+    assert [f["rule_id"] for f in body["findings"]] == ["R020", "R011"]
+    assert [f["rule_id"] for f in body["current_findings"]] == ["R022"]
+    assert set(body["current_findings"][0]) == set(body["findings"][0])
+    assert body["current_findings"][0]["resolved_by_repair"] is False
+
+
 def test_list_filters_and_pages(reviewer_client):
     body = reviewer_client.get("/receipts", params={"status": "needs_review", "limit": 1}).json()
     assert len(body["items"]) == 1

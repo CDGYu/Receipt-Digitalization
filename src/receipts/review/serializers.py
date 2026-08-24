@@ -28,6 +28,7 @@ that boundary.
 
 from __future__ import annotations
 
+import logging
 import uuid
 from datetime import date as date_cls
 from datetime import time as time_cls
@@ -46,16 +47,22 @@ from ..extract.schema import Modifier as ExtractModifier
 from ..extract.schema import Payment as ExtractPayment
 from ..persist.models import Correction, LineItem, Receipt, ReviewTask, ValidationFinding
 from ..score.confidence import ReceiptStatus
-from ..validate.report import Severity
+from ..validate.context import ValidationContext
+from ..validate.report import Finding, Severity, ValidationReport
+from ..validate.rules import RULES, Subject
 from .signing import sign_url
+
+log = logging.getLogger(__name__)
 
 __all__ = [
     "build_export_rows",
     "correction_summary",
     "money",
+    "not_rechecked",
     "query_export_receipts",
     "receipt_detail",
     "receipt_summary",
+    "revalidate",
 ]
 
 #: Receipt statuses ``query_export_receipts`` leaves out unless ``status=``
@@ -170,6 +177,22 @@ def _finding(finding: ValidationFinding) -> dict[str, Any]:
     }
 
 
+def _report_finding(finding: Finding) -> dict[str, Any]:
+    """One in-memory finding in the same shape :func:`_finding` gives an ORM row.
+
+    Same keys deliberately, so the client's ``Finding`` type covers both lists.
+    ``resolved_by_repair`` is always ``False`` here: repair is an extraction-run
+    concept and a freshly computed finding has not been through one.
+    """
+    return {
+        "rule_id": finding.rule_id,
+        "severity": finding.severity.value,
+        "message": finding.message,
+        "context": finding.context,
+        "resolved_by_repair": False,
+    }
+
+
 def correction_summary(correction: Correction) -> dict[str, Any]:
     """One ``corrections`` row as JSON (``GET /receipts/{id}/corrections``).
 
@@ -193,7 +216,13 @@ def correction_summary(correction: Correction) -> dict[str, Any]:
     }
 
 
-def receipt_detail(receipt: Receipt, findings: list[ValidationFinding]) -> dict[str, Any]:
+def receipt_detail(
+    receipt: Receipt,
+    findings: list[ValidationFinding],
+    *,
+    expected_buyer_name: str | None = None,
+    expected_buyer_tax_id: str | None = None,
+) -> dict[str, Any]:
     """The full receipt (``GET /receipts/{id}``), findings included.
 
     ``findings`` is passed in rather than re-read off ``receipt`` because the
@@ -201,6 +230,14 @@ def receipt_detail(receipt: Receipt, findings: list[ValidationFinding]) -> dict[
     :func:`receipts.persist.repository.get_findings` (oldest first) --
     fetching it again here would be a second query for data the caller was
     going to load anyway.
+
+    **Two finding lists come back, and they are not the same fact.**
+    ``findings`` is what the extraction run recorded; ``current_findings`` is
+    :func:`revalidate` run over the row as it now stands, and ``not_rechecked``
+    names the rules that recomputation could not ask. The two
+    ``expected_buyer_*`` keywords are the only context :func:`revalidate` cannot
+    supply itself; both blank makes R014/R015 inert, so a caller that omits them
+    loses two rules from ``current_findings`` and is told nothing about it.
 
     Every money column lives under ``totals``, named after
     :class:`receipts.extract.schema.Totals` (``subtotal``, ``tax``,
@@ -332,6 +369,19 @@ def receipt_detail(receipt: Receipt, findings: list[ValidationFinding]) -> dict[
         "prices_include_tax": receipt.prices_include_tax,
         "line_items": [_line_item(item) for item in receipt.line_items],
         "findings": [_finding(finding) for finding in findings],
+        # Beside `findings`, never merged into it. `findings` is what the
+        # extraction run recorded and is history; these are recomputed from the
+        # row as it now stands. One list holding both would destroy exactly the
+        # distinction that made this defect visible.
+        "current_findings": [
+            _report_finding(finding)
+            for finding in revalidate(
+                receipt,
+                expected_buyer_name=expected_buyer_name,
+                expected_buyer_tax_id=expected_buyer_tax_id,
+            ).findings
+        ],
+        "not_rechecked": not_rechecked(),
     }
 
 
@@ -630,3 +680,86 @@ def build_export_rows(
         )
 
     return extractions, rows
+
+
+# --------------------------------------------------------------------------- #
+# Re-validation on read (ISSUE-033)
+# --------------------------------------------------------------------------- #
+
+
+#: The rules that can answer from a persisted receipt alone. Filtered from the
+#: registry rather than listed, so a rule added later is included or excluded by
+#: its own declaration and never by this module's memory of it.
+_CONTENT_RULES = [rule for rule in RULES if rule.subject is Subject.CONTENT]
+
+
+def not_rechecked() -> list[str]:
+    """The rule ids a reviewer's screen must NOT claim were checked.
+
+    Derived from the registry, never written out. Without this list an empty
+    ``current_findings`` reads as "everything was checked and is fine", which is
+    the confidently-wrong-answer shape this whole change exists to remove.
+    """
+    return sorted(rule.id for rule in RULES if rule.subject is Subject.RUN)
+
+
+def revalidate(
+    receipt: Receipt,
+    *,
+    expected_buyer_name: str | None = None,
+    expected_buyer_tax_id: str | None = None,
+) -> ValidationReport:
+    """Run the content rules against the receipt AS IT NOW STANDS.
+
+    Pure, and deliberately writes nothing. A stored copy would be stale the
+    moment the next correction landed -- the defect this closes, re-created one
+    table over -- whereas a report computed on read cannot be out of date.
+
+    The context carries only what a review route can honestly rebuild
+    (:data:`~receipts.validate.context.REVIEW_RECONSTRUCTIBLE`): the two
+    ``expected_buyer_*`` fields below, plus ``config`` and ``today`` at their
+    process-local defaults. The expected buyer is passed IN rather than read
+    from ``Settings`` here, keeping validation reproducible from its inputs,
+    exactly as :func:`receipts.pipeline.process_receipt` does it. **Both blank
+    makes R014/R015 inert** (``expects_a_buyer`` in
+    :mod:`receipts.validate.rules`), so a caller that omits them silently loses
+    two content rules; ``review/api.py`` supplies them from
+    ``app.state.settings``.
+
+    ``RULES`` is looped over here rather than through
+    :func:`receipts.validate.validator.validate`, which runs the whole registry
+    and takes no subset. Filtering its output afterwards would be worse than
+    duplication: the RUN rules would have been handed a context they must never
+    see, and a rule that read one absent field would answer quietly rather than
+    not at all.
+
+    A rule that raises is logged and skipped, so a broken rule costs one answer
+    rather than the whole review screen. That containment is written here
+    because it is not inherited, and it is deliberately weaker than
+    ``validate()``'s: that function turns a crash into an INFO ``{id}.crashed``
+    finding a reviewer can see, while a crash here is visible only in the log.
+
+    :func:`_export_extraction` is not wrapped: if a receipt written by
+    ``save_extraction`` cannot be rebuilt, that is a data-integrity defect and a
+    loud failure is the correct signal. Swallowing it into an empty report would
+    manufacture the exact silent wrong answer this function exists to remove.
+
+    **A refund stored before 2026-08-24 rebuilds as a sale and earns a false
+    ``R040``**, because ``receipts.is_refund`` was added that day as NOT NULL
+    defaulting to false and no column exists that a backfill could have guessed
+    the true value from -- which is why the column was added at all.
+    """
+    ctx = ValidationContext(
+        expected_buyer_name=expected_buyer_name,
+        expected_buyer_tax_id=expected_buyer_tax_id,
+    )
+    extraction = _export_extraction(receipt)
+    findings: list[Finding] = []
+    for rule in _CONTENT_RULES:
+        try:
+            if not rule.applies(extraction, ctx):
+                continue
+            findings.extend(rule.check(extraction, ctx))
+        except Exception:  # a broken rule must not take down the review screen
+            log.exception("rule %s crashed during re-validation", rule.id)
+    return ValidationReport(findings=findings)
