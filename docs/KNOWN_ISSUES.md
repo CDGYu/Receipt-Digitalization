@@ -3067,3 +3067,111 @@ queue.
 - ISSUE-029 — forced the run off the queue path, which is how this was found.
 - ADR-0013 — ingest does not enqueue, and `--inline` is the no-Redis path.
 - ADR-0048 — a rationale is a second claim; see the near-miss above.
+
+---
+
+## ISSUE-032 — The line-items table paints a control over the column beside it
+
+**Status:** OPEN. **The symptom is measured and reproducible; the cause is NOT
+established, and the obvious fix is probably the wrong one.** Read the
+"refuted" section before touching the stylesheet.
+**Owner action required:** not yet — one measurement decides the fix, and it is
+named below.
+**Discovered:** 2026-08-24, by the Editorial refresh's browser pass (design
+decision 14). **Pre-existing:** yes — it arrived with the `is_template_row`
+control merged that morning, and **`main` is very likely red on this test now.**
+**Blocks:** nothing mechanically. It makes a reviewer's line-items table
+misread at every width.
+
+### The symptom, measured
+
+`frontend/e2e/visual.spec.ts` measures each `tbody td`'s
+`getBoundingClientRect().width` against the width of the `input` inside it. On
+the seeded review screen it reports, **at all four viewports and in both
+themes**, two rows of:
+
+```
+{ column: "Template", cell: 0, control: 13, overflowsBy: 13 }
+```
+
+A 13px checkbox in a cell whose border box measures **zero**. Under
+`table-layout: fixed` the cell does not grow, so the control paints over the
+column beside it and the right-aligned em dash — the mark meaning "never
+extracted" — is pushed outside the clipped scroller.
+
+### What is established
+
+- **Cell mapping is sound.** The header renders **8** `<th>` and each body row
+  renders **8** `<td>`, with no `colSpan` anywhere.
+- **The stylesheet declares 7 widths for those 8 columns.**
+  `.head th:nth-child(1..7)` are `3rem, 24%, 12%, 12%, 9%, 14%, 14%` — i.e.
+  **`3rem` + 85%** — and `Template`, the eighth, has no rule. The file's own
+  prose still says "seven columns" in two places.
+- **The probe's labelling is page-wide** (`document.querySelectorAll('thead th')`
+  and `('tbody td')`), so on a screen with two tables the `column` name can be
+  wrong. **Not a factor here** — the review screen renders exactly one table.
+
+### REFUTED: the missing width rule alone does not cause this
+
+The obvious reading is "the eighth column has no width, so it gets none". **A
+reproduction refutes it.** The same eight columns and the same rules —
+`table-layout: fixed`, `width: 100%`, `min-width: 44rem`,
+`border-collapse: collapse`, `.row > td` padding — measured in Chromium:
+
+| viewport | table | column widths | 8th |
+|---|---|---|---|
+| 375 | 704 | 51,171,86,86,65,100,100,**43** | **43** |
+| 768 | 768 | 51,186,94,94,71,109,109,**53** | **53** |
+| 1024 | 1024 | 51,248,125,125,94,145,145,**91** | **91** |
+| 1440 | 1440 | 51,347,175,175,132,203,203,**153** | **153** |
+
+An unwidthed column takes the remainder and is never 0 — always several times
+the 13px control. **So something else collapses it in the app.**
+
+### The surviving hypothesis, as a prediction that can be falsified
+
+Under fixed layout the eighth column is `W − 48 − 0.85W = 0.15W − 48`, which is
+**≤ 0 exactly when the table's rendered width `W` ≤ 320px.** So the prediction
+is: **the real `.table` is rendering at ≤320px wide, despite `min-width: 44rem`**
+— and if so the whole table is collapsed and every column is being squeezed,
+not just the eighth.
+
+### The one measurement that settles it
+
+On the seeded review screen, read the computed width of `.table` (and of its
+scroller). If it is ~704px or more, the prediction is wrong and the cause is
+something else again — do not guess a third time, instrument it. If it is
+≤320px, the defect is **whatever defeats `min-width: 44rem`**, and the column
+allocation is a red herring.
+
+*(Not measured yet only because this host cannot currently run the harness: the
+Playwright `webServer` chain — build, seed, serve — timed out at its 180s
+ceiling under unrelated CPU load.)*
+
+### Why the fix is being withheld
+
+An earlier draft of this issue recommended: give column 8 a width, raise
+`min-width`, fix the "seven columns" prose, and pin header count against width
+rules. **The reproduction above makes the first of those probably useless** — if
+the table is collapsed, allocating a width for one column changes nothing.
+Filing that fix would have been fixing the symptom's most plausible cause rather
+than its actual one, which is the failure mode this register exists to prevent.
+
+**What survives regardless of the mechanism:**
+
+1. **The prose is wrong.** "Seven columns" appears twice while eight render.
+2. **A pin is missing, and it is the property rather than an instance:** *every
+   column the header renders has a declared width*, derived by counting `<th>`
+   against `nth-child` width rules. Without it, a ninth column repeats this
+   exactly — an enumerated list of rules silently falling out of step with a
+   markup list is what produced it.
+3. **Playwright is not one of the five gates**, so this shipped to `main` and
+   stayed there unseen. The guard that caught it was added by an *earlier*
+   browser pass; nothing ran it between that merge and 2026-08-24.
+
+### Related
+
+- ADR-0029 — what the gates certify, and what they do not.
+- ISSUE-006 — the `is_template_row` control this column exists for.
+- ISSUE-028, ISSUE-031 — the other two found this day by running something
+  rather than reading it.
