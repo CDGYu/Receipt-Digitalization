@@ -235,9 +235,11 @@ def receipt_detail(
     ``findings`` is what the extraction run recorded; ``current_findings`` is
     :func:`revalidate` run over the row as it now stands, and ``not_rechecked``
     names the rules that recomputation could not ask. The two
-    ``expected_buyer_*`` keywords are the only context :func:`revalidate` cannot
-    supply itself; both blank makes R014/R015 inert, so a caller that omits them
-    loses two rules from ``current_findings`` and is told nothing about it.
+    ``expected_buyer_*`` keywords come from ``Settings``, which a serializer
+    must not read; the rest of that function's context stays at
+    :class:`~receipts.validate.context.ValidationContext`'s own defaults. Both
+    blank makes R014/R015 inert, so a caller that omits them loses two rules
+    from ``current_findings`` and is told nothing about it.
 
     Every money column lives under ``totals``, named after
     :class:`receipts.extract.schema.Totals` (``subtotal``, ``tax``,
@@ -696,12 +698,12 @@ def revalidate(
     two content rules; ``review/api.py`` supplies them from
     ``app.state.settings``.
 
-    ``RULES`` is looped over here rather than through
+    :data:`_CONTENT_RULES` is looped over here rather than handed to
     :func:`receipts.validate.validator.validate`, which runs the whole registry
     and takes no subset. Filtering its output afterwards would be worse than
-    duplication: the RUN rules would have been handed a context they must never
-    see, and a rule that read one absent field would answer quietly rather than
-    not at all.
+    duplicating the loop: the RUN rules would have been handed a context they
+    must never see, and a rule that read one absent field would answer quietly
+    rather than not at all.
 
     A rule that raises is logged and skipped, so a broken rule costs one answer
     rather than the whole review screen. That containment is written here
