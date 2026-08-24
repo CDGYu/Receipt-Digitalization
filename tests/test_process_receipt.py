@@ -73,6 +73,7 @@ from receipts.pipeline import (  # noqa: E402
     STAGES,
     ProcessResult,
     _heartbeat_sink,
+    _stage,
     fan_out,
     process_batch,
     process_receipt,
@@ -1244,6 +1245,38 @@ def test_a_sink_that_raises_never_takes_the_receipt_down(
     assert result.failed_stage is None
 
 
+def test_a_raising_sink_does_not_escape_the_stage_guard() -> None:
+    """`_stage`'s own guard, called directly because nothing else can reach it.
+
+    `process_receipt` now hands `_stage` a `fan_out` product, and `fan_out`
+    swallows per delivery -- so a raising sink routed through the pipeline is
+    caught before `_stage` ever sees it. A test written that way proves
+    `fan_out` works and leaves this guard unpinned, which is exactly how it
+    came to be unpinned: removing it left the whole suite green.
+
+    So the sink is handed to `_stage` raw. That is a real path rather than a
+    contrivance -- the signature takes a `ProgressSink` and `_normalizer`
+    already calls `_stage` directly -- and what the guard buys is not losing
+    an extraction to a database blip in the heartbeat.
+
+    `seen` is asserted as well as the block running: without it this would
+    still pass if `_stage` stopped calling the sink at all, which is a guard
+    that guards nothing.
+    """
+    seen: list[str] = []
+
+    def boom(event):
+        seen.append(event.stage)
+        raise RuntimeError("sink")
+
+    entered = False
+    with _stage("load", boom):
+        entered = True
+
+    assert seen == ["load"], "the sink was never called, so nothing was guarded"
+    assert entered, "the guard let the exception escape and skipped the block"
+
+
 # --------------------------------------------------------------------------- #
 # The heartbeat: a run cannot be constructed without one
 # --------------------------------------------------------------------------- #
@@ -1274,6 +1307,12 @@ def test_process_receipt_heartbeats_with_no_progress_argument(
 
     with session_factory() as session:
         receipt = get_receipt(session, job.id)
+        # Checked first so this reddens on the assertion it is about. This is
+        # the sole guard for the whole milestone -- measured: removing the
+        # wiring is 1 failure in 1405 -- and without this line a `None` row
+        # would fail it with `'NoneType' object has no attribute
+        # 'progress_at'`, which names the wrong problem.
+        assert receipt is not None
         assert receipt.progress_at is not None
         assert receipt.progress_stage is not None
 
@@ -1288,10 +1327,12 @@ def test_a_receipt_with_no_row_beats_nothing_and_raises_nothing(
     narrates nothing -- it does not fail, and it does not conjure a row.
 
     This is reachable only through `process_batch`, which has **no production
-    caller** (checked: the only references to it in `src/` are its own
-    definition and two docstrings). Every path that can actually strand a
-    receipt creates the row first, so the milestone's guarantee is unaffected:
-    a receipt with no row is not stranded, it was never recorded.
+    caller**: `git grep -n "process_batch" -- src/` returns its definition at
+    `pipeline.py:1350` and three docstring mentions (`pipeline.py:19`,
+    `pipeline.py:459`, `cli.py:797`), and nothing else. Every path that can
+    actually strand a receipt creates the row first, so the milestone's
+    guarantee is unaffected: a receipt with no row is not stranded, it was
+    never recorded.
     """
     job = _job(storage)
 

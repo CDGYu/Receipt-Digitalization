@@ -255,6 +255,57 @@ def test_the_repair_loop_reports_every_attempt():
     assert "kept attempt" in seen[2]
 
 
+def test_a_raising_sink_does_not_escape_the_per_attempt_report():
+    """`_report`'s own guard, driven directly.
+
+    `pipeline.py` hands `extract_with_repair` a `fan_out` product, which
+    swallows per delivery, so a raising sink sent through the pipeline never
+    reaches this guard -- removing it left the whole suite green. Calling
+    `_report` with a raw sink is what actually pins it.
+
+    `seen` is asserted too: a guard that stopped calling the sink would
+    otherwise satisfy "nothing escaped" while guarding nothing.
+    """
+    from receipts.extract.extractor import _evaluate, _report
+
+    client = FakeVLMClient([good()])
+    attempt = _evaluate(
+        client.complete_json(system="", user="", images=[], schema=ReceiptExtraction),
+        CTX, None, "extract",
+    )
+    seen: list[str | None] = []
+
+    def boom(event):
+        seen.append(event.detail)
+        raise RuntimeError("sink")
+
+    _report(boom, [attempt])
+
+    assert seen and seen[0].startswith("attempt 1")
+
+
+def test_a_raising_sink_does_not_escape_the_best_attempt_choice():
+    """The third guard, isolated from the second.
+
+    The sink raises **only** on the kept-attempt event, so `_report`'s guard
+    is not involved and this test reddens for the best-attempt block alone.
+    Asserting the outcome as well proves the extraction survived rather than
+    merely that no exception surfaced.
+    """
+    seen: list[str] = []
+
+    def boom(event):
+        if event.detail and event.detail.startswith("kept attempt"):
+            seen.append(event.detail)
+            raise RuntimeError("sink")
+
+    client = FakeVLMClient([good()])
+    outcome = extract_with_repair(IMG, client, ctx=CTX, progress=boom)
+
+    assert seen and seen[0].startswith("kept attempt")
+    assert outcome.extraction.totals.total == D("224.00")
+
+
 # --------------------------------------------------------------------------- #
 # Few-shot ordering
 # --------------------------------------------------------------------------- #
