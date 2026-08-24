@@ -280,7 +280,7 @@ sentence (ADR-0028 §1):
 ```
 git status --short                                # docker-compose.yml is HELD, see below
 git log --oneline -6
-git branch --no-merged main                       # names feat/terminal-state-guarantee
+git branch --no-merged main                       # named FIVE on 2026-08-25, not one
 git rev-parse main                                # merged tip, BEHIND the branch
 git ls-remote --heads origin main                 # authoritative on what is pushed
 git log --oneline refs/remotes/origin/main..main  # what the pending push would send

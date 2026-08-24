@@ -131,11 +131,19 @@ stays reachable — ADR-0042. `git log --oneline -- docs/MEMORY.md` is the list.
 
 ## Snapshot
 
-- **`git branch --no-merged main` names `feat/terminal-state-guarantee`.** Run the
-  command rather than believing this sentence — this bullet read "NO BRANCH IN
-  FLIGHT" for three days while one existed, and announcing one after it landed
-  would be the same defect in the other direction. It said "must name NOTHING"
-  until 2026-08-25, when a branch was written under it.
+- **`git branch --no-merged main` named FIVE branches on 2026-08-25**, not one:
+  `feat/terminal-state-guarantee` (this milestone), plus
+  `feat/golden-label-privacy` and `feat/revalidate-corrected-receipt` — **both
+  of which moved on 2026-08-25, so other work is in flight** —
+  `feat/arithmetic-went-offline`, and `backup/tsg-before-rebase`. Run the
+  command rather than believing this sentence.
+  **This bullet has now been wrong in both directions.** It read "NO BRANCH IN
+  FLIGHT" for three days while one existed; then it read **"must name
+  NOTHING"**, which was false while at least three of the five above already
+  existed; then a refresh replaced that with a **singular** claim naming only
+  this milestone's branch, written without running the command. A count is the
+  part that rots — that is why the list above is dated and the command is the
+  answer.
 - **THE TERMINAL-STATE GUARANTEE IS COMPLETE AND UNMERGED** (2026-08-25,
   **ADR-0054**). Seven tasks on `feat/terminal-state-guarantee`; **all five gates
   PASS at `5c1e8eb`**, suite **1430** — that is the anchor above, the last commit
