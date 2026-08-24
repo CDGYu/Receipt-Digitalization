@@ -1183,7 +1183,19 @@ def _make(session, *, status, progress_at, created_at, stage="extract"):
 
 @pytest.fixture
 def six_shapes(session_factory):
-    """All six, keyed by name. Cutoffs used by the tests: started 30m, unstarted 6h."""
+    """All six shapes, keyed by name.
+
+    The cutoffs these ages are chosen against, derived rather than quoted so a
+    reader can check them:
+
+        one_call        = vlm_timeout_s x _SDK_ATTEMPTS = 600 x 3   = 1800s
+        started_cutoff  = one_call x STRAND_MARGIN      = 1800 x 2  = 1h
+        unstarted_cutoff= one_call x calls x UNSTARTED_MARGIN
+                        = 1800 x 3 x 12                             = 18h
+
+    So: 2h and 48h are cold; 1 minute and 1h are warm. If you change
+    STRAND_MARGIN or UNSTARTED_MARGIN, these ages must move with them.
+    """
     ids: dict[str, uuid.UUID] = {}
     with session_factory() as session:
         ids["stranded_started"] = _make(
