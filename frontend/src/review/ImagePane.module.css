@@ -5,6 +5,8 @@
  * surround hides the receipt's own edge and a page-coloured one hides the pane.
  * `#F1F5F9` is what §5.5 names, and Task 1 put exactly that value behind
  * `--color-surface-sunken` rather than leave a raw hex for this file to spell.
+ * The token has moved since: the Editorial refresh warmed it to `#F4F3F0`, so
+ * the name no longer resolves to the number §5.5 wrote down.
  * Sunken rather than raised: the photograph sits *in* the page, below the panel
  * surfaces around it.
  *

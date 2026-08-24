@@ -37,7 +37,7 @@
  * §5.2 asks for "zebra at 2% foreground tint". There is no tint token and this
  * task may not invent hex, so the alternation is between two surfaces that
  * already exist -- `--color-surface` and `--color-background`. Both pairs differ
- * in both themes (#FFFFFF/#F8FAFC light, #0E1223/#020617 dark), and neither is a
+ * in both themes (#FFFFFF/#FAFAF9 light, #0E1223/#020617 dark), and neither is a
  * severity colour, which is the constraint that matters: a row must never read
  * as a warning about itself. */
 

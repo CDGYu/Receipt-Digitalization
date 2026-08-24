@@ -29,9 +29,13 @@
  * a drag, and a box that looks droppable and is not is a worse lie than a plain
  * one.
  *
- * No new token is introduced. Plan 3 owns the Editorial palette and the display
- * face and moves token *values*; everything below is written against the names,
- * so it inherits that change for free. */
+ * No new token is introduced, and the token *values* plan 3 moves did arrive here
+ * for free: every rule below is written against the names. The rest did not.
+ * **Plan 3's Task 2 edited this file**, because a larger scale and a raised card
+ * are new declarations rather than new values: `.screen` took `--space-4xl` of
+ * vertical padding, `.heading` took `--font-display` at `--text-3xl`, and `.field`
+ * moved to `--color-surface-raised` with `--shadow-md`. This paragraph claimed the
+ * whole refresh was inherited; corrected 2026-08-24, once it was not. */
 
 .screen {
   box-sizing: border-box;

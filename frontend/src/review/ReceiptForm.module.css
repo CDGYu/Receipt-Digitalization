@@ -83,7 +83,7 @@
 /* The same shape as `MoneyInput.module.css`'s `.field`, so a text field and a
  * money field sit on one rhythm: the label above, the control below, both in one
  * column. `--color-muted-foreground` is the darkened light value ADR-0027 §2
- * records (#475569, ~8:1 on white) rather than the generated #94A3B8 that failed
+ * records (#57534E, ~8:1 on white) rather than the generated #94A3B8 that failed
  * the body-text rule. */
 .field {
   display: flex;
