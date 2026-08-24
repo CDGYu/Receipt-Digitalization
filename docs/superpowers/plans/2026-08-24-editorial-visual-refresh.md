@@ -73,7 +73,7 @@ So the honest statement is: **the ramp's brightness is gated and its hue is not.
 
 **Values, all measured. Use these verbatim.**
 
-Light block (`:root`) — every changed line, and only these:
+Light block (`:root`) — the ramp in full. **Eight of these nine values change**; `--color-surface` is already `#FFFFFF` and is listed only so the ramp reads as a whole. (This said "every changed line, and only these" until 2026-08-24, which made it a nine-change claim and was wrong by one.)
 
 ```css
   --color-background: #FAFAF9;
@@ -160,7 +160,7 @@ The failure message prints the received value for `styles/tokens.css`. Copy the 
 
 - [ ] **Step 6: Run the frontend gates**
 
-Run: `cd frontend && npx vitest run && npx tsc --noEmit`
+Run: `cd frontend && npx vitest run && npm run typecheck`
 
 Expected: PASS. The contrast checks are the ones that matter here — if any pair reds, the message names the token, the surface and the theme block. Do not "fix" it by lightening the background further without re-measuring every reserved colour against the new value.
 
@@ -204,7 +204,7 @@ As Task 1 Step 5, mechanically from the received value. Each rule that gained a 
 
 - [ ] **Step 4: Run the gates**
 
-Run: `cd frontend && npx vitest run && npx tsc --noEmit`
+Run: `cd frontend && npx vitest run && npm run typecheck`
 
 Expected: PASS. If a contrast pair reds here it means `--color-surface-raised` now carries text that `--color-surface` did not — read the message, it names the rule.
 
@@ -243,7 +243,7 @@ Exactly one rule per file, named — **not** "the outermost rule that sets `--co
 - [ ] **Step 3: Re-derive the census entries, run the gates, commit**
 
 ```bash
-cd frontend && npx vitest run && npx tsc --noEmit
+cd frontend && npx vitest run && npm run typecheck
 git add frontend/src/review frontend/tests/stylesheets.test.ts
 git commit -m "feat(ui): the review cluster on the Editorial scale"
 ```
@@ -279,7 +279,7 @@ Leave every `.alert` and `.waiting` on `--color-surface`.
 - [ ] **Step 2: Re-derive the three census entries, run the gates, commit**
 
 ```bash
-cd frontend && npx vitest run && npx tsc --noEmit
+cd frontend && npx vitest run && npm run typecheck
 git add frontend/src/login frontend/src/receipts frontend/src/admin frontend/tests/stylesheets.test.ts
 git commit -m "feat(ui): login, receipts and admin adopt the scale"
 ```
