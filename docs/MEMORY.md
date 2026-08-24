@@ -138,7 +138,10 @@ stays reachable — ADR-0042. `git log --oneline -- docs/MEMORY.md` is the list.
   until 2026-08-25, when a branch was written under it.
 - **THE TERMINAL-STATE GUARANTEE IS COMPLETE AND UNMERGED** (2026-08-25,
   **ADR-0054**). Seven tasks on `feat/terminal-state-guarantee`; **all five gates
-  PASS at the tip**, suite **1430**. It closes **ISSUE-029** (`c08b718`),
+  PASS at `5c1e8eb`**, suite **1430** — that is the anchor above, the last commit
+  before this pair, and it is named rather than called "the tip" because the
+  pair commit moves the tip and would falsify the sentence carrying it
+  (ADR-0032 section 2). Re-run them yourself; a gate run is about a commit. It closes **ISSUE-029** (`c08b718`),
   **ISSUE-030** (`63084b6`, `41d2933`, `d1e446b`) and **ISSUE-031** (`2d1bea9`,
   `d1e446b`): a heartbeat written as the run works, `receipts sweep` and a
   single-row sweep on the progress route, and a progress route that falls back to

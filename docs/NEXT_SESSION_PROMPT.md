@@ -289,8 +289,10 @@ git log --oneline refs/remotes/origin/main..main  # what the pending push would 
 ## A COMPLETE BRANCH IS WAITING ON YOU, AND IT IS NOT MERGED.
 
 **`feat/terminal-state-guarantee` is finished** (2026-08-25, **ADR-0054**):
-seven tasks, **all five gates PASS at the tip**, suite **1430**, working tree
-clean apart from the deliberately-held `docker-compose.yml`. It closes
+seven tasks, **all five gates PASS at `5c1e8eb`** (the last commit before the
+handoff pair — named rather than "the tip", which the pair commit moves),
+suite **1430**, working tree clean apart from the deliberately-held
+`docker-compose.yml`. It closes
 **ISSUE-029**, **ISSUE-030** and **ISSUE-031**.
 
 **Two things are owed by the user and by nobody else:**
