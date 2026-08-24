@@ -8,6 +8,10 @@ This directory is the on-ramp: drop in hand-labelled receipts and the validator
 tells you whether they are schema-valid and whether the set is the right size
 and mix.
 
+**Working through a stack of receipts?** `RUN_SHEET.md` beside this file is the
+same procedure in the order you do it, with the mistakes that have actually been
+made and the arithmetic of what is still to collect.
+
 ## Layout
 
 ```
