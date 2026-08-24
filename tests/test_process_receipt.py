@@ -549,6 +549,47 @@ def test_repair_resolved_findings_are_kept_as_history(session_factory, storage, 
         assert runs[1].prompt_hash != runs[2].prompt_hash
 
 
+def test_the_pipeline_keeps_the_best_attempt_when_the_repair_is_worse(
+    session_factory, storage, settings
+):
+    """P2.T4's acceptance: proven UNDER THE PIPELINE, not just in isolation.
+
+    `extract_with_repair` promises the best attempt rather than the last, and
+    `tests/test_extractor.py` pins the adversarial direction by calling it
+    directly. Nothing drove a worse repair through `process_receipt`, so the
+    guarantee the pipeline depends on was asserted by no test that persists a
+    row -- ISSUE-025, and `git grep -in worse -- tests/test_process_receipt.py`
+    returned nothing when it was filed.
+
+    The repair here is strictly worse than the extract it was asked to fix: the
+    same unreconcilable total, plus a quantity that no longer multiplies out.
+    So the row that lands must carry the EXTRACT's values.
+    """
+    worse = _broken_totals()
+    worse.line_items[0].qty = D("7")  # 7 x 100.00 != 100.00 -- a second ERROR
+    job = _job(storage)
+    client = _Client([_triage(), _broken_totals(), worse])
+
+    _run(job, client, session_factory, storage, settings)
+
+    with session_factory() as session:
+        # **The repair must actually have been attempted.** Without this the
+        # test passes on a pipeline that never repairs at all: the extract's
+        # values would survive for the wrong reason, and the selection this
+        # exists to pin would never run.
+        runs = session.scalars(
+            select(ExtractionRun).where(ExtractionRun.receipt_id == job.id)
+        ).all()
+        assert [run.pass_name.value for run in runs] == ["triage", "extract", "repair"]
+
+        receipt = get_receipt(session, job.id)
+        by_position = sorted(receipt.line_items, key=lambda item: item.position)
+        # Asserted on the PERSISTED row rather than on the returned outcome:
+        # what the pipeline reports and what it writes are two claims, and this
+        # issue is about the one that survives the process.
+        assert by_position[0].qty == D("1")
+
+
 def test_reprocessing_a_persisted_job_updates_the_row_in_place(
     session_factory, storage, settings
 ):

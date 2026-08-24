@@ -1,4 +1,4 @@
-"""The 30 validation rules.
+"""The 31 validation rules.
 
 Design contract for every rule in this module:
 
@@ -1343,3 +1343,83 @@ class ConsistencyAgreement(Rule):
                 )
             )
         return findings
+
+
+# =========================================================================== #
+# COMPLETENESS
+# =========================================================================== #
+
+
+@register
+class LineItemCountMatchesTriage(Rule):
+    """Spec section 18's tall-receipt trap: rows are lost and nothing notices.
+
+    A tall receipt is photographed in strips, some rows never reach the
+    extraction, and the arithmetic still reconciles because no subtotal was
+    printed to disagree with it. Triage counted the rows on the page before any
+    of that happened, so its estimate is the only independent witness there is.
+
+    Until this rule, the estimate was read and never used to detect the loss it
+    exists to detect: R013 consults it only to decide whether to complain about
+    *zero* rows (ISSUE-024).
+
+    **Only under-extraction fires.** Extracting more rows than triage counted is
+    a different defect -- a duplicated row, or triage undercounting a dense
+    receipt -- and it is not the loss this rule is for. One rule pointed at both
+    would write a message the repair model cannot act on, and that message is
+    the thing a rule exists to produce.
+    """
+
+    id = "R071"
+    severity = Severity.WARN
+    description = "Far fewer line items were extracted than triage counted."
+
+    #: The estimate must be at least this many times what survived. Two, so
+    #: ISSUE-024's own worked example -- triage counted 12, six were extracted
+    #: -- fires exactly ON the boundary rather than just inside it.
+    MIN_SHORTFALL_FACTOR = 2
+
+    #: ...and this many rows must be missing outright. Without it the rule fires
+    #: on an estimate of 2 against 1 extracted row, which is one miscount on a
+    #: glance at a photograph rather than evidence of loss -- and the issue's own
+    #: warning is that a tight threshold fires on correct extractions.
+    #:
+    #: **The blind spot this buys is stated rather than hidden:** an estimate of
+    #: 4 against 2 extracted rows is half a receipt lost and does NOT fire.
+    #: Lowering this catches that and costs false positives on short receipts,
+    #: which is a trade nobody has measured yet.
+    MIN_MISSING = 3
+
+    def applies(self, r, ctx) -> bool:
+        # A zero estimate is triage saying it saw no body at all, and zero
+        # extracted rows is R013's finding to raise. Neither is a shortfall this
+        # rule can measure, and both would produce a message naming no numbers.
+        return (
+            ctx.triage is not None
+            and bool(ctx.triage.estimated_line_item_count)
+            and bool(r.line_items)
+        )
+
+    def check(self, r, ctx) -> list[Finding]:
+        estimated = ctx.triage.estimated_line_item_count
+        extracted = len(r.line_items)
+        missing = estimated - extracted
+        if extracted * self.MIN_SHORTFALL_FACTOR > estimated:
+            return []
+        if missing < self.MIN_MISSING:
+            return []
+        return [
+            self.finding(
+                f"Triage counted about {estimated} line items and only "
+                f"{extracted} were extracted, so roughly {missing} rows are "
+                "missing. Re-read the body of the receipt from the first item "
+                "down to the subtotal, including any rows near a fold or the "
+                "edge of the photograph.",
+                field_paths=["line_items"],
+                context={
+                    "estimated": estimated,
+                    "extracted": extracted,
+                    "missing": missing,
+                },
+            )
+        ]

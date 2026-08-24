@@ -9,17 +9,19 @@ from __future__ import annotations
 
 import json
 import logging
-from collections import Counter
+import re
 from dataclasses import dataclass, field, replace
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from typing import Callable
 
 from ..progress import ProgressEvent
 from ..validate.context import ValidationContext
 from ..validate.report import ValidationReport
+from ..validate.rules import within_tolerance
 from ..validate.validator import validate
 from . import prompts as P
 from .clients.base import ImagePart, ResponseCache, VLMClient, VLMResponse
+from .lineitem_align import align_line_items
 from .paths import count_nulls, flatten, unflatten
 from .schema import ConsistencyResult, ReceiptExtraction, TriageResult
 
@@ -378,11 +380,142 @@ def run_consistency(
     )
 
 
+#: A flattened line-item path, split into its row index and its field.
+_LINE_ITEM_PATH = re.compile(r"^line_items\[(\d+)\]\.(.+)$")
+
+
+def _as_number(value: object) -> Decimal | None:
+    """``value`` as a :class:`Decimal`, or ``None`` when it is not a number.
+
+    **Money reaches this module as a string**, measured rather than assumed:
+    :func:`~receipts.extract.paths.flatten` runs ``model_dump(mode="json")``, so
+    ``totals.total`` arrives as ``'112.00'``. Tolerance therefore has to parse
+    before it can compare.
+
+    Anything that does not parse -- a merchant name, a date like ``2026-07-20``
+    -- comes back ``None`` and is compared exactly, which is the right answer for
+    a reading that is not a quantity. Deciding by *what the value is* rather than
+    by a list of money paths is deliberate: a path list would silently stop
+    covering a field the day the schema grows one.
+    """
+    if isinstance(value, Decimal):
+        return value
+    if isinstance(value, str):
+        try:
+            return Decimal(value)
+        except InvalidOperation:
+            return None
+    return None
+
+
+def _cluster(observed: list) -> tuple[list[list[int]], list]:
+    """Group observations into agreement clusters, with one exemplar each.
+
+    Two numbers agree when :func:`~receipts.validate.rules.within_tolerance`
+    says so, which is what stops ``949.20`` and ``949.21`` -- cent-level rounding
+    between two runs of the same model -- from reading as uncertainty
+    (ISSUE-023). Everything else agrees on exact serialisation, as before.
+
+    First-fit and order-dependent, so it is deterministic for a given run order.
+    Tolerance is not transitive, and no clustering over a tolerance can be; this
+    picks the reading a majority sits closest to rather than pretending
+    otherwise.
+    """
+    clusters: list[list[int]] = []
+    exemplars: list = []
+    for index, value in enumerate(observed):
+        number = _as_number(value)
+        for slot, exemplar in enumerate(exemplars):
+            other = _as_number(exemplar)
+            if number is not None and other is not None:
+                same = within_tolerance(number, other)
+            else:
+                same = _key(value) == _key(exemplar)
+            if same:
+                clusters[slot].append(index)
+                break
+        else:
+            clusters.append([index])
+            exemplars.append(value)
+    return clusters, exemplars
+
+
+def _key(value: object) -> str:
+    return json.dumps(value, sort_keys=True, default=str)
+
+
+def _reference_run(runs: list[ReceiptExtraction]) -> int:
+    """The run whose rows every other run's rows are aligned against.
+
+    The longest, ties to the earliest. Anchoring on run 0 would silently drop
+    every row run 0 happened to miss, and the rows a run misses are exactly what
+    a consistency check exists to surface.
+    """
+    return max(range(len(runs)), key=lambda i: (len(runs[i].line_items), -i))
+
+
+def _aligned_flat(runs: list[ReceiptExtraction]) -> tuple[list[dict], bool]:
+    """Flatten every run with its line items re-keyed to the reference's rows.
+
+    **This is the half that ends the "differing count -> all disputed" cascade.**
+    Flattened paths are positional -- ``line_items[0].qty``,
+    ``line_items[1].qty`` -- so one inserted or dropped row shifted every later
+    index and every later row disagreed. Rows are matched by description through
+    :func:`~receipts.extract.lineitem_align.align_line_items` instead, which is
+    the consumer P0.T3's acceptance named and never got.
+
+    ``position`` is taken from the reference slot rather than voted on: after
+    alignment a row's position IS its slot, so voting on it would manufacture a
+    disagreement out of the realignment itself.
+
+    Returns the flattened runs and whether any run held a row that matched no
+    reference row -- a reading with nowhere to be voted on, which the caller
+    reports rather than discards in silence.
+    """
+    reference = _reference_run(runs)
+    reference_rows = runs[reference].line_items
+    flattened: list[dict] = []
+    unmatched = False
+
+    for index, run in enumerate(runs):
+        flat = flatten(run)
+        if index == reference:
+            mapping = {row: row for row in range(len(reference_rows))}
+        else:
+            mapping = {}
+            for i, j in align_line_items(reference_rows, run.line_items):
+                if i is not None and j is not None:
+                    mapping[j] = i
+                elif j is not None:
+                    unmatched = True
+
+        rekeyed: dict = {}
+        for path, value in flat.items():
+            match = _LINE_ITEM_PATH.match(path)
+            if match is None:
+                rekeyed[path] = value
+                continue
+            row, field_name = int(match.group(1)), match.group(2)
+            if row not in mapping:
+                continue
+            slot = mapping[row]
+            rekeyed[f"line_items[{slot}].{field_name}"] = (
+                slot if field_name == "position" else value
+            )
+        flattened.append(rekeyed)
+
+    return flattened, unmatched
+
+
 def _vote(runs: list[ReceiptExtraction]):
     """Per-path majority vote. No strict majority means the field is nulled and
     marked disputed — silence is the correct output when the readings conflict.
+
+    Two things it does NOT do by serialised string equality, both ISSUE-023:
+    money agrees within :func:`within_tolerance`, and line items are matched by
+    description rather than by position.
     """
-    flattened = [flatten(r) for r in runs]
+    flattened, unmatched_rows = _aligned_flat(runs)
     all_paths = sorted({p for f in flattened for p in f})
 
     merged: dict[str, object] = {}
@@ -392,27 +525,31 @@ def _vote(runs: list[ReceiptExtraction]):
 
     for path in all_paths:
         observed = [f.get(path) for f in flattened]
-        tally = Counter(json.dumps(v, sort_keys=True, default=str) for v in observed)
-        top_key, top_count = tally.most_common(1)[0]
+        clusters, exemplars = _cluster(observed)
+        best = max(clusters, key=len)
+        top_count = len(best)
 
         ratio = top_count / len(flattened)
         agreement[path] = ratio
 
         if top_count * 2 > len(flattened):  # strict majority
-            merged[path] = next(v for v in observed
-                                if json.dumps(v, sort_keys=True, default=str) == top_key)
+            merged[path] = observed[best[0]]
         else:
             merged[path] = None
             disputed.append(path)
 
         if ratio < 1.0:
-            distinct = []
-            for value in observed:
-                if value not in distinct:
-                    distinct.append(value)
-            values_by_path[path] = distinct
+            # The exemplars, not every raw observation: two readings that agree
+            # within tolerance are one reading, and listing both would tell a
+            # reviewer the model disagreed with itself when it did not.
+            values_by_path[path] = list(exemplars)
             if path not in disputed:
                 disputed.append(path)
+
+    if unmatched_rows and "line_items" not in disputed:
+        # A row some run read and the reference never saw. It has no slot to be
+        # voted in, so it is reported here rather than dropped quietly.
+        disputed.append("line_items")
 
     consensus = ReceiptExtraction.model_validate(unflatten(merged))
     return consensus, agreement, disputed, values_by_path
