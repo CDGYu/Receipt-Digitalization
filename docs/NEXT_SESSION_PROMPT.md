@@ -82,15 +82,25 @@ source disagree, the source wins** (ADR-0030). **No issue count is written in th
 section** — count `^## ISSUE-` headings in the register, and note that its
 `**Status:**` lines are one per heading by design, so the two answers must agree.
 
-### 2a. FIRST — decide what happens to the branch in flight
+### 2a. Plan 3 — the Editorial visual refresh, and the browser pass
 
-`feat/label-provenance-rule` is **unmerged, unreviewed, and pushed**, with five
-gates passing on it, controller-run. Two documentation commits: `1ee87e2` (the
-no-seeding rule reaches `eval/golden/README.md`, plus the plan's Defect 8) and
-`c1cd404` (ISSUE-023 through ISSUE-026). **No whole-branch review has run on it**,
-and this repository has never run one that found nothing. Review and ff-merge it,
-or consciously leave it — but do not stack new work on an unreviewed branch
-without deciding which.
+**Plans 1 and 2 merged 2026-08-24.** What is left of that design is **plan 3**:
+the Editorial palette, the grotesque display face, real elevation
+(`--color-surface-raised` is still identical to `--color-surface`), a spacing
+scale past 32px, and a display step above `--text-2xl`.
+
+**Its decision 14 matters more than the palette: the browser pass is inside the
+milestone, not after it.** The declaration census pins declarations *by name and
+is silent on values*, jsdom lays nothing out, and Vitest returns a proxy for
+class names — so **every colour, space and type size in that refresh can change
+with all five gates byte-identically green and nobody having looked.** Three
+findings already wait on that pass: raw stage identifiers shown to an audience,
+the production `setInterval` body being unexercised, and
+`app-admin-route.test.tsx` being misnamed.
+
+**Read the design's two dated corrections first** — §3 describes a drop zone, a
+list, `multiple` and a HEIC chip that were deliberately not built, and §4
+described a narration sequence the pipeline never emits.
 
 ### 2b. THE ONE THAT UNBLOCKS EVERYTHING ELSE — ISSUE-001
 
@@ -219,7 +229,7 @@ sentence (ADR-0028 §1):
 ```
 git status --short                                # must be empty
 git log --oneline -6
-git branch --no-merged main                       # names feat/label-provenance-rule
+git branch --no-merged main                       # must name NOTHING
 git rev-parse main                                # merged tip
 git ls-remote --heads origin main                 # authoritative on what is pushed
 git log --oneline refs/remotes/origin/main..main  # what the pending push would send
@@ -372,13 +382,9 @@ git log --oneline <STAMP>..main -- ":(top,exclude)docs/MEMORY.md" ":(top,exclude
 it was written. **Read the stamp for the SHA** — it is not written here, because
 a SHA in two places is a SHA that can disagree with itself.
 
-*(The `HEAD`-for-`main` substitution is **restored**, because a branch is in
-flight again. `feat/label-provenance-rule` is unmerged and this pair was written
-on it, so the anchor is not on `main` yet — **substitute `HEAD` for `main` in the
-stamp's command until the branch lands.** The command in `docs/MEMORY.md` is
-deliberately NOT edited: `tests/test_freshness_check.py` parses it and requires
-the literal `<seven-hex>..main` form. This note goes again when the branch
-merges, on the same terms it went last time.)*
+*(The `HEAD`-for-`main` substitution that stood here is **deleted**, not kept
+with a caveat — the branch landed, so the stamp's command is right as written.
+It comes back the next time a pair is written on an unmerged branch.)*
 
 **Gates on `main` at the merged tip, controller-run: `python scripts/verify.py` —
 all five PASS.** **No pytest count and no delta is given** — the number moves
@@ -511,6 +517,7 @@ is a pointer; where it and an entry disagree, the entry wins.**
 | **ISSUE-024** | **Nothing cross-checks the triage line-count against what was extracted.** 30 rules registered, highest id R070, and both uses of `estimated_line_item_count` sit inside R013, which fires only at zero rows. Spec §18's silent truncation is undetected. | **OPEN — P2.T3, never built** |
 | ISSUE-025 | Best-attempt selection is proven only in isolation; no pipeline-level test drives a repair that makes things worse, which is exactly the direction P2.T4's acceptance names. | OPEN — coverage gap, not a behavioural defect |
 | **ISSUE-026** | **A receipt cannot enter the system from a browser.** No upload component exists and nothing mounts one; `POST /upload` is complete and guarded. Only a shell can ingest. | **OPEN — needs your ruling: CLI-only, or build the screen?** |
+| **ISSUE-027** | **A PDF is accepted at the door and always fails at `preprocess`.** `validate_upload` accepts one, `load_image` raises `UnsupportedFormat`, and `expand_pdf` has zero callers. The upload screen refuses PDFs client-side as an interim. | **OPEN — needs your ruling: wire `expand_pdf`, or stop accepting PDFs?** |
 
 ---
 
@@ -2238,40 +2245,59 @@ and was measured not to need it.)*
 
 ## Today's goal
 
-# A BRANCH IS IN FLIGHT AND UNREVIEWED. THE GOLDEN SET IS STILL THREE RECEIPTS.
+# NOTHING IS IN FLIGHT. TWO PLANS MERGED — AND THE GOLDEN SET IS STILL THREE RECEIPTS.
 
-**`git branch --no-merged main` names `feat/label-provenance-rule`.** Run it
-rather than believing this sentence — it has been wrong in **both** directions,
-announcing no branch while one existed for three days, and announcing one after
-it landed.
+**`git branch --no-merged main` must name NOTHING.** Run it rather than believing
+this sentence — it has been wrong in **both** directions, announcing no branch
+while one existed for three days, and announcing one after it landed.
 
-**The branch, and what it is not.** Two documentation commits, pushed, five gates
-PASS controller-run: `1ee87e2` puts design §5's no-seeding rule into
-`eval/golden/README.md`, where a labeller actually meets it, and records the
-plan's Defect 8; `c1cd404` files **ISSUE-023 through ISSUE-026**, four gaps found
-by auditing `IMPLEMENTATION_PLAN.md` against the tree. **It has had no
-whole-branch review**, and on 2026-08-22/23 four branches got four reviews and
-every one found something real with five gates green. **Deciding what happens to
-this branch is task 2a, and it comes before new work.**
+**What merged, 2026-08-24.** True fast-forward `791c356` -> `9170151`, **38
+commits, single parent each, zero merge commits**. `feat/label-provenance-rule`
+is kept at its merge point. Five gates PASS at the merged tip, controller-run.
 
-**What that audit found, and it changes how you read that file.**
-`IMPLEMENTATION_PLAN.md` has **93 checkboxes and none of them is ticked**,
-including for whole phases that shipped; its "Current state" still lists
-`ingest/`, `normalize/`, `persist/`, `review/`, `export/`, `pipeline.py`,
-`cli.py`, `eval/harness.py`, migrations and the frontend as "Specified but not
-built". It says "all 28 rules"; `rules.py` registers **30**. **A checkbox in that
-file is evidence of nothing.** The user ruled 2026-08-23 that the boxes stay
-unticked; whether the file is corrected or retired is still open.
+- **Pipeline progress, end to end.** A pure `receipts.progress` vocabulary; an
+  **optional, default-`None`** sink through `extract_with_repair` and
+  `process_receipt`, so every existing caller is unaffected by construction; a
+  Redis writer in the worker; and `GET /receipts/{id}/progress`.
+- **`/app/upload`** — a receipt can now enter the system from a browser, which
+  ISSUE-026 recorded it could not. The screen becomes a live processing view
+  **in place**, narrating stages and stopping on **`status`, never on `stage`**.
+- **ISSUE-006's visibility half** — `is_template_row` is editable in the review
+  UI, so a reviewer can see and correct which rows leave the export.
+- **`IMPLEMENTATION_PLAN.md` corrected against the tree**, and **ISSUE-023
+  through ISSUE-027** filed.
 
-**Section 2 above is now the complete remaining-task list** — every open issue,
-every unbuilt plan task, grouped by what it costs you, with the four blocked on a
-ruling from the user called out. Read it instead of reconstructing the board.
+**What did NOT merge: plan 3, the Editorial visual refresh** — and with it the
+browser pass, which is the only thing that can see any of the above.
 
-**No push state for `main` is written here** — run the command below, and every
-`main` push needs its own fresh ask. *(This clause said "`main` is NOT pushed"
-until 2026-08-23, by which point it had been pushed. Twice now. The hedge telling
-you to run the command did not stop either rot, which is ADR-0042's point about a
-warning not being a check.)*
+**AND THE THING THAT MATTERS MOST DID NOT MOVE.** All of that is machinery.
+**The golden set is three receipts, exactly as it was**, and **ISSUE-001 step 7
+Task 3 — collect and label real receipts — is still the top of the board.** It
+needs a person and a camera, no code removes it, and it still gates every
+accuracy claim in this project. Section 1 above is the whole briefing.
+
+**Three things are owed before anyone demos this.**
+
+1. **Nothing has ever run the join.** `worker -> Redis -> route -> screen` is
+   pinned in halves and exercised end to end by **nothing** — `redis` is not
+   installed on this machine, so no gate and no reviewer crossed that boundary.
+   The design's §9 asks for a dry run of the full stack. Do it before demo day.
+2. **Nobody has looked at the new screen.** jsdom lays nothing out and Vitest
+   sets `css: false`, so the two-pane layout, the 1023px collapse and the stage
+   list's weight are invisible to every gate. Three findings are deferred to that
+   pass: raw stage identifiers shown to an audience (`dedupe`, `persist` are
+   operational vocabulary), the production `setInterval` body being unexercised,
+   and `app-admin-route.test.tsx` being misnamed for what it now covers.
+3. **The design carries two dated corrections and plan 3 inherits the document.**
+   §4's hero sequence named `validate`, `findings` and `repair` as narrated
+   steps — there are exactly **three** `ProgressEvent` constructions in the tree
+   and **only `stage="extract"` ever carries a detail**, so those three emit
+   nothing. §3's decisions 5 and 9 describe a drop zone, a file list, `multiple`
+   and a HEIC chip, **none of which was built**, deliberately. **Read both
+   corrections before building from either section.**
+
+**No push state is written here** — run the command below, and **every `main`
+push needs its own fresh ask.**
 
 **THE NUMBER, AND IT IS A SPREAD.** Cloud-only, one rung, `gemma4:cloud` both
 passes, five repeats, 15 receipts, `n_failed` 0, committed at `62eefa3`:
@@ -2311,7 +2337,7 @@ suggests**: a standalone triage call alone exceeded 10 minutes and was killed at
 ```
 git branch --show-current                         # expect main
 git status --short                                # must be empty
-git branch --no-merged main                       # names feat/label-provenance-rule
+git branch --no-merged main                       # must name NOTHING
 git log --oneline refs/remotes/origin/main..main  # what a push would send
 python scripts/verify.py                          # background it; exceeds a 2-min timeout
 ```

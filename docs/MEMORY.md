@@ -42,29 +42,24 @@ moves, and this file has carried a wrong issue count before.
 **No count of refreshes is written here** — it is a number that moves without its
 sentence changing, which is review standard 5.
 
-**Freshness anchor `c1cd404`** — the last commit that is not this handoff pair.
+**Freshness anchor `9170151`** — the last commit that is not this handoff pair.
 **It is written twice below — here and inside the command.** Moving one and not
 the other is what happened on this file's previous refresh, and the gate caught
 it because it parses the anchor out of the *command*.
 
-**A BRANCH IS IN FLIGHT, so substitute `HEAD` for `main` in the first command
-below.** `feat/label-provenance-rule` is unmerged, and this pair was written on
-it — so the anchor is not on `main` yet and `<anchor>..main` names a range git
-cannot resolve from `main`'s side. **The command itself is not edited**, because
-`tests/test_freshness_check.py` parses it and requires the literal
-`<seven-hex>..main` form; the substitution is a reader's instruction, not a
-rewrite. *(This paragraph was deleted at the previous refresh, correctly, because
-nothing was unmerged then. It is restored on the same terms: it goes again the
-moment the branch lands.)*
-**`git rev-parse HEAD` will be AHEAD of the anchor**, by the pair commit and
+**Nothing is in flight.** The `HEAD`-for-`main` substitution that stood here is
+**deleted rather than kept with a caveat**, on its own stated terms — the branch
+landed, so the command below is right as written. It comes back the next time a
+pair is written on an unmerged branch, and not before.
+**`git rev-parse main` will be AHEAD of the anchor**, by the pair commit and
 nothing else: a stamp cannot name the commit that writes it. The test is a
 command, not a commit and not a count:
 
 ```
-git log --oneline c1cd404..main -- ":(top,exclude)docs/MEMORY.md" ":(top,exclude)docs/NEXT_SESSION_PROMPT.md"
+git log --oneline 9170151..main -- ":(top,exclude)docs/MEMORY.md" ":(top,exclude)docs/NEXT_SESSION_PROMPT.md"
 git log --oneline refs/remotes/origin/main..main   # what a push would send
 git ls-remote --heads origin main                  # authoritative on what is pushed
-git branch --no-merged main                        # names feat/label-provenance-rule
+git branch --no-merged main                        # must name NOTHING
 ```
 
 **Empty means this pair is current.** Anything listed means the tree moved
@@ -127,23 +122,46 @@ stays reachable — ADR-0042. `git log --oneline -- docs/MEMORY.md` is the list.
 
 ## Snapshot
 
-- **`git branch --no-merged main` names `feat/label-provenance-rule`.** Run the
-  command rather than believing this sentence — this bullet read "NO BRANCH IN
-  FLIGHT" for three days while one existed, in 2026-08, and announcing one for
-  three days after it landed would be the same defect in the other direction.
-  **The branch is UNREVIEWED and UNMERGED.** Two commits, both documentation:
-  `1ee87e2` (the no-seeding rule reaches `eval/golden/README.md`, plus the plan's
-  Defect 8) and `c1cd404` (ISSUE-023 through ISSUE-026). Five gates PASS on it,
-  controller-run. It is pushed. **No whole-branch review has run**, which this
-  repository's own record says is where the defect will be.
-- **The golden-set labelling rule is now where a labeller meets it.** Design §5's
-  "labels are not seeded from the pipeline's own output" existed only in the
-  design; `eval/golden/README.md` and `TEMPLATE.json` contained no word of the
-  "seed" family, and Task 3's reading table names §3, §7a and §7b — not §5. The
-  plan's self-review had declared that gap closed on the reason that the README
-  says "replace every value with exactly what the image shows", which constrains
-  the values you end up with and not where you started. **It stays enforced by
-  nothing**, which is what §5 says of it.
+- **`git branch --no-merged main` must name NOTHING.** Run the command rather
+  than believing this sentence — this bullet read "NO BRANCH IN FLIGHT" for three
+  days while one existed, and announcing one after it landed would be the same
+  defect in the other direction.
+- **Plans 1 and 2 of the upload/processing/refresh design are MERGED** (2026-08-24).
+  True fast-forward `791c356` -> `9170151`, **38 commits, single parent each,
+  zero merge commits**; `feat/label-provenance-rule` is kept at its merge point.
+  Five gates PASS at the merged tip, controller-run.
+  **What landed:** pipeline progress end to end — a pure `receipts.progress`
+  vocabulary, an optional default-`None` sink through `extract_with_repair` and
+  `process_receipt`, a Redis writer in the worker, and
+  `GET /receipts/{id}/progress`; plus `/app/upload` with a live processing view
+  that narrates stages and stops on **`status`, never on `stage`**. Also:
+  `is_template_row` is editable (ISSUE-006's visibility half),
+  `IMPLEMENTATION_PLAN.md` is corrected against the tree, and ISSUE-023 through
+  ISSUE-027 are filed.
+  **What did NOT land: plan 3, the Editorial visual refresh** — and with it the
+  browser pass, which is the only thing that can see any of this.
+- **The golden set is still three receipts, and that has not changed all session.**
+  Everything above is machinery. **ISSUE-001 step 7 Task 3 — collect and label
+  real receipts — is still the top of the board**, still needs a person and a
+  camera, and still gates every accuracy claim in the project.
+- **The design carries TWO dated corrections, both mine, and plan 3 inherits the
+  document.** §4's hero-beat sequence named `validate`, `findings` and `repair`
+  as narrated steps; there are exactly three `ProgressEvent` constructions in the
+  tree and **only `stage="extract"` ever carries a detail**, so those three emit
+  nothing. §3's decisions 5 and 9 describe a drop zone, a file list, `multiple`
+  and a HEIC chip — **none of which was built**, deliberately and for a recorded
+  reason. And I invented a timing figure: "~25–60s" had no source. The only
+  measured pipeline timing in the tree is **25 seconds** for `gemma4:cloud` on
+  r002. **Read both corrections before building from §3 or §4.**
+- **Nothing has ever run the join.** `worker -> Redis -> route -> screen` is
+  pinned in halves and exercised end to end by nothing: `redis` is not installed
+  on this machine, so no gate and no reviewer crossed that boundary. The design's
+  §9 already calls for a dry run of the full stack; **it should happen before any
+  demo, not before a merge.**
+- **The labelling rule is now where a labeller meets it.** Design §5's "labels are
+  not seeded from the pipeline's own output" existed only in the design;
+  `eval/golden/README.md` and `TEMPLATE.json` contained no word of the "seed"
+  family. **It stays enforced by nothing**, which is what §5 says of it.
 - **`IMPLEMENTATION_PLAN.md` was audited against the tree, and its own state
   markers are worthless in both directions.** 93 checkboxes, **none ticked**,
   including for work merged months of milestones ago; and its "Current state"
