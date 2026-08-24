@@ -87,7 +87,7 @@
 
   --color-background: #020617;
   --color-surface: #0E1223;
-  --color-surface-raised: #1A1E2F;
+  --color-surface-raised: #161925;
   --color-surface-active: #1E293B;
   --color-surface-sunken: #020617;
   --color-foreground: #F8FAFC;
@@ -114,12 +114,18 @@
    * `--color-muted-foreground` is in light (ADR-0027 §2): contrast decides these
    * two, not the palette.
    *
-   * Measured, not assumed, for every surface the mark can land on: all 36
-   * dark-theme records of it -- the form, the line items, the confidence rail,
-   * the admin tiles and the admin table -- sample it against `#0E1223`, because
-   * every one of those paints `background: var(--color-surface)` on the box that
-   * holds it. It never reaches `--color-surface-raised` or
-   * `--color-surface-active`.
+   * Measured, not assumed, for every surface the mark can land on. That
+   * sentence read "It never reaches `--color-surface-raised` or
+   * `--color-surface-active`" until 2026-08-24, when **this refresh falsified
+   * it**: `ReceiptForm.module.css`'s `.form` now paints
+   * `--color-surface-raised`, and its `:125` sets `color: var(--color-null)`,
+   * so the mark lands there. Re-measured rather than re-asserted -- **5.11:1 on
+   * dark `#161925`, 4.72:1 on light `#FFFDF9`** -- so the move is safe and the
+   * old sentence was not. `--color-surface-active` is still never reached.
+   *
+   * `--color-surface-raised` is now inside `INHERITABLE_SURFACES`, so this pair
+   * is gated rather than argued about; see that constant for what a browser
+   * found while it was outside.
    *
    * This value must stay identical in the `prefers-color-scheme` copy below;
    * `tokens.test.ts` pins the two blocks equal, so a half-applied change is
@@ -142,7 +148,7 @@
 
     --color-background: #020617;
     --color-surface: #0E1223;
-    --color-surface-raised: #1A1E2F;
+    --color-surface-raised: #161925;
     --color-surface-active: #1E293B;
     --color-surface-sunken: #020617;
     --color-foreground: #F8FAFC;

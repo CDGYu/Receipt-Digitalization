@@ -116,9 +116,18 @@ interface Viewport {
 
 const WIDE: Viewport = { name: '1440', width: 1440, height: 1400 }
 const MID: Viewport = { name: '1024', width: 1024, height: 1400 }
+const TABLET: Viewport = { name: '768', width: 768, height: 1400 }
 const NARROW: Viewport = { name: '375', width: 375, height: 1400 }
-/** The three the plan names, in the order a reader will want them. */
-const ALL_WIDTHS: readonly Viewport[] = [NARROW, MID, WIDE]
+/** In the order a reader will want them.
+ *
+ *  **768 is not decoration.** 1024 and 1440 both sit on the wide side of the
+ *  layouts' only breakpoint (`max-width: 1023px`), so without it the collapsed
+ *  layout is only ever seen at its narrowest -- and a two-pane collapse goes
+ *  wrong at 768 in ways that look fine at 375, where everything is stacked
+ *  anyway. Added 2026-08-24 for the Editorial refresh's browser pass (design
+ *  decision 14). No count is stated here on purpose: a count in prose rots on
+ *  the next width somebody adds. */
+const ALL_WIDTHS: readonly Viewport[] = [NARROW, TABLET, MID, WIDE]
 /** 1024 and 1440 are the same layout -- the grid's only breakpoint is
  *  `max-width: 1023px` -- so the states whose interest is the message rather
  *  than the column count are captured at the two ends only. */

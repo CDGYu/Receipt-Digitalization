@@ -851,7 +851,25 @@ function soleToken(value: string): string | null {
  *  the surface set stays at two rather than being widened to a set this tree
  *  does not satisfy -- widening it is a source change, which the round that
  *  wrote this file was not permitted to make. */
-const INHERITABLE_SURFACES = ['--color-background', '--color-surface'] as const
+/** The surfaces an inherited `color` is checked against.
+ *
+ *  `--color-surface-raised` joined this list on 2026-08-24, **because a browser
+ *  found what its absence hid.** The Editorial refresh gave `FindingsPanel`'s
+ *  `.panel` a raised background, which moved severity text onto a surface no
+ *  check covered: `--color-severity-error` on it measured **4.39:1 in dark**,
+ *  under design §6's floor, with all five gates green. The browser pass
+ *  reported exactly 4.39 and this file's own arithmetic agrees.
+ *
+ *  `--color-surface-active` and `--color-surface-sunken` are deliberately still
+ *  outside. Both carry known sub-floor pairs recorded in the table below, all
+ *  predating this refresh, and adding them would red this suite for defects
+ *  nobody has decided to fix. **That is a gap, not a clean bound** -- the same
+ *  gap that hid this one. */
+const INHERITABLE_SURFACES = [
+  '--color-background',
+  '--color-surface',
+  '--color-surface-raised',
+] as const
 
 describe('a colour token is readable on what it is painted on', () => {
   it('reads three theme blocks with hex values, or says so', () => {
