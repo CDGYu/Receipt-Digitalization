@@ -389,7 +389,7 @@ const CENSUS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
     '.penalty': 'flex: none, font-family, font-variant-numeric: tabular-nums, white-space: nowrap',
   },
   'review/FindingsPanel.module.css': {
-    '.panel': 'border, border-radius, background, padding',
+    '.panel': 'border, border-radius, background, box-shadow, padding',
     '.heading': 'margin, font-family, font-size, font-weight, line-height',
     '.note': 'margin, color, font-size',
     '.empty': 'margin, color, font-size',
@@ -464,7 +464,7 @@ const CENSUS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
   },
   'review/ReceiptForm.module.css': {
     '.form':
-      'display: grid, grid-template-columns, gap, align-items: start, border, border-radius, background, padding',
+      'display: grid, grid-template-columns, gap, align-items: start, border, border-radius, background, box-shadow, padding',
     '.form > h2': 'grid-column, margin, font-family, font-size, font-weight, line-height',
     '.fieldCell': 'display: flex, flex-direction: column, gap, min-width',
     '.field': 'display: flex, flex-direction: column, gap, min-width, color, font-family, font-size',
@@ -483,7 +483,7 @@ const CENSUS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
     '.screen':
       'box-sizing: border-box, display: grid, grid-template-columns, align-content: start, gap, max-width, margin, padding, font-family, color',
     '.screen > *': 'grid-column, min-width',
-    '.screen > h1': 'grid-column, margin, font-size, font-weight, line-height',
+    '.screen > h1': 'grid-column, margin, font-family, font-size, font-weight, line-height',
     '.screen > div':
       'grid-column, grid-row, align-self: start, position: sticky, top, max-height, overflow: auto',
     '.notice':

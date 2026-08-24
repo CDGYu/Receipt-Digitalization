@@ -51,7 +51,8 @@
   align-items: start;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
-  background: var(--color-surface);
+  background: var(--color-surface-raised);
+  box-shadow: var(--shadow-md);
   padding: var(--space-xl);
 }
 
