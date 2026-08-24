@@ -638,10 +638,9 @@ gitignored (`.gitignore` excludes `.superpowers/`) and therefore reaches no one
 who clones this repository. It follows the log `d397506` added to
 `2026-08-23-pipeline-progress.md`, for the same reason and in the same shape.
 
-**Every defect this plan produced was a sentence or a test, and none was a
-behavioural bug.** Three tasks, four fix rounds, four scoped re-reviews. The
-ledger's own closing line: *"Zero behavioural defects survived; every defect
-found after the first review of each task was a sentence."*
+Three tasks, four fix rounds, four scoped re-reviews. The ledger's own closing
+line: *"Zero behavioural defects survived; every defect found after the first
+review of each task was a sentence."*
 
 ### Still wrong in the text above, and not corrected there
 
@@ -842,6 +841,31 @@ because the ledger is also where the counts about the counts live.
   correctly** — only the report was wrong, and it was caught before anyone
   relayed it onward.
 
+### Two defects that live in commit messages, where they cannot be fixed
+
+Both are in `bf3be4a`. **History is not rewritten on this branch** —
+`tests/test_sha_citations.py` requires cited short SHAs to stay reachable, and
+this branch's commits are cited in tracked files — so they are recorded here
+rather than corrected where they were written.
+
+- **A false universal, carried as the rationale for a correct deletion.** The
+  message reads *every "60s" is the review acceptance criterion for a human
+  correction*. It is the reviewer's phrasing, repeated rather than re-derived,
+  and `ea42b09` refutes it two commits later from the same enumeration: one
+  match, in `2026-08-05-review-ui-browser-pass.md`, is an e2e suite's own
+  runtime. The design's dated correction states the narrower claim instead —
+  no "60s" in the tree is a pipeline time. **The deletion that rationale
+  justified was right; the reason written down for it is false.** ADR-0048's
+  shape, in a message whose subject line is about deleting sentences.
+- **Two wrong counts, in that same message.** *"Two test fixes:"* heads three
+  bullets. *"The sentences, all deletions:"* heads four bullets, of which two
+  are substitutions rather than deletions: the opening line of
+  `ProcessingView`'s doc comment became "what a person watches while a receipt
+  is processed" rather than losing its clause, and `attempt N (pass): M errors`
+  became `M error(s)`. The other two — "at the one stage where the wall clock
+  actually goes", and the "three" in "three different things under one heading"
+  — are deletions.
+
 ### An operational incident worth carrying beyond this plan
 
 **Reverting a mutation with `git checkout -- <file>` restored the file to its
@@ -875,6 +899,18 @@ The four Important:
    code, corrected by a dated note in the design.
 4. **§3 describes a screen that was not built** — the first entry in *Still
    wrong in the text above*.
+
+**A Minor that was behavioural, and was fixed rather than deferred: the dead
+end.** The exit link rendered only inside the `finished !== null` branch, so a
+receipt whose worker never started left the view polling with no navigation off
+the screen at all — correct by decision 3, which says the wait never ends on
+silence, and a dead end on the failure a live demo is likeliest to hit. Fixed
+in `bf3be4a`: the link renders in every state, and the outcome sentence still
+renders only when the server ended the wait. Putting the link back inside the
+finished branch reddened exactly one test — the one added with the fix — and
+every other test in the file passed, which is how the dead end survived the
+whole suite. **This is a behavioural defect**, as is the stylesheet with no
+`@media` rule recorded under *What the tasks found that the plan had not*.
 
 **Deferred to plan 3's browser pass**, because each needs eyes on a screen
 rather than a gate: raw stage identifiers shown to an audience (`dedupe`,

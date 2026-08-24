@@ -309,13 +309,12 @@ Re-derived 2026-08-24 across the tree:
   measurement in `docs/MEMORY.md`.
 - `VLM_AND_DATA.md` says 3–8 seconds is typical.
 - **No "60s" in the tree is a pipeline time.** Enumerated 2026-08-24 with
-  `git grep -nEI "60 ?s"` over every tracked file: sixteen lines outside this
-  document, in six files. Fifteen are the review acceptance criterion for a
-  human correction, or the argument that a scripted run makes it
-  non-discriminating. The sixteenth is an e2e suite's own runtime
-  (`2026-08-05-review-ui-browser-pass.md`) — **so the reviewer's phrasing,
-  "every 60s in the tree is the review acceptance criterion", is not true and
-  is not what is claimed here.**
+  `git grep -nEI "60 ?s"` over every tracked file. Outside this document,
+  fifteen are the review acceptance criterion for a human correction, or the
+  argument that a scripted run makes it non-discriminating, and one is an e2e
+  suite's own runtime (`2026-08-05-review-ui-browser-pass.md`) — **so the
+  reviewer's phrasing, "every 60s in the tree is the review acceptance
+  criterion", is not true and is not what is claimed here.**
 
 So the 25 has a source, the 60 has none, and a range implies a distribution
 nobody measured. **The figure is deleted rather than replaced**: the
