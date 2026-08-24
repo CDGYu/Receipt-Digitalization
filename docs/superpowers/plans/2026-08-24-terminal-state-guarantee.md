@@ -796,7 +796,8 @@ def test_a_receipt_with_no_row_beats_nothing_and_raises_nothing(
 
     This is reachable only through `process_batch`, which has **no production
     caller** (checked: the only references to it in `src/` are its own
-    definition and two docstrings). Every path that can actually strand a
+    definition and three docstrings -- `pipeline.py:19`, `pipeline.py:459`
+    and `cli.py:797`). Every path that can actually strand a
     receipt creates the row first, so the milestone's guarantee is unaffected:
     a receipt with no row is not stranded, it was never recorded.
     """
