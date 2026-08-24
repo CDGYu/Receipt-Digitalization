@@ -45,14 +45,15 @@ from .validate.context import ValidationContext
 log = logging.getLogger(__name__)
 
 __all__ = [
-    "DEFAULT_JOB_TIMEOUT_S",
     "DEFAULT_QUEUE_NAME",
+    "NON_MODEL_BUDGET_S",
     "PROGRESS_SOCKET_TIMEOUT_S",
     "PROGRESS_TTL_S",
     "WorkerDeps",
     "build_deps",
     "enqueue_receipt",
     "job_from_payload",
+    "job_timeout_for",
     "job_to_payload",
     "make_progress_writer",
     "make_queue",
@@ -64,11 +65,43 @@ __all__ = [
 #: The queue receipts are dispatched to. One queue, one job type.
 DEFAULT_QUEUE_NAME = "receipts"
 
-#: Ceiling on a single job. A receipt is a triage call plus an extract plus up to
-#: ``MAX_REPAIR_ATTEMPTS`` repairs, and CPU inference on a self-hosted model can
-#: spend minutes on each -- a timeout shorter than the work would kill jobs that
-#: were about to succeed and hand them back as failures.
-DEFAULT_JOB_TIMEOUT_S = 900
+#: HTTP attempts the OpenAI SDK makes per call: the initial one plus its default
+#: ``max_retries`` of 2, which ``OpenAICompatClient`` never overrides (ADR-0047
+#: decision 8). The retries are silent, so one ``complete_json`` can take three
+#: times ``VLM_TIMEOUT_S``.
+#:
+#: Pinned by ``test_the_sdk_retry_default_this_derivation_rests_on`` rather than
+#: trusted: without that test a change to the SDK default would make this
+#: derivation wrong and nothing would fail. Whether to *set* ``max_retries``
+#: instead is ADR-0047's open question and is not taken here.
+_SDK_ATTEMPTS = 3
+
+#: Everything in a receipt that is not a model call -- reading the original
+#: bytes, decoding and hashing the image, the dedupe and merchant reads,
+#: scoring, and the persist write. Additive rather than a multiplier, because
+#: this work is bounded and small whatever model is configured.
+NON_MODEL_BUDGET_S = 180
+
+
+def job_timeout_for(settings: Settings) -> int:
+    """The ceiling for one receipt's job, derived from what its model can cost.
+
+    A receipt is a triage call, an extract call, and up to
+    ``MAX_REPAIR_ATTEMPTS`` repairs; each can take ``_SDK_ATTEMPTS`` HTTP
+    attempts of ``VLM_TIMEOUT_S``.
+
+    **Derived rather than a constant** because a constant that fits one model
+    does not fit another, and this value was previously 900 -- below its own
+    worst case of 1080 even at code defaults, on any hardware (ISSUE-029).
+
+    Since ``receipts.sweep`` now carries the terminal-state guarantee, this
+    ceiling no longer decides whether an interrupted receipt is recoverable.
+    It is a resource guard on a worker slot, and can therefore be generous.
+    """
+    one_call = settings.vlm_timeout_s * _SDK_ATTEMPTS
+    calls = 2 + max(0, settings.max_repair_attempts)
+    return one_call * calls + NON_MODEL_BUDGET_S
+
 
 #: How long a progress record outlives its last write. Long enough to survive a
 #: slow extract pass, short enough that an abandoned run disappears on its own.
@@ -281,18 +314,30 @@ def process_receipt_job(
     return result_to_payload(result)
 
 
-def enqueue_receipt(job: ReceiptJob, queue: Any, *, job_timeout: int | None = None) -> Any:
+def enqueue_receipt(
+    job: ReceiptJob,
+    queue: Any,
+    *,
+    job_timeout: int | None = None,
+    settings: Settings | None = None,
+) -> Any:
     """Push one receipt onto ``queue`` and return the queue's handle.
 
     ``queue`` is anything with RQ's ``enqueue(func, *args, **kwargs)`` signature,
     which is what lets the dispatch path be tested without a live Redis. The
     enqueued callable is always :func:`process_receipt_job` -- the worker has one
     job type, and that is the invariant a test pins.
+
+    ``job_timeout`` defaults to :func:`job_timeout_for` over ``settings`` rather
+    than to a constant, so every caller gets a ceiling that fits the configured
+    model. An explicit value still wins: an operator override is not overridden.
     """
+    if job_timeout is None:
+        job_timeout = job_timeout_for(settings or get_settings())
     return queue.enqueue(
         process_receipt_job,
         job_to_payload(job),
-        job_timeout=DEFAULT_JOB_TIMEOUT_S if job_timeout is None else job_timeout,
+        job_timeout=job_timeout,
     )
 
 
