@@ -1654,7 +1654,7 @@ def test_cmd_sweep_reports_nothing_to_do(session_factory, capsys) -> None:
     code = cmd_sweep(
         args, session_factory=session_factory, settings=Settings(_env_file=None)
     )
-    assert code == 0
+    assert code == EXIT_OK
     assert "0" in capsys.readouterr().out
 ```
 
@@ -1709,8 +1709,8 @@ Beside the other `cmd_` functions:
 def cmd_sweep(args: argparse.Namespace, *, session_factory, settings: Settings) -> int:
     """Bring interrupted receipts to a terminal state.
 
-    Imported inside the body so `receipts sweep` costs no import for every
-    other command, matching how this module treats the queue.
+    Exits ``EXIT_OK`` even when it moved receipts: a receipt routed to review
+    is a completed command, not a failure (ADR-0013).
     """
     from .sweep import sweep_stranded
 
@@ -1719,7 +1719,7 @@ def cmd_sweep(args: argparse.Namespace, *, session_factory, settings: Settings) 
     print(f"{verb} {len(moved)} stranded receipt(s) to review")
     for receipt_id in moved:
         print(f"  {receipt_id}")
-    return 0
+    return EXIT_OK
 ```
 
 In `main`, beside the other dispatch branches:
@@ -1730,6 +1730,21 @@ In `main`, beside the other dispatch branches:
 ```
 
 Add `"cmd_sweep"` to `__all__` alongside `"cmd_process"` and `"cmd_reprocess"`.
+
+**Two tests beyond the three above, added because a mutation demanded each.**
+Neither was in this plan, and the plan was wrong to omit them:
+
+- `test_main_routes_sweep_to_its_handler` -- goes through `main(["sweep",
+  "--dry-run"])`. Measured: deleting `main`'s dispatch branch leaves all three
+  tests above **green** while a real `receipts sweep` dies on
+  `AssertionError: unhandled command 'sweep'`. A command registered in the
+  parser and unreachable from `main` is the shape that ships green here.
+- `test_cmd_sweep_dry_run_writes_nothing_and_a_real_run_writes` -- seeds a row
+  that would move and looks at the row. Measured: `dry_run=False` hard-coded in
+  the `sweep_stranded` call left all four other tests green, because `verb`
+  reads `args.dry_run` directly -- the command printed "would send" while
+  marking every receipt it claimed to be only inspecting. Both directions are
+  pinned, so forcing the flag either way reddens it.
 
 - [ ] **Step 5: Run the tests, then the full suite**
 
