@@ -1224,10 +1224,7 @@ def test_a_sink_that_raises_never_takes_the_receipt_down(
     """Narration is a nicety; the extraction is not.
 
     Every emit is wrapped, so a sink that raises on *every* event must leave
-    the outcome exactly as it would have been with no sink at all. A single
-    raising sink reaches all three swallow sites: the one in `_stage`, the
-    per-attempt one in `_report`, and the kept-attempt one in
-    `extract_with_repair`.
+    the outcome exactly as it would have been with no sink at all.
     """
     def _boom(_event):
         raise RuntimeError("sink")
