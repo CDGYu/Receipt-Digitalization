@@ -3253,3 +3253,125 @@ already names as "the only column that carries prose, so it takes the slack".
 - ISSUE-006 — the `is_template_row` control this column exists for.
 - ISSUE-028, ISSUE-031 — the other two found this day by running something
   rather than reading it.
+
+---
+
+## ISSUE-033 — A private label's value is printed by the command that validates it
+
+**Status:** **CLOSED 2026-08-25**, on `feat/golden-label-privacy`. Found
+pre-flighting ISSUE-001 step 7 Task 3, by probing a claim rather than reading
+it.
+**Owner action required:** no.
+**Discovered:** 2026-08-25.
+**Pre-existing:** yes, since `p*` labels were defined (ADR-0050, Task 1 of the
+2026-08-22 growing-the-golden-set plan). Never reached, because the golden set
+contains no `p*` label yet — the set is `r001`, `r002`, `r003`.
+**Blocks:** nothing today. It sits directly in Task 3's path: it fires on the
+first private receipt anyone labels, and `eval/golden/README.md` says "when in
+doubt, use `p`."
+
+### What is wrong
+
+A `p*` label is gitignored because it carries a real third party's name,
+address and tax id. Nothing stopped that content being *printed*. Two surfaces,
+both measured 2026-08-25 against a `p042.json` containing
+`{"merchant": {"tax_id": 7888999000}}` — a tax id typed without quotes, which
+is an ordinary slip beside the README's money-as-string rule:
+
+| surface | who runs it | what appeared |
+|---|---|---|
+| `validate_labels` → the terminal | the labeller, after every batch | `p042.json: 1 validation error ... input_value=7888999000, input_type=int ...` |
+| `load_labels` → the pytest traceback | the suite | the same, inside the rendered traceback |
+
+**The first surface is the higher-traffic one and was named nowhere.**
+`eval/golden/README.md` ("Validate your set") and Task 3 steps 1 and 3 both
+instruct the labeller to run `validate_labels` and read its output on screen,
+after every batch — one paste away from a commit message, an issue, or a chat.
+
+### The description this was carried under is broader than the defect
+
+`docs/NEXT_SESSION_PROMPT.md` recorded it as "pydantic echoes that label's
+content into the traceback." Measured, pydantic echoes **the failing field's
+value**, not the label:
+
+- A record whose `totals.total` is the wrong type, carrying PII in `merchant`,
+  rendered the bad total and **none** of the merchant fields.
+- A record whose `merchant.name` is the wrong type rendered that field's input
+  and **not** the sibling `address` or `tax_id`.
+
+So the leak is per-field, and suppressing `input_value` closes it. The
+distinction is what decided the fix: "stop echoing the label" and "stop echoing
+one field's value" are different changes.
+
+**A second shape exists and is not per-field.** A JSON *syntax* error takes
+pydantic's `json_invalid` path, which echoes a truncated window of the raw file:
+a trailing comma after a merchant name rendered as
+`input_value='{"merchant": {"name": "A...HARMACY CORPORATION",}}'`. The
+ellipsis splits the name, so an exact-string search for it reports "not
+present" while a reader sees it plainly — the first probe run here made exactly
+that mistake, and its needle test said the data was safe.
+
+### What was checked and came back clean
+
+Recorded because the check looked like it would find a hole and did not.
+
+`validate_labels` returning `[]` certifies much less than Task 3 step 3 implies:
+it is `[]` for a label whose every key is misspelled **and** for `{}` — both
+load as a fully-null `ReceiptExtraction`, because the schema sets
+`extra='ignore'` and every field is optional. That is not a hole, because
+`tests/test_eval_floor.py` fails all three of those shapes: floor `1.0` for
+`{}`, `1.0` for an all-typo label, and `16.7%` for a partial typo, each at or
+above its `MAX_FLOOR = 0.10`. **The suite is the guard, not the validator** —
+which is what makes Defect 7's "run the whole suite, not `test_eval_floor.py`
+alone" correction load-bearing rather than advisory.
+
+**Unrelated and not investigated:** `receipt.date` is `str | None`, so the
+loader accepts `"14/03/2026 ACME PHARMACY QC"` as a date without complaint.
+Whether the rule engine rejects it downstream was not checked.
+
+### The fix
+
+Scoped to `p*` by `_is_private_label`, reusing `.gitignore`'s own
+`eval/golden/labels/p*.json` prefix so the redaction boundary and the commit
+boundary cannot drift into two rules that disagree.
+
+**The scope is forced, not preferred.**
+`test_naming_the_label_does_not_change_what_escapes` requires the original
+exception to escape unwrapped, and it exercises a **public** label; redacting
+unconditionally turns that pre-existing pin red. Verified by mutation.
+
+`_redacted_reason` emits `loc` and `type` and nothing else. `msg` is dropped
+even though today's messages are value-free: a custom validator raising
+`ValueError(f"bad {value}")` would render the value into `msg`, so keeping it
+would make the guarantee a standing audit of every validator added later. The
+cost is real and is recorded at the site — the parser's "trailing comma at line
+1 column 51" is safe, useful, and now lost.
+
+`raise ... from None` is load-bearing. Raising inside `except` sets
+`__context__`, and a rendered traceback prints the chained exception's message
+in full, so a wrapper that omits the value still shows it under "During
+handling of the above exception."
+
+### Six mutations, each proven to still compile
+
+| mutation | result |
+|---|---|
+| redaction made unconditional | RED — the new scope pin **and** the pre-existing type pin |
+| redaction never fires | RED — all three private tests |
+| `from None` dropped | RED — both traceback tests |
+| `include_input=True` alone | **GREEN — caught by nothing** |
+| emit `input`, flag left `False` | GREEN — no leak; the flag really is a second layer |
+| emit `input`, flag `True` | RED — all three private tests |
+
+The fourth row is why the last two were run. `include_input=False` is not the
+mechanism — `_redacted_reason` never reads `input` — so mutating the flag alone
+changes no output and pins nothing. Mutating where the subject computes its
+answer is what certifies the tests.
+
+### Related
+
+- ADR-0050 — a label is fully public or fully private; `p*` is gitignored.
+- ISSUE-004 — nothing checks a label against its photograph. Untouched by this.
+- ISSUE-019 — "committed whole or not at all" is a rule no gate holds. Untouched.
+- ISSUE-021, ISSUE-022 — the two earlier defects in this same handler.
+- ISSUE-001 step 7, Task 3 — the work this was found in front of.
