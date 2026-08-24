@@ -541,7 +541,7 @@ where a user gets a confidently wrong answer.
 
 ## THE COMPLETE ISSUE REGISTER
 
-**Every issue, as of 2026-08-23.** `docs/KNOWN_ISSUES.md` is the source for
+**Every issue, as of 2026-08-24.** `docs/KNOWN_ISSUES.md` is the source for
 every row and **is not to be re-derived** — each entry there records the
 diagnosis, what was already fixed, and the exact steps to resume. **This table
 is a pointer; where it and an entry disagree, the entry wins.**
