@@ -884,6 +884,113 @@ the `progress_at is not None` assertion.
 **Revert with the inverse edit, not `git checkout`.** Confirm with
 `grep -n "fan_out(_heartbeat_sink" src/receipts/pipeline.py`.
 
+- [ ] **Step 6b: Pin the sink itself, which Task 3 left deletable**
+
+Task 3 added `_heartbeat_sink` with no caller and no test — `grep` found only
+its own `def`, so it was deletable with the whole suite green. Step 4 gives it a
+caller; that is not the same as pinning it. **A `process_receipt`-level test
+that only asserts "a heartbeat was written" passes even if the sink shares the
+caller's session, swallows exceptions, or leaks connections.**
+
+Add these to `tests/test_process_receipt.py`. Each drives `_heartbeat_sink`
+directly with a fake factory — that is legitimate here, because the *behaviour
+under test is the sink's own contract*, not whether `process_receipt` uses it
+(Step 3's test owns that, and must keep never naming the sink).
+
+```python
+class _RecordingSession:
+    """A Session stand-in that records the lifecycle calls the sink makes."""
+
+    def __init__(self, calls: list[str], *, raise_on_commit: bool = False) -> None:
+        self.calls = calls
+        self._raise = raise_on_commit
+
+    def execute(self, *_a, **_k):
+        self.calls.append("execute")
+
+    def flush(self) -> None:
+        self.calls.append("flush")
+
+    def commit(self) -> None:
+        self.calls.append("commit")
+        if self._raise:
+            raise RuntimeError("database went away")
+
+    def rollback(self) -> None:
+        self.calls.append("rollback")
+
+    def close(self) -> None:
+        self.calls.append("close")
+
+
+def test_the_heartbeat_sink_commits_its_own_session() -> None:
+    """A heartbeat no other process can see is not a heartbeat.
+
+    This is the ADR-0006 asymmetry: repository functions never commit, and this
+    sink -- which is the caller -- must.
+    """
+    calls: list[str] = []
+    sink = _heartbeat_sink(lambda: _RecordingSession(calls), uuid.uuid4())
+    sink(ProgressEvent(stage="extract"))
+    assert "commit" in calls
+
+
+def test_the_heartbeat_sink_closes_its_session_on_success() -> None:
+    calls: list[str] = []
+    sink = _heartbeat_sink(lambda: _RecordingSession(calls), uuid.uuid4())
+    sink(ProgressEvent(stage="extract"))
+    assert calls[-1] == "close"
+
+
+def test_a_failing_beat_rolls_back_closes_and_re_raises() -> None:
+    """It must not swallow.
+
+    If this is ever softened to a swallow, the three guarded call sites become
+    the only thing between a database blip and a lost beat, and nothing would
+    notice.
+    """
+    calls: list[str] = []
+    sink = _heartbeat_sink(
+        lambda: _RecordingSession(calls, raise_on_commit=True), uuid.uuid4()
+    )
+    with pytest.raises(RuntimeError, match="database went away"):
+        sink(ProgressEvent(stage="extract"))
+    assert "rollback" in calls
+    assert calls[-1] == "close"
+
+
+def test_the_beat_writes_the_event_stage_not_a_constant(
+    session_factory, storage, settings
+) -> None:
+    """Last beat wins, and it is the event's stage that lands."""
+    job = _job(storage)
+    with session_factory() as session:
+        create_pending_receipt(session, job)
+        session.commit()
+
+    sink = _heartbeat_sink(session_factory, job.id)
+    sink(ProgressEvent(stage="triage"))
+    sink(ProgressEvent(stage="persist"))
+
+    with session_factory() as session:
+        assert get_receipt(session, job.id).progress_stage == "persist"
+```
+
+Run: `python -m pytest tests/test_process_receipt.py -v -k "heartbeat_sink or failing_beat or event_stage"`
+Expected: PASS.
+
+**Then prove the first one is a real pin:** delete the `session.commit()` line
+inside `_heartbeat_sink` and confirm `test_the_heartbeat_sink_commits_its_own_session`
+reddens. Revert by inverse edit and `grep`.
+
+**One property deliberately left unpinned, and why.** The sink's beat fires
+*outside* any open write transaction on the same `receipts` row — otherwise a
+second connection would block on Postgres or fail on SQLite, and narration
+would hang a run. That holds today by construction: every stage body delegates
+to helpers that open their own short-lived sessions. It is a constraint on
+future work rather than a testable property here. **Do not introduce a
+long-lived pipeline session without revisiting it.**
+
 - [ ] **Step 7: Pin the spec's keystone, which nothing currently guards**
 
 The spec's section 5.1 rests on **the largest gap between two heartbeats being
