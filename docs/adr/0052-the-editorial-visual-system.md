@@ -249,3 +249,38 @@ and the measured ramp);
 `docs/superpowers/specs/2026-08-05-review-ui-browser-pass.md` (the dark
 measurements decision 4 above declines to invalidate);
 ADR-0027 (the system this extends), ADR-0029 (what the gates certify).
+
+---
+
+## Correction (2026-08-24) — three invariants this page states in the present tense stopped being true the same day
+
+Written before `0fe6be5`, and **superseded by it in three places**. The values
+this ADR records are unchanged and correct; what went stale are three
+*invariants* stated with no date cue, which a reader has no way to age.
+
+**What happened.** The browser pass of decision 14 found severity error text at
+**4.39:1** on `--color-surface-raised` in dark — under design §6's 4.5 floor,
+with all five gates green. This refresh had put it there: Task 3 gave
+`FindingsPanel`'s `.panel` a raised background, moving that text off
+`--color-surface` (4.94:1). The fix darkened dark `--color-surface-raised` from
+`#1A1E2F` to `#161925` and widened the gate.
+
+| this page says | reads at `0fe6be5` and after |
+|---|---|
+| "the dark blocks are byte-identical" (decision 4, and repeated at ADR-0027:435) | **False.** One dark value moved: `--color-surface-raised` `#1A1E2F` → `#161925`. The *other* fourteen are untouched, and decision 4's reasoning — that each dark value is backed by a browser measurement — is what made this the only one changed, and only because a browser measured it. |
+| "`INHERITABLE_SURFACES` holds exactly `--color-background` and `--color-surface`" (:83, :222) | **False.** It holds **three**; `--color-surface-raised` joined it. This is the most consequential of the three, because it sits in the section on what no gate can see — and that gap is now smaller than this page describes. `--color-surface-active` and `--color-surface-sunken` are still outside, which is a gap and not a bound. |
+| "the same five pairs sit under 4.5 before and after" (:177) | **Four.** Dark `--color-severity-error` on `--color-surface-raised` went **4.39 → 4.65** and left the set. The claim was exactly right when written — verified by a full re-sweep at `2042d49^` and at `74acf24` — and the refresh's own correction is what changed it. |
+
+**Annotated rather than edited, deliberately.** This page is Accepted, and
+added-to-never-rewritten is the discipline it observed on ADR-0027 four hours
+earlier — a pure insertion of 38 lines and zero deletions. Editing the
+invariants in place would destroy the record of what was true when the decision
+was taken, which is the thing an ADR is for. The same call was made in
+`tokens.css`, where a sentence this refresh falsified was re-measured and
+annotated where it stood.
+
+**And the lesson is not the values.** Every number on this page verified exact —
+fifteen ratios and two luminances, re-derived against the suite's own arithmetic.
+What aged was every sentence that said *is* rather than *was on this date*. A
+present-tense invariant in a dated document is a claim with no expiry printed on
+it.

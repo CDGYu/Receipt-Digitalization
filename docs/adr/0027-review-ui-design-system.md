@@ -438,6 +438,15 @@ the 2026-08-06 pass above is what backs them, and `--color-null: #7C8CA2` at
 arithmetic control in `stylesheets.test.ts`. The stated cost is that light now
 reads neutral-warm while dark stays blue-slate.
 
+> **That sentence held for about four hours.** At `0fe6be5`, **one** dark value
+> moved — `--color-surface-raised` `#1A1E2F` → `#161925` — because the browser
+> pass measured severity error text at **4.39:1** on it, under §6's floor, with
+> all five gates green. The other fourteen are untouched, and the reasoning
+> above is exactly why: each dark value is backed by a measurement, so the only
+> one that changed is the one a browser re-measured. See ADR-0052's own
+> `## Correction (2026-08-24)`, which records this and two further invariants
+> that aged the same day.
+
 ## References
 
 `docs/superpowers/specs/2026-08-05-review-ui-design-system.md` (the design,
