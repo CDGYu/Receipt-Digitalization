@@ -2751,10 +2751,29 @@ decision 3 if it paginates anything.
 
 ## ISSUE-027 — A PDF is accepted at the door and always fails at `preprocess`
 
-**Status:** OPEN — a live defect, and the only one on this board where an
-advertised input type never works.
-**Owner action required:** **yes** — wire `expand_pdf`, or stop accepting PDFs.
-Both are defensible and §19 advertises PDF support, so it is a decision.
+**Status:** **RESOLVED 2026-08-25** at `55f9847`. Ingest rasterises a PDF into
+one receipt per page, so `expand_pdf` has a caller and an advertised input type
+works. Everything after this block describes the defect as it stood until then.
+**Owner action required:** none. The ruling was taken on 2026-08-25 and it was
+**wire `expand_pdf`**, not drop `.pdf`.
+
+**Two things this fix did NOT do the way the resume note below predicts.**
+The note says `make_image_key` needs to disambiguate pages: it does not, and was
+not touched -- each page is its own receipt with its own uuid, so the key is
+already unique. And it says that whichever option is chosen,
+`process_receipt`'s docstring must lose the sentence asserting the expansion
+already happens: **that sentence is now true and is kept.** Both halves were
+re-measured -- ingest expands, and `load_image` still raises
+`UnsupportedFormat: Unsupported file extension: '.pdf'` for a PDF that reaches
+it, so the safety net the second half describes is intact. The note assumed both
+options left the sentence false; one of them made it true.
+
+**What the fix added that the note does not mention**, because both are about an
+accepted upload not vanishing or running away: a **50-page bound**, checked
+before anything is rasterised (page count is not bounded by the size ceiling --
+a few megabytes of PDF holds hundreds of pages), and a refusal when a PDF
+rasterises to **no** pages rather than returning an empty list, which would
+store a file, report success and process nothing.
 **Discovered:** 2026-08-23, designing the upload screen — a screen has to tell a
 user what happens when they drop a PDF, and the answer turned out to be "it is
 accepted and then it dies".
