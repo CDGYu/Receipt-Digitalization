@@ -446,6 +446,33 @@ it.** That is ADR-0029's blind spot at full scale, and it is exactly how the
 blank at 1440, past five gates, five task reviews and five scoped re-reviews,
 found only when the final reviewer measured a real browser.
 
+### Dated correction (2026-08-24) — the colour half of §7 is gated, and the ramp is not free
+
+**"Every colour … can change with all five gates byte-identically green" is
+false, and believing it would send an implementer at a palette the suite
+rejects.** Measured against `frontend/tests/stylesheets.test.ts` on 2026-08-24:
+the same file that holds the census also computes WCAG relative luminance and
+enforces a **4.5:1 floor across all three theme blocks** — for every rule that
+sets `color` and `background` together, and for every inherited `color` token
+against `--color-background` and `--color-surface`. It further requires every
+colour token to be a plain `#RRGGBB`, because anything else makes the
+arithmetic return `NaN` and `NaN >= 4.5` is false.
+
+So the accurate statement is: **the ramp's brightness is gated; its hue is
+not.** Spacing, radii, type sizes and shadows remain ungated, exactly as §7
+says, and so does whether any of it looks right — which is what decision 14 is
+for. Three surfaces are also outside the floor check: `--color-surface-raised`,
+`--color-surface-active` and `--color-surface-sunken` are not in
+`INHERITABLE_SURFACES`.
+
+**This constrains decision 12 more than decision 12 knew.** The reserved
+severity colours already sit near the floor — `--color-severity-error`
+`#DC2626` measures **4.62:1** on today's `--color-background` `#F8FAFC`, and
+`--color-null` measures **4.55:1**. With 0.12 and 0.05 of headroom, the page
+background **cannot get darker**; it can only change hue at roughly constant
+luminance. That is a real bound on "moves from cool Slate toward neutral", and
+the plan's values were measured under it rather than chosen and hoped for.
+
 ### Decision 14 — a browser pass is inside this milestone, not after it
 
 At 1440, 768 and 375, in both themes, with a person reading the captures. On
