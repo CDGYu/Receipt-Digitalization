@@ -1651,9 +1651,30 @@ In `get_receipt_progress`, replace the body's session block and return with:
         }
 ```
 
-Add `strand_if_cold` to `src/receipts/sweep.py`:
+Add `strand_if_cold` to `src/receipts/sweep.py`, **with the `_as_utc` helper it
+needs**:
 
 ```python
+def _as_utc(value: datetime) -> datetime:
+    """Read a stored timestamp as the UTC instant it is.
+
+    **Measured, not assumed** (Task 3): SQLite hands these columns back
+    ``tzinfo=None`` -- ``12:00+00:00`` goes in and a naive ``12:00`` comes out,
+    because SQLite has no native timezone type. Postgres hands back an aware
+    value. Everything this system writes to these columns is UTC, so a naive
+    value *is* UTC and this says so.
+
+    Without it, the comparisons below raise
+    ``TypeError: can't compare offset-naive and offset-aware datetimes`` --
+    on SQLite only. That would pass review on Postgres and fail the suite,
+    which runs on SQLite.
+
+    :func:`find_stranded` needs no equivalent: it compares in SQL, where the
+    dialect's own bind processing keeps both sides in one representation.
+    """
+    return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
+
+
 def strand_if_cold(
     session: Session,
     receipt: Receipt,
@@ -1672,10 +1693,32 @@ def strand_if_cold(
     if receipt.status is not ReceiptStatus.PENDING:
         return False
     if receipt.progress_at is not None:
-        cold = receipt.progress_at < started_cutoff
+        cold = _as_utc(receipt.progress_at) < started_cutoff
     else:
-        cold = receipt.created_at < unstarted_cutoff
+        cold = _as_utc(receipt.created_at) < unstarted_cutoff
     return strand_receipt(session, receipt) if cold else False
+```
+
+**Add a test that pins the naive case specifically**, because it is the one an
+implementer on Postgres would never hit:
+
+```python
+def test_a_naive_stored_timestamp_is_read_as_utc(session_factory) -> None:
+    """SQLite stores these columns naive; the comparison must still work.
+
+    Without _as_utc this raises TypeError rather than failing an assertion,
+    which is a different and louder failure than a wrong answer.
+    """
+    with session_factory() as session:
+        receipt_id = _make(
+            session, status=ReceiptStatus.PENDING,
+            progress_at=datetime(2026, 8, 24, 10, 0),  # deliberately naive
+            created_at=NOW - timedelta(hours=3),
+        )
+        session.commit()
+    with session_factory() as session:
+        receipt = get_receipt(session, receipt_id)
+        assert strand_if_cold(receipt=receipt, session=session, settings=_settings(), now=NOW)
 ```
 
 Add `"strand_if_cold"` to that module's `__all__`. Import it in `api.py` at
