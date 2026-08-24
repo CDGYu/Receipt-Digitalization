@@ -166,3 +166,43 @@ alone.
 
 The dispatch was held for exactly this reason and no work was lost; this is
 recorded as a hazard identified before it fired rather than after.
+
+**Dated correction (2026-08-24) — two further widenings, both measured, and the
+rule underneath them.** The 2026-08-06 rule turns on a task's *intent*: whether
+its plan contains a deliberate RED phase. Two incidents on the Editorial-refresh
+milestone show intent is the wrong thing to serialise on.
+
+**First: any concurrent writing makes the other party's gate run unreliable, red
+phase or not.** A full-suite run reported `review/FindingsPanel.module.css`
+failing its census — a **committed** file, clean in `git status`, that the other
+session was not touching. Run in isolation it passed; run again in full it
+passed. Transient, and the only available cause is `stylesheets()` walking the
+tree while another session wrote to it. A fix round was nearly opened against a
+defect that did not exist.
+
+**Second, and sharper: a file merely appearing on disk is itself a global-gate
+event.** `stylesheets.test.ts` pins `stylesheets().length`, so the instant a new
+`*.module.css` exists that pin fails — **before any test is edited, any gate is
+run, or any RED phase is entered.** Creating a file was enough. Caught in
+flight: a peer session had created `home/HomeScreen.module.css` while a task
+reviewer was running, and the resulting 21-against-22 failure would have read as
+a defect in the task under review. A second file it had already edited,
+`admin-screen.test.tsx`, would have produced a second red that looked even more
+like a real defect.
+
+**The general form, which is the rule worth holding rather than its three
+instances:** *any gate that quantifies over the tree turns file creation into a
+shared-state write.* Here that is at least the stylesheet census, its count pin,
+and `admin-screen.test.tsx` — which derives its path list from `route.ts`
+source rather than from a fixture, so it too quantifies over the tree.
+
+**Rule 2 widens again: while one party's gates or reviewers are running, another
+must not write to the tree at all** — not to disjoint files, and not to new
+ones. The protocol that worked in practice: the writer does everything that
+touches no tracked path, holds the rest, and whoever runs gates declares the
+window. Note this is not confined to subagents of one session — both incidents
+were between two independent Claude sessions sharing one worktree, which this
+ADR's title anticipates but its rules did not.
+
+*The general form was derived by the peer session from an incident it caught and
+parked before it fired.*
