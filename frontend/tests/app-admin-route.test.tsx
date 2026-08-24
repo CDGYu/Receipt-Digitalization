@@ -13,10 +13,7 @@ import type { Route } from '../src/route'
  * puts the two together. **Measured before this file existed** -- the same
  * measurement `app-header.test.tsx` records for `SignOutControl`, run again for
  * Task 4's own deliverable: with the import and the route branch deleted from
- * `main.tsx`, so that `App` rendered `<ReviewScreen />` unconditionally (that
- * being the fall-through at the time; since `3f58425` the same deletion falls
- * through to `<HomeScreen />` instead -- the measurement stands, the screen it
- * lands on moved),
+ * `main.tsx`, so that `App` renders `<ReviewScreen />` unconditionally,
  * `tsc -b` exits 0, `oxlint` reports only its pre-existing fast-refresh warning,
  * and **all 316 tests pass**. The whole `/app/admin` surface could be built,
  * merged and then quietly unreachable, with every gate green.
@@ -75,16 +72,27 @@ import type { Route } from '../src/route'
  * it "strips nothing at all" was false, and only its `route.ts` read was ever
  * meant.)
  *
- * `/app/` is not among the literals: `home` is the switch's *default* and
- * `route.ts` declares no string for it. The last case below covers it, and that
- * default is why every case here asserts the expected screen **by name** rather
- * than asserting "not the admin screen" -- an unmounted route does not throw,
- * it quietly serves the landing screen.
+ * **There are two fall-throughs and they land on different screens.** Say which
+ * one you mean, always:
  *
- * This named `review` as the default until 2026-08-24. True when written;
- * `3f58425` made `/app/` a landing screen, so `home` took the default and
- * `review` gained the explicit `/app/review` literal it had never needed while
- * it *was* the default.
+ *   * `route.ts`'s **route-resolution** default is `home` -- what an
+ *     unrecognised *path* resolves to. Executed: `/app/`, `/`, `/app/xyz` all
+ *     give `home`.
+ *   * `main.tsx`'s **render fallback** is the terminal `else` of its ternary
+ *     chain, and it is `<ReviewScreen />` -- what a *route with no branch*
+ *     renders. Executed by deleting the `route === 'admin'` branch: `/app/admin`
+ *     renders **the review screen**, not the home screen.
+ *
+ * `/app/` is not among the literals: `home` is the route-resolution default and
+ * `route.ts` declares no string for it. The last case below covers it. But the
+ * reason every case here asserts the expected screen **by name** rather than
+ * "not the admin screen" is the *second* fall-through -- an unmounted route
+ * does not throw, it quietly serves the review screen.
+ *
+ * `3f58425` moved the first of those two and left the second where it was. A
+ * sweep that rewrote "the review queue" to "the landing screen" by vocabulary
+ * broke this sentence, because the two fall-throughs share every word and only
+ * a mutation tells them apart.
  *
  * Every screen is mocked, and that is the point rather than a shortcut: what is
  * under test is the *switch*, not any one of the components. A real
@@ -204,7 +212,7 @@ describe('the app entry point routes by pathname', () => {
     // green -- the failure mode of every derived list.
     //
     // Stated as coverage rather than as a count, because a count is what this
-    // file is getting away from: `review` aside, every member of `Route` must be
+    // file is getting away from: `home` aside, every member of `Route` must be
     // the route of some literal `route.ts` declares. So a sixth member that is
     // typed but never routed fails HERE, and a sixth member with no screen fails
     // `tsc -b` on `SCREEN` -- measured 2026-08-24 by adding `'settings'` to the

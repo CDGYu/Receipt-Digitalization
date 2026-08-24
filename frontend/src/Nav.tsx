@@ -25,8 +25,8 @@ interface Destination {
  * mapping is derivable from the other.
  *
  * This said `/app/review` was "a path `route.ts` matches no branch for" until
- * 2026-08-24. True when written; `3f58425` gave it an explicit branch two lines
- * below this comment and did not correct it here.
+ * 2026-08-24. True when written; `3f58425` gave it an explicit branch in
+ * `route.ts` and did not correct it here.
  */
 const DESTINATIONS: readonly Destination[] = [
   // `/app/` rather than a named path: home is `route.ts`'s default, so it has
