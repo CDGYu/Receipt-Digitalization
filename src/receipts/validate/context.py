@@ -149,12 +149,18 @@ class ValidationContext:
 #: The context a review route can reconstruct after extraction has finished.
 #:
 #: ``config`` and ``today`` are process-local. The two ``expected_buyer_*``
-#: fields come from ``Settings``, which a review route already holds. Everything
-#: else on :class:`ValidationContext` is evidence produced by the extraction RUN
-#: -- the raw OCR text, the triage result, the repeated-run agreement, the JSON
-#: parse error. A review route rebuilds the receipt from the ``receipts`` and
-#: ``line_items`` tables (``review.serializers._export_extraction``), and none of
-#: that evidence is a column on either, so a re-run at review time sees it absent.
+#: fields come from ``Settings``, which a review route already holds.
+#:
+#: ``ocr_text``, ``triage``, ``consistency`` and ``parse_error`` are evidence
+#: produced by the extraction RUN. A review route rebuilds the receipt from the
+#: ``receipts`` and ``line_items`` tables
+#: (``review.serializers._export_extraction``), and none of them is a column on
+#: either, so a re-run at review time sees them absent.
+#:
+#: ``merchant`` is not run evidence and is left out for the other reason: this
+#: is an allow-list, so a field is unreconstructible until somebody deliberately
+#: admits it, and nothing has needed this one admitted -- the scan in
+#: ``tests/test_rule_subjects.py`` resolves a read of it for none of the rules.
 REVIEW_RECONSTRUCTIBLE: frozenset[str] = frozenset(
     {"config", "today", "expected_buyer_name", "expected_buyer_tax_id"}
 )
