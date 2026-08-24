@@ -97,8 +97,16 @@ five gates green**) and a zero-width table column already sitting on `main`.
 Both invisible to pytest, ruff, `tsc -b`, vitest and the build. **Do this again
 on any visual milestone.** `scripts/verify.py` does not run Playwright.
 
-**The four rulings, each with a measured cause and no chosen fix. Do not guess
-one — read the issue, they are not equivalent:**
+**THREE OF THESE FOUR RULINGS WERE TAKEN on 2026-08-25 (ADR-0054) and the rows
+below are kept as the record of what was decided, not as work.** ISSUE-029,
+ISSUE-030 and ISSUE-031 are **closed** on `feat/terminal-state-guarantee`:
+the ceiling is derived from the model budget rather than fixed; the stranded
+hole is closed by a heartbeat plus two runners; and the sink belongs inside
+`process_receipt`, which builds it rather than accepting it. **ISSUE-032 is
+still open and still needs you.**
+
+**The one remaining ruling, and three kept for the record. Do not guess a fix —
+read the issue, they are not equivalent:**
 
 | ruling | issue | why it needs you |
 |---|---|---|
@@ -226,7 +234,8 @@ is the collapsed-table `border-radius`, a repo-wide question nobody has ruled on
 ### 2g. WAITING ON YOU, NOT ON ANYONE'S TIME
 
 The full list is under "BLOCKED ON THE USER" below. The ones that block work
-rather than merely tidy it: **the four rulings in 2a** (ISSUE-029/030/031/032),
+rather than merely tidy it: **ISSUE-032, the one ruling left in 2a** (029, 030
+and 031 were taken on 2026-08-25 — ADR-0054),
 **R060/R061 grounding** (which also gates bbox), and **what happens to
 `IMPLEMENTATION_PLAN.md`**. *(ISSUE-006's flag decision and ISSUE-026's upload
 ruling were both given on 2026-08-23 and both shipped; this line asked for them
@@ -269,13 +278,39 @@ the wrong push state twice, in both directions. Run the commands rather than the
 sentence (ADR-0028 §1):
 
 ```
-git status --short                                # must be empty
+git status --short                                # docker-compose.yml is HELD, see below
 git log --oneline -6
-git branch --no-merged main                       # must name NOTHING
-git rev-parse main                                # merged tip
+git branch --no-merged main                       # names feat/terminal-state-guarantee
+git rev-parse main                                # merged tip, BEHIND the branch
 git ls-remote --heads origin main                 # authoritative on what is pushed
 git log --oneline refs/remotes/origin/main..main  # what the pending push would send
 ```
+
+## A COMPLETE BRANCH IS WAITING ON YOU, AND IT IS NOT MERGED.
+
+**`feat/terminal-state-guarantee` is finished** (2026-08-25, **ADR-0054**):
+seven tasks, **all five gates PASS at the tip**, suite **1430**, working tree
+clean apart from the deliberately-held `docker-compose.yml`. It closes
+**ISSUE-029**, **ISSUE-030** and **ISSUE-031**.
+
+**Two things are owed by the user and by nobody else:**
+1. **The merge.** The plan's close ends in a fast-forward merge to `main`. It
+   was deliberately not taken: `main` waits for the user on this project.
+2. **The push.** The remote is at `e91bad8`, the **pre-rebuild lineage**, so
+   this is a force-with-lease and **not** a fast-forward. The
+   destructive-commands hook blocks the assistant from running it, which is
+   why it has sat owed across sessions.
+
+**`docker-compose.yml` carries an uncommitted 28-line change and must stay
+uncommitted.** It is the worker's `VLM_*` environment. Its
+`VLM_TIMEOUT_S: "3600"` implies a **nine-hour** derived job ceiling under
+ADR-0054 decision 5, which is worth deciding before it lands. Do not `git add
+-A` anywhere near it.
+
+**What that milestone does NOT buy, because no gate can say it:** nothing
+schedules `receipts sweep`, so the guarantee holds only where an operator
+schedules it; and **nobody has watched a screen** — both halves of ISSUE-031
+are pinned at the API and pipeline level, and jsdom cannot see narration.
 
 ## What last merged, and how to check what is pushed.
 
@@ -576,9 +611,9 @@ is a pointer; where it and an entry disagree, the entry wins.**
 | ISSUE-026 | A receipt cannot enter the system from a browser. | **RESOLVED 2026-08-24** — `/app/upload` built, mounted, pinned by mutation |
 | **ISSUE-027** | **A PDF is accepted at the door and always fails at `preprocess`.** `validate_upload` accepts one, `load_image` raises `UnsupportedFormat`, and `expand_pdf` has zero callers. The upload screen refuses PDFs client-side as an interim. | **OPEN — needs your ruling: wire `expand_pdf`, or stop accepting PDFs?** |
 | ISSUE-028 | The containerised worker could only ever run the `fake` VLM client — the image lacked the `openai` extra, so every OpenAI-shaped provider raised at client construction. **Every compose run this project has ever done was silently a fake-client run.** | **RESOLVED 2026-08-24** at `45b5329`; the re-reading of past runs is not |
-| **ISSUE-029** | **The job ceiling is shorter than one receipt.** `DEFAULT_JOB_TIMEOUT_S = 900`; triage alone measured **696s** under the project's own local model. Its own comment already describes the failure it causes. | **OPEN — needs your ruling: what ceiling, and derived from what?** |
-| **ISSUE-030** | **An interrupted receipt has no terminal state, ever.** Breaks the stated "nothing is silently dropped" guarantee. **Not RQ-specific** — reproduced on a synchronous CLI path. Raising ISSUE-029's ceiling **hides this without closing it**. | **OPEN — needs your ruling: reaper, per-runner hook, or both?** |
-| **ISSUE-031** | **Progress narration exists on exactly one of four `process_receipt` call sites.** `--inline` — the documented no-Redis deployment — narrates nothing, ever. | **OPEN — needs your ruling: where does the sink belong?** |
+| ISSUE-029 | The job ceiling is shorter than one receipt. `DEFAULT_JOB_TIMEOUT_S = 900`; triage alone measured **696s** under the project's own local model. | **RESOLVED 2026-08-24** at `c08b718` — derived from the model budget, not a constant (ADR-0054) |
+| ISSUE-030 | An interrupted receipt has no terminal state, ever. Broke the stated "nothing is silently dropped" guarantee; **not RQ-specific**. | **RESOLVED 2026-08-25** at `63084b6`, `41d2933`, `d1e446b` — but **nothing schedules `receipts sweep`**, and a sweep nobody runs closes nothing |
+| ISSUE-031 | Progress narration existed on exactly one of four `process_receipt` call sites; `--inline` narrated nothing, ever. | **RESOLVED** in two halves at `2d1bea9` and `d1e446b` — but **nobody has watched a screen**; jsdom cannot see narration |
 | **ISSUE-032** | **A control paints over the column beside it at every width.** Cause measured: `th` is `box-sizing: content-box` with 8px padding, so seven columns demand more than the table has and the eighth renders at **0**. | **OPEN — needs your ruling: three fixes, one repaints every table cell** |
 
 ---
