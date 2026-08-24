@@ -81,9 +81,10 @@ const customProperties = (source: string): string[] =>
  *  -- name plus colon -- rather than merely present as a substring, which is
  *  what let `--color-surface-raised` answer for a deleted `--color-surface`. */
 const TOKENS: readonly string[] = [
-  // §3.1 typography
-  '--font-sans', '--font-mono',
+  // §3.1 typography, plus the Editorial display face and its headline step
+  '--font-sans', '--font-display', '--font-mono',
   '--text-xs', '--text-sm', '--text-base', '--text-lg', '--text-xl', '--text-2xl',
+  '--text-3xl',
   // §3.2 colour, plus the two surfaces added by the round-1 controller ruling
   '--color-background', '--color-surface', '--color-surface-raised',
   '--color-surface-active', '--color-surface-sunken',
@@ -93,7 +94,7 @@ const TOKENS: readonly string[] = [
   '--color-null',
   // §3.3 spacing, radii, elevation
   '--space-xs', '--space-sm', '--space-md', '--space-lg', '--space-xl',
-  '--space-2xl', '--space-3xl',
+  '--space-2xl', '--space-3xl', '--space-4xl', '--space-5xl',
   '--radius-sm', '--radius-md', '--radius-lg',
   '--shadow-sm', '--shadow-md',
 ]
@@ -115,7 +116,13 @@ describe('the guard is not passing vacuously', () => {
   it('bounds a block at its own closing brace', () => {
     // If `block` ran to EOF this would contain the dark values too, and every
     // "the light theme says X" assertion would be meaningless.
-    expect(block(LIGHT)).toContain('#F8FAFC')
+    //
+    // `#FAFAF9` is the light `--color-background`, and the anchor moved here
+    // from `#F8FAFC` when the Editorial ramp landed. It has to be a value only
+    // the light block carries: `#F8FAFC` is still in the file, as the dark
+    // `--color-foreground`, so leaving it would have turned this assertion from
+    // a bound on `block` into one satisfied by the very leak it looks for.
+    expect(block(LIGHT)).toContain('#FAFAF9')
     expect(block(LIGHT), 'the light block leaked into the dark one').not.toContain('#020617')
     expect(block(DARK_ATTR)).toContain('#020617')
     expect(block(DARK_ATTR), 'the dark block leaked into the media copy').not.toContain(
@@ -139,7 +146,20 @@ describe('tokens.css', () => {
     for (const token of TOKENS) {
       expect(declared.has(token), `${token} is not declared in the ${LIGHT} block`).toBe(true)
     }
-    expect(TOKENS.length).toBe(35)
+    expect(TOKENS.length).toBe(39)
+  })
+
+  it('gives the light theme a raised surface that is actually raised', () => {
+    // The flatness this refresh removes was in the tokens, not the components:
+    // --color-surface-raised and --color-surface were both #FFFFFF, so nothing
+    // in light mode could sit above anything. Both values are read from the
+    // file, so this cannot pass by agreeing with a constant it also supplies.
+    const light = declarations(block(LIGHT))
+    const raised = light.get('--color-surface-raised')
+    const surface = light.get('--color-surface')
+    expect(raised, '--color-surface-raised is not declared in the light block').toBeDefined()
+    expect(surface, '--color-surface is not declared in the light block').toBeDefined()
+    expect(raised).not.toBe(surface)
   })
 
   it('ships a dark theme for every colour the light theme defines', () => {
@@ -194,6 +214,8 @@ describe('tokens.css', () => {
       '@fontsource/fira-sans/600.css',
       '@fontsource/fira-code/400.css',
       '@fontsource/fira-code/500.css',
+      '@fontsource/archivo/600.css',
+      '@fontsource/archivo/700.css',
     ]) {
       expect(main, `main.tsx does not import ${specifier}`).toContain(`import '${specifier}'`)
     }

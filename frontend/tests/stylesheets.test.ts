@@ -498,7 +498,7 @@ const CENSUS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
   },
   'styles/tokens.css': {
     ':root':
-      'color-scheme: light, --font-sans, --font-mono, --text-xs, --text-sm, --text-base, --text-lg, --text-xl, --text-2xl, --space-xs, --space-sm, --space-md, --space-lg, --space-xl, --space-2xl, --space-3xl, --radius-sm, --radius-md, --radius-lg, --shadow-sm, --shadow-md, --color-background, --color-surface, --color-surface-raised, --color-surface-active, --color-surface-sunken, --color-foreground, --color-muted-foreground, --color-border, --color-primary, --color-ring, --color-severity-error, --color-severity-warn, --color-severity-info, --color-positive, --color-null',
+      'color-scheme: light, --font-sans, --font-display, --font-mono, --text-xs, --text-sm, --text-base, --text-lg, --text-xl, --text-2xl, --text-3xl, --space-xs, --space-sm, --space-md, --space-lg, --space-xl, --space-2xl, --space-3xl, --space-4xl, --space-5xl, --radius-sm, --radius-md, --radius-lg, --shadow-sm, --shadow-md, --color-background, --color-surface, --color-surface-raised, --color-surface-active, --color-surface-sunken, --color-foreground, --color-muted-foreground, --color-border, --color-primary, --color-ring, --color-severity-error, --color-severity-warn, --color-severity-info, --color-positive, --color-null',
     ":root[data-theme='dark']":
       'color-scheme: dark, --color-background, --color-surface, --color-surface-raised, --color-surface-active, --color-surface-sunken, --color-foreground, --color-muted-foreground, --color-border, --color-primary, --color-ring, --color-severity-error, --color-severity-warn, --color-severity-info, --color-positive, --color-null',
     "@media (prefers-color-scheme: dark) :root:not([data-theme='light'])":
@@ -797,8 +797,19 @@ function soleToken(value: string): string | null {
  *
  *    --color-severity-error on --color-surface-raised   dark 4.39
  *    --color-severity-error on --color-surface-active   dark 3.89, light 4.44
- *    --color-null           on --color-surface-active   dark 4.27, light 4.37
- *    --color-null           on --color-surface-sunken   light 4.34
+ *    --color-severity-error on --color-surface-sunken   light 4.35
+ *    --color-null           on --color-surface-active   dark 4.27, light 4.41
+ *    --color-null           on --color-surface-sunken   light 4.32
+ *
+ *  Re-derived 2026-08-24, when the Editorial ramp moved the light surfaces, by
+ *  running this file's own `contrastRatio` over both ramps and diffing the two
+ *  tables. **The same five pairs are under the floor before and after** -- the
+ *  refresh widens this list by nothing -- and only light digits moved:
+ *  error/sunken 4.41 to 4.35, null/active 4.37 to 4.41, null/sunken 4.34 to
+ *  4.32. The dark digits are unchanged because the dark blocks are. The
+ *  error-on-sunken row is new to *this list* and not to the tree: it was 4.41
+ *  at the previous ramp and was simply missing from the four rows recorded
+ *  here, which is worth knowing about a list nothing executes.
  *
  *  Whether any of those pairs is *reached* is a cascade question this file
  *  cannot answer, and the browser half can only answer it for a state somebody

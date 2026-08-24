@@ -5,17 +5,30 @@
 // woff2 files under `src/assets/fonts/`; these packages are lockfile-pinned
 // with integrity hashes, which is provenance a hand-copied binary cannot prove.
 //
-// Five imports because the design uses five faces (§3.1): Fira Sans 400/500/600
-// for prose and labels, Fira Code 400/500 for every number. Each file declares
-// all of the family's subsets with a `unicode-range`, so a browser rendering
-// latin text fetches only the latin woff2 -- the rest sit in `dist` unrequested,
-// and a merchant name in Cyrillic or Greek still renders in the right family
-// instead of falling back mid-string.
+// Seven imports because the design uses seven faces: the five §3.1 names --
+// Fira Sans 400/500/600 for prose and labels, Fira Code 400/500 for every
+// number -- plus Archivo 600/700, the two weights behind `--font-display`. Each
+// file declares all of the family's subsets with a `unicode-range`, so a browser
+// rendering latin text fetches only the latin woff2 -- the rest sit in `dist`
+// unrequested, and a merchant name in Cyrillic or Greek still renders in the
+// right family instead of falling back mid-string.
+//
+// Archivo is the exception to that last clause, and `--font-display`'s stack is
+// why it costs nothing: this package ships latin, latin-ext and vietnamese and
+// no others -- no Cyrillic, no Greek, against Fira Sans's seven subsets -- so a
+// heading in either script falls through to `'Fira Sans'`, which is next in the
+// stack precisely because it carries them.
+//
+// The variable package is deliberately not used, and neither is `index.css`:
+// that entrypoint pulls every weight the family ships, and the design asks for
+// two.
 import '@fontsource/fira-sans/400.css'
 import '@fontsource/fira-sans/500.css'
 import '@fontsource/fira-sans/600.css'
 import '@fontsource/fira-code/400.css'
 import '@fontsource/fira-code/500.css'
+import '@fontsource/archivo/600.css'
+import '@fontsource/archivo/700.css'
 import './styles/tokens.css'
 import { StrictMode, useEffect, useSyncExternalStore } from 'react'
 import { createRoot } from 'react-dom/client'
