@@ -1332,10 +1332,17 @@ def _attempt_prompt_hash(
     """
     if attempt.pass_name == "repair":
         previous = attempts[attempt_number - 2]
+        # `extractor.repair()` sends this text as `user` and
+        # `P.SYSTEM_EXTRACTION` as `system`, exactly as the extract call does,
+        # so the hash has to cover both halves -- and in the same order the
+        # branch below uses. Hashing the user half alone stored, for every
+        # `pass_name='repair'` row, the hash of a string no provider ever
+        # received (ISSUE-002). Nothing read the column, so nothing noticed.
         return P.prompt_hash(
             P.build_repair_prompt(
                 previous.extraction, previous.report.render_for_repair_prompt()
             )
+            + P.SYSTEM_EXTRACTION
         )
     return P.prompt_hash(
         P.build_extraction_prompt(triage_result, hints, few_shots or [])

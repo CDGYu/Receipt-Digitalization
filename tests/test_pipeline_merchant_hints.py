@@ -299,6 +299,79 @@ def test_the_recorded_hash_describes_the_prompt_that_was_actually_sent(
     )
 
 
+def _inconsistent() -> ReceiptExtraction:
+    """An extraction whose printed total contradicts its own arithmetic.
+
+    Exists only to force a repair round: the validator has to fail hard enough
+    that a second pass is attempted, and `_good()` never does.
+    """
+    bad = _good()
+    bad.totals = Totals(
+        subtotal=D("200.00"), tax=D("24.00"), discount=D("0.00"), total=D("999.00")
+    )
+    return bad
+
+
+def _stored_repair_hash(session_factory, receipt_id: uuid.UUID) -> str:
+    with session_factory() as session:
+        run = session.scalars(
+            select(ExtractionRun).where(
+                ExtractionRun.receipt_id == receipt_id,
+                ExtractionRun.pass_name == PassName.REPAIR,
+            )
+        ).one()
+        return run.prompt_hash
+
+
+def test_the_recorded_repair_hash_describes_the_prompt_that_was_actually_sent(
+    session_factory, storage, settings
+):
+    """ISSUE-002: the repair branch hashed the user half and dropped the system.
+
+    `extractor.repair()` sends `system=P.SYSTEM_EXTRACTION` alongside the repair
+    text, exactly as the extract call does. `_attempt_prompt_hash`'s repair
+    branch hashed `build_repair_prompt(...)` **alone**, so every
+    `pass_name='repair'` row stored the hash of a string no provider ever
+    received -- while the extract branch four lines below appended the system
+    half and was correct.
+
+    This is the repair twin the issue asks for, and it is built the same way as
+    its extract sibling **on purpose**: it compares the stored hash against the
+    prompt string the recording client was *actually handed*, never against a
+    re-derivation of what the pipeline should have sent. A test that rebuilds
+    both sides the same way agrees with the bug.
+
+    Goes red if the `+ P.SYSTEM_EXTRACTION` is dropped from the repair branch.
+    """
+    _register_merchant(session_factory, MERCHANT_HINTS)
+    job = _job(storage)
+    client = _RecordingClient([_triage(), _inconsistent(), _good()])
+
+    process_receipt(
+        job,
+        client=client,
+        storage=storage,
+        session_factory=session_factory,
+        ctx=CTX,
+        settings=settings,
+    )
+
+    # Precondition, not decoration: without a third call there was no repair
+    # round, the query below would raise, and a green result would mean nothing.
+    assert len(client.prompts) == 3, (
+        f"expected triage, extract, repair -- got {len(client.prompts)} calls"
+    )
+
+    system_sent, user_sent = client.prompts[2]
+    stored = _stored_repair_hash(session_factory, job.id)
+
+    assert stored == P.prompt_hash(user_sent + system_sent)
+    # The system half is what was missing, so a hash of the user half alone is
+    # precisely the defect. Without this the test would pass on a repair branch
+    # that appended the wrong constant.
+    assert stored != P.prompt_hash(user_sent)
+
+
 def test_an_unknown_merchant_extracts_exactly_as_before(
     session_factory, storage, settings
 ):
