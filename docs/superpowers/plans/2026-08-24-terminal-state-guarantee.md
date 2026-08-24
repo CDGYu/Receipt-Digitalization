@@ -708,8 +708,32 @@ git commit -m "feat(persist): record when a run was last known alive"
 
 **Files:**
 - Modify: `src/receipts/pipeline.py`
-- Test: `tests/test_pipeline.py`
-- Test: `tests/test_extractor.py` (add one case -- see Step 8)
+- Test: `tests/test_process_receipt.py`
+- Test: `tests/test_extractor.py` (add one case -- see Step 7)
+
+**Pre-flighted: the tests go in `tests/test_process_receipt.py`, not
+`tests/test_pipeline.py`.** Every test in `test_pipeline.py` exercises
+`run_receipt` and the escalation ladder, and that module has **no fixtures at
+all** — its tests take `tmp_path` directly. `test_process_receipt.py` is the
+module that drives `process_receipt`, and it already supplies everything this
+task needs:
+
+| what | where |
+|---|---|
+| `settings`, `session_factory`, `storage` fixtures | `:96`, `:102`, `:110` |
+| `_job(storage)` | `:162` |
+| `_Client(VLMClient)`, a scripted client | `:175` |
+| `_triage()`, `_good()` | `:226`, `:234` |
+| `_run(job, client, session_factory, storage, settings, **kwargs)` | `:264` |
+
+`_run` calls `process_receipt` **with no `progress=`**, which is exactly the
+shape the headline test needs — do not write your own caller.
+
+It imports `from receipts.persist.repository import (...)` at `:65` and
+`from receipts.pipeline import (...)` at `:70`; extend those existing blocks
+rather than adding new import lines. `get_receipt` is **not** currently
+imported there and you will need it. `ProgressEvent` comes from
+`receipts.progress`.
 
 **Interfaces:**
 - Consumes: `_heartbeat_sink` (Task 3).
@@ -728,8 +752,8 @@ test below never mentions `_heartbeat_sink`.**
 
 - [ ] **Step 1: Write the failing tests**
 
-Add to `tests/test_pipeline.py`, reusing that module's existing fixtures for a
-fake client, storage, and session factory:
+Add to `tests/test_process_receipt.py`, using that module's existing fixtures
+and helpers:
 
 ```python
 def test_process_receipt_heartbeats_with_no_progress_argument(
@@ -737,20 +761,14 @@ def test_process_receipt_heartbeats_with_no_progress_argument(
 ) -> None:
     """The guarantee's signal does not depend on the caller remembering.
 
-    This test never names the sink. It calls process_receipt exactly as
-    `--inline`, `reprocess` and `process_batch` do -- with no `progress=` --
-    and asserts the row was stamped anyway. Deleting the sink construction
-    inside process_receipt is what turns it red.
+    This test never names the sink. It goes through `_run`, which calls
+    process_receipt exactly as `--inline`, `reprocess` and `process_batch` do
+    -- with no `progress=` -- and asserts the row was stamped anyway. Deleting
+    the sink construction inside process_receipt is what turns it red.
     """
-    job = _ingested_job(session_factory, storage)
+    job = _job(storage)
 
-    process_receipt(
-        job,
-        client=FakeVLMClient([_ok_response()]),
-        storage=storage,
-        session_factory=session_factory,
-        settings=settings,
-    )
+    _run(job, _Client([_triage(), _good()]), session_factory, storage, settings)
 
     with session_factory() as session:
         receipt = get_receipt(session, job.id)
@@ -792,14 +810,13 @@ def test_one_raising_sink_does_not_starve_the_other() -> None:
     assert seen == ["persist"]
 ```
 
-`_ingested_job` and `_ok_response` stand for whatever that module already uses
-to build an ingested receipt and a passing fake response. **Use the module's
-existing helpers; do not invent new ones.** If no such helper exists, build the
-job with `ingest_bytes` the way the neighbouring tests do.
+**Use the module's existing helpers; do not invent new ones.** `_job`,
+`_Client`, `_triage`, `_good` and `_run` are all already defined in that file
+at the line numbers given above, and the fixtures are already there.
 
 - [ ] **Step 2: Run them and watch them fail**
 
-Run: `python -m pytest tests/test_pipeline.py -v -k "heartbeat or fan_out or raising_sink"`
+Run: `python -m pytest tests/test_process_receipt.py -v -k "heartbeat or fan_out or raising_sink"`
 
 Expected: the three `fan_out` tests FAIL on `NameError: name 'fan_out' is not
 defined`; the heartbeat test FAILS on `assert None is not None`.
@@ -853,13 +870,13 @@ Leave the `progress` parameter and its `None` default exactly as they are.
 
 - [ ] **Step 5: Run the tests**
 
-Run: `python -m pytest tests/test_pipeline.py -v`
+Run: `python -m pytest tests/test_process_receipt.py -v`
 Expected: PASS.
 
 - [ ] **Step 6: Prove the headline guard by mutation**
 
 Comment out the `progress = fan_out(...)` line and run
-`python -m pytest tests/test_pipeline.py -v -k heartbeat`.
+`python -m pytest tests/test_process_receipt.py -v -k heartbeat`.
 
 Expected: `test_process_receipt_heartbeats_with_no_progress_argument` FAILS on
 the `progress_at is not None` assertion.
@@ -922,7 +939,7 @@ handle this. **If a test fails on session nesting or a locked database, stop
 and report** -- the spec flags that as a predicted trap worth a real pin.
 
 ```bash
-git add src/receipts/pipeline.py tests/test_pipeline.py tests/test_extractor.py
+git add src/receipts/pipeline.py tests/test_process_receipt.py tests/test_extractor.py
 git diff --cached --stat
 git commit -m "feat(pipeline): a run cannot be constructed without a heartbeat"
 ```
