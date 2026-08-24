@@ -5,10 +5,13 @@
  * than flooding a background with the severity colour. Two reasons: a filled
  * severity pill competes with the row it is describing, and tinting a background
  * without a token for the tint would mean inventing hex. Contrast measured
- * against `--color-surface` for all five tones in light (the tighter theme):
- * error 4.83:1, warn 5.02:1, info 6.70:1, positive 5.02:1, neutral 7.63:1. Dark
- * is looser -- every tone's dark value is the lighter of the pair against a
- * near-black surface.
+ * against `--color-surface` for all five tones in light:
+ * error 4.83:1, warn 5.02:1, info 6.70:1, positive 5.02:1, neutral 7.63:1.
+ * **Dark is looser for four of those five** -- 4.94, 8.66, 7.31, 8.16 against
+ * `#0E1223` -- because each of those tones' dark value is the lighter of the
+ * pair against a near-black surface. **Neutral is the exception: 7.25 dark
+ * against 7.63 light.** This said "in light (the tighter theme)" and "every
+ * tone" until 2026-08-24; the mechanism was right and the "every" was not.
  *
  * **One** of those figures was wrong when written rather than made wrong by the
  * Editorial ramp: warn read 4.7 until 2026-08-24. `--color-severity-warn`
