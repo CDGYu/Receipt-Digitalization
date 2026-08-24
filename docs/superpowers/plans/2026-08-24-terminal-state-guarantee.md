@@ -1563,27 +1563,51 @@ def test_the_two_attempt_constants_cannot_drift() -> None:
 - [ ] **Step 6: Run the module**
 
 Run: `python -m pytest tests/test_sweep.py -v`
-Expected: PASS, all ten.
+Expected: PASS, all twelve.
 
 - [ ] **Step 7: Prove three guards by mutation, one at a time**
 
-Run each mutation, confirm the expected test reddens, then **revert with the
+Run each mutation, confirm the owning test reddens, then **revert with the
 inverse edit** and confirm with `grep` before the next one.
 
+**These are measurements, not predictions.** Each was applied alone,
+grep-confirmed applied, `py_compile`-confirmed to compile, run against this
+module, then reverted by inverse edit and grep-confirmed. An earlier version of
+this step predicted different owning tests for mutations 1 and 3; both
+predictions were measured false, and the two tests that now own them exist
+because of that. The design's section 6.3 records why, and states the claim it
+had to withdraw.
+
 1. In `find_stranded`, delete the `Receipt.status == ReceiptStatus.PENDING`
-   clause. Expect `test_a_reviewed_receipt_is_never_touched` **and**
-   `test_a_terminal_receipt_is_never_touched` to FAIL. Two tests from one
-   mutation is the structural claim being demonstrated, not a redundancy.
+   clause. `test_the_query_alone_refuses_every_non_pending_row` FAILS -- the
+   terminal and reviewed ids appear as extra members of the dry run's set --
+   `1 failed, 11 passed`. It fails **alone**: on the write path
+   `strand_receipt`'s own guard still refuses those rows, so
+   `test_a_reviewed_receipt_is_never_touched` and
+   `test_a_terminal_receipt_is_never_touched` stay green under this mutation.
+   That masking is the reason this test asserts the dry run's exact row set.
 2. In `find_stranded`, change the never-started branch's `Receipt.created_at <
    unstarted_cutoff` to `Receipt.created_at < started_cutoff` -- collapsing the
-   two thresholds. Expect `test_a_recently_queued_receipt_is_not_swept` to FAIL.
+   two thresholds. `test_a_recently_queued_receipt_is_not_swept` FAILS, the
+   owning test, with the captured log showing a healthy queued receipt sent to
+   review. `test_the_query_alone_refuses_every_non_pending_row` fails with it,
+   because that row joins the dry run's set -- `2 failed, 10 passed`.
 3. In `strand_receipt`, delete the `if receipt.status is not
-   ReceiptStatus.PENDING: return False` guard. Expect
-   `test_sweeping_twice_opens_one_task_not_two` to FAIL on `second == []`.
+   ReceiptStatus.PENDING: return False` guard.
+   `test_strand_receipt_alone_refuses_a_non_pending_row` FAILS on
+   `assert True is False` -- `1 failed, 11 passed`.
+   `test_sweeping_twice_opens_one_task_not_two` stays **green**: its
+   `second == []` holds because `find_stranded` returns nothing on the second
+   pass, which has nothing to do with this guard.
 
 **A mutation that does not compile proves nothing.** If any of these produces a
 `SyntaxError` or an import error rather than an assertion failure, the mutation
 was malformed -- fix the mutation, not the test.
+
+**Nor does a crash.** One run of mutation 3 on this box died with
+`Windows fatal exception: access violation` before pytest reported anything at
+all. That is the interpreter, not the mutation -- re-run it. A run that does
+not finish is not a result in either direction.
 
 - [ ] **Step 8: Full suite, then commit**
 
