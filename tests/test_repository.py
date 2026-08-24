@@ -331,6 +331,59 @@ def test_save_extraction_carries_meta_flags(engine: sa.Engine) -> None:
         assert got.status is ReceiptStatus.NEEDS_REVIEW
 
 
+def test_save_extraction_persists_the_fields_validation_needs(engine: sa.Engine) -> None:
+    """Three fields that rules read and no column carried until 2026-08-24.
+
+    Without them a rehydrated receipt validates DIFFERENTLY from the one that
+    was extracted, with no edit involved: R040 reads ``meta.is_refund`` and
+    inverts, R020/R024 read ``prices_include_tax`` and silently loosen, R025
+    reads ``tax_breakdown`` and silently skips.
+    """
+    extraction = _extraction()
+    extraction.meta.is_refund = True
+    extraction.totals.prices_include_tax = True
+    extraction.totals.tax_breakdown = [
+        TaxBand(
+            label="VATable",
+            base=Decimal("500.00"),
+            rate=Decimal("0.12"),
+            amount=Decimal("60.00"),
+        )
+    ]
+    with Session(engine) as session:
+        receipt = save_extraction(
+            session, _job(), extraction, ValidationReport(),
+            Decimal("0.9"), ReceiptStatus.NEEDS_REVIEW,
+        )
+        session.commit()
+        assert receipt.is_refund is True
+        assert receipt.prices_include_tax is True
+        assert receipt.tax_breakdown == [
+            {"label": "VATable", "base": "500.00", "rate": "0.12", "amount": "60.00"}
+        ]
+
+
+def test_save_extraction_redacts_a_pan_inside_tax_breakdown(engine: sa.Engine) -> None:
+    """``tax_breakdown`` is model text in a JSON column, so the blanket pass misses it.
+
+    ``save_extraction``'s redaction pass is ``type(value) is str`` over its
+    ``fields`` dict; a list value is skipped whole, and ``TaxBand.label`` is
+    model text. This is ``LineItem.modifiers``' hazard one column over, and it
+    is invisible to the ``String``-typed-column walk in
+    ``test_every_text_column_save_extraction_writes_is_redacted``.
+    """
+    pan = "4111111111111111"
+    extraction = _extraction()
+    extraction.totals.tax_breakdown = [TaxBand(label=f"VAT CARD {pan}", amount=Decimal("60.00"))]
+    with Session(engine) as session:
+        receipt = save_extraction(
+            session, _job(), extraction, ValidationReport(),
+            Decimal("0.9"), ReceiptStatus.NEEDS_REVIEW,
+        )
+        session.commit()
+        assert pan not in str(receipt.tax_breakdown)
+
+
 def test_save_extraction_falls_back_to_list_order_on_duplicate_positions(
     engine: sa.Engine,
 ) -> None:

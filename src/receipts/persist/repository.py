@@ -567,6 +567,16 @@ def save_extraction(
         is_handwritten=extraction.meta.is_handwritten,
         legibility=extraction.meta.legibility,
         receipt_is_inconsistent=extraction.meta.receipt_is_inconsistent,
+        is_refund=extraction.meta.is_refund,
+        prices_include_tax=extraction.totals.prices_include_tax,
+        # §18: wrapped in ``redact_pan`` for the same reason
+        # ``LineItem.modifiers`` is -- ``TaxBand.label`` is model text, and the
+        # blanket pass below is ``type(value) is str``, which skips a list value
+        # whole. ``redact_pan`` recurses into lists and dicts, so one wrap
+        # reaches every label. A ``String``-typed-column walk cannot see in here.
+        tax_breakdown=redact_pan(
+            [band.model_dump(mode="json") for band in extraction.totals.tax_breakdown]
+        ),
     )
 
     # §18: redaction is default-on rather than an enumerated column list. That
