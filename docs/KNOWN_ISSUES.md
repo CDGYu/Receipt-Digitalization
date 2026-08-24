@@ -3072,11 +3072,11 @@ queue.
 
 ## ISSUE-032 — The line-items table paints a control over the column beside it
 
-**Status:** OPEN. **The symptom is measured and reproducible; the cause is NOT
-established, and the obvious fix is probably the wrong one.** Read the
-"refuted" section before touching the stylesheet.
-**Owner action required:** not yet — one measurement decides the fix, and it is
-named below.
+**Status:** OPEN. **Symptom measured, cause established 2026-08-24, fix not
+chosen.** The obvious fix — allocate a width for the eighth column — is *not*
+sufficient on its own; read the measured section before touching the stylesheet.
+**Owner action required:** **yes** — three candidate fixes have genuinely
+different blast radii and one of them repaints every table cell in the app.
 **Discovered:** 2026-08-24, by the Editorial refresh's browser pass (design
 decision 14). **Pre-existing:** yes — it arrived with the `is_template_row`
 control merged that morning, and **`main` is very likely red on this test now.**
@@ -3128,36 +3128,89 @@ reproduction refutes it.** The same eight columns and the same rules —
 An unwidthed column takes the remainder and is never 0 — always several times
 the 13px control. **So something else collapses it in the app.**
 
-### The surviving hypothesis, as a prediction that can be falsified
+### MEASURED 2026-08-24 — the prediction was wrong, and here is the cause
 
-Under fixed layout the eighth column is `W − 48 − 0.85W = 0.15W − 48`, which is
-**≤ 0 exactly when the table's rendered width `W` ≤ 320px.** So the prediction
-is: **the real `.table` is rendering at ≤320px wide, despite `min-width: 44rem`**
-— and if so the whole table is collapsed and every column is being squeezed,
-not just the eighth.
+A prediction was recorded here that the table must be rendering at **≤320px**,
+since the eighth column computes as `0.15W − 48`. **Measured against a real
+seeded review screen, that is dead:**
 
-### The one measurement that settles it
+| viewport | scroller | scrolls? | table | 8th column |
+|---|---|---|---|---|
+| 375 | 336.0 | yes | **704.0** | **0.0** |
+| 1366 | 734.8 | yes | 734.8 | 0.1 |
+| 1440 | 777.3 | yes | 777.3 | **0.0** |
 
-On the seeded review screen, read the computed width of `.table` (and of its
-scroller). If it is ~704px or more, the prediction is wrong and the cause is
-something else again — do not guess a third time, instrument it. If it is
-≤320px, the defect is **whatever defeats `min-width: 44rem`**, and the column
-allocation is a red herring.
+**`min-width` is not defeated — it is working.** At 375 the table is exactly
+`44rem` to the pixel and the scroller scrolls, which is the designed state this
+file describes. And the eighth column is zero **at 1440 as well**, so zero was
+never a narrow-viewport symptom.
 
-*(Not measured yet only because this host cannot currently run the harness: the
-Playwright `webServer` chain — build, seed, serve — timed out at its 180s
-ceiling under unrelated CPU load.)*
+*(Both the scroller and the table are reported deliberately: a table sitting at
+its `min-width` inside a narrower scroller is working as intended, and a table
+collapsed below it is a defect. Both look narrow. Reporting one number lets a
+reader assume the other.)*
 
-### Why the fix is being withheld
+### The cause: `th` is content-box, so every column renders 16px wider than its rule
 
-An earlier draft of this issue recommended: give column 8 a width, raise
-`min-width`, fix the "seven columns" prose, and pin header count against width
-rules. **The reproduction above makes the first of those probably useless** — if
-the table is collapsed, allocating a width for one column changes nothing.
-Filing that fix would have been fixing the symptom's most plausible cause rather
-than its actual one, which is the failure mode this register exists to prevent.
+`.head th` sets `padding: var(--space-md) var(--space-md)` — 8px each side — and
+**this app has no global `box-sizing` reset**; it is applied per element in
+eight places and `.head th` is not one of them. So each specified width is a
+*content* width. At 1440:
 
-**What survives regardless of the mechanism:**
+```
+seven specified widths   48 + 0.85 × 777.3  =  708.7
+plus their padding       7 × 16             = +112.0
+                                              -------
+the seven demand                               820.7
+the table has                                  777.3
+deficit before the eighth gets anything         43.4
+```
+
+**There is no remainder.** The seven overflow the table by themselves, the
+eighth collapses to 0, and the seven are then compressed to fit — measured at
+776.2 against 820.7 demanded. Same shape at 1366.
+
+`min-width: 44rem`'s own comment says "Seven columns whose widths are
+percentages of *this*". There are eight, and no `nth-child(8)` rule exists —
+verified, nine `nth-child` occurrences and none for the eighth. The floor was
+reasoned about a seven-column table and the eighth was added without revisiting
+it.
+
+### How both attempts to reason it out failed, recorded because the shape repeats
+
+The reproduction below refuted "the column has no rule, so it gets nothing" —
+correctly. **But it omitted `th` padding entirely**, so it modelled a table this
+app does not have; that single omission is the whole difference between its 43px
+and the real 0. And `0.15W − 48` was derived **independently by two people from
+the same CSS, agreeing exactly** — and is wrong, because it models the
+*specified* widths and not the *rendered* ones.
+
+**Agreement between two derivations is not evidence when both read the same
+source the same way.** What neither asked was whether there *is* a remainder.
+
+### The three candidate fixes, and why none is chosen here
+
+The cause is known; the remedy is a judgement about blast radius, not a
+derivation. All three make the eighth column non-zero:
+
+1. **`box-sizing: border-box` on `th`.** The most correct and the widest: it
+   makes every declared width mean the painted box, which is what the rules
+   read as if they meant. **It repaints every column in the table** and the
+   percentages would want re-checking against the money columns' equal-width
+   property. `LoginPage.module.css:106` already argues for exactly this
+   reasoning on a different control.
+2. **Reduce the percentages** so `3rem + Σ% + 8×16px` fits with real headroom.
+   Narrow and surgical; leaves the content-box trap in place for the ninth
+   column.
+3. **Give the eighth an explicit width and rebalance the other seven.** Fixes
+   this instance only, and re-creates the exact enumeration that produced it.
+
+**The three money columns being equal is a stated design property** — Fira
+Code's tabular figures exist to make those decimals line up as a block — so
+whichever is chosen, the slack should come from Description, which this file
+already names as "the only column that carries prose, so it takes the slack".
+
+**What survives regardless of which fix is chosen:**
 
 1. **The prose is wrong.** "Seven columns" appears twice while eight render.
 2. **A pin is missing, and it is the property rather than an instance:** *every
