@@ -85,6 +85,21 @@ COPY --from=frontend /frontend/dist ./frontend/dist
 # STORAGE_ROOT or S3, and the database is remote -- so the tree can stay owned
 # by root and unwritable by the runtime user.
 RUN useradd --create-home --uid 10001 receipts
+
+# The blob directory exists in the image, owned by the runtime user, *because*
+# of how Docker initialises a named volume: it copies the image directory's
+# content and ownership at the mount point on first use. Absent from the image,
+# the mount point is created root-owned instead, and uid 10001 cannot write it
+# -- measured on a fresh `docker compose up`, where every POST /upload returned
+# 500 with `PermissionError: [Errno 13] Permission denied:
+# '/var/receipts/blobs/receipts'` from storage.py's `mkdir`.
+#
+# This path is docker-compose.yml's STORAGE_ROOT, not the application default
+# (`var/blobs`, relative to the working directory). A deployment that mounts its
+# volume somewhere else has to make that path writable itself -- the image can
+# only pre-own a path it knows about.
+RUN mkdir -p /var/receipts/blobs && chown receipts:receipts /var/receipts/blobs
+
 USER receipts
 
 # FRONTEND_DIST is absolute: the default is relative to the working directory,
