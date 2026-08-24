@@ -56,9 +56,15 @@ three receipts, all handwritten, against a 20% handwritten target.
 - **Count real-label cases, not the total.** The corpus check carries two
   synthetic calendar cases that pass whether or not a label loaded.
 - **A label that will not parse aborts the whole session and names itself** —
-  look for `while loading golden label <name>`. But **pydantic echoes that
-  label's content into the traceback**, so a `p*` label puts real merchant data
-  in pytest output. Nobody has decided what to do about that.
+  look for `while loading golden label <name>`. **A `p*` label's value no longer
+  reaches the terminal** — ISSUE-033, closed 2026-08-25 on
+  `feat/golden-label-privacy`. **Two surfaces leaked, not one**, and the one
+  described here was the quieter: `validate_labels` prints to the terminal, and
+  steps 1 and 3 below tell you to run it and read it after every batch. Both now
+  report the field path and error kind (`merchant.tax_id [string_type]`) and
+  never the value. What pydantic echoed was the *failing field's* value, never
+  the whole label — a sibling PII field on a record that failed elsewhere never
+  appeared.
 
 **Then re-baseline** (Task 3 Step 4) and report min/max/median/n over the new
 set, never a single figure. **Compare only to a run over the same
@@ -67,11 +73,22 @@ set, never a single figure. **Compare only to a run over the same
 **But neither committed baseline HAS a `scored_receipts` field** — measured
 2026-08-23. It was added by `3ca4ec4`, inside step 7's machinery, which merged
 *after* the baseline landed at `62eefa3`; `eval/results/2026-08-22-cloud-only/`
-and `eval/results/ladder-probe/` both predate it. **The set is still recoverable**
-— each repeat file's `results[].receipt_id` gives `r001, r002, r003` — so this is
-one derivation step, not a wall. Derive it and say you did; do not report the
-field as absent-and-therefore-incomparable, and do not backfill the committed
-artifacts.
+and `eval/results/ladder-probe/` both predate it. **It has now been derived**
+— 2026-08-25, by reading `results[].receipt_id` out of every repeat file in both
+run directories — and **the two runs do not score the same set:**
+
+| run | `scored_receipts` | repeats |
+|---|---|---|
+| `2026-08-22-cloud-only` | `{r001, r002, r003}`, identical on all five | 5, `n_failed: 0`, `spread_omitted: []` |
+| `ladder-probe` | **`{r002}` alone** | 1 |
+
+**An earlier version of this paragraph said both give `r001, r002, r003`.** That
+is true of the baseline and **false of `ladder-probe`**, which scored one
+receipt — as this file's own ISSUE-018 passage already said in the words "ONE
+receipt", while this paragraph said otherwise. So the two are not a strong and a
+weak comparison of the same thing; they are different measurements, and
+comparing them is precisely the error Step 4 warns against. Do not backfill the
+committed artifacts.
 
 ## 2. EVERY REMAINING TASK — the whole board, grouped by what it costs you
 
@@ -326,11 +343,16 @@ camera.
   filename appeared zero times in the whole output. It now prints
   `while loading golden label <name>`. A bad label still stops the whole
   session; it just tells you which one.
-- **Nobody has decided about this one, and it touches privacy.** pydantic echoes
-  the failing label's *content* into the traceback as `input_value=...`. For a
-  `p*` label that is real merchant data sitting in pytest output. Pre-existing
-  and unchanged by today's work, but you will see it the first time a real
-  receipt's label fails to parse.
+- **ISSUE-033 is CLOSED** (2026-08-25, on `feat/golden-label-privacy`), and it
+  was both narrower and wider than it was recorded as. **Narrower:** pydantic
+  echoed the **failing field's** value as `input_value=...`, not the label's
+  content — measured at two failure sites, a sibling PII field on a record that
+  failed elsewhere never appeared. **Wider:** it leaked on two surfaces, and the
+  traceback was the quieter one. `validate_labels` prints to the terminal, and
+  `eval/golden/README.md` and Task 3 steps 1 and 3 all tell a labeller to run it
+  after every batch. Redaction is scoped to `p*`, reusing `.gitignore`'s own
+  prefix; a public label keeps the echoed value, and a pre-existing pin requires
+  that.
 - **Count real-label cases, not the total.** The corpus check carries two
   synthetic calendar cases that pass whether or not a label loaded, and
   `test_every_label_file_on_disk_reached_the_corpus` is a *regression* guard
@@ -541,7 +563,7 @@ where a user gets a confidently wrong answer.
 
 ## THE COMPLETE ISSUE REGISTER
 
-**Every issue, as of 2026-08-24.** `docs/KNOWN_ISSUES.md` is the source for
+**Every issue, as of 2026-08-25 — with three exceptions.** ISSUE-020, ISSUE-021 and ISSUE-022 are closed and have no row here: the register carries 33 `^## ISSUE-` headings and this table 30, compared 2026-08-25. `docs/KNOWN_ISSUES.md` is the source for
 every row and **is not to be re-derived** — each entry there records the
 diagnosis, what was already fixed, and the exact steps to resume. **This table
 is a pointer; where it and an entry disagree, the entry wins.**
@@ -580,6 +602,7 @@ is a pointer; where it and an entry disagree, the entry wins.**
 | **ISSUE-030** | **An interrupted receipt has no terminal state, ever.** Breaks the stated "nothing is silently dropped" guarantee. **Not RQ-specific** — reproduced on a synchronous CLI path. Raising ISSUE-029's ceiling **hides this without closing it**. | **OPEN — needs your ruling: reaper, per-runner hook, or both?** |
 | **ISSUE-031** | **Progress narration exists on exactly one of four `process_receipt` call sites.** `--inline` — the documented no-Redis deployment — narrates nothing, ever. | **OPEN — needs your ruling: where does the sink belong?** |
 | **ISSUE-032** | **A control paints over the column beside it at every width.** Cause measured: `th` is `box-sizing: content-box` with 8px padding, so seven columns demand more than the table has and the eighth renders at **0**. | **OPEN — needs your ruling: three fixes, one repaints every table cell** |
+| ISSUE-033 | A `p*` label's value was printed by `validate_labels` — the command Task 3 tells a labeller to run after every batch — and by the pytest traceback. Per-field, not whole-label. | **CLOSED 2026-08-25** on `feat/golden-label-privacy` |
 
 ---
 

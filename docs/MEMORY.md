@@ -42,7 +42,7 @@ moves, and this file has carried a wrong issue count before.
 **No count of refreshes is written here** — it is a number that moves without its
 sentence changing, which is review standard 5.
 
-**Freshness anchor `68217a2`** — the last commit that is not this handoff pair.
+**Freshness anchor `2bf5d79`** — the last commit that is not this handoff pair.
 **It is written twice below — here and inside the command.** Moving one and not
 the other is what happened on this file's previous refresh, and the gate caught
 it because it parses the anchor out of the *command*.
@@ -56,7 +56,7 @@ nothing else: a stamp cannot name the commit that writes it. The test is a
 command, not a commit and not a count:
 
 ```
-git log --oneline 68217a2..main -- ":(top,exclude)docs/MEMORY.md" ":(top,exclude)docs/NEXT_SESSION_PROMPT.md"
+git log --oneline 2bf5d79..main -- ":(top,exclude)docs/MEMORY.md" ":(top,exclude)docs/NEXT_SESSION_PROMPT.md"
 git log --oneline refs/remotes/origin/main..main   # what a push would send
 git ls-remote --heads origin main                  # authoritative on what is pushed
 git branch --no-merged main                        # must name NOTHING
@@ -225,10 +225,14 @@ stays reachable — ADR-0042. `git log --oneline -- docs/MEMORY.md` is the list.
   the filename appeared zero times in the whole pytest output. It now does:
   look for the line reading `while loading golden label <name>`. One unreadable
   private label still blocks every test in the repository, but it says which.
-  **One thing nobody has decided:** pydantic echoes the failing label's
-  *content* into the traceback as `input_value=...`. For a `p*` label that is
-  real merchant data in pytest output. Pre-existing, and not made worse by any
-  of today's fixes.
+  **That is now ISSUE-033, CLOSED 2026-08-25** on `feat/golden-label-privacy`.
+  What pydantic echoed as `input_value=...` was the **failing field's** value,
+  not the label's content — narrower than this entry used to say, and the
+  distinction is what made "suppress the value" the fix. It also leaked on a
+  second and louder surface nothing had named: `validate_labels`, printing to
+  the terminal after every batch. `p*` labels now report the field path and
+  error kind and never the value; `r*` labels are unchanged, and a pre-existing
+  pin requires that.
   **What the three closes cost, and it is now a decision: ADR-0051.** Each of
   the three shipped a test that was **proven red and still could not catch the
   defect it was named for** — because the guard derived its expected value from
