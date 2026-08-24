@@ -117,5 +117,15 @@ normalisation would pass review on Postgres and redden the suite.
 - **The compose `VLM_*` environment is not landed.** It remains uncommitted; its
   `VLM_TIMEOUT_S: "3600"` implies a nine-hour derived ceiling under decision 5,
   which is worth deciding before it lands.
+  **Correction, 2026-08-25 (`dbc1365`): it landed the same day, and the
+  decision was taken.** Measured by calling the functions: `one_call` 10800s,
+  job ceiling **32580s (9.05h)**, sweep `started_cutoff` 21600s (6h), sweep
+  `unstarted_cutoff` **388800s (4.5 days)** — every window 30x its value at the
+  120s default. The nine-hour ceiling is accepted on decision 2's terms: with
+  the sweep carrying the guarantee, the ceiling is a resource guard on a worker
+  slot and can be generous. **The 4.5-day unstarted window is the real cost**,
+  and it is UNSTARTED_MARGIN's stated trade rather than a defect — a receipt
+  enqueued and never picked up waits that long, and the progress route sweeps
+  its own row on the same clock, so a waiting screen waits with it.
 - **The SDK's `max_retries` is asserted, not set.** Setting it changes retry
   behaviour and remains ADR-0047's open question.

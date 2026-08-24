@@ -2129,8 +2129,12 @@ found something real**, and the five gates were green on all of them.
   `css: false`, so nobody will have seen an `--inline` receipt narrate. That is
   a browser pass, not a test.
 - **It does not land the compose `VLM_*` env.** That change is uncommitted and
-  stays uncommitted; the spec's section 8.6 flags that its
-  `VLM_TIMEOUT_S: "3600"` implies a nine-hour derived ceiling, which is worth
-  revisiting before it lands.
+  stays uncommitted for the duration of this plan; the spec's section 8.6 flags
+  that its `VLM_TIMEOUT_S: "3600"` implies a nine-hour derived ceiling, which is
+  worth revisiting before it lands.
+  *(It landed after this plan closed, at `dbc1365` on 2026-08-25 — the sentence
+  above stays as written because it is true of the plan, and "stays
+  uncommitted" was a rule for this plan's tasks rather than a claim about the
+  future.)*
 - **It does not set the SDK's `max_retries`.** It asserts the default instead.
   Setting it changes retry behaviour and remains ADR-0047's open question.

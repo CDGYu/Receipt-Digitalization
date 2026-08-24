@@ -546,6 +546,10 @@ A migration for the two columns is covered by the existing
   status goes terminal.
 - **Whether the compose `VLM_*` env lands**, and at what `VLM_TIMEOUT_S`.
   Section 8.6 flags it; it is a separate change.
+  *(Answered 2026-08-25 at `dbc1365`: it landed at `VLM_TIMEOUT_S: "3600"`,
+  once ISSUE-029 and ISSUE-030 closed and made it safe to point the dev
+  worker at a real model. The derived values are recorded beside the setting
+  in `docker-compose.yml`.)*
 - **Whether a periodic runner is introduced.** None exists in the tree and this
   design adds none; scheduling the sweep command is an operator's choice.
 
