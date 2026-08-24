@@ -2846,3 +2846,102 @@ nobody has watched narrate: a whole capability absent, with everything green.
 - ADR-0039 — local VLM inference on this box is a liveness check only.
 - ADR-0048 — a rationale is a second claim.
 - ISSUE-027 — the other live defect where an advertised capability never works.
+- ISSUE-029 and ISSUE-030 — both were unreachable until this was fixed.
+
+---
+
+## ISSUE-029 — The job ceiling is shorter than one receipt on this hardware
+
+**Status:** OPEN — live on default configuration.
+**Owner action required:** **yes** — it is a decision (raise the ceiling, derive
+it from the model's measured cost, or make it explicit per deployment), not a
+line to change.
+**Discovered:** 2026-08-24, on the first pipeline run that ever reached a real
+model. It was unreachable before — see ISSUE-028.
+**Pre-existing:** yes. **Blocks:** any containerised run completing on this box.
+
+### Measured, and the comment beside it already described the failure
+
+`src/receipts/worker.py:71` sets `DEFAULT_JOB_TIMEOUT_S = 900`. Its own comment,
+lines 67-70, reads: *"a timeout shorter than the work would kill jobs that were
+about to succeed and hand them back as failures."* **900 is that value**, now
+measured rather than reasoned about.
+
+Observed on receipt `7399df56` under `granite3.2-vision:2b`, from the
+container's timestamps: **triage alone took 696s**; `extract` was entered at
+696s; the work-horse was killed at **960s wall** — the 900s ceiling plus RQ
+monitor slack — **204 seconds into extract**. ADR-0039's standing figure for
+this box is ~1896s per receipt.
+
+So with the project's own configured local model on the project's own hardware,
+**every receipt is killed mid-extract.**
+
+### Why nothing saw it
+
+Under the fake client a receipt finishes in about 1.9 seconds and cannot
+approach a 900s ceiling. ISSUE-028 meant the container could only ever run the
+fake client, so this was unreachable until both were true at once.
+
+### Resume
+
+1. Decide the ceiling. A fixed constant that fits one model will not fit
+   another; ADR-0039's figure is a floor for this box, not a budget.
+2. **Do not treat raising it as closing ISSUE-030.** See there.
+
+---
+
+## ISSUE-030 — A killed work-horse leaves a receipt with no terminal state, ever
+
+**Status:** OPEN. **This one breaks a stated guarantee**, and raising ISSUE-029's
+ceiling hides it without closing it.
+**Owner action required:** **yes.**
+**Discovered:** 2026-08-24, as the consequence of ISSUE-029 firing.
+**Pre-existing:** yes, on every path where a job dies without raising.
+
+### The guarantee it breaks
+
+`docs/MEMORY.md:1979-1980`: *"Nothing is silently dropped — every receipt reaches
+a terminal state."*
+
+### Why no handler can save it
+
+`process_receipt_job` deliberately has no net around the processing. Its own
+docstring says so (`src/receipts/worker.py:246`): *"The one `except` below is
+not a second net around the processing"* — that single `except` guards the Redis
+progress write. **This is correct design for a throw**: `process_receipt`
+re-raises, and RQ records a failed job.
+
+**A SIGKILLed work-horse throws nothing.** No Python exception is raised in that
+process at all, so no handler of any kind can run. Verified statically here and
+observed in the run.
+
+### What it leaves behind
+
+Minutes after the kill, `GET /receipts/{id}/progress` still returned
+`{"status":"pending","stage":"extract"}`. The job sits in `rq:failed:receipts`
+and nothing requeues it.
+
+### It also puts a hole in a property that was proved this morning
+
+The processing screen stops on **`status`** and never on `stage` — that is
+correct, and it was proved on two independent failure paths. But it assumes
+`status` eventually becomes terminal. **Here it never does, so the screen polls
+forever.** The defect is not in the screen; the screen is right. The pipeline
+has a reachable path to no terminal state at all.
+
+### Resume
+
+1. The **parent** process, not the horse, must mark a receipt whose job died
+   without reaching a terminal status. RQ's failed-job registry is where that
+   lives.
+2. Any kill reaches this, not just a timeout: OOM, a container restart, a
+   deploy. That is why it is filed apart from ISSUE-029.
+3. Separately, decide whether the screen should say "this receipt has stopped
+   making progress" rather than polling indefinitely.
+
+### Related
+
+- ISSUE-029 — the timeout that fires it on default configuration.
+- ISSUE-028 — why both were unreachable until 2026-08-24.
+- ADR-0022 — failure egress redaction, the other place a failure path is
+  contractual.
