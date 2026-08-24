@@ -39,7 +39,7 @@ from enum import Enum
 from typing import Any, Callable
 
 from pydantic import BaseModel
-from sqlalchemy import or_, select
+from sqlalchemy import and_, or_, select
 from sqlalchemy import update as sa_update
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
@@ -896,6 +896,48 @@ def query_receipts(
 
     query = query.order_by(Receipt.created_at, Receipt.id).limit(limit).offset(offset)
     return list(session.scalars(query))
+
+
+def find_stranded(
+    session: Session,
+    *,
+    started_cutoff: datetime,
+    unstarted_cutoff: datetime,
+) -> list[Receipt]:
+    """Pending receipts whose processing has stopped, on either of two clocks.
+
+    Two thresholds because there are two failure modes, not one. A receipt that
+    *started* and went cold is stranded within about one model call. A receipt
+    with no heartbeat at all is ambiguous -- it may have been enqueued and be
+    waiting behind a backlog, which is healthy -- so it needs a much longer
+    clock, and nothing on the row can tell the two apart without asking Redis.
+
+    ``status == PENDING`` excludes every terminal status, ``reviewed``
+    included, from the work set. It is not the only rule enforcing that --
+    :func:`~receipts.sweep.strand_receipt` guards the direct-call path with its
+    own check -- so the two are pinned separately, each on the path where it is
+    the only thing standing. For this clause that path is the dry run, which
+    reports straight from this query without calling ``strand_receipt``.
+
+    A pure read. The caller decides what to do with the rows.
+    """
+    return list(
+        session.scalars(
+            select(Receipt).where(
+                Receipt.status == ReceiptStatus.PENDING,
+                or_(
+                    and_(
+                        Receipt.progress_at.is_not(None),
+                        Receipt.progress_at < started_cutoff,
+                    ),
+                    and_(
+                        Receipt.progress_at.is_(None),
+                        Receipt.created_at < unstarted_cutoff,
+                    ),
+                ),
+            )
+        )
+    )
 
 
 # --------------------------------------------------------------------------- #
