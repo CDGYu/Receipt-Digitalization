@@ -9,7 +9,7 @@ deployment can loosen tolerances without a code change.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
@@ -144,3 +144,29 @@ class ValidationContext:
     def tol(self, rule_id: str) -> dict[str, Decimal]:
         """Tolerance kwargs for a rule, falling back to the default."""
         return dict(self.config.tolerances.get(rule_id, self.config.default_tolerance))
+
+
+#: The context a review route can reconstruct after extraction has finished.
+#:
+#: ``config`` and ``today`` are process-local. The two ``expected_buyer_*``
+#: fields come from ``Settings``, which a review route already holds. Everything
+#: else on :class:`ValidationContext` is evidence produced by the extraction RUN
+#: -- the raw OCR text, the triage result, the repeated-run agreement, the JSON
+#: parse error. A review route rebuilds the receipt from the ``receipts`` and
+#: ``line_items`` tables (``review.serializers._export_extraction``), and none of
+#: that evidence is a column on either, so a re-run at review time sees it absent.
+REVIEW_RECONSTRUCTIBLE: frozenset[str] = frozenset(
+    {"config", "today", "expected_buyer_name", "expected_buyer_tax_id"}
+)
+
+
+def unreconstructible_context() -> frozenset[str]:
+    """The context fields a review route CANNOT rebuild.
+
+    The **complement** of :data:`REVIEW_RECONSTRUCTIBLE`, computed from the
+    dataclass rather than written out, so a field added to
+    :class:`ValidationContext` is unreconstructible by default. A written-out
+    list would silently admit a new field to the safe set -- the failure this
+    function exists to make impossible.
+    """
+    return frozenset(f.name for f in fields(ValidationContext)) - REVIEW_RECONSTRUCTIBLE

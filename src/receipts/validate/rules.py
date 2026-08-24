@@ -20,12 +20,35 @@ import unicodedata
 from abc import ABC, abstractmethod
 from datetime import date
 from decimal import Decimal, InvalidOperation
+from enum import Enum
 from typing import ClassVar, Iterable, NamedTuple
 
 from ..extract.schema import LineItem, ReceiptExtraction
 from ..normalize.text import normalize_merchant_name
 from .context import ValidationContext
 from .report import Finding, Severity
+
+# --------------------------------------------------------------------------- #
+# What a rule is about
+# --------------------------------------------------------------------------- #
+
+
+class Subject(str, Enum):
+    """What a rule's finding is ABOUT, which decides whether it can be re-run.
+
+    ``(str, Enum)`` matching :class:`~receipts.validate.report.Severity`, so it
+    serialises as its token if it is ever persisted.
+    """
+
+    #: Answerable from the persisted receipt alone, so it can be re-run against
+    #: a reviewer's corrections.
+    CONTENT = "content"
+    #: The evidence is the extraction run -- the OCR text, the triage estimate,
+    #: the agreement between repeated runs, the parse error -- and a review route
+    #: cannot rebuild any of it. Re-running such a rule after a correction would
+    #: not be a stricter check; it would be a different and quieter one.
+    RUN = "run"
+
 
 # --------------------------------------------------------------------------- #
 # Registry
@@ -47,6 +70,11 @@ def register(cls: type["Rule"]) -> type["Rule"]:
 class Rule(ABC):
     id: ClassVar[str]
     severity: ClassVar[Severity]
+    #: Defaults to CONTENT: a new rule is re-runnable unless it says otherwise,
+    #: and ``tests/test_rule_subjects.py`` reddens if it reads run-only context
+    #: without declaring RUN. The default is the safe one BECAUSE it is bound --
+    #: an unbound default this way round would be a silent lie.
+    subject: ClassVar[Subject] = Subject.CONTENT
     description: ClassVar[str] = ""
 
     def applies(self, r: ReceiptExtraction, ctx: ValidationContext) -> bool:
@@ -298,6 +326,9 @@ def median(values: list[Decimal]) -> Decimal:
 class SchemaParses(Rule):
     id = "R001"
     severity = Severity.ERROR
+    #: Reads ``ctx.parse_error`` -- the extraction run's own JSON failure, which
+    #: a receipt rebuilt from its columns cannot have.
+    subject = Subject.RUN
     description = "Model output deserialised into ReceiptExtraction."
 
     def applies(self, r, ctx) -> bool:
@@ -386,6 +417,12 @@ class MerchantPresent(Rule):
 class LineItemsPresent(Rule):
     id = "R013"
     severity = Severity.WARN
+    #: Content by subject, RUN by evidence -- a deliberate loss.
+    #: ``applies()`` reads ``ctx.triage`` to suppress this rule when triage
+    #: expected zero items; without triage it would fire on a receipt that
+    #: legitimately has none. Re-running it at review time trades a check for a
+    #: wrong finding, so it is not re-run. See ``tests/test_rule_subjects.py``.
+    subject = Subject.RUN
     description = "At least one line item was extracted."
 
     def applies(self, r, ctx) -> bool:
@@ -1312,6 +1349,8 @@ class DescriptionNotEmpty(Rule):
 class TotalAppearsInOcr(Rule):
     id = "R060"
     severity = Severity.WARN
+    #: Reads ``ctx.ocr_text`` -- the image's independent OCR text layer.
+    subject = Subject.RUN
     description = "The extracted total's digits appear in the raw OCR text."
 
     def applies(self, r, ctx) -> bool:
@@ -1341,6 +1380,8 @@ class TotalAppearsInOcr(Rule):
 class MerchantAppearsInOcr(Rule):
     id = "R061"
     severity = Severity.INFO
+    #: Reads ``ctx.ocr_text``.
+    subject = Subject.RUN
     description = "The merchant name overlaps the raw OCR text."
 
     MIN_OVERLAP = 0.6
@@ -1376,6 +1417,9 @@ class MerchantAppearsInOcr(Rule):
 class ConsistencyAgreement(Rule):
     id = "R070"
     severity = Severity.WARN
+    #: Reads ``ctx.consistency`` -- how far repeated extraction runs agreed. A
+    #: correction is one reading, so there is nothing left to disagree with.
+    subject = Subject.RUN
     description = "Fields that disagreed across repeated extraction runs."
 
     CRITICAL = ("merchant.name", "receipt.date", "totals.total",
