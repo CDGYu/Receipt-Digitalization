@@ -352,8 +352,24 @@ trap and deserves a pin rather than a belief.
 **The route falls back to the row.** `GET /receipts/{id}/progress` reads Redis
 first and, when Redis has nothing to say, reports `progress_stage` from the row
 it has already loaded. This is what turns ISSUE-031 from "the signal now
-exists" into closed: `--inline`, `reprocess` and `process_batch` narrate to the
-screen instead of showing an empty STEPS list forever. The contract is
+exists" into closed: `--inline` and `reprocess` narrate to the
+screen instead of showing an empty STEPS list forever.
+
+**`process_batch` is deliberately absent from that list.** `record_progress` is
+an UPDATE, and `process_batch` is the one `process_receipt` call site with no
+pre-existing row -- `save_extraction` creates the row inside the `persist`
+stage, at the end, so every earlier beat matches zero rows and writes nothing.
+Measured during Task 4 with a spy sink: ten beats per receipt, all ten matching
+zero rows when no row exists, all ten landing when one does.
+
+**The milestone's guarantee is unaffected, and this is why.** Every path that
+can actually strand a receipt creates the row first -- upload at
+`review/api.py:635`, ingest at `cli.py:654`, and `--inline` drawing from
+`query_receipts(status=PENDING)`. A receipt with no row is not a stranded
+receipt; it is one that was never recorded, which is a different failure and
+not this design's. `process_batch` has **no production caller** in any case:
+the only references to it under `src/` are its own definition and two
+docstrings. The contract is
 unchanged -- `status` is still the truth, `stage` is still only narration.
 
 ---

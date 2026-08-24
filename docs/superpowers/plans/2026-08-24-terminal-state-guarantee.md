@@ -767,6 +767,15 @@ def test_process_receipt_heartbeats_with_no_progress_argument(
     the sink construction inside process_receipt is what turns it red.
     """
     job = _job(storage)
+    # The row must exist first, and that is the real shape rather than a
+    # convenience: `record_progress` is an UPDATE, and every live path creates
+    # the pending row before processing -- upload at `review/api.py:635`,
+    # ingest at `cli.py:654`, and `--inline` draws from
+    # `query_receipts(status=PENDING)`. Measured during Task 4: with no row,
+    # all ten beats match zero rows and write nothing.
+    with session_factory() as session:
+        create_pending_receipt(session, job)
+        session.commit()
 
     _run(job, _Client([_triage(), _good()]), session_factory, storage, settings)
 
@@ -774,6 +783,34 @@ def test_process_receipt_heartbeats_with_no_progress_argument(
         receipt = get_receipt(session, job.id)
         assert receipt.progress_at is not None
         assert receipt.progress_stage is not None
+
+
+def test_a_receipt_with_no_row_beats_nothing_and_raises_nothing(
+    session_factory, storage, settings
+) -> None:
+    """The boundary of the heartbeat, stated rather than left implicit.
+
+    `record_progress` is an UPDATE and its contract is that an unknown id
+    writes nothing and raises nothing. So a run with no pre-existing row
+    narrates nothing -- it does not fail, and it does not conjure a row.
+
+    This is reachable only through `process_batch`, which has **no production
+    caller** (checked: the only references to it in `src/` are its own
+    definition and two docstrings). Every path that can actually strand a
+    receipt creates the row first, so the milestone's guarantee is unaffected:
+    a receipt with no row is not stranded, it was never recorded.
+    """
+    job = _job(storage)
+
+    _run(job, _Client([_triage(), _good()]), session_factory, storage, settings)
+
+    with session_factory() as session:
+        receipt = get_receipt(session, job.id)
+        # persist created it at the end of the run, so it exists now -- but no
+        # beat reached it, because none of the ten had a row to update.
+        assert receipt is not None
+        assert receipt.progress_stage is None
+        assert receipt.progress_at is None
 
 
 def test_fan_out_delivers_to_every_sink() -> None:
