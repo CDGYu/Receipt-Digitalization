@@ -39,7 +39,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from ..export.xlsx import ReceiptExportRow
 from ..extract.schema import Buyer as ExtractBuyer
-from ..extract.schema import ExtractionMeta, ReceiptExtraction, ReceiptMeta, Totals
+from ..extract.schema import ExtractionMeta, ReceiptExtraction, ReceiptMeta, TaxBand, Totals
 from ..extract.schema import LineItem as ExtractLineItem
 from ..extract.schema import Merchant as ExtractMerchant
 from ..extract.schema import Modifier as ExtractModifier
@@ -386,17 +386,24 @@ def _export_extraction(receipt: Receipt) -> ReceiptExtraction:
     persisted ``Receipt`` (plus its ``line_items``), for
     :func:`receipts.export.xlsx.export_workbook`.
 
-    **Lossy against the full extraction schema.** ``tax_breakdown``,
-    ``prices_include_tax``, ``meta.ambiguous_fields``,
+    **Lossy against the full extraction schema.** ``meta.ambiguous_fields``,
     ``meta.unreadable_regions``, ``meta.notes``, and the merchant's
-    ``address``/``tax_id``/``phone``/``branch`` are not columns on
-    ``receipts`` -- they were never persisted past the extraction run that
-    produced them, so there is nothing here to rebuild them from. They are
-    left at their schema defaults (``[]``/``None``/``False``), never
-    invented.
+    ``address``/``tax_id``/``phone``/``branch`` are not columns on ``receipts``
+    -- they were never persisted past the extraction run that produced them, so
+    there is nothing here to rebuild them from. They are left at their schema
+    defaults (``[]``/``None``), never invented.
+
+    **``tax_breakdown``, ``prices_include_tax`` and ``meta.is_refund`` are
+    deliberately not on that list.** They became columns on 2026-08-24, and are
+    rebuilt below, because *rules read them*: R025, R020/R024 and R040
+    respectively. While they were missing, a receipt rebuilt here validated
+    differently from the one that was extracted -- measured, a refund went from
+    clean to ``R040/ERROR`` -- so re-validating a reviewer's correction would
+    have blamed the database on the reviewer. Nothing else on the list above is
+    read by any rule.
 
     **The buyer is the counter-example, and is rebuilt whole.** Reading the
-    paragraph above, a merchant whose ``tax_id`` cannot be rebuilt invites the
+    lossy list above, a merchant whose ``tax_id`` cannot be rebuilt invites the
     assumption that the buyer's cannot either; it can.
     :class:`~receipts.extract.schema.Buyer` has exactly two fields, ``name``
     and ``tax_id``, and both are columns on ``receipts`` -- it deliberately
@@ -452,10 +459,15 @@ def _export_extraction(receipt: Receipt) -> ReceiptExtraction:
             total=receipt.total,
             tender=receipt.tender_amount,
             change=receipt.change_amount,
+            prices_include_tax=receipt.prices_include_tax,
+            tax_breakdown=[
+                TaxBand.model_validate(band) for band in (receipt.tax_breakdown or [])
+            ],
         ),
         payment=ExtractPayment(method=receipt.payment_method, card_last4=receipt.card_last4),
         meta=ExtractionMeta(
             is_handwritten=receipt.is_handwritten,
+            is_refund=receipt.is_refund,
             legibility=receipt.legibility,
             receipt_is_inconsistent=receipt.receipt_is_inconsistent,
         ),
