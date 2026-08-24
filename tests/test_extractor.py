@@ -238,6 +238,23 @@ def test_resolved_findings_are_marked_for_audit():
     assert any(f.resolved_by_repair for f in first.findings)
 
 
+def test_the_repair_loop_reports_every_attempt():
+    """The keystone the sweep threshold and the job ceiling both rest on.
+
+    Extract dominates a receipt, so if it narrated only on stage entry the
+    heartbeat would go cold during entirely normal work and the sweep would
+    presume a live run dead. Three reports: the first attempt, the repair, and
+    the best-attempt choice.
+    """
+    seen: list[str | None] = []
+    client = FakeVLMClient([broken(), good()])
+    extract_with_repair(IMG, client, ctx=CTX, progress=lambda e: seen.append(e.detail))
+    assert len(seen) == 3
+    assert "attempt 1" in seen[0]
+    assert "attempt 2" in seen[1]
+    assert "kept attempt" in seen[2]
+
+
 # --------------------------------------------------------------------------- #
 # Few-shot ordering
 # --------------------------------------------------------------------------- #

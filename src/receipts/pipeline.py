@@ -560,6 +560,30 @@ def _heartbeat_sink(
     return sink
 
 
+def fan_out(*sinks: "ProgressSink | None") -> ProgressSink:
+    """One sink that delivers to several, isolating each from the others.
+
+    ``None`` entries are dropped, so a caller can pass an optional sink
+    without a conditional.
+
+    **Each delivery is guarded separately, and that is load-bearing rather
+    than defensive.** The worker fans out to a Redis writer and the heartbeat;
+    if a broken Redis writer could abort the fan-out, an outage would stop the
+    heartbeat too and silently reopen the stranded-receipt hole. Isolation is
+    what keeps the guarantee independent of the narration.
+    """
+    live = [sink for sink in sinks if sink is not None]
+
+    def sink(event: ProgressEvent) -> None:
+        for one in live:
+            try:
+                one(event)
+            except Exception:
+                log.warning("progress sink raised; continuing", exc_info=True)
+
+    return sink
+
+
 def process_receipt(
     job: ReceiptJob,
     *,
@@ -666,6 +690,13 @@ def process_receipt(
     gate = gate if gate is not None else get_vlm_gate(settings)
     cost_guard = cost_guard if cost_guard is not None else CostGuard.from_settings(settings)
     guarded = GuardedVLMClient(client, gate=gate, guard=cost_guard)
+
+    # The heartbeat is built here rather than accepted from the caller: it
+    # carries the terminal-state guarantee, and a guarantee a call site can
+    # forget is not one. `progress` stays optional and injected because it
+    # carries Redis narration, which is cosmetic and genuinely absent on the
+    # no-Redis deployments.
+    progress = fan_out(_heartbeat_sink(session_factory, job.id), progress)
 
     phash = ""
     try:
