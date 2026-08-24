@@ -163,6 +163,119 @@ def test_naming_the_label_does_not_change_what_escapes(tmp_path):
     assert through_loader.value.__cause__ is None, "re-raised, never wrapped"
 
 
+# --------------------------------------------------------------------------- #
+# Private-label redaction (ADR-0050)
+# --------------------------------------------------------------------------- #
+
+#: A private label whose **failing field is itself the PII**. That is the only
+#: shape that leaks: pydantic echoes the offending value as ``input_value=`` and
+#: says nothing about the fields that parsed. ``merchant.tax_id`` is declared a
+#: string, so an id typed without quotes -- an ordinary slip next to the
+#: README's money-as-string rule -- puts a real tax id in the message.
+_PRIVATE_TAX_ID = "7888999000"
+_PRIVATE_LABEL_BAD_TAX_ID = json.dumps({"merchant": {"tax_id": int(_PRIVATE_TAX_ID)}})
+
+
+def test_validate_labels_does_not_echo_a_private_labels_value(tmp_path):
+    """The surface a labeller runs by hand, every batch.
+
+    ``eval/golden/README.md`` and the growing-the-golden-set plan (Task 3,
+    steps 1 and 3) both tell the labeller to run ``validate_labels`` and read
+    its output in the terminal. Measured 2026-08-25 before this pin: the entry
+    for a ``p*`` label read ``... input_value=7888999000, input_type=int ...``,
+    so following the documented procedure printed a real third party's tax id
+    to the screen, where it is one paste away from a commit or an issue.
+
+    ADR-0050 makes ``p*`` the privacy boundary and ``.gitignore`` already
+    carries ``eval/golden/labels/p*.json``; this reuses that same prefix so the
+    redaction boundary and the commit boundary stay one rule rather than two.
+
+    **What survives is what the labeller needs to fix it**: which field, and
+    why. Only the value goes.
+    """
+    (tmp_path / "p042.json").write_text(_PRIVATE_LABEL_BAD_TAX_ID, encoding="utf-8")
+
+    reported = validate_labels(tmp_path)
+
+    assert len(reported) == 1, reported
+    entry = reported[0]
+    assert _PRIVATE_TAX_ID not in entry, "leaked a private label's value: " + entry
+    assert "p042.json" in entry, entry
+    assert "merchant.tax_id" in entry, "must still say which field: " + entry
+
+
+def test_load_labels_does_not_echo_a_private_labels_value(tmp_path):
+    """The pytest-traceback surface, and the one the handoff named.
+
+    A ``p*`` label that will not parse aborts collection, and the traceback is
+    written to the terminal and to any CI log. The filename must still appear
+    (ISSUE-022) -- redacting the value must not cost the labeller the ability
+    to tell WHICH label to fix.
+    """
+    (tmp_path / "p042.json").write_text(_PRIVATE_LABEL_BAD_TAX_ID, encoding="utf-8")
+
+    with pytest.raises(Exception) as excinfo:
+        load_labels(tmp_path)
+
+    rendered = "".join(traceback.format_exception(excinfo.value))
+    assert _PRIVATE_TAX_ID not in rendered, "leaked into the traceback: " + rendered
+    assert "p042.json" in rendered, rendered
+    assert "merchant.tax_id" in rendered, "must still say which field: " + rendered
+
+
+def test_a_private_label_that_is_not_json_does_not_echo_its_bytes(tmp_path):
+    """A syntax error takes a different pydantic path from a type error.
+
+    ``json_invalid`` echoes a truncated window of the **raw file** rather than
+    one field's value, so it leaks whatever happens to sit near the mistake.
+    Measured 2026-08-25: a trailing comma after a merchant name rendered as
+    ``input_value='{"merchant": {"name": "A...HARMACY CORPORATION",}}'`` -- the
+    name is split by the ellipsis, which is exactly why an exact-string search
+    for it reports "not present" while a reader sees it plainly.
+
+    Asserted on a distinctive fragment rather than the whole name for that
+    reason: the truncation point moves with the file's length, so a test that
+    looked only for the intact string would pass while the data was on screen.
+    """
+    body = '{"merchant": {"name": "ACME PHARMACY CORPORATION",}}'
+    (tmp_path / "p042.json").write_text(body, encoding="utf-8")
+
+    with pytest.raises(Exception) as excinfo:
+        load_labels(tmp_path)
+
+    rendered = "".join(traceback.format_exception(excinfo.value))
+    for fragment in ("ACME", "PHARMACY", "CORPORATION"):
+        assert fragment not in rendered, (
+            f"leaked the fragment {fragment!r} from a private label: " + rendered
+        )
+    assert "p042.json" in rendered, rendered
+
+
+def test_a_public_label_keeps_the_detail_redaction_removes(tmp_path):
+    """The scope pin: this fix must not become a blanket.
+
+    ``r*`` labels are public by ADR-0050 -- they carry no third party's data,
+    they are committed, and their values are already in git. Redacting them
+    would buy nothing and cost the labeller the echoed value that makes a type
+    error obvious. It would also contradict
+    ``test_naming_the_label_does_not_change_what_escapes``, which requires the
+    original exception to escape unwrapped for a public label.
+
+    The expected text is **derived** from a direct parse rather than named, so
+    this cannot rot when pydantic changes how it renders a value.
+    """
+    (tmp_path / "r042.json").write_text(_PRIVATE_LABEL_BAD_TAX_ID, encoding="utf-8")
+
+    with pytest.raises(Exception) as direct:
+        ReceiptExtraction.model_validate_json(_PRIVATE_LABEL_BAD_TAX_ID)
+    assert _PRIVATE_TAX_ID in str(direct.value), "fixture no longer echoes a value"
+
+    reported = validate_labels(tmp_path)
+    assert len(reported) == 1, reported
+    assert _PRIVATE_TAX_ID in reported[0], (
+        "a public label lost detail it is meant to keep: " + reported[0]
+    )
+
 
 # --------------------------------------------------------------------------- #
 # load_manifest

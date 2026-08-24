@@ -87,6 +87,60 @@ def _label_files(labels_dir: Path) -> list[Path]:
 # --------------------------------------------------------------------------- #
 
 
+class PrivateLabelError(ValueError):
+    """A ``p*`` label failed to load, reported without its contents.
+
+    Subclasses :class:`ValueError` because that is what
+    :class:`pydantic.ValidationError` already is, so a caller writing
+    ``except ValueError`` is unaffected by the redaction. Nothing in the tree
+    catches ``ValidationError`` by name.
+    """
+
+
+def _is_private_label(path: Path) -> bool:
+    """True for a label whose contents may never be shown or committed.
+
+    ADR-0050 makes the ``p`` prefix the privacy decision, and ``.gitignore``
+    carries ``eval/golden/labels/p*.json``. This reads the *same* prefix, so
+    the redaction boundary and the commit boundary cannot drift apart into two
+    rules that disagree. A public label misnamed ``printed_003.json`` is
+    redacted too, which is the harmless direction to be wrong in.
+    """
+    return path.name.startswith("p")
+
+
+def _redacted_reason(exc: Exception) -> str:
+    """Describe a failure using only the field path and the error kind.
+
+    **Never derives a single character from the file's contents**, and that is
+    the whole property. Pydantic renders the offending value as ``input_value=``
+    (measured 2026-08-25: a tax id typed without quotes reached the terminal
+    verbatim), and a JSON syntax error echoes a truncated window of the raw
+    bytes instead -- so an unredacted message leaks in two different shapes.
+
+    ``msg`` is dropped rather than kept, even though today's messages happen to
+    be value-free. A custom validator raising ``ValueError(f"bad {value}")``
+    renders that value into ``msg``, so keeping it would make the guarantee a
+    standing audit of every validator anyone adds later. Emitting only ``loc``
+    and ``type`` holds by construction instead. The cost is real: the parser's
+    "trailing comma at line 1 column 51" is safe and useful, and it is lost. A
+    labeller who needs it can validate a copy with the values stripped.
+    """
+    errors = getattr(exc, "errors", None)
+    if not callable(errors):
+        return f"{type(exc).__name__} (detail redacted)"
+    try:
+        details = errors(include_url=False, include_input=False, include_context=False)
+    except TypeError:  # pragma: no cover - older pydantic without the keywords
+        details = errors()
+    fields = [
+        f"{'.'.join(str(part) for part in item.get('loc', ())) or '<root>'}"
+        f" [{item.get('type', 'unknown')}]"
+        for item in details
+    ]
+    return f"{len(fields)} validation error(s), values redacted: " + "; ".join(fields)
+
+
 def load_labels(labels_dir: Path) -> dict[str, ReceiptExtraction]:
     """Load every label under ``labels_dir`` keyed by filename stem.
 
@@ -107,6 +161,22 @@ def load_labels(labels_dir: Path) -> dict[str, ReceiptExtraction]:
                 path.read_text(encoding="utf-8")
             )
         except Exception as exc:
+            # A private label is reported without its contents; see ADR-0050.
+            #
+            # ``from None`` is load-bearing, not tidiness. Raising inside an
+            # ``except`` sets ``__context__``, and a rendered traceback prints
+            # the chained exception's message in full -- so a wrapped error
+            # that omits the value still shows it under "During handling of the
+            # above exception". Suppressing the context is what actually
+            # removes it, and
+            # ``test_load_labels_does_not_echo_a_private_labels_value``
+            # asserts on the rendered traceback precisely so that dropping
+            # ``from None`` here goes red.
+            if _is_private_label(path):
+                raise PrivateLabelError(
+                    f"{_redacted_reason(exc)} while loading golden label {path.name}"
+                ) from None
+
             # Name the file, then let the error out untouched.
             #
             # **This is not the handler ISSUE-021 deleted.** That one swallowed
@@ -134,7 +204,14 @@ def validate_labels(labels_dir: Path) -> list[str]:
         try:
             ReceiptExtraction.model_validate_json(path.read_text(encoding="utf-8"))
         except Exception as exc:  # noqa: BLE001 - report every failure, never raise
-            reason = " ".join(str(exc).split())
+            # This list is printed to a terminal by the documented labelling
+            # procedure (eval/golden/README.md, and Task 3 steps 1 and 3 of the
+            # growing-the-golden-set plan), which makes it the higher-traffic
+            # of the two leak surfaces -- a labeller runs it after every batch.
+            if _is_private_label(path):
+                reason = _redacted_reason(exc)
+            else:
+                reason = " ".join(str(exc).split())
             errors.append(f"{path.name}: {reason}")
     return errors
 
