@@ -1976,10 +1976,35 @@ aggregate carries run-level metrics only, so this is invisible in
 
 ## ISSUE-018 — The escalation records that it escalated, never why
 
-**Status:** OPEN — a gap the first real ladder run exposed.
-**Owner action required:** no. **Discovered:** 2026-08-22, ISSUE-001 step 6.
-**Pre-existing:** yes — it arrived with ADR-0047 and had no consequence until a
-real rung was discarded. **Blocks:** interpreting any ladder run.
+**Status:** **RESOLVED 2026-08-25** at `1d56a4d`. `PassAttempt` now carries
+`discarded: DiscardReason | None`, set to `RAISED` or `READ_NOTHING` at the two
+sites that discard a rung, and `eval.run_baseline` reads it into
+`EvalReport.extract_discard_counts` (model id → reason → count) so the ladder
+artifact answers it. **Owner action required:** no. **Discovered:** 2026-08-22,
+ISSUE-001 step 6. **Pre-existing:** yes — it arrived with ADR-0047 and had no
+consequence until a real rung was discarded. **Blocks:** nothing; it blocked
+interpreting any ladder run.
+
+**`kept` is now derived rather than stored, and that is the design.** A reason
+field *beside* `kept` would have been two stored sources of one fact, free to
+disagree. Storing only the reason leaves the invariant nothing to police: a rung
+is kept exactly when nothing discarded it. All eleven readers of `.kept` were
+untouched — it is a property — and the only construction sites in the tree are
+the four in `pipeline.py`.
+
+**Proven by mutation:** pointing the read-nothing site at `RAISED`, collapsing
+the two clauses, reddens
+`test_a_rung_that_read_nothing_is_distinguishable_from_one_that_raised` and
+nothing else — which is this defect one step along, and is why the pin is two
+tests rather than one.
+
+**One thing this issue asked for that it does not get, corrected rather than
+quietly dropped:** "How to resume" below says a discard-reason field "gives
+`rung` its first production consumer". It does not. `.rung` still has no reader
+in `src/` or `eval/` — measured 2026-08-25, `git grep "\.rung\b"` over both is
+empty — because the discard counts are keyed by **model id**, which is what a
+reader of a ladder report wants to see. **ISSUE-015 is unchanged and stays
+open.**
 
 ### What is wrong
 
@@ -2017,13 +2042,47 @@ the field's committed type would change, so it is a decision rather than a line.
 
 ## ISSUE-019 — "Committed whole or not at all" is a rule no gate holds
 
-**Status:** OPEN — found by the whole-branch review of
-`feat/golden-set-privacy`, before merge.
-**Owner action required:** no, but the remedy is a design decision.
-**Discovered:** 2026-08-22, closing ISSUE-001 step 7's machinery.
-**Pre-existing:** no — it arrives with ADR-0050, which states the rule.
-**Blocks:** nothing today. It is a stated guarantee with nothing behind it,
-which is the shape this repository has twice paid for.
+**Status:** **RESOLVED 2026-08-25** at `be59045`, taking the candidate proposed
+in "How to resume" below. Every manifest entry now carries a `withheld` list of
+label paths omitted for privacy, and
+`test_a_tracked_label_declares_that_it_withholds_nothing` requires it to be
+**present and empty** for every tracked label. **Owner action required:** no, and the design decision was taken here
+rather than deferred again. **Discovered:** 2026-08-22, closing ISSUE-001 step
+7's machinery. **Pre-existing:** no — it arrived with ADR-0050, which states the
+rule.
+**Blocks:** nothing.
+
+**Where the marker lives, and why not in the label.** The manifest, because the
+label *cannot express the difference*: README step 3 tells a labeller to write
+`null` for anything the receipt does not show, so `merchant.tax_id: null` is
+correct for a receipt with no printed tax ID and wrong for one where the labeller
+removed it. A pin over label values would redden on an honest blank. The label
+JSON therefore stays pure extraction data.
+
+**One boundary, not two.** The pin reuses `_is_private_label`, which reads the
+same `p` prefix as `.gitignore`'s `eval/golden/labels/p*.json`, so "may withhold"
+and "is not committed" cannot drift apart. A non-empty `withheld` on an `r*`
+label is not a new state to handle — it means the label should have been `p*`.
+
+**A second pin came with it, and it closes the third shape this issue did not
+name.** `ReceiptExtraction` is `extra='ignore'` with every field optional, so a
+**misspelled key** is dropped in silence and its intended path reads as `null` —
+indistinguishable from a withholding, and able to satisfy the declaration with
+fields nobody chose to blank. The existing completeness guard computes
+`complete - declared` and cannot see it;
+`test_a_label_declares_no_path_the_schema_does_not` computes the other
+direction and does.
+
+**All three proven red by mutation:** a tracked label declaring
+`["merchant.tax_id"]`; a manifest entry with `withheld` deleted (absent is not
+empty); and an unknown key in `r001.json`.
+
+**What this does NOT close, stated rather than implied.** A labeller who nulls a
+field and does **not** declare it still passes. No static check can catch that —
+it is the same indistinguishability that forced the marker out of the label in
+the first place. What this buys is that withholding from a *tracked* label is no
+longer expressible without saying so: an honest redaction fails loudly, and a
+dishonest one is a written falsehood rather than an invisible default.
 
 ### What is wrong
 
