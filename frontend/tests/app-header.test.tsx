@@ -19,8 +19,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
  * signed-out case is driven by moving the URL there and re-importing the module
  * graph, the way `session.test.ts` drives its own fresh imports.
  */
-vi.mock('../src/review/ReviewScreen', () => ({
-  ReviewScreen: () => <p>the review screen</p>,
+// The home screen, not the review screen: jsdom serves "/", and `route.ts`'s
+// default moved from `review` to `home` when `/app/` became a landing screen.
+// This test is about the header, which sits above whichever screen renders, so
+// the stub follows the route rather than the route being bent to the stub.
+vi.mock('../src/home/HomeScreen', () => ({
+  HomeScreen: () => <p>the home screen</p>,
 }))
 
 let consoleError: ReturnType<typeof vi.spyOn>
@@ -50,13 +54,13 @@ afterEach(() => {
 })
 
 describe('the app header', () => {
-  it('renders the sign-out control above the review screen when signed in', async () => {
+  it('renders the sign-out control above the landing screen when signed in', async () => {
     // jsdom serves "/", which is the not-/app/login case.
     await import('../src/main')
 
     expect(await screen.findByRole('button', { name: 'Sign out' })).toBeDefined()
     // ...above the screen it belongs to, not instead of it.
-    expect(screen.getByText('the review screen')).toBeDefined()
+    expect(screen.getByText('the home screen')).toBeDefined()
   })
 
   it('renders no sign-out control on the login page', async () => {

@@ -24,6 +24,10 @@ interface Destination {
  * other would make that fall-through look deliberate.
  */
 const DESTINATIONS: readonly Destination[] = [
+  // `/app/` rather than a named path: home is `route.ts`'s default, so it has
+  // no literal of its own. That is deliberate -- an unrecognised path under
+  // `/app/` lands here too, and this is the screen that offers every way on.
+  { label: 'Home', href: '/app/', route: 'home' },
   { label: 'Upload', href: '/app/upload', route: 'upload' },
   { label: 'Review', href: '/app/review', route: 'review' },
   { label: 'Results', href: '/app/receipts', route: 'receipts' },

@@ -17,12 +17,14 @@
  * `window.location`, so the mapping can be tested at every path without
  * pushing history state. `main.tsx` calls it with no argument.
  *
- * The default is `review`, not a 404: an unknown path under `/app/` reaches
- * this function only because the backend already decided to serve the shell,
- * and dropping a signed-in reviewer on the queue is better than telling them a
- * URL they did not type is wrong.
+ * The default is `home`, not a 404: an unknown path under `/app/` reaches this
+ * function only because the backend already decided to serve the shell, so
+ * landing somebody somewhere useful beats telling them a URL they did not type
+ * is wrong. The argument is unchanged from when the default was `review`; only
+ * the destination moved, because `/app/` became a landing screen that offers
+ * every way forward rather than a queue that is usually empty.
  */
-export type Route = 'login' | 'review' | 'admin' | 'receipts' | 'upload'
+export type Route = 'login' | 'home' | 'review' | 'admin' | 'receipts' | 'upload'
 
 export function currentRoute(pathname: string = window.location.pathname): Route {
   if (pathname === '/app/login') {
@@ -33,9 +35,14 @@ export function currentRoute(pathname: string = window.location.pathname): Route
   if (pathname.startsWith('/app/admin')) {
     return 'admin'
   }
-  // Same `startsWith`, for the same reason. The results list is reached only by
-  // typing or bookmarking the path -- nothing in the app links to it yet -- so
-  // the slashed form a browser offers is the likelier of the two to arrive.
+  // Same `startsWith`, for the same reason: a browser offers the slashed form
+  // and the backend's history fallback serves it.
+  //
+  // This said "the results list is reached only by typing or bookmarking the
+  // path -- nothing in the app links to it yet" until 2026-08-24. It was true
+  // when written and `a7e5fa0` falsified it that morning by adding the nav,
+  // which links here and to every other screen; the home screen links here
+  // too. Missed in that commit's own sweep and corrected here.
   if (pathname.startsWith('/app/receipts')) {
     return 'receipts'
   }
@@ -51,5 +58,14 @@ export function currentRoute(pathname: string = window.location.pathname): Route
   if (pathname.startsWith('/app/upload')) {
     return 'upload'
   }
-  return 'review'
+  // Explicit since `/app/` became a landing screen. This branch used to not
+  // exist: `/app/review` resolved only by falling through the default, which
+  // was `review`. `upload/ProcessingView.tsx` has always linked here, and the
+  // nav links here, so the fall-through was load-bearing without being written
+  // down anywhere. Moving the default to `home` would have silently pointed
+  // both at the landing screen.
+  if (pathname.startsWith('/app/review')) {
+    return 'review'
+  }
+  return 'home'
 }

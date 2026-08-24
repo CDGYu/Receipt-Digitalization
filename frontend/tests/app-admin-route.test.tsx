@@ -118,6 +118,10 @@ vi.mock('../src/login/LoginPage', () => ({
   LoginPage: () => <p>the login page</p>,
 }))
 
+vi.mock('../src/home/HomeScreen', () => ({
+  HomeScreen: () => <p>the home screen</p>,
+}))
+
 /** What each route must put on the page, one entry per `Route` member.
  *
  * `Record<Route, string>` and not a partial: a sixth member on the union is a
@@ -125,6 +129,7 @@ vi.mock('../src/login/LoginPage', () => ({
  * property a test run cannot enforce on its own. */
 const SCREEN: Record<Route, string> = {
   login: 'the login page',
+  home: 'the home screen',
   review: 'the review screen',
   admin: 'the admin screen',
   receipts: 'the receipts screen',
@@ -198,9 +203,13 @@ describe('the app entry point routes by pathname', () => {
     // union: `TS2741: Property 'settings' is missing in type ... but required in
     // type 'Record<Route, string>'`.
     expect(LITERALS.length, 'no /app/ path literal was found in route.ts at all').toBeGreaterThan(0)
-    // `review` has no literal by design: it is the fall-through, covered by the
-    // last case below rather than by a declared path.
-    const reached = new Set<string>(['review', ...LITERALS.map((literal) => currentRoute(literal))])
+    // `home` has no literal by design: it is the fall-through, covered by the
+    // last case below rather than by a declared path. That seed was `review`
+    // until 2026-08-24, when `/app/` became a landing screen: `home` took the
+    // default and `review` gained the explicit `/app/review` branch it had
+    // never needed while it *was* the default. So the exemption moved with the
+    // fall-through rather than staying attached to a route name.
+    const reached = new Set<string>(['home', ...LITERALS.map((literal) => currentRoute(literal))])
     expect(
       Object.keys(SCREEN).filter((route) => !reached.has(route)),
       'a Route member is declared and no /app/ literal reaches it, so nothing below mounts it',
@@ -215,12 +224,15 @@ describe('the app entry point routes by pathname', () => {
     await expectOnly(currentRoute(literal))
   })
 
-  it('renders the review screen everywhere else', async () => {
-    // jsdom serves "/", which `currentRoute` maps to `review` by default. This
-    // is the one route with no literal to derive, because it is the fall-through
-    // rather than a declared path.
+  it('renders the home screen everywhere else', async () => {
+    // jsdom serves "/", which `currentRoute` maps to `home` by default. This is
+    // the one route with no literal to derive, because it is the fall-through
+    // rather than a declared path -- and the fall-through moved from `review`
+    // to `home` when `/app/` became a landing screen. `/app/review` gained an
+    // explicit branch in the same change, so review is no longer reachable this
+    // way at all.
     await import('../src/main')
 
-    await expectOnly('review')
+    await expectOnly('home')
   })
 })

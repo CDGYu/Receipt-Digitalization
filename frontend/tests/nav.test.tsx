@@ -67,11 +67,12 @@ describe('the current page', () => {
     expect(screen.getByRole('link', { name: 'Results' }).getAttribute('aria-current')).toBeNull()
   })
 
-  it('marks Review on the landing path, which routes there by default', () => {
-    // `route.ts` returns 'review' for any path it does not recognise, so `/app/`
-    // -- the URL a person actually lands on -- arrives here as 'review'. If the
-    // marking keyed off the pathname instead of the route, the landing page
-    // would show nothing marked at all.
+  it('marks Review when the review route is the one in hand', () => {
+    // This comment used to read "the landing path, which routes there by
+    // default" -- true until `/app/` became the home screen and `route.ts`'s
+    // default moved to `home`. `/app/review` is an explicit branch now, so
+    // Review is marked because the route says review and not because an
+    // unrecognised path fell through to it.
     render(<Nav identity={{ username: 'alice', role: 'reviewer' }} route="review" />)
 
     expect(screen.getByRole('link', { name: 'Review' }).getAttribute('aria-current')).toBe('page')
@@ -119,5 +120,19 @@ describe('the stylesheet and the component agree', () => {
         `styles.${name} has no .${name} rule -- it ships as class="undefined"`,
       ).toBe(true)
     }
+  })
+})
+
+describe('the home link', () => {
+  it('leads to the landing screen and is marked there', () => {
+    render(<Nav identity={{ username: 'alice', role: 'reviewer' }} route="home" />)
+
+    const home = screen.getByRole('link', { name: 'Home' })
+    expect(home.getAttribute('href')).toBe('/app/')
+    expect(home.getAttribute('aria-current')).toBe('page')
+    // Review is a separate destination now. Before `/app/` had a screen of its
+    // own the two would have been the same place, since `route.ts` resolved
+    // `/app/` to `review` by falling through its default.
+    expect(screen.getByRole('link', { name: 'Review' }).getAttribute('aria-current')).toBeNull()
   })
 })

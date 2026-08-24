@@ -12,9 +12,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
  *
  * The mock is file-scoped, which is why this is its own file.
  */
-vi.mock('../src/review/ReviewScreen', () => ({
-  ReviewScreen: () => {
-    throw new Error('the review screen threw during render')
+// The home screen, not the review screen: jsdom serves "/", and `route.ts`'s
+// default moved from `review` to `home`. The property under test is that a
+// throw from *whichever* screen renders is caught rather than blanking the
+// page, so the stub follows the route.
+vi.mock('../src/home/HomeScreen', () => ({
+  HomeScreen: () => {
+    throw new Error('the home screen threw during render')
   },
 }))
 
@@ -31,19 +35,19 @@ afterEach(() => {
 })
 
 describe('the app root', () => {
-  it('catches a render throw from the review screen instead of blanking the page', async () => {
+  it('catches a render throw from the landing screen instead of blanking the page', async () => {
     const root = document.createElement('div')
     root.id = 'root'
     document.body.append(root)
     // `session.ts` guesses "signed in" from the path, and jsdom's is `/`, so
-    // `App` renders the review screen rather than the login page. `fetch` is
+    // `App` renders the home screen rather than the login page. `fetch` is
     // stubbed anyway because a real one is not available here.
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')))
 
     await import('../src/main')
 
     await waitFor(() => {
-      expect(root.textContent).toContain('the review screen threw during render')
+      expect(root.textContent).toContain('the home screen threw during render')
     })
     root.remove()
   })

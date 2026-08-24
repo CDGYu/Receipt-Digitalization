@@ -253,6 +253,25 @@ const CENSUS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
   // against the file and its output transcribed, not read off the stylesheet by
   // eye. `.bar` is worn by `main.tsx`'s `<header>` and the rest by the `<nav>`
   // inside it -- one bar, so one stylesheet.
+  // Derived by running `censusFor` against the file and transcribing what the
+  // assertion printed, the same mechanical way as every entry below.
+  'home/HomeScreen.module.css': {
+    '.screen':
+      'box-sizing: border-box, display: flex, flex-direction: column, align-items: stretch, gap, max-width, margin, padding, color, font-family',
+    '.heading': 'margin, font-family, font-size, font-weight, line-height',
+    '.counts': 'display: flex, flex-wrap: wrap, gap',
+    '.waiting': 'margin, color, font-size, line-height',
+    '.count':
+      'display: flex, flex-direction: column, gap, min-width, margin, padding, border, border-radius, background',
+    '.countLabel': 'color, font-size, font-weight, letter-spacing, text-transform: uppercase',
+    '.countValue': 'font-family, font-size, line-height',
+    '.ways': 'display: flex, flex-direction: column, gap',
+    '.way':
+      'display: flex, flex-direction: column, gap, padding, border, border-radius, background, box-shadow, text-decoration: none, transition',
+    '.way:hover': 'border-color',
+    '.wayLabel': 'color, font-size, font-weight, line-height',
+    '.wayHint': 'color, font-size, line-height',
+  },
   'Nav.module.css': {
     '.bar':
       'display: flex, flex-wrap: wrap, align-items: center, gap, padding, border-bottom, background',
@@ -677,7 +696,7 @@ describe('the census reads what is there, not what it hopes for', () => {
 
   it('is reading the real tree, not an empty one', () => {
     const files = stylesheets()
-    expect(files.length, 'no stylesheets found -- the whole census is vacuous').toBe(21)
+    expect(files.length, 'no stylesheets found -- the whole census is vacuous').toBe(22)
     let rules = 0
     let declarations = 0
     for (const file of files) {

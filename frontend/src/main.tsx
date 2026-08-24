@@ -36,6 +36,7 @@ import { AdminScreen } from './admin/AdminScreen'
 import { ErrorBoundary } from './ErrorBoundary'
 import { currentRoute } from './route'
 import { currentIdentity, hydrateIdentity, isSignedIn, setSignedIn, subscribe } from './session'
+import { HomeScreen } from './home/HomeScreen'
 import { LoginPage } from './login/LoginPage'
 import { Nav } from './Nav'
 import navStyles from './Nav.module.css'
@@ -136,6 +137,11 @@ function App() {
         // screen reads `role` to decide whether to offer the export button, and
         // needs no clock -- it renders no ages.
         <ReceiptsScreen identity={identity} />
+      ) : route === 'home' ? (
+        // No `identity`: the counts are system-wide and every signed-in caller
+        // gets the same three destinations. The admin link is the nav's job and
+        // is gated there.
+        <HomeScreen />
       ) : route === 'upload' ? (
         // No `identity`: nothing on this screen is decided by who is asking.
         // `POST /upload` takes `require_upload`, which is the API key or ANY

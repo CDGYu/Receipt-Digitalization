@@ -168,9 +168,16 @@ describe('the route switch, which is deliberately not a router', () => {
     expect(currentRoute('/app/admin/')).toBe('admin')
     expect(currentRoute('/app/receipts/')).toBe('receipts')
     expect(currentRoute('/app/upload/')).toBe('upload')
-    expect(currentRoute('/app/')).toBe('review')
-    expect(currentRoute('/')).toBe('review')
-    expect(currentRoute('/app/anything-else')).toBe('review')
+    // `/app/review` resolved by falling through the default until `/app/` became
+    // a landing screen of its own. It is an explicit branch now, so the slashed
+    // form needs the same `startsWith` cover every sibling has.
+    expect(currentRoute('/app/review/')).toBe('review')
+    // The default moved from `review` to `home`. The last two are unrecognised
+    // paths: dropping someone on a screen that offers every way forward is a
+    // better answer than dropping them on a queue that is usually empty.
+    expect(currentRoute('/app/')).toBe('home')
+    expect(currentRoute('/')).toBe('home')
+    expect(currentRoute('/app/anything-else')).toBe('home')
   })
 
   it('reads the live pathname when it is given none', () => {
