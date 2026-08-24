@@ -1154,7 +1154,7 @@ describe('terminal submit and load states', () => {
     expect(screen.getByText(/only the assignee or an admin/)).toBeTruthy()
     // No retry affordances -- they would fail identically forever.
     expect(screen.queryByRole('button', { name: 'Close task' })).toBeNull()
-    expect(screen.queryByRole('button', { name: 'Approve (⌘↵)' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Approve' })).toBeNull()
 
     // The chord is dead here: it must not re-run the chain.
     const patches = chain(fetchMock).filter((c) => c.startsWith('PATCH')).length
@@ -1222,7 +1222,7 @@ describe('terminal submit and load states', () => {
     // green, so the ruling held only by the code agreeing with itself.
     expect(sentence.getAttribute('role')).toBeNull()
     // The chain can be retried once the database is back: Approve survives.
-    expect(screen.getByRole('button', { name: 'Approve (⌘↵)' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Approve' })).toBeTruthy()
   })
 
   it('a 503 on the close does not also claim nothing could be saved', async () => {

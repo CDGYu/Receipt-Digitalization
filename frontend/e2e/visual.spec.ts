@@ -1516,7 +1516,7 @@ test('focus rings, as the browser actually paints them', async ({ browser }, tes
       await page.keyboard.press('Shift+Tab')
       await page.keyboard.press('Tab')
       await shot(page, 'focus-money-input', MID, theme, formSection(page))
-      const approve = page.getByRole('button', { name: 'Approve (⌘↵)' })
+      const approve = page.getByRole('button', { name: 'Approve' })
       await approve.focus()
       await page.keyboard.press('Shift+Tab')
       await page.keyboard.press('Tab')

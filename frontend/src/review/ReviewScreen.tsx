@@ -644,7 +644,7 @@ export function ReviewScreen() {
           onClick={() => void approve()}
           disabled={busy}
         >
-          Approve (⌘↵)
+          Approve
         </button>
       )}
       {openTaskId === null ? null : (
