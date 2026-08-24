@@ -158,8 +158,10 @@ them is startable today.**
 - **ISSUE-006** — **the only issue on the board where a user gets a confidently
   wrong answer.** A reviewer who mis-flags the *sole* purchase gets zero findings
   at any severity and the row silently leaves the export; all three golden
-  receipts have that shape. **Needs your ruling first**: does the review screen
-  show `is_template_row`, and read-only or editable?
+  receipts have that shape. **The visibility half is DONE**: you ruled 2026-08-23
+  that `is_template_row` is **editable**, and it shipped in plan 2 — a reviewer
+  can now see and correct which rows leave the export. **The arithmetic residual
+  is still open**: nothing warns when the correction empties the purchase set.
 - **ISSUE-024** *(new 2026-08-23)* — nothing cross-checks the triage line-count
   against what was extracted, so spec §18's silent tall-receipt truncation goes
   undetected. `IMPLEMENTATION_PLAN.md` P2.T3, never built.
@@ -167,8 +169,10 @@ them is startable today.**
   equality, so `949.20` and `949.21` disagree, and line items are compared
   positionally so one lost row cascades into every later one. P2.T1, never built.
   **Fix it before P7.T1**, not after.
-- **ISSUE-005** — `R051`'s message promises printed order; its check accepts any
-  permutation. One line, and it needs its own RED.
+- ~~**ISSUE-005** — `R051`'s message promises printed order; its check accepts
+  any permutation.~~ **RESOLVED 2026-08-24** at `5c72af5`, pinned by a
+  permutation whose sorted set is still `0..n-1` — a gap or a repeat would have
+  passed under the old check and proved nothing.
 - **ISSUE-025** *(new 2026-08-23)* — best-attempt selection is proven only in
   isolation; no pipeline-level test drives a repair that makes things worse.
 - **ISSUE-002 / ISSUE-003** — recorded, deliberately not fixed. Read the entries
@@ -222,9 +226,11 @@ is the collapsed-table `border-radius`, a repo-wide question nobody has ruled on
 ### 2g. WAITING ON YOU, NOT ON ANYONE'S TIME
 
 The full list is under "BLOCKED ON THE USER" below. The ones that block work
-rather than merely tidy it: **ISSUE-006's flag decision**, **ISSUE-026's upload
-ruling**, **R060/R061 grounding** (which also gates bbox), and **what happens to
-`IMPLEMENTATION_PLAN.md`**. On the last: its checkboxes are **93 unticked out of
+rather than merely tidy it: **the four rulings in 2a** (ISSUE-029/030/031/032),
+**R060/R061 grounding** (which also gates bbox), and **what happens to
+`IMPLEMENTATION_PLAN.md`**. *(ISSUE-006's flag decision and ISSUE-026's upload
+ruling were both given on 2026-08-23 and both shipped; this line asked for them
+again for a day.)* On the last: its checkboxes are **93 unticked out of
 93**, and its "Current state" still lists fourteen things as "Specified but not
 built" that all shipped, so it competes with the register instead of
 complementing it. **You ruled 2026-08-23 that the boxes stay unticked for now**;
