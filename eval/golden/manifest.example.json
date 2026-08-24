@@ -1,7 +1,9 @@
 {
-  "r001": { "category": "printed_clean", "holdout": false },
-  "r002": { "category": "printed_clean", "holdout": true },
-  "r003": { "category": "printed_degraded", "holdout": false },
-  "r004": { "category": "handwritten", "holdout": true },
-  "r005": { "category": "adversarial", "holdout": false }
+  "r001": { "category": "printed_clean", "holdout": false, "withheld": [] },
+  "r002": { "category": "printed_clean", "holdout": true, "withheld": [] },
+  "r003": { "category": "printed_degraded", "holdout": false, "withheld": [] },
+  "r004": { "category": "handwritten", "holdout": true, "withheld": [] },
+  "r005": { "category": "adversarial", "holdout": false, "withheld": [] },
+  "p006": { "category": "printed_clean", "holdout": false,
+            "withheld": ["merchant.tax_id", "buyer.name"] }
 }

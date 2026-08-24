@@ -28,7 +28,7 @@ from pathlib import Path
 
 import pytest
 
-from eval.golden_set import TEMPLATE_PATH
+from eval.golden_set import DEFAULT_MANIFEST_PATH, TEMPLATE_PATH, _is_private_label
 from eval.metrics import field_breakdown, ratio
 from receipts.extract.paths import flatten
 from receipts.extract.schema import ReceiptExtraction
@@ -86,7 +86,7 @@ def test_an_extraction_that_read_nothing_hallucinates_nothing(label_path: Path):
 # --------------------------------------------------------------------------- #
 # What the labels themselves must say
 #
-# The FOUR pins below exist because the label CONTENT was reachable by nothing:
+# The SIX pins below exist because the label CONTENT was reachable by nothing:
 # blanking every buyer block and deleting every flagged row left the whole suite
 # green. They are deliberately properties rather than transcriptions of the
 # labels -- a test that restated r001's rows would fire on a legitimate re-read
@@ -94,8 +94,10 @@ def test_an_extraction_that_read_nothing_hallucinates_nothing(label_path: Path):
 #
 # Said "three" until 2026-08-19: this comment arrived with the first three in
 # ca44f81 and 6169893 added the array-order pin below it without touching it.
+# Said "four" until 2026-08-25, when ISSUE-019 added the withheld-declaration
+# pin and the unknown-path pin together.
 # The count is here because it is the thing a reader checks the section against;
-# if you add a fifth, this line is part of the change.
+# if you add a seventh, this line is part of the change.
 # --------------------------------------------------------------------------- #
 
 
@@ -202,4 +204,114 @@ def test_at_least_one_label_records_a_buyer_name():
     """
     named = [path.stem for path in _labels() if _truth(path).buyer.name]
     assert named, "no golden label records a buyer.name"
+
+
+def _manifest() -> dict:
+    """The manifest, read strictly -- deliberately NOT through ``load_manifest``.
+
+    ``eval.golden_set.load_manifest`` collapses a missing, unreadable, malformed
+    or non-object manifest to ``{}`` so ``composition_stats`` never raises. That
+    is correct for a report and wrong for a guard: every one of those collapses
+    would leave the pin below iterating an empty mapping and passing on nothing.
+    """
+    assert DEFAULT_MANIFEST_PATH.exists(), (
+        f"no manifest at {DEFAULT_MANIFEST_PATH} -- the withheld declaration has "
+        "nowhere to live, so the pin below would pass without checking anything"
+    )
+    data = json.loads(DEFAULT_MANIFEST_PATH.read_text(encoding="utf-8"))
+    assert isinstance(data, dict) and data, (
+        f"{DEFAULT_MANIFEST_PATH} is empty or is not a JSON object"
+    )
+    return data
+
+
+@pytest.mark.parametrize("label_path", _labels(), ids=lambda p: p.stem)
+def test_a_tracked_label_declares_that_it_withholds_nothing(label_path: Path):
+    """ADR-0050 decision 1's "committed whole or not at all", given a gate (ISSUE-019).
+
+    The rule was stated in the ADR and in ``eval/golden/README.md`` and checked
+    by nothing: a tracked ``r*`` label with ``merchant.name``, ``merchant.address``,
+    ``merchant.tax_id`` and ``buyer.name`` set to ``null`` passed every gate. The
+    nearest guard compares the paths the JSON declares against the paths the model
+    carries, and a key present with value ``null`` is in *both* sets, so redaction
+    by nulling is invisible to it.
+
+    **Why a declaration and not a detection.** A redacted field and an absent one
+    are indistinguishable in the label itself -- the README tells a labeller to
+    write ``null`` for anything the receipt does not show, so ``merchant.tax_id:
+    null`` is correct for a receipt with no printed tax ID and wrong for one where
+    the labeller removed it. Asserting "the PII paths are filled" would redden on
+    a legitimate receipt. The manifest is the only place that can hold the
+    difference, so the property is moved there.
+
+    **The boundary is reused, not reinvented.** ``_is_private_label`` reads the
+    same ``p`` prefix as ``.gitignore``'s ``eval/golden/labels/p*.json``, so
+    "may withhold" and "is not committed" stay one rule. A second notion of
+    private is exactly the drift this would otherwise introduce.
+
+    **What this does NOT close, stated rather than implied:** a labeller who nulls
+    a field and does not declare it still passes. Nothing in a static file can
+    catch that. What this buys is that withholding from a *tracked* label is no
+    longer expressible without saying so -- an honest redaction now fails loudly,
+    and a dishonest one is a written falsehood rather than an invisible default.
+    """
+    entry = _manifest().get(label_path.stem)
+    assert isinstance(entry, dict), (
+        f"{label_path.stem} has no manifest entry, so its withheld declaration "
+        "cannot be checked and this pin would skip it silently"
+    )
+    assert "withheld" in entry, (
+        f"{label_path.stem}'s manifest entry declares no `withheld` list. Absent "
+        "is not the same as empty: a missing key is what this pin exists to "
+        "refuse, because it reads as 'nothing withheld' while asserting nothing."
+    )
+    withheld = entry["withheld"]
+    assert isinstance(withheld, list), (
+        f"{label_path.stem}'s `withheld` is {type(withheld).__name__}, not a list"
+    )
+    if _is_private_label(label_path):
+        return
+    assert withheld == [], (
+        f"{label_path.stem} is a tracked label and declares {sorted(withheld)} "
+        "withheld. ADR-0050 decision 1: a label is committed whole or not at "
+        "all. A receipt with something to withhold is a `p*` label, which "
+        "`.gitignore` keeps out of the repository."
+    )
+
+
+@pytest.mark.parametrize(
+    "json_path",
+    [*_labels(), TEMPLATE_PATH],
+    ids=lambda p: p.stem,
+)
+def test_a_label_declares_no_path_the_schema_does_not(json_path: Path):
+    """The other direction of the completeness pin above, and a different defect.
+
+    That pin computes ``complete - declared`` and catches a key the label omits.
+    This computes ``declared - complete`` and catches a key the label *invents* --
+    which is what a misspelled one is. ``ReceiptExtraction`` is ``extra='ignore'``
+    and every field is optional, so a typo'd key is dropped in silence and its
+    intended path reads as ``null``.
+
+    **That makes a typo indistinguishable from a withholding**, which is why it
+    belongs beside the pin above rather than somewhere else: without this, the
+    declaration that pin asks for could be satisfied by a label whose fields are
+    null for a reason nobody chose. Measured on this schema: a label whose every
+    key is misspelled, and ``{}``, both load as a fully-null extraction and
+    ``validate_labels`` returns no error for either.
+
+    ``TEMPLATE.json`` is checked for the same reason it is checked above -- the
+    README tells a labeller to copy it, so a typo there is a typo in every label
+    made afterwards.
+    """
+    raw = json.loads(json_path.read_text(encoding="utf-8"))
+    declared = set(flatten(raw))
+    complete = set(flatten(ReceiptExtraction.model_validate(raw).model_dump()))
+
+    unknown = declared - complete
+    assert not unknown, (
+        f"{json_path.stem} declares {sorted(unknown)}, which the schema does not "
+        f"carry -- `extra='ignore'` drops these in silence and the paths they "
+        f"were meant to fill read as null"
+    )
 

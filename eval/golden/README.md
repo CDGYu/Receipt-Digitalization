@@ -18,7 +18,7 @@ made and the arithmetic of what is still to collect.
 eval/golden/
   labels/{id}.json        one hand-label per receipt (`r` tracked, `p` ignored)
   images/                 the source photos (GIT-IGNORED — receipts hold PII)
-  manifest.json           id -> {"category", "holdout"} sidecar (you create this)
+  manifest.json           id -> {"category", "holdout", "withheld"} sidecar
   manifest.example.json   a worked example of the manifest
   TEMPLATE.json           a schema-valid worked label to copy
 ```
@@ -88,6 +88,36 @@ Record the receipt in `manifest.json` either way — an id, a category and a
 holdout flag carry no personal data, and keeping every receipt there is what
 lets `composition_stats` report the real mix. A clone that lacks the label
 simply does not count it.
+
+### `withheld` — say what you left out, and it must be nothing
+
+Every manifest entry carries a `withheld` list naming the label paths you did
+not fill in for privacy reasons:
+
+```json
+"r001": { "category": "handwritten", "holdout": false, "withheld": [] },
+"p006": { "category": "printed_clean", "holdout": false,
+          "withheld": ["merchant.tax_id", "buyer.name"] }
+```
+
+**For every `r*` label this list must be empty, and a test enforces it.** That
+is "committed in full or not at all", written down where a gate can read it.
+Until 2026-08-25 the rule lived only in this file and in ADR-0050 decision 1,
+and a tracked label with its merchant and buyer nulled passed every gate
+(ISSUE-019).
+
+The list is here rather than in the label because **the label cannot express the
+difference**. Step 3 above tells you to write `null` for anything the receipt
+does not show — so `merchant.tax_id: null` is correct for a receipt with no
+printed tax ID and wrong for one where you removed it, and nothing in the file
+can tell those apart. The manifest can.
+
+The key is required, and empty is not the same as absent: a missing `withheld`
+reads as "nothing withheld" while asserting nothing, so the test refuses it.
+
+**If you find yourself wanting a non-empty `withheld` on an `r*` label, the
+label is a `p*` label.** Rename it. That keeps one boundary — the same `p`
+prefix `.gitignore` uses — rather than a second, quieter way of saying private.
 
 ## Composition targets (spec §15)
 
