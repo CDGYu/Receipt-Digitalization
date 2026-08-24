@@ -359,7 +359,13 @@ def _install_read_routes(app: FastAPI) -> None:
             if receipt is None:
                 raise HTTPException(status_code=404, detail=f"no receipt with id {receipt_id}")
             findings = get_findings(session, receipt_id)
-            return receipt_detail(receipt, findings)
+            settings: Settings = request.app.state.settings
+            return receipt_detail(
+                receipt,
+                findings,
+                expected_buyer_name=settings.expected_buyer_name,
+                expected_buyer_tax_id=settings.expected_buyer_tax_id,
+            )
 
     @app.get("/receipts/{receipt_id}/progress")
     def get_receipt_progress(
@@ -675,7 +681,13 @@ def _install_write_routes(app: FastAPI) -> None:
                 session, receipt_id, raw_patch, corrected_by=user.username
             )
             findings = get_findings(session, receipt_id)
-            return receipt_detail(receipt, findings)
+            settings: Settings = request.app.state.settings
+            return receipt_detail(
+                receipt,
+                findings,
+                expected_buyer_name=settings.expected_buyer_name,
+                expected_buyer_tax_id=settings.expected_buyer_tax_id,
+            )
 
     @app.get("/receipts/{receipt_id}/image")
     def get_image_url(

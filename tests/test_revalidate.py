@@ -9,6 +9,7 @@ caused by the database, attributed to their edit.
 from __future__ import annotations
 
 import json
+import logging
 import uuid
 from decimal import Decimal as D
 
@@ -23,6 +24,7 @@ from receipts.ingest.ingest import ReceiptJob
 from receipts.persist.models import Base, ReceiptStatus
 from receipts.persist.repository import create_pending_receipt, save_extraction
 from receipts.review.serializers import _export_extraction
+from receipts.validate.context import ValidationContext
 from receipts.validate.report import ValidationReport
 from receipts.validate.validator import validate
 
@@ -150,11 +152,12 @@ def test_a_row_that_recorded_no_tax_breakdown_still_rebuilds(engine) -> None:
     NULL into the schema default, which is what the rebuild did for every row
     before the column existed.
 
-    **Reachable today, not only after Task 4.** ``_export_extraction``'s one
-    caller is ``build_export_rows``, and ``query_export_receipts`` leaves
-    ``pending`` out of an export *unless the caller names* ``status=pending``
-    (``_EXPORT_EXCLUDED_BY_DEFAULT``) -- so an export that asks for pending rows
-    walks straight into this, as does any pre-migration row in any export.
+    **Reachable through the export, not only through re-validation.**
+    ``build_export_rows`` calls :func:`_export_extraction` too, and
+    ``query_export_receipts`` leaves ``pending`` out of an export *unless the
+    caller names* ``status=pending`` (``_EXPORT_EXCLUDED_BY_DEFAULT``) -- so an
+    export that asks for pending rows walks straight into this, as does any
+    pre-migration row in any export.
     """
     job = ReceiptJob(
         id=uuid.uuid4(),
@@ -170,3 +173,96 @@ def test_a_row_that_recorded_no_tax_breakdown_still_rebuilds(engine) -> None:
         # for: a later default of ``[]`` on the column would make it vacuous.
         assert receipt.tax_breakdown is None
         assert _export_extraction(receipt).totals.tax_breakdown == []
+
+
+# --------------------------------------------------------------------------- #
+# Re-validation on read (Task 4)
+# --------------------------------------------------------------------------- #
+
+
+def test_revalidate_runs_the_content_rules_on_the_stored_receipt(engine) -> None:
+    """A defect introduced after extraction is found, with no re-extraction."""
+    from receipts.review.serializers import revalidate
+
+    original = GOLDEN_LABELS["r001"]
+    rid = uuid.uuid4()
+    job = ReceiptJob(
+        id=rid, image_key=f"receipts/2026/08/{rid}/original.jpg", source="upload",
+        original_filename="receipt.jpg", content_type="image/jpeg",
+    )
+    with Session(engine) as session:
+        receipt = save_extraction(
+            session, job, original, ValidationReport(),
+            D("0.9"), ReceiptStatus.NEEDS_REVIEW,
+        )
+        session.commit()
+        assert revalidate(receipt).findings == []
+
+        # What a reviewer does with the Template checkbox: flag the only row
+        # that was actually bought. R026 exists for exactly this.
+        for item in receipt.line_items:
+            item.is_template_row = True
+        session.commit()
+        assert revalidate(receipt).fired("R026")
+
+
+def test_revalidate_never_runs_a_rule_whose_subject_is_the_extraction_run() -> None:
+    """The RUN rules must be absent, not merely silent.
+
+    Silence is what they would produce anyway with no context -- so asserting
+    "no R060 finding" proves nothing. This asserts on the rule set that RAN.
+    """
+    from receipts.review.serializers import _CONTENT_RULES, not_rechecked
+
+    assert {r.id for r in _CONTENT_RULES} & {"R001", "R013", "R060", "R061", "R070"} == set()
+    assert not_rechecked() == ["R001", "R013", "R060", "R061", "R070"]
+
+
+def test_a_rule_that_crashes_is_contained_and_the_loop_carries_on(
+    engine, monkeypatch, caplog
+) -> None:
+    """A broken rule costs one rule's answer, not the whole review screen.
+
+    :func:`revalidate` runs its own loop rather than calling ``validate()``, so
+    it does not inherit that function's crash containment and needs its own.
+    The two containments are **not** the same: ``validate()`` turns the crash
+    into an INFO ``{id}.crashed`` finding a reviewer can see, while this one
+    only logs -- which is why the log line is asserted here. A bare
+    ``except Exception: pass`` would leave nothing at all behind.
+
+    R010 is broken rather than R026 so that the surviving R026 finding proves
+    the loop carried *past* the crash: ``_CONTENT_RULES`` is id-ordered, so R010
+    is reached first.
+    """
+    from receipts.review.serializers import _CONTENT_RULES, revalidate
+
+    victim = next(rule for rule in _CONTENT_RULES if rule.id == "R010")
+
+    def boom(self, r, ctx):
+        raise RuntimeError("deliberate crash in a rule")
+
+    original = GOLDEN_LABELS["r001"]
+    rid = uuid.uuid4()
+    job = ReceiptJob(
+        id=rid, image_key=f"receipts/2026/08/{rid}/original.jpg", source="upload",
+        original_filename="receipt.jpg", content_type="image/jpeg",
+    )
+    with Session(engine) as session:
+        receipt = save_extraction(
+            session, job, original, ValidationReport(),
+            D("0.9"), ReceiptStatus.NEEDS_REVIEW,
+        )
+        for item in receipt.line_items:
+            item.is_template_row = True
+        session.commit()
+
+        # Not vacuous: a rule whose ``applies()`` said no would never reach the
+        # ``check()`` this test breaks, and the containment would go unexercised.
+        assert victim.applies(_export_extraction(receipt), ValidationContext())
+
+        monkeypatch.setattr(type(victim), "check", boom)
+        with caplog.at_level(logging.ERROR, logger="receipts.review.serializers"):
+            report = revalidate(receipt)
+
+    assert report.fired("R026")
+    assert "R010" in caplog.text

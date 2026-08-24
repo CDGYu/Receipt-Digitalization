@@ -488,6 +488,74 @@ def test_patch_with_an_unmappable_path_changes_nothing(
         assert session.query(Correction).count() == 0
 
 
+# --------------------------------------------------------------------------- #
+# The correction is re-checked, on both routes that serve the detail (Task 4)
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.parametrize(
+    ("configured", "patch_body"),
+    [
+        pytest.param(
+            {"expected_buyer_name": "IDEAL SOURCE"},
+            {"buyer": {"name": "SOMEONE ELSE"}},
+            id="expected_buyer_name",
+        ),
+        pytest.param(
+            {"expected_buyer_tax_id": "123-456-789-000"},
+            {"buyer": {"tax_id": "999-999-999-999"}},
+            id="expected_buyer_tax_id",
+        ),
+    ],
+)
+def test_a_correction_is_re_checked_by_both_routes_that_serve_the_detail(
+    session_factory, storage, settings, submitted, receipt_id, configured, patch_body
+):
+    """The reviewer edits the buyer, and the panel answers about the edit.
+
+    Two things at once, because they are the same fact seen twice. Nothing is
+    stored: the ``PATCH`` response and the ``GET`` that follows it both compute
+    ``current_findings`` from the row, so both must show ``R015`` and neither
+    can be reading a copy written at extraction time -- ``MAIN_RECEIPT`` was
+    never extracted and has no findings row at all.
+
+    **Exactly one ``expected_buyer_*`` field is configured per case, and that is
+    the point.** ``expects_a_buyer`` (``validate/rules.py``) gates R014/R015 on
+    *either* being non-blank, so a case that set both would still fire with one
+    of the two kwargs dropped from a ``receipt_detail`` call site, and the loss
+    would be invisible. One at a time makes each kwarg, at each of the two call
+    sites, individually load-bearing.
+
+    The ``before`` assertion is what keeps this from passing vacuously: R015 is
+    silent on the untouched receipt (no buyer name and no buyer TIN is "not
+    read", which is R014's subject, not a mismatch), so its appearance is caused
+    by the edit rather than by the fixture.
+    """
+    client = _logged_in(
+        create_app(
+            session_factory=session_factory,
+            storage=storage,
+            submit=submitted.append,
+            settings=settings.model_copy(update=configured),
+        ),
+        "alice",
+        "pw-alice",
+    )
+
+    before = client.get(f"/receipts/{receipt_id}").json()
+    assert before["findings"] == []
+    assert "R015" not in [f["rule_id"] for f in before["current_findings"]]
+
+    patched = client.patch(f"/receipts/{receipt_id}", json=patch_body)
+    assert patched.status_code == 200
+    assert "R015" in [f["rule_id"] for f in patched.json()["current_findings"]]
+
+    after = client.get(f"/receipts/{receipt_id}").json()
+    assert "R015" in [f["rule_id"] for f in after["current_findings"]]
+    # History is history: re-validation writes nothing, here or anywhere.
+    assert after["findings"] == []
+
+
 def test_image_url_is_signed_and_the_blob_streams(reviewer_client, receipt_id):
     url = reviewer_client.get(f"/receipts/{receipt_id}/image").json()["url"]
     assert reviewer_client.get(url).content == JPEG_BYTES
