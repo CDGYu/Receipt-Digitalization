@@ -85,7 +85,10 @@
 
 /* `ReceiptForm.module.css`'s `.field`, to the declaration: label above, control
  * below, one column. `--color-muted-foreground` is the darkened light value
- * ADR-0027 §2 records (#57534E, ~8:1 on white). */
+ * ADR-0027 chose over the generated #94A3B8. **§2 records that value as
+ * #475569**; the Editorial refresh moved it to #57534E (~8:1 on white), and it
+ * is ADR-0027's `## Correction (2026-08-24)` that records the new one -- §2
+ * itself was deliberately not edited. */
 .field {
   display: flex;
   flex-direction: column;

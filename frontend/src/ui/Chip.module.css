@@ -6,17 +6,25 @@
  * severity pill competes with the row it is describing, and tinting a background
  * without a token for the tint would mean inventing hex. Contrast measured
  * against `--color-surface` for all five tones in light (the tighter theme):
- * error 4.83:1, warn 5.02:1, info 6.70:1, positive 5.02:1, neutral 4.80:1. Dark
+ * error 4.83:1, warn 5.02:1, info 6.70:1, positive 5.02:1, neutral 7.63:1. Dark
  * is looser -- every tone's dark value is the lighter of the pair against a
  * near-black surface.
  *
- * Two of those figures read 4.7 (warn) and 7.6 (neutral) until 2026-08-24, and
- * **both were wrong when written rather than made wrong by the Editorial ramp**
- * -- checked against `2042d49^` before saying so. `--color-severity-warn`
- * `#B45309` is a reserved severity colour that Task 1 did not touch: it measured
- * 5.02 then and measures 5.02 now. `--color-null` went `#64748B` -> `#78716C`,
- * which is **4.76 -> 4.80**, so the ramp moved that one the right way by 0.04
- * while the claim of 7.6 was never close to either value. */
+ * **One** of those figures was wrong when written rather than made wrong by the
+ * Editorial ramp: warn read 4.7 until 2026-08-24. `--color-severity-warn`
+ * `#B45309` is a reserved severity colour Task 1 did not touch -- it measured
+ * 5.02 then and measures 5.02 now -- so 4.7 was never right.
+ *
+ * Neutral's figure moved for an ordinary reason, and its old value was true:
+ * `.neutral` paints `--color-muted-foreground`, which the ramp took from
+ * `#475569` to `#57534E`, i.e. **7.58 -> 7.63**. The recorded "7.6" was correct
+ * before and is correct now; only the precision changed.
+ *
+ * Corrected 2026-08-24 after being *mis*-corrected the same day: this briefly
+ * read "neutral 4.80" and blamed `--color-null` moving `#64748B` -> `#78716C`.
+ * **`.neutral` has never used `--color-null`.** 4.80 is that token's number --
+ * right arithmetic, wrong pair. The number was checked twice; the pairing was
+ * never checked once. */
 
 .chip {
   display: inline-flex;
