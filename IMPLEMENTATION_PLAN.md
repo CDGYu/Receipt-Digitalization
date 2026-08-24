@@ -180,6 +180,18 @@ def test_field_accuracy_flags_misread():
 
 **Acceptance:** `eval.metrics.line_item_f1` and (in Phase 2) `consistency.diff_extractions` both call `align_line_items`.
 
+> **The property holds as of `aa65a2b`; the second name does not exist.**
+> `consistency.diff_extractions` appears nowhere in code -- only in this line
+> and `RECEIPT_SYSTEM_SPEC.md:1256`. The consistency-side consumer that was
+> actually built is `_vote` in `src/receipts/extract/extractor.py`, which P2.T1's
+> own Files line calls "(consistency diff)".
+>
+> Left as written rather than re-pointed at `_vote`: an acceptance line is the
+> record of what was asked for, and this one asked for a module nobody built.
+> **Calling the acceptance "fully met" would retire it by pointing at a symbol
+> that is not there** -- which is what a first draft of ISSUE-023's resolution
+> did say, and it was narrowed on review before it landed.
+
 ### Task P0.T4 — Dev tooling & CI `[ops]`
 
 **Files:** Modify `pyproject.toml`; Create `.github/workflows/ci.yml`, `tests/test_no_float_in_money_path.py`
@@ -553,9 +565,15 @@ ticked by inspection, because what they claim is a measurement nobody has taken
 - [x] No receipt can reach a non-terminal state
 - [x] No `float` anywhere in the money path
 - [x] **(added) No financial-data API route is reachable unauthenticated**
-- [ ] **(added) Consistency and eval share one line-item alignment strategy** —
-      **they do not.** `align_line_items` has one consumer, `eval/metrics.py`
-      (ISSUE-023).
+- [x] **(added) Consistency and eval share one line-item alignment strategy** —
+      as of `aa65a2b` they do. `align_line_items` has **two** call sites,
+      derived rather than counted from memory: `eval/metrics.py:278` and
+      `src/receipts/extract/extractor.py:486`, inside `_vote`.
+      *(This row read "they do not", named one consumer, and cited ISSUE-023 as
+      open. `aa65a2b` falsified all three parts at once and the row did not
+      move -- it was found by the session that pasted ISSUE-023's resolution,
+      not by the one that wrote the commit. A definition-of-done row is exactly
+      the kind that goes stale green.)*
 - [x] **(added) Full PAN never persisted (last-4 only)**
 
 ---
