@@ -6,9 +6,12 @@ continuity protocol itself — what lives where, and why this snapshot must be
 verified rather than trusted — is **ADR-0019**, extended by **ADR-0021** (whose
 2026-08-02 dated correction widened the freshness check after a docs-only task
 proved invisible to it).
-Last updated: **2026-08-22**, by the session that ran **ISSUE-001 step 6** —
-**the first measured accuracy number in this project's history**, after the gap
-that opened on 2026-07-28. **ADR-0049** is the decision.
+Last updated: **2026-08-25**, by the session that finished the
+**terminal-state guarantee** — the milestone that closed ISSUE-029, ISSUE-030
+and ISSUE-031. **ADR-0054** is the decision. It is **MERGED into `main` by true
+fast-forward and PUSHED** — 30 commits, zero merge commits — and the compose
+`VLM_*` environment landed after it. Verify with the commands below rather than
+believing this sentence.
 
 **Do not quote a single figure.** `transcription_accuracy` over five repeats of
 the three golden receipts is **min 60.00%, max 61.43%, median 60.00%** — and
@@ -42,24 +45,31 @@ moves, and this file has carried a wrong issue count before.
 **No count of refreshes is written here** — it is a number that moves without its
 sentence changing, which is review standard 5.
 
-**Freshness anchor `2bf5d79`** — the last commit that is not this handoff pair.
+**Freshness anchor `bcbf5c4`** — the last commit that is not this handoff pair.
 **It is written twice below — here and inside the command.** Moving one and not
-the other is what happened on this file's previous refresh, and the gate caught
-it because it parses the anchor out of the *command*.
+the other is what happened on an earlier refresh, and the gate caught it because
+it parses the anchor out of the *command*.
 
-**Nothing is in flight.** The `HEAD`-for-`main` substitution that stood here is
-**deleted rather than kept with a caveat**, on its own stated terms — the branch
-landed, so the command below is right as written. It comes back the next time a
-pair is written on an unmerged branch, and not before.
+**Nothing is in flight from this milestone.** The `HEAD`-for-`main` substitution
+that stood here is **deleted rather than kept with a caveat**, on its own stated
+terms — the branch landed, so the command below is right as written.
+
+**When it comes back, it must come back as PROSE.** The command has to keep the
+literal `<seven-hex>..main` spelling: `tests/test_freshness_check.py`'s
+`_stamp_anchor` parses that exact form out of this file and calls `pytest.fail`
+on anything else, so editing `main` to `HEAD` inside the code block **reddens the
+suite** instead of helping the reader. Say "read `HEAD` for `main`" beside the
+block; never in it. Written down because the obvious edit is the wrong one, and
+the next unmerged branch will invite it again.
 **`git rev-parse main` will be AHEAD of the anchor**, by the pair commit and
 nothing else: a stamp cannot name the commit that writes it. The test is a
 command, not a commit and not a count:
 
 ```
-git log --oneline 2bf5d79..main -- ":(top,exclude)docs/MEMORY.md" ":(top,exclude)docs/NEXT_SESSION_PROMPT.md"
+git log --oneline bcbf5c4..main -- ":(top,exclude)docs/MEMORY.md" ":(top,exclude)docs/NEXT_SESSION_PROMPT.md"
 git log --oneline refs/remotes/origin/main..main   # what a push would send
 git ls-remote --heads origin main                  # authoritative on what is pushed
-git branch --no-merged main                        # must name NOTHING
+git branch --no-merged main                        # named FOUR on 2026-08-25
 ```
 
 **Empty means this pair is current.** Anything listed means the tree moved
@@ -122,10 +132,66 @@ stays reachable — ADR-0042. `git log --oneline -- docs/MEMORY.md` is the list.
 
 ## Snapshot
 
-- **`git branch --no-merged main` must name NOTHING.** Run the command rather
-  than believing this sentence — this bullet read "NO BRANCH IN FLIGHT" for three
-  days while one existed, and announcing one after it landed would be the same
-  defect in the other direction.
+- **`git branch --no-merged main` named FOUR branches on 2026-08-25**, measured
+  *after* this milestone merged and dropped off the list:
+  `feat/golden-label-privacy` and `feat/revalidate-corrected-receipt` — **both
+  of which moved on 2026-08-25, so other work is in flight** —
+  `feat/arithmetic-went-offline`, and `backup/tsg-before-rebase`. Run the
+  command rather than believing this sentence.
+  **This bullet has now been wrong in both directions.** It read "NO BRANCH IN
+  FLIGHT" for three days while one existed; then it read **"must name
+  NOTHING"**, which was false while at least three of the five above already
+  existed; then a refresh replaced that with a **singular** claim naming only
+  this milestone's branch, written without running the command. A count is the
+  part that rots — that is why the list above is dated and the command is the
+  answer.
+- **THE TERMINAL-STATE GUARANTEE IS MERGED AND PUSHED** (2026-08-25,
+  **ADR-0054**). Seven tasks on `feat/terminal-state-guarantee`; **all five gates
+  PASS at `5c1e8eb`**, suite **1430** — that is the anchor above, the last commit
+  before this pair, and it is named rather than called "the tip" because the
+  pair commit moves the tip and would falsify the sentence carrying it
+  (ADR-0032 section 2). Re-run them yourself; a gate run is about a commit. It closes **ISSUE-029** (`c08b718`),
+  **ISSUE-030** (`63084b6`, `41d2933`, `d1e446b`) and **ISSUE-031** (`2d1bea9`,
+  `d1e446b`): a heartbeat written as the run works, `receipts sweep` and a
+  single-row sweep on the progress route, and a progress route that falls back to
+  the row when nothing is narrating.
+  **Merged by true fast-forward** `b7ef275` -> `79d9db7`, **30 commits, zero merge
+  commits**, and pushed — `origin/main` was at `b7ef275`, exactly where local
+  `main` was, so the push needed **no force at all**. All five gates PASS at the
+  merged tip `79d9db7`, run there rather than inferred from the branch.
+  **What is still stale is the BRANCH's remote ref, a different thing.**
+  `origin/feat/terminal-state-guarantee` sits at `e91bad8`, the pre-rebuild
+  lineage; updating *that* is a force-with-lease the hook blocks. Nothing depends
+  on it — every commit it would carry is on `main`. **The two were conflated in
+  this file's previous refresh**, which implied the `main` push needed a force.
+- **THE COMPOSE `VLM_*` ENV LANDED TOO** (`dbc1365`), after sitting held across
+  several sessions. It was waiting on exactly what this milestone delivered: the
+  handoff's own reason was that pointing the dev worker at a real model while
+  ISSUE-029 was open ended by stranding the receipt, so **"it should land after
+  the ceiling, not before"**. Measured, not reasoned: `one_call` 10800s, job
+  ceiling **32580s (9.05h)**, sweep `started_cutoff` 21600s, sweep
+  `unstarted_cutoff` **388800s = 4.5 DAYS** — every window 30x its value at the
+  120s default, and all four recorded beside the setting in `docker-compose.yml`.
+  **The 4.5-day window is the cost**: a receipt enqueued and never picked up is
+  not swept until then, and the progress route sweeps its own row on the same
+  clock. Lower `VLM_TIMEOUT_S` and all four come down together.
+  **No gate covers this file** — nothing under `tests/` reads it. `docker compose
+  config` is the only check that does, and it is not one of the five.
+- **WHAT THAT MILESTONE DOES NOT BUY, stated because the gates cannot say it.**
+  **Nothing schedules `receipts sweep`** — the guarantee holds only where an
+  operator schedules it, and a sweep nobody runs closes nothing. **Nobody has
+  watched a screen**: both halves of ISSUE-031 are pinned at the API and pipeline
+  level, no browser pass has seen an `--inline` receipt narrate, and jsdom cannot.
+  The `worker -> Redis -> route -> screen` join stays unexercised here.
+- **THE COST OF THAT MILESTONE, and it is the argument for mutating every guard.**
+  The sweep's first implementation was correct, green, and its **three mutations
+  ALL SURVIVED** a ten-test module: two rules enforce "only touch a pending row",
+  and on the write path each masked the other's deletion. **Task 6 was worse** —
+  deleting `main`'s dispatch branch left every planned test green while
+  `receipts sweep` died on `unhandled command`, and hard-coding `dry_run=False`
+  left them green while `--dry-run` marked every receipt it claimed to be only
+  inspecting. **The plan had no mutation step for Task 6 at all.** Neither defect
+  was in the code; both were in what the tests could see.
 - **Plan 3, the Editorial visual refresh, is MERGED** (2026-08-24). True
   fast-forward `9b15d6a` -> `68217a2`, **32 commits, single parent each, zero
   merge commits**; `feat/editorial-refresh` is kept at its merge point. **All
@@ -159,6 +225,10 @@ stays reachable — ADR-0042. `git log --oneline -- docs/MEMORY.md` is the list.
   on a synchronous CLI path); **ISSUE-031** (**narration exists on exactly one of
   four `process_receipt` call sites**, so `--inline` — the documented no-Redis
   deployment — narrates nothing, ever).
+  **THREE OF THE FOUR ARE NOW CLOSED** on `feat/terminal-state-guarantee`
+  (029, 030, 031 — ADR-0054). **ISSUE-028 is not**, and it is the one that makes
+  every other measurement on this box suspect. Verify against the register
+  rather than this sentence.
 - **The golden set is STILL three receipts.** Everything above is machinery.
   **ISSUE-001 step 7 Task 3 — collect and label real receipts — is still the top
   of the board**, still needs a person and a camera, and still gates every

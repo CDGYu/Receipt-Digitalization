@@ -114,8 +114,16 @@ five gates green**) and a zero-width table column already sitting on `main`.
 Both invisible to pytest, ruff, `tsc -b`, vitest and the build. **Do this again
 on any visual milestone.** `scripts/verify.py` does not run Playwright.
 
-**The four rulings, each with a measured cause and no chosen fix. Do not guess
-one — read the issue, they are not equivalent:**
+**THREE OF THESE FOUR RULINGS WERE TAKEN on 2026-08-25 (ADR-0054) and the rows
+below are kept as the record of what was decided, not as work.** ISSUE-029,
+ISSUE-030 and ISSUE-031 are **closed** on `feat/terminal-state-guarantee`:
+the ceiling is derived from the model budget rather than fixed; the stranded
+hole is closed by a heartbeat plus two runners; and the sink belongs inside
+`process_receipt`, which builds it rather than accepting it. **ISSUE-032 is
+still open and still needs you.**
+
+**The one remaining ruling, and three kept for the record. Do not guess a fix —
+read the issue, they are not equivalent:**
 
 | ruling | issue | why it needs you |
 |---|---|---|
@@ -127,14 +135,15 @@ one — read the issue, they are not equivalent:**
 **Two more await you and are older:** **ISSUE-027** (a PDF is accepted at the
 door and always dies at `preprocess`), and **ISSUE-006's arithmetic residual**.
 
-**Held, not lost — two things a session deliberately did not commit.**
+**Held, not lost — one thing a session deliberately did not commit.**
 
-- **The compose `VLM_*` env.** The image can now reach Ollama (ISSUE-028 fixed
-  at `45b5329`), but pointing the dev worker at a real model **while ISSUE-029
-  is open** turns every dev upload into a ~15-minute hang that ends by stranding
-  the receipt — strictly worse than today's fast, honest `FakeVLMClient
-  exhausted`. **It should land after the ceiling, not before.** The change sits
-  uncommitted in `docker-compose.yml`.
+- ~~**The compose `VLM_*` env.**~~ **LANDED 2026-08-25 at `dbc1365`.** It was
+  held because pointing the dev worker at a real model **while ISSUE-029 was
+  open** turned every dev upload into a long hang that ended by stranding the
+  receipt — so **"it should land after the ceiling, not before"**. ISSUE-029
+  and ISSUE-030 both closed on 2026-08-25, so the condition was met: a hang now
+  ends in `needs_review` instead of in silence. The values it derives are
+  recorded beside the setting in the file.
 - **The `docs/` prose sweep.** A sample of six falsifiable claims in the
   high-traffic docs found **two false, both in this handoff pair** — including
   one telling the owner to rule on whether to build a screen that had shipped
@@ -243,7 +252,8 @@ is the collapsed-table `border-radius`, a repo-wide question nobody has ruled on
 ### 2g. WAITING ON YOU, NOT ON ANYONE'S TIME
 
 The full list is under "BLOCKED ON THE USER" below. The ones that block work
-rather than merely tidy it: **the four rulings in 2a** (ISSUE-029/030/031/032),
+rather than merely tidy it: **ISSUE-032, the one ruling left in 2a** (029, 030
+and 031 were taken on 2026-08-25 — ADR-0054),
 **R060/R061 grounding** (which also gates bbox), and **what happens to
 `IMPLEMENTATION_PLAN.md`**. *(ISSUE-006's flag decision and ISSUE-026's upload
 ruling were both given on 2026-08-23 and both shipped; this line asked for them
@@ -286,13 +296,44 @@ the wrong push state twice, in both directions. Run the commands rather than the
 sentence (ADR-0028 §1):
 
 ```
-git status --short                                # must be empty
+git status --short                                # must be empty; nothing is held now
 git log --oneline -6
-git branch --no-merged main                       # must name NOTHING
+git branch --no-merged main                       # named FOUR on 2026-08-25
 git rev-parse main                                # merged tip
 git ls-remote --heads origin main                 # authoritative on what is pushed
 git log --oneline refs/remotes/origin/main..main  # what the pending push would send
 ```
+
+## THE TERMINAL-STATE GUARANTEE IS MERGED AND PUSHED.
+
+**`feat/terminal-state-guarantee` landed on 2026-08-25** (**ADR-0054**): seven
+tasks, suite **1430**, closing **ISSUE-029**, **ISSUE-030** and **ISSUE-031**.
+Merged by **true fast-forward** `b7ef275` -> `79d9db7` — **30 commits, zero
+merge commits** — with **all five gates PASS at the merged tip**, run there
+rather than inferred from the branch. Pushed to `origin/main`, which needed no
+force: it was at `b7ef275`, exactly where local `main` was.
+
+**One ref is still stale, and it is not `main`.**
+`origin/feat/terminal-state-guarantee` sits at `e91bad8`, the pre-rebuild
+lineage. Updating it is a force-with-lease that the destructive-commands hook
+blocks the assistant from running. **Nothing depends on it** — every commit it
+would carry is already on `main` — so this is tidiness, not work. The branch
+itself is kept locally per the repo rule on merged `feat/*`.
+
+**`docker-compose.yml` is committed** (`dbc1365`) and the working tree is clean;
+it no longer needs holding. It points the worker at the Docker Ollama. Its
+`VLM_TIMEOUT_S: "3600"` derives, **measured by calling the functions rather than
+by arithmetic**: `one_call` 10800s, job ceiling **32580s (9.05h)**, sweep
+`started_cutoff` 21600s, sweep `unstarted_cutoff` **388800s = 4.5 days**. The
+ceiling is fine — with the sweep carrying the guarantee it is only a resource
+guard on a worker slot. **The 4.5-day unstarted window is the one to watch**,
+and it is UNSTARTED_MARGIN's stated trade rather than a defect. **No gate covers
+that file**; `docker compose config` is the only check that reads it.
+
+**What that milestone does NOT buy, because no gate can say it:** nothing
+schedules `receipts sweep`, so the guarantee holds only where an operator
+schedules it; and **nobody has watched a screen** — both halves of ISSUE-031
+are pinned at the API and pipeline level, and jsdom cannot see narration.
 
 ## What last merged, and how to check what is pushed.
 
@@ -598,9 +639,9 @@ is a pointer; where it and an entry disagree, the entry wins.**
 | ISSUE-026 | A receipt cannot enter the system from a browser. | **RESOLVED 2026-08-24** — `/app/upload` built, mounted, pinned by mutation |
 | **ISSUE-027** | **A PDF is accepted at the door and always fails at `preprocess`.** `validate_upload` accepts one, `load_image` raises `UnsupportedFormat`, and `expand_pdf` has zero callers. The upload screen refuses PDFs client-side as an interim. | **OPEN — needs your ruling: wire `expand_pdf`, or stop accepting PDFs?** |
 | ISSUE-028 | The containerised worker could only ever run the `fake` VLM client — the image lacked the `openai` extra, so every OpenAI-shaped provider raised at client construction. **Every compose run this project has ever done was silently a fake-client run.** | **RESOLVED 2026-08-24** at `45b5329`; the re-reading of past runs is not |
-| **ISSUE-029** | **The job ceiling is shorter than one receipt.** `DEFAULT_JOB_TIMEOUT_S = 900`; triage alone measured **696s** under the project's own local model. Its own comment already describes the failure it causes. | **OPEN — needs your ruling: what ceiling, and derived from what?** |
-| **ISSUE-030** | **An interrupted receipt has no terminal state, ever.** Breaks the stated "nothing is silently dropped" guarantee. **Not RQ-specific** — reproduced on a synchronous CLI path. Raising ISSUE-029's ceiling **hides this without closing it**. | **OPEN — needs your ruling: reaper, per-runner hook, or both?** |
-| **ISSUE-031** | **Progress narration exists on exactly one of four `process_receipt` call sites.** `--inline` — the documented no-Redis deployment — narrates nothing, ever. | **OPEN — needs your ruling: where does the sink belong?** |
+| ISSUE-029 | The job ceiling is shorter than one receipt. `DEFAULT_JOB_TIMEOUT_S = 900`; triage alone measured **696s** under the project's own local model. | **RESOLVED 2026-08-24** at `c08b718` — derived from the model budget, not a constant (ADR-0054) |
+| ISSUE-030 | An interrupted receipt has no terminal state, ever. Broke the stated "nothing is silently dropped" guarantee; **not RQ-specific**. | **RESOLVED 2026-08-25** at `63084b6`, `41d2933`, `d1e446b` — but **nothing schedules `receipts sweep`**, and a sweep nobody runs closes nothing |
+| ISSUE-031 | Progress narration existed on exactly one of four `process_receipt` call sites; `--inline` narrated nothing, ever. | **RESOLVED** in two halves at `2d1bea9` and `d1e446b` — but **nobody has watched a screen**; jsdom cannot see narration |
 | **ISSUE-032** | **A control paints over the column beside it at every width.** Cause measured: `th` is `box-sizing: content-box` with 8px padding, so seven columns demand more than the table has and the eighth renders at **0**. | **OPEN — needs your ruling: three fixes, one repaints every table cell** |
 | ISSUE-033 | A `p*` label's value was printed by `validate_labels` — the command Task 3 tells a labeller to run after every batch — and by the pytest traceback. Per-field, not whole-label. | **CLOSED 2026-08-25** on `feat/golden-label-privacy` |
 

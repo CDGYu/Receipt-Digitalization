@@ -68,6 +68,7 @@ from .persist.repository import (
     find_duplicate_by_phash,
     get_receipt,
     mark_duplicate,
+    record_progress,
     redact_pan,
     save_extraction,
     save_extraction_run,
@@ -525,6 +526,64 @@ def _stage(name: str, progress: "ProgressSink | None" = None):
         raise _StageFailure(name, exc) from exc
 
 
+def _heartbeat_sink(
+    session_factory: Callable[[], Session], receipt_id: uuid.UUID
+) -> ProgressSink:
+    """A :data:`ProgressSink` that records liveness on the receipt row.
+
+    Its own short session per event, opened and closed around a single write.
+    It deliberately does not reuse the pipeline's session: that one may be
+    mid-stage or already rolled back, which is the same reason
+    :func:`_persist_failure` takes a fresh one.
+
+    It commits, because a heartbeat no other process can see is not a
+    heartbeat. That is consistent with ADR-0006, which puts the transaction in
+    the caller's hands -- here the sink is the caller.
+
+    It may raise. Every call site is already guarded (:func:`_stage`,
+    :func:`~receipts.extract.extractor._report`, and the best-attempt block in
+    ``extract_with_repair``), so a database blip costs narration and never the
+    extraction.
+    """
+
+    def sink(event: ProgressEvent) -> None:
+        session = session_factory()
+        try:
+            record_progress(session, receipt_id, event.stage)
+            session.commit()
+        except Exception:
+            session.rollback()
+            raise
+        finally:
+            session.close()
+
+    return sink
+
+
+def fan_out(*sinks: "ProgressSink | None") -> ProgressSink:
+    """One sink that delivers to several, isolating each from the others.
+
+    ``None`` entries are dropped, so a caller can pass an optional sink
+    without a conditional.
+
+    **Each delivery is guarded separately, and that is load-bearing rather
+    than defensive.** The worker fans out to a Redis writer and the heartbeat;
+    if a broken Redis writer could abort the fan-out, an outage would stop the
+    heartbeat too and silently reopen the stranded-receipt hole. Isolation is
+    what keeps the guarantee independent of the narration.
+    """
+    live = [sink for sink in sinks if sink is not None]
+
+    def sink(event: ProgressEvent) -> None:
+        for one in live:
+            try:
+                one(event)
+            except Exception:
+                log.warning("progress sink raised; continuing", exc_info=True)
+
+    return sink
+
+
 def process_receipt(
     job: ReceiptJob,
     *,
@@ -631,6 +690,13 @@ def process_receipt(
     gate = gate if gate is not None else get_vlm_gate(settings)
     cost_guard = cost_guard if cost_guard is not None else CostGuard.from_settings(settings)
     guarded = GuardedVLMClient(client, gate=gate, guard=cost_guard)
+
+    # The heartbeat is built here rather than accepted from the caller: it
+    # carries the terminal-state guarantee, and a guarantee a call site can
+    # forget is not one. `progress` stays optional and injected because it
+    # carries Redis narration, which is cosmetic and genuinely absent on the
+    # no-Redis deployments.
+    progress = fan_out(_heartbeat_sink(session_factory, job.id), progress)
 
     phash = ""
     try:

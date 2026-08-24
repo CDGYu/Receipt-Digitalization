@@ -31,15 +31,16 @@ import math
 import re
 import uuid
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from datetime import date as date_cls
-from datetime import datetime
 from datetime import time as time_cls
 from decimal import Decimal, InvalidOperation
 from enum import Enum
 from typing import Any, Callable
 
 from pydantic import BaseModel
-from sqlalchemy import or_, select
+from sqlalchemy import and_, or_, select
+from sqlalchemy import update as sa_update
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -819,6 +820,32 @@ def get_receipt(session: Session, receipt_id: uuid.UUID) -> Receipt | None:
     return session.get(Receipt, receipt_id)
 
 
+def record_progress(
+    session: Session,
+    receipt_id: uuid.UUID,
+    stage: str,
+    *,
+    now: datetime | None = None,
+) -> None:
+    """Stamp ``receipt_id`` as last known alive at ``stage``.
+
+    A heartbeat, not a log: it overwrites, because the only question anyone
+    asks of it is "when was this last moving". ``receipts.sweep`` reads it to
+    tell a slow receipt from a stranded one.
+
+    An unknown ``receipt_id`` writes nothing and raises nothing. Narration is
+    never load-bearing, and a heartbeat is not a reason to fail a run.
+
+    Flushes; does not commit (ADR-0006).
+    """
+    session.execute(
+        sa_update(Receipt)
+        .where(Receipt.id == receipt_id)
+        .values(progress_stage=stage, progress_at=now or datetime.now(UTC))
+    )
+    session.flush()
+
+
 def get_findings(session: Session, receipt_id: uuid.UUID) -> list[ValidationFinding]:
     """Every finding written for a receipt, oldest first.
 
@@ -869,6 +896,48 @@ def query_receipts(
 
     query = query.order_by(Receipt.created_at, Receipt.id).limit(limit).offset(offset)
     return list(session.scalars(query))
+
+
+def find_stranded(
+    session: Session,
+    *,
+    started_cutoff: datetime,
+    unstarted_cutoff: datetime,
+) -> list[Receipt]:
+    """Pending receipts whose processing has stopped, on either of two clocks.
+
+    Two thresholds because there are two failure modes, not one. A receipt that
+    *started* and went cold is stranded within about one model call. A receipt
+    with no heartbeat at all is ambiguous -- it may have been enqueued and be
+    waiting behind a backlog, which is healthy -- so it needs a much longer
+    clock, and nothing on the row can tell the two apart without asking Redis.
+
+    ``status == PENDING`` excludes every terminal status, ``reviewed``
+    included, from the work set. It is not the only rule enforcing that --
+    :func:`~receipts.sweep.strand_receipt` guards the direct-call path with its
+    own check -- so the two are pinned separately, each on the path where it is
+    the only thing standing. For this clause that path is the dry run, which
+    reports straight from this query without calling ``strand_receipt``.
+
+    A pure read. The caller decides what to do with the rows.
+    """
+    return list(
+        session.scalars(
+            select(Receipt).where(
+                Receipt.status == ReceiptStatus.PENDING,
+                or_(
+                    and_(
+                        Receipt.progress_at.is_not(None),
+                        Receipt.progress_at < started_cutoff,
+                    ),
+                    and_(
+                        Receipt.progress_at.is_(None),
+                        Receipt.created_at < unstarted_cutoff,
+                    ),
+                ),
+            )
+        )
+    )
 
 
 # --------------------------------------------------------------------------- #

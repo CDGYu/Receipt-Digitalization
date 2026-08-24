@@ -65,15 +65,20 @@ from receipts.persist.models import (  # noqa: E402
 from receipts.persist.repository import (  # noqa: E402
     apply_corrections,
     create_pending_receipt,
+    get_receipt,
 )
 from receipts.persist.session import make_engine, make_session_factory  # noqa: E402
 from receipts.pipeline import (  # noqa: E402
     _MAX_REASON_CHARS,
     STAGES,
     ProcessResult,
+    _heartbeat_sink,
+    _stage,
+    fan_out,
     process_batch,
     process_receipt,
 )
+from receipts.progress import ProgressEvent  # noqa: E402
 from receipts.score.confidence import ReceiptStatus  # noqa: E402
 from receipts.validate.context import ValidationContext  # noqa: E402
 
@@ -1219,10 +1224,7 @@ def test_a_sink_that_raises_never_takes_the_receipt_down(
     """Narration is a nicety; the extraction is not.
 
     Every emit is wrapped, so a sink that raises on *every* event must leave
-    the outcome exactly as it would have been with no sink at all. A single
-    raising sink reaches all three swallow sites: the one in `_stage`, the
-    per-attempt one in `_report`, and the kept-attempt one in
-    `extract_with_repair`.
+    the outcome exactly as it would have been with no sink at all.
     """
     def _boom(_event):
         raise RuntimeError("sink")
@@ -1238,3 +1240,222 @@ def test_a_sink_that_raises_never_takes_the_receipt_down(
 
     assert result.status is ReceiptStatus.AUTO_APPROVED
     assert result.failed_stage is None
+
+
+def test_a_raising_sink_does_not_escape_the_stage_guard() -> None:
+    """`_stage`'s own guard, called directly because nothing else can reach it.
+
+    `process_receipt` now hands `_stage` a `fan_out` product, and `fan_out`
+    swallows per delivery -- so a raising sink routed through the pipeline is
+    caught before `_stage` ever sees it. A test written that way proves
+    `fan_out` works and leaves this guard unpinned, which is exactly how it
+    came to be unpinned: removing it left the whole suite green.
+
+    So the sink is handed to `_stage` raw. That is a real path rather than a
+    contrivance -- the signature takes a `ProgressSink` and `_normalizer`
+    already calls `_stage` directly -- and what the guard buys is not losing
+    an extraction to a database blip in the heartbeat.
+
+    `seen` is asserted as well as the block running: without it this would
+    still pass if `_stage` stopped calling the sink at all, which is a guard
+    that guards nothing.
+    """
+    seen: list[str] = []
+
+    def boom(event):
+        seen.append(event.stage)
+        raise RuntimeError("sink")
+
+    entered = False
+    with _stage("load", boom):
+        entered = True
+
+    assert seen == ["load"], "the sink was never called, so nothing was guarded"
+    assert entered, "the guard let the exception escape and skipped the block"
+
+
+# --------------------------------------------------------------------------- #
+# The heartbeat: a run cannot be constructed without one
+# --------------------------------------------------------------------------- #
+
+
+def test_process_receipt_heartbeats_with_no_progress_argument(
+    session_factory, storage, settings
+) -> None:
+    """The guarantee's signal does not depend on the caller remembering.
+
+    This test never names the sink. It goes through `_run`, which calls
+    process_receipt exactly as `--inline`, `reprocess` and `process_batch` do
+    -- with no `progress=` -- and asserts the row was stamped anyway. Deleting
+    the sink construction inside process_receipt is what turns it red.
+    """
+    job = _job(storage)
+    # The row must exist first, and that is the real shape rather than a
+    # convenience: `record_progress` is an UPDATE, and every live path creates
+    # the pending row before processing -- upload at `review/api.py:635`,
+    # ingest at `cli.py:654`, and `--inline` draws from
+    # `query_receipts(status=PENDING)`. Measured during Task 4: with no row,
+    # all ten beats match zero rows and write nothing.
+    with session_factory() as session:
+        create_pending_receipt(session, job)
+        session.commit()
+
+    _run(job, _Client([_triage(), _good()]), session_factory, storage, settings)
+
+    with session_factory() as session:
+        receipt = get_receipt(session, job.id)
+        # Checked first so this reddens on the assertion it is about. This is
+        # the sole guard for the whole milestone -- measured: removing the
+        # wiring is 1 failure in 1405 -- and without this line a `None` row
+        # would fail it with `'NoneType' object has no attribute
+        # 'progress_at'`, which names the wrong problem.
+        assert receipt is not None
+        assert receipt.progress_at is not None
+        assert receipt.progress_stage is not None
+
+
+def test_a_receipt_with_no_row_beats_nothing_and_raises_nothing(
+    session_factory, storage, settings
+) -> None:
+    """The boundary of the heartbeat, stated rather than left implicit.
+
+    `record_progress` is an UPDATE and its contract is that an unknown id
+    writes nothing and raises nothing. So a run with no pre-existing row
+    narrates nothing -- it does not fail, and it does not conjure a row.
+
+    This is reachable only through `process_batch`, which has **no production
+    caller**: `git grep -n "process_batch" -- src/` returns its definition at
+    `pipeline.py:1350` and three docstring mentions (`pipeline.py:19`,
+    `pipeline.py:459`, `cli.py:797`), and nothing else. Every path that can
+    actually strand a receipt creates the row first, so the milestone's
+    guarantee is unaffected: a receipt with no row is not stranded, it was
+    never recorded.
+    """
+    job = _job(storage)
+
+    _run(job, _Client([_triage(), _good()]), session_factory, storage, settings)
+
+    with session_factory() as session:
+        receipt = get_receipt(session, job.id)
+        # persist created it at the end of the run, so it exists now -- but no
+        # beat reached it, because none of the ten had a row to update.
+        assert receipt is not None
+        assert receipt.progress_stage is None
+        assert receipt.progress_at is None
+
+
+def test_fan_out_delivers_to_every_sink() -> None:
+    seen_a: list[str] = []
+    seen_b: list[str] = []
+    sink = fan_out(lambda e: seen_a.append(e.stage), lambda e: seen_b.append(e.stage))
+    sink(ProgressEvent(stage="extract"))
+    assert seen_a == ["extract"]
+    assert seen_b == ["extract"]
+
+
+def test_fan_out_ignores_none_sinks() -> None:
+    seen: list[str] = []
+    sink = fan_out(None, lambda e: seen.append(e.stage), None)
+    sink(ProgressEvent(stage="triage"))
+    assert seen == ["triage"]
+
+
+def test_one_raising_sink_does_not_starve_the_other() -> None:
+    """The heartbeat must survive a broken Redis writer.
+
+    This is the whole reason fan_out isolates each sink rather than letting an
+    exception escape to the outer guard: if a raising narration sink stopped
+    the heartbeat, a Redis outage would silently reopen the stranded-receipt
+    hole this milestone exists to close.
+    """
+    seen: list[str] = []
+
+    def boom(event):
+        raise RuntimeError("redis is down")
+
+    sink = fan_out(boom, lambda e: seen.append(e.stage))
+    sink(ProgressEvent(stage="persist"))
+    assert seen == ["persist"]
+
+
+# --------------------------------------------------------------------------- #
+# The heartbeat sink's own contract
+# --------------------------------------------------------------------------- #
+
+
+class _RecordingSession:
+    """A Session stand-in that records the lifecycle calls the sink makes."""
+
+    def __init__(self, calls: list[str], *, raise_on_commit: bool = False) -> None:
+        self.calls = calls
+        self._raise = raise_on_commit
+
+    def execute(self, *_a, **_k):
+        self.calls.append("execute")
+
+    def flush(self) -> None:
+        self.calls.append("flush")
+
+    def commit(self) -> None:
+        self.calls.append("commit")
+        if self._raise:
+            raise RuntimeError("database went away")
+
+    def rollback(self) -> None:
+        self.calls.append("rollback")
+
+    def close(self) -> None:
+        self.calls.append("close")
+
+
+def test_the_heartbeat_sink_commits_its_own_session() -> None:
+    """A heartbeat no other process can see is not a heartbeat.
+
+    This is the ADR-0006 asymmetry: repository functions never commit, and this
+    sink -- which is the caller -- must.
+    """
+    calls: list[str] = []
+    sink = _heartbeat_sink(lambda: _RecordingSession(calls), uuid.uuid4())
+    sink(ProgressEvent(stage="extract"))
+    assert "commit" in calls
+
+
+def test_the_heartbeat_sink_closes_its_session_on_success() -> None:
+    calls: list[str] = []
+    sink = _heartbeat_sink(lambda: _RecordingSession(calls), uuid.uuid4())
+    sink(ProgressEvent(stage="extract"))
+    assert calls[-1] == "close"
+
+
+def test_a_failing_beat_rolls_back_closes_and_re_raises() -> None:
+    """It must not swallow.
+
+    If this is ever softened to a swallow, the three guarded call sites become
+    the only thing between a database blip and a lost beat, and nothing would
+    notice.
+    """
+    calls: list[str] = []
+    sink = _heartbeat_sink(
+        lambda: _RecordingSession(calls, raise_on_commit=True), uuid.uuid4()
+    )
+    with pytest.raises(RuntimeError, match="database went away"):
+        sink(ProgressEvent(stage="extract"))
+    assert "rollback" in calls
+    assert calls[-1] == "close"
+
+
+def test_the_beat_writes_the_event_stage_not_a_constant(
+    session_factory, storage, settings
+) -> None:
+    """Last beat wins, and it is the event's stage that lands."""
+    job = _job(storage)
+    with session_factory() as session:
+        create_pending_receipt(session, job)
+        session.commit()
+
+    sink = _heartbeat_sink(session_factory, job.id)
+    sink(ProgressEvent(stage="triage"))
+    sink(ProgressEvent(stage="persist"))
+
+    with session_factory() as session:
+        assert get_receipt(session, job.id).progress_stage == "persist"

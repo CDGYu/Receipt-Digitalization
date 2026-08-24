@@ -31,6 +31,7 @@ pytest.importorskip("pillow_heif")
 from PIL import Image  # noqa: E402
 
 from config.settings import Settings  # noqa: E402
+from receipts import worker  # noqa: E402
 from receipts import worker as worker_module  # noqa: E402
 from receipts.extract.clients.fake import FakeVLMClient  # noqa: E402
 from receipts.extract.schema import (  # noqa: E402
@@ -166,14 +167,16 @@ def test_enqueue_receipt_dispatches_only_process_receipt_job():
     queue = _FakeQueue()
     job = _job()
 
-    handle = enqueue_receipt(job, queue)
+    handle = enqueue_receipt(
+        job, queue, settings=Settings(_env_file=None, vlm_timeout_s=120, max_repair_attempts=1)
+    )
 
     assert handle == "job-1"
     func, args, kwargs = queue.enqueued[0]
     # The worker's entire surface: one function, one JSON-safe argument.
     assert func is process_receipt_job
     assert args == (job_to_payload(job),)
-    assert kwargs["job_timeout"] == worker_module.DEFAULT_JOB_TIMEOUT_S
+    assert kwargs["job_timeout"] == 1260
 
 
 def test_the_job_function_calls_process_receipt_and_nothing_else(monkeypatch, deps):
@@ -581,3 +584,82 @@ def test_make_progress_writer_without_redis_installed_says_so(monkeypatch):
 
     with pytest.raises(RuntimeError, match="worker"):
         worker_module.make_progress_writer(uuid.uuid4(), url="redis://localhost:6379/0")
+
+
+# --------------------------------------------------------------------------- #
+# The job ceiling (ISSUE-029)
+# --------------------------------------------------------------------------- #
+
+
+def test_job_timeout_is_derived_from_the_model_budget_not_a_constant() -> None:
+    """At code defaults the ceiling is 1080 + 180, not DEFAULT_JOB_TIMEOUT_S.
+
+    The numbers are written out rather than computed. A test that recomputed
+    them with the function under test would follow any change to the formula
+    and never fail (ADR-0051: a guard must not share its derivation with its
+    subject).
+
+    120 s per HTTP attempt x 3 attempts x (triage + extract + 1 repair) = 1080,
+    plus a 180 s non-model budget.
+    """
+    settings = Settings(_env_file=None, vlm_timeout_s=120, max_repair_attempts=1)
+    assert worker.job_timeout_for(settings) == 1260
+
+
+def test_job_timeout_tracks_the_configured_timeout() -> None:
+    """600 s per attempt x 3 x 3 calls = 5400, plus 180."""
+    settings = Settings(_env_file=None, vlm_timeout_s=600, max_repair_attempts=1)
+    assert worker.job_timeout_for(settings) == 5580
+
+
+def test_job_timeout_tracks_the_repair_budget() -> None:
+    """Two repairs is four calls, not three: 120 x 3 x 4 = 1440, plus 180."""
+    settings = Settings(_env_file=None, vlm_timeout_s=120, max_repair_attempts=2)
+    assert worker.job_timeout_for(settings) == 1620
+
+
+def test_the_old_constant_was_below_its_own_worst_case() -> None:
+    """ISSUE-029, stated as a pin rather than as prose.
+
+    At code defaults the derived ceiling exceeds 900, which is what the
+    constant used to be. This is why a fixed constant was wrong on any
+    hardware, not merely on the box where it was noticed.
+    """
+    settings = Settings(_env_file=None, vlm_timeout_s=120, max_repair_attempts=1)
+    assert worker.job_timeout_for(settings) > 900
+
+
+def test_enqueue_uses_the_derived_ceiling_when_none_is_given() -> None:
+    """The default submit path must not fall back to a constant."""
+    queue = _FakeQueue()
+
+    worker.enqueue_receipt(
+        _job(),
+        queue,
+        settings=Settings(_env_file=None, vlm_timeout_s=120, max_repair_attempts=1),
+    )
+    assert queue.enqueued[0][2]["job_timeout"] == 1260
+
+
+def test_an_explicit_job_timeout_still_wins() -> None:
+    """An operator override is not overridden by the derivation."""
+    queue = _FakeQueue()
+
+    worker.enqueue_receipt(_job(), queue, job_timeout=42)
+    assert queue.enqueued[0][2]["job_timeout"] == 42
+
+
+def test_the_sdk_retry_default_this_derivation_rests_on() -> None:
+    """The x3 above is the SDK's default max_retries, applied by the client THIS repo builds.
+
+    Two facts, one assertion. The SDK defaults max_retries to 2, and
+    OpenAICompatClient never overrides it -- ADR-0047 decision 8 records the
+    second and ADR-0047 leaves pinning it undecided. Asserting the SDK's own
+    default would guard only the first: adding max_retries= to
+    OpenAICompatClient would leave this green while the ceiling undercounts by
+    40%. Pinning the constructed client covers both.
+    """
+    from receipts.extract.clients.openai_compat import OpenAICompatClient
+
+    client = OpenAICompatClient(model_id="unused", base_url="http://unused.invalid/v1")
+    assert client._client.max_retries == 2

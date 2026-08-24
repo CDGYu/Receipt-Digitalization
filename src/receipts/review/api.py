@@ -64,6 +64,7 @@ from ..persist.repository import (
 )
 from ..persist.users import ROLE_ADMIN
 from ..score.confidence import ReceiptStatus
+from ..sweep import strand_if_cold
 from .auth import (
     SessionUser,
     build_auth_router,
@@ -388,7 +389,22 @@ def _install_read_routes(app: FastAPI) -> None:
                 raise HTTPException(
                     status_code=404, detail=f"no receipt with id {receipt_id}"
                 )
+            # Sweep this one row if it has gone cold. Single-row on purpose: a
+            # table-wide sweep on a GET would put unbounded work on a request
+            # path. The command in `receipts sweep` is what covers receipts
+            # nobody is looking at; this is only the latency for one that
+            # somebody is waiting on.
+            try:
+                strand_if_cold(session, receipt, settings=request.app.state.settings)
+                session.commit()
+            except Exception:
+                session.rollback()
+                logger.warning(
+                    "could not sweep receipt %s while reading progress", receipt_id,
+                    exc_info=True,
+                )
             status = receipt.status.value if receipt.status else None
+            row_stage = receipt.progress_stage
         try:
             event = request.app.state.read_progress(receipt_id)
         except Exception:
@@ -403,7 +419,9 @@ def _install_read_routes(app: FastAPI) -> None:
             event = None
         return {
             "status": status,
-            "stage": event.stage if event else None,
+            # The live reader wins; the row is the fallback, which is what lets
+            # a no-Redis deployment narrate at all (ISSUE-031).
+            "stage": event.stage if event else row_stage,
             "detail": event.detail if event else None,
         }
 

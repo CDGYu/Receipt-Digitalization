@@ -27,7 +27,7 @@ The database is seeded once per test with three receipts:
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, date, datetime, time
+from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
 
 import pytest
@@ -46,7 +46,11 @@ from receipts.persist.models import (  # noqa: E402
     Receipt,
     ValidationFinding,
 )
-from receipts.persist.repository import _LINE_ITEM_FIELDS, _RECEIPT_FIELDS  # noqa: E402
+from receipts.persist.repository import (  # noqa: E402
+    _LINE_ITEM_FIELDS,
+    _RECEIPT_FIELDS,
+    get_receipt,
+)
 from receipts.persist.session import make_engine, make_session_factory  # noqa: E402
 from receipts.persist.users import ROLE_ADMIN, ROLE_REVIEWER, create_user  # noqa: E402
 from receipts.review.api import MAX_PAGE_LIMIT, MAX_PAGE_OFFSET, create_app  # noqa: E402
@@ -1650,3 +1654,118 @@ def test_progress_survives_a_reader_that_cannot_answer(
     assert swallowed, "the swallowed failure was never logged"
     assert swallowed[-1].levelname == "WARNING"
     assert swallowed[-1].exc_info is not None, "logged without the traceback"
+
+
+def _long_ago() -> datetime:
+    """Older than any cutoff the sweep can derive from these settings.
+
+    A month rather than an hour: the cutoffs come from `vlm_timeout_s`, so an
+    age picked against today's default would stop discriminating the moment
+    that setting moved.
+    """
+    return datetime.now(UTC) - timedelta(days=30)
+
+
+def _pending_receipt(
+    session_factory,
+    *,
+    progress_stage: str | None = None,
+    progress_at: datetime | None = None,
+) -> uuid.UUID:
+    """A fresh pending receipt, so the shared seed stays untouched.
+
+    `_seed`'s three receipts are compared field-by-field by other tests in this
+    module; adding a heartbeat to one of them would be a change at a distance.
+    """
+    receipt_id = uuid.uuid4()
+    with session_factory() as session:
+        session.add(
+            Receipt(
+                id=receipt_id,
+                status=ReceiptStatus.PENDING,
+                confidence=Decimal("0"),
+                image_key=f"receipts/2026/08/{receipt_id}/original.jpg",
+                image_phash="",
+                progress_stage=progress_stage,
+                progress_at=progress_at,
+            )
+        )
+        session.commit()
+    return receipt_id
+
+
+def test_progress_falls_back_to_the_row_when_redis_is_silent(
+    session_factory, settings, tmp_path
+) -> None:
+    """`--inline` narrates too. This is ISSUE-031's reader half.
+
+    A deployment with no Redis, or a receipt processed by `receipts process
+    --inline`, has a stage on the row and nothing in the queue. Reporting
+    `null` there tells a screen "nothing is happening" about a receipt that is
+    being worked on right now.
+    """
+    receipt_id = _pending_receipt(session_factory, progress_stage="triage")
+    client = _progress_client(session_factory, settings, tmp_path, lambda _id: None)
+
+    reply = client.get(f"/receipts/{receipt_id}/progress")
+
+    assert reply.status_code == 200
+    assert reply.json()["stage"] == "triage"
+
+
+def test_a_live_reader_still_wins_over_the_row(
+    session_factory, settings, tmp_path
+) -> None:
+    """The fallback must not shadow the queue path's narration.
+
+    The row's stage is the last stage that *reported*; the reader's is what is
+    happening now. A fallback that won would rewind the screen.
+    """
+    from receipts.progress import ProgressEvent
+
+    receipt_id = _pending_receipt(session_factory, progress_stage="triage")
+    client = _progress_client(
+        session_factory, settings, tmp_path,
+        lambda _id: ProgressEvent(stage="extract", detail="d"),
+    )
+
+    body = client.get(f"/receipts/{receipt_id}/progress").json()
+
+    assert body["stage"] == "extract"
+    assert body["detail"] == "d"
+
+
+def test_reading_progress_sweeps_a_cold_receipt(
+    session_factory, settings, tmp_path
+) -> None:
+    """The screen stops polling forever, which is ISSUE-030's visible symptom."""
+    receipt_id = _pending_receipt(
+        session_factory, progress_stage="extract", progress_at=_long_ago()
+    )
+    client = _progress_client(session_factory, settings, tmp_path, lambda _id: None)
+
+    body = client.get(f"/receipts/{receipt_id}/progress").json()
+
+    assert body["status"] == "needs_review"
+
+
+def test_reading_progress_does_not_sweep_other_rows(
+    session_factory, settings, tmp_path
+) -> None:
+    """Single-row only: a GET must not become a table scan or a bulk write."""
+    warm = _pending_receipt(
+        session_factory, progress_stage="extract", progress_at=datetime.now(UTC)
+    )
+    cold = _pending_receipt(
+        session_factory, progress_stage="extract", progress_at=_long_ago()
+    )
+    other_cold = _pending_receipt(
+        session_factory, progress_stage="extract", progress_at=_long_ago()
+    )
+    client = _progress_client(session_factory, settings, tmp_path, lambda _id: None)
+
+    client.get(f"/receipts/{cold}/progress")
+
+    with session_factory() as session:
+        assert get_receipt(session, other_cold).status is ReceiptStatus.PENDING
+        assert get_receipt(session, warm).status is ReceiptStatus.PENDING

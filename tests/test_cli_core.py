@@ -31,6 +31,8 @@ The load-bearing behaviours pinned down below (ADR-0013):
 from __future__ import annotations
 
 import sys
+import uuid
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlalchemy import select
@@ -38,9 +40,11 @@ from sqlalchemy.exc import DBAPIError
 
 from config.settings import Settings
 from receipts import cli as cli_module
-from receipts.cli import EXIT_FAILED, EXIT_OK, build_parser, cmd_ingest, cmd_users, main
+from receipts.cli import EXIT_FAILED, EXIT_OK, build_parser, cmd_ingest, cmd_sweep, cmd_users, main
+from receipts.ingest.ingest import ReceiptJob
 from receipts.ingest.storage import LocalStorage
 from receipts.persist.models import Base, Receipt
+from receipts.persist.repository import create_pending_receipt, get_receipt
 from receipts.persist.session import make_engine, make_session_factory
 from receipts.persist.users import get_user, verify_password
 from receipts.score.confidence import ReceiptStatus
@@ -376,3 +380,91 @@ def test_is_missing_schema_only_matches_a_missing_table():
     assert not cli_module._is_missing_schema(
         _dbapi_error(Exception("no such column: receipts.image_phash"))
     )
+
+
+def test_sweep_is_a_registered_command() -> None:
+    args = build_parser().parse_args(["sweep"])
+    assert args.command == "sweep"
+    assert args.dry_run is False
+
+
+def test_sweep_accepts_dry_run() -> None:
+    args = build_parser().parse_args(["sweep", "--dry-run"])
+    assert args.dry_run is True
+
+
+def test_cmd_sweep_reports_nothing_to_do(session_factory, capsys) -> None:
+    args = build_parser().parse_args(["sweep"])
+    code = cmd_sweep(
+        args, session_factory=session_factory, settings=Settings(_env_file=None)
+    )
+    assert code == EXIT_OK
+    assert "0" in capsys.readouterr().out
+
+
+def test_main_routes_sweep_to_its_handler(tmp_path, monkeypatch, capsys) -> None:
+    """The wiring, which the three tests above leave unpinned.
+
+    They exercise the parser and the handler separately, and every one of them
+    stays green if `main` never routes "sweep" to `cmd_sweep`: an operator
+    would get `AssertionError: unhandled command 'sweep'` from a command the
+    suite called clean. This is the only test that runs the dispatch branch,
+    and it goes through `--dry-run` so it writes nothing.
+    """
+    db_url = f"sqlite:///{tmp_path / 'sweep.db'}"
+    monkeypatch.setenv("DATABASE_URL", db_url)
+    Base.metadata.create_all(make_engine(db_url))
+
+    assert main(["sweep", "--dry-run"]) == EXIT_OK
+    assert "would send 0" in capsys.readouterr().out
+
+
+def _stranded_receipt(session_factory) -> uuid.UUID:
+    """A pending receipt whose heartbeat went cold a month ago.
+
+    A month rather than an hour on purpose: the sweep's cutoffs are derived
+    from `vlm_timeout_s`, so an age chosen against today's default would stop
+    discriminating the moment that setting moved.
+    """
+    job = ReceiptJob(
+        id=uuid.uuid4(), image_key="k", source="t",
+        original_filename="r.jpg", content_type="image/jpeg",
+    )
+    long_ago = datetime.now(UTC) - timedelta(days=30)
+    with session_factory() as session:
+        receipt = create_pending_receipt(session, job)
+        receipt.progress_at = long_ago
+        receipt.created_at = long_ago
+        receipt.progress_stage = "extract"
+        session.commit()
+    return job.id
+
+
+def test_cmd_sweep_dry_run_writes_nothing_and_a_real_run_writes(
+    session_factory, capsys
+) -> None:
+    """`--dry-run` must reach `sweep_stranded`, not merely the printed verb.
+
+    Pinning the verb is not enough, and this test exists because pinning only
+    the verb was measured insufficient: `verb` reads `args.dry_run` directly,
+    so a `cmd_sweep` that printed "would send" while passing `dry_run=False`
+    -- marking every receipt it claimed to be only inspecting -- left every
+    other sweep test in this file green. Against an empty database the two
+    calls are indistinguishable, so this one supplies a row that would move
+    and looks at the row.
+
+    Both directions are pinned, so forcing the flag either way reddens it.
+    """
+    receipt_id = _stranded_receipt(session_factory)
+    settings = Settings(_env_file=None)
+
+    dry = build_parser().parse_args(["sweep", "--dry-run"])
+    assert cmd_sweep(dry, session_factory=session_factory, settings=settings) == EXIT_OK
+    assert str(receipt_id) in capsys.readouterr().out
+    with session_factory() as session:
+        assert get_receipt(session, receipt_id).status is ReceiptStatus.PENDING
+
+    wet = build_parser().parse_args(["sweep"])
+    assert cmd_sweep(wet, session_factory=session_factory, settings=settings) == EXIT_OK
+    with session_factory() as session:
+        assert get_receipt(session, receipt_id).status is ReceiptStatus.NEEDS_REVIEW

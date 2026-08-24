@@ -162,6 +162,7 @@ __all__ = [
     "cmd_merchants",
     "cmd_process",
     "cmd_reprocess",
+    "cmd_sweep",
     "cmd_users",
     "main",
 ]
@@ -569,6 +570,26 @@ def _add_calibrate(sub: argparse._SubParsersAction) -> None:
     )
 
 
+def _add_sweep(sub: argparse._SubParsersAction) -> None:
+    parser = sub.add_parser(
+        "sweep",
+        help="bring interrupted receipts to a terminal state",
+        description=(
+            "Find receipts whose processing stopped without reaching a "
+            "terminal status and send them to review. An interruption -- a "
+            "timeout, a container restart, an operator's Ctrl-C -- runs no "
+            "handler in the process it kills, so nothing inside a run can "
+            "close this; something that survives has to notice. Run it on a "
+            "schedule. `--dry-run` reports what would move and writes nothing."
+        ),
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="report what would be swept without writing anything",
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="receipts", description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -580,6 +601,7 @@ def build_parser() -> argparse.ArgumentParser:
     _add_merchants(sub)
     _add_eval(sub)
     _add_calibrate(sub)
+    _add_sweep(sub)
     return parser
 
 
@@ -1591,6 +1613,22 @@ def cmd_calibrate(args: argparse.Namespace, *, results_dir: Path | None = None) 
     return code
 
 
+def cmd_sweep(args: argparse.Namespace, *, session_factory, settings: Settings) -> int:
+    """Bring interrupted receipts to a terminal state.
+
+    Exits ``EXIT_OK`` even when it moved receipts: a receipt routed to review
+    is a completed command, not a failure (ADR-0013).
+    """
+    from .sweep import sweep_stranded
+
+    moved = sweep_stranded(session_factory, settings=settings, dry_run=args.dry_run)
+    verb = "would send" if args.dry_run else "sent"
+    print(f"{verb} {len(moved)} stranded receipt(s) to review")
+    for receipt_id in moved:
+        print(f"  {receipt_id}")
+    return EXIT_OK
+
+
 def _is_missing_schema(exc: DBAPIError) -> bool:
     """Whether ``exc`` looks like a query against a table that does not exist.
 
@@ -1663,6 +1701,8 @@ def main(argv: list[str] | None = None) -> int:
             return cmd_eval(args, settings=settings)
         if args.command == "calibrate":
             return cmd_calibrate(args)
+        if args.command == "sweep":
+            return cmd_sweep(args, session_factory=session_factory, settings=settings)
         # unreachable: subparsers are required
         raise AssertionError(f"unhandled command {args.command!r}")
     except DBAPIError as exc:
