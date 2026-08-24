@@ -631,57 +631,35 @@ def test_the_old_constant_was_below_its_own_worst_case() -> None:
 
 def test_enqueue_uses_the_derived_ceiling_when_none_is_given() -> None:
     """The default submit path must not fall back to a constant."""
-    calls: list[dict[str, object]] = []
+    queue = _FakeQueue()
 
-    class RecordingQueue:
-        def enqueue(self, func, *args, **kwargs):
-            calls.append(kwargs)
-            return "handle"
-
-    job = ReceiptJob(
-        id=uuid.uuid4(),
-        image_key="k",
-        source="test",
-        original_filename="r.jpg",
-        content_type="image/jpeg",
-    )
     worker.enqueue_receipt(
-        job,
-        RecordingQueue(),
+        _job(),
+        queue,
         settings=Settings(_env_file=None, vlm_timeout_s=120, max_repair_attempts=1),
     )
-    assert calls[0]["job_timeout"] == 1260
+    assert queue.enqueued[0][2]["job_timeout"] == 1260
 
 
 def test_an_explicit_job_timeout_still_wins() -> None:
     """An operator override is not overridden by the derivation."""
-    calls: list[dict[str, object]] = []
+    queue = _FakeQueue()
 
-    class RecordingQueue:
-        def enqueue(self, func, *args, **kwargs):
-            calls.append(kwargs)
-            return "handle"
-
-    job = ReceiptJob(
-        id=uuid.uuid4(),
-        image_key="k",
-        source="test",
-        original_filename="r.jpg",
-        content_type="image/jpeg",
-    )
-    worker.enqueue_receipt(job, RecordingQueue(), job_timeout=42)
-    assert calls[0]["job_timeout"] == 42
+    worker.enqueue_receipt(_job(), queue, job_timeout=42)
+    assert queue.enqueued[0][2]["job_timeout"] == 42
 
 
 def test_the_sdk_retry_default_this_derivation_rests_on() -> None:
-    """The x3 above is the SDK's default max_retries, which nothing here pins.
+    """The x3 above is the SDK's default max_retries, applied by the client THIS repo builds.
 
-    ADR-0047 decision 8 records that OpenAICompatClient never sets
-    max_retries, and ADR-0047 leaves pinning it undecided. Without this
-    assertion a change to that default would make both the ceiling and the
-    sweep threshold silently wrong and nothing would fail -- which is the
-    ADR-0048 test for a load-bearing rationale.
+    Two facts, one assertion. The SDK defaults max_retries to 2, and
+    OpenAICompatClient never overrides it -- ADR-0047 decision 8 records the
+    second and ADR-0047 leaves pinning it undecided. Asserting the SDK's own
+    default would guard only the first: adding max_retries= to
+    OpenAICompatClient would leave this green while the ceiling undercounts by
+    40%. Pinning the constructed client covers both.
     """
-    import openai
+    from receipts.extract.clients.openai_compat import OpenAICompatClient
 
-    assert openai.OpenAI(api_key="unused").max_retries == 2
+    client = OpenAICompatClient(model_id="unused", base_url="http://unused.invalid/v1")
+    assert client._client.max_retries == 2
