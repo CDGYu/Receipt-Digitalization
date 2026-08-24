@@ -2781,3 +2781,68 @@ asserts the expansion already happens.
 - `IMPLEMENTATION_PLAN.md` P1.T3 (`ingest/`), and its definition-of-done row.
 - ADR-0013 — ingest does not enqueue.
 - ADR-0048 — a rationale is a second claim.
+
+---
+
+## ISSUE-028 — The containerised worker can only ever run the `fake` VLM client
+
+**Status:** OPEN. The image fix is one word and is in flight on
+`feat/editorial-refresh`; what stays open is the consequence — **every
+compose-based run this project has ever done was silently a `fake`-client run**,
+whatever `VLM_PROVIDER` it was given.
+**Owner action required:** **yes**, but not for the fix — for the re-reading.
+Decide which recorded runs, if any, were described as exercising a provider they
+could not have reached.
+**Discovered:** 2026-08-24, standing the full stack up for the first real
+pipeline run. Nothing was looking for it; it surfaced because a run that should
+have taken minutes finished instantly.
+**Pre-existing:** yes, on every containerised path for as long as the image has
+existed. **Blocks:** any claim that a compose run exercised a real model.
+
+### The mechanism, re-derived from the tree rather than relayed
+
+- `pyproject.toml:33` declares `openai = ["openai>=1.50"]` — an **optional
+  extra**.
+- The committed `Dockerfile:73` runs
+  `pip install --no-cache-dir ".[api,worker,postgres,pipeline]"`.
+  **`openai` is not among those four.**
+- `src/receipts/extract/clients/openai_compat.py:57` imports the SDK **inside
+  `OpenAICompatClient.__init__`** (`import openai  # noqa: PLC0415`).
+
+So the import raises `ModuleNotFoundError` at **client construction**, not at
+module import. That is why nothing failed at container startup and why the
+resulting fall back to `fake` was indistinguishable from a configuration
+problem. Confirmed at runtime inside the running worker as well as statically
+here.
+
+### One precision, because a wrong reason licenses a wrong fix
+
+This was first reported as "the image has neither `openai` nor `httpx`". Both
+are indeed absent, but **only `openai` is load-bearing**: `httpx>=0.27` sits in
+the **`dev`** extra (`pyproject.toml:23`), and **nothing under
+`src/receipts/` imports it**. Adding `httpx` to the image would fix nothing.
+The defect is one missing extra, not two.
+
+### Why no gate saw it, and why that is the familiar shape
+
+The five gates are pytest, ruff, `tsc -b`, vitest and the frontend build
+(`scripts/verify.py:88-94`). **Not one of them builds the image or runs a
+container.** So this joins the clipped `Theme` control and the progress bar
+nobody has watched narrate: a whole capability absent, with everything green.
+
+### Resume
+
+1. The fix is `,openai` in the `Dockerfile` extras list. **Verify it by running
+   `import openai` inside the running worker**, not by reading the `Dockerfile`
+   — reading the file is what made this invisible for so long.
+2. Decide what, if anything, must be re-labelled among recorded compose runs.
+3. Consider whether anything should assert that the image can *construct* its
+   configured client. Nothing does today, and a check that only reads
+   configuration would have passed throughout.
+
+### Related
+
+- ADR-0029 — what the gates certify, and what they do not.
+- ADR-0039 — local VLM inference on this box is a liveness check only.
+- ADR-0048 — a rationale is a second claim.
+- ISSUE-027 — the other live defect where an advertised capability never works.
