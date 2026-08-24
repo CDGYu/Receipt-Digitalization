@@ -70,7 +70,15 @@ COPY config/ ./config/
 #             API's. Measured: the API path calls `ingest_bytes`, which imports
 #             only stdlib and `.storage`; `pypdfium2` is lazy inside
 #             `expand_pdf`, which the API never calls.
-RUN pip install --no-cache-dir ".[api,worker,postgres,pipeline]" \
+#   openai    the SDK `OpenAICompatClient` imports lazily, and therefore the one
+#             thing standing between this image and a local Ollama. Measured
+#             2026-08-24 inside the running worker: `import openai` and `import
+#             httpx` both raised ModuleNotFoundError, so every VLM_PROVIDER
+#             pointing at an OpenAI-shaped endpoint -- including `ollama` --
+#             failed at client construction. Without it the containerised worker
+#             can only ever run `vlm_provider="fake"`, which is why four
+#             pipeline stages had never been executed end to end.
+RUN pip install --no-cache-dir ".[api,worker,postgres,pipeline,openai]" \
     && rm -rf /build
 
 # /app holds only what the *runtime* reads: the migration scripts and the built
