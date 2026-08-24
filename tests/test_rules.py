@@ -747,6 +747,166 @@ def test_R025_tax_bands_do_not_sum(ctx):
 
 
 # --------------------------------------------------------------------------- #
+# R026 -- the line-item sum could not be computed
+#
+# R020 and R024 both gate on ``sum_line_nets(r) is not None``, so ANYTHING that
+# makes that helper return None takes the entire line-item reconciliation
+# offline -- silently, because a rule that skips says nothing. That is
+# ISSUE-006's arithmetic residual.
+#
+# Measured 2026-08-24 via ``validate()`` over the three golden labels, with
+# every non-template row flipped to ``is_template_row=True``: ZERO findings at
+# any severity on all three. Carried through ``score_confidence``/``route``,
+# r001 scored 0.850 -- identical to the untouched label, and
+# ``AUTO_APPROVE_THRESHOLD`` is 0.85 exactly -- and routed to ``auto_approved``
+# while ``export.xlsx._purchases`` wrote no line rows at all. A 1000.00 purchase
+# entered the ledger with no line items and nothing was said.
+#
+# TWO distinct causes reach that one silence:
+#   * every transcribed row is flagged ``is_template_row``, so ``_purchased``
+#     is empty -- ISSUE-006's case;
+#   * a purchased row has no ``line_total``, which ``sum_line_nets`` treats as
+#     fatal for the WHOLE receipt, by its own docstring. Measured equally
+#     silent (zero findings, 0.850, auto_approved) and NOT recorded in
+#     ISSUE-006.
+#
+# So the rule enforces one property -- the sum must be computable, or the
+# report must say it was not -- rather than the one shape that was reported. A
+# rule that closed only the flag case would leave the second cause exactly as
+# silent as the first.
+# --------------------------------------------------------------------------- #
+
+
+def test_R026_fires_when_every_row_is_flagged_as_a_template(ctx):
+    """The purchase set is empty, so both arithmetic rules go quiet.
+
+    The other two assertions are the point of the rule: R020 is the check that
+    would have been in charge and it is NOT firing, so without R026 this
+    receipt is reconciled by nothing.
+    """
+    r = clean_receipt()
+    for item in r.line_items:
+        item.is_template_row = True
+    assert fired(r, ctx, "R026")
+    assert not fired(r, ctx, "R020")
+    assert not fired(r, ctx, "R024")
+
+
+def test_R026_fires_when_a_purchased_row_has_no_amount(ctx):
+    """One missing ``line_total`` takes the whole receipt's sum offline.
+
+    Not in ISSUE-006, and just as silent. ``sum_line_nets`` returns None for
+    the receipt -- not for the row -- so the two surviving rows are never
+    reconciled against the printed 847.50 either.
+    """
+    r = clean_receipt()
+    r.line_items[1].line_total = None
+    assert fired(r, ctx, "R026")
+    assert not fired(r, ctx, "R020")
+
+
+def test_R026_names_the_row_whose_amount_is_missing(ctx):
+    """A reviewer needs the row, not just the receipt.
+
+    The two causes need different corrections -- clear a flag, or read an
+    amount -- so the finding has to say which one happened and where.
+    """
+    r = clean_receipt()
+    r.line_items[1].line_total = None
+    finding = validate(r, ctx).by_rule("R026")[0]
+    assert "line_items[1].line_total" in finding.field_paths
+    assert "line_items[0].line_total" not in finding.field_paths
+
+
+def test_R026_silent_on_a_clean_receipt(ctx):
+    assert not fired(clean_receipt(), ctx, "R026")
+
+
+def test_R026_defers_to_R013_when_no_line_items_were_extracted(ctx):
+    """A receipt with no rows at all is R013's subject, not this rule's.
+
+    Two rules reporting one problem is the failure R020 and R024 already
+    divide subtotal-present from subtotal-absent to avoid.
+    """
+    r = clean_receipt()
+    r.line_items = []
+    assert not fired(r, ctx, "R026")
+    assert fired(r, ctx, "R013")
+
+
+def test_R026_skips_when_no_printed_figure_was_read(ctx):
+    """Nothing to reconcile against means nothing went offline.
+
+    R010 owns a missing total. This rule fires only where a reconciliation was
+    actually available and did not happen.
+    """
+    r = clean_receipt()
+    for item in r.line_items:
+        item.is_template_row = True
+    r.totals.subtotal = None
+    r.totals.total = None
+    assert not fired(r, ctx, "R026")
+    assert fired(r, ctx, "R010")
+
+
+#: The two ways to reach the one silence, applied to the REAL labels.
+_EVERY_ROW_FLAGGED = "every-row-flagged"
+_AMOUNT_MISSING = "a-purchased-amount-missing"
+
+
+def _took_the_sum_offline(label: ReceiptExtraction, shape: str) -> ReceiptExtraction:
+    """A real label, mutated into one of the two silent shapes."""
+    r = copy.deepcopy(label)
+    if shape == _EVERY_ROW_FLAGGED:
+        for item in r.line_items:
+            item.is_template_row = True
+    else:
+        for item in r.line_items:
+            if not item.is_template_row:
+                item.line_total = None
+    return r
+
+
+@pytest.mark.parametrize("shape", [_EVERY_ROW_FLAGGED, _AMOUNT_MISSING])
+@pytest.mark.parametrize("case_id", sorted(GOLDEN_LABELS))
+def test_a_real_receipt_whose_line_sum_cannot_be_computed_is_never_silent(case_id, shape):
+    """The standing property, on the corpus that actually has this shape.
+
+    Every one of the three golden receipts has exactly ONE filled row, which is
+    why ISSUE-006 insists the pin use the one-purchase shape: mis-flagging one
+    row of two is already caught by R020/R024 and would prove nothing about the
+    silence. Here the whole purchase set empties, which is the case that was
+    quiet.
+
+    ``ValidationContext()`` unqualified, matching
+    ``test_the_real_corpus_validates_as_production_does`` -- what production
+    builds, not a test-tuned config.
+
+    Asserted on the exact ERROR rule ids rather than on "some error", so an
+    unrelated failure cannot satisfy it, and so a future rule that starts
+    firing on these labels is caught here rather than silently absorbed.
+    """
+    subject = _took_the_sum_offline(GOLDEN_LABELS[case_id], shape)
+
+    # The precondition, read off the MODEL rather than through the helper the
+    # rule itself calls. Asking ``sum_line_nets`` whether the sum is offline
+    # would derive the setup from the code under test, so a helper that stopped
+    # returning None would make this check vacuous instead of red.
+    if shape == _EVERY_ROW_FLAGGED:
+        assert all(i.is_template_row for i in subject.line_items)
+    else:
+        assert any(
+            i.line_total is None and not i.is_template_row for i in subject.line_items
+        )
+
+    errors = validate(subject, ValidationContext()).by_severity(Severity.ERROR)
+    assert sorted(f.rule_id for f in errors) == ["R026"], (
+        f"{case_id}/{shape}: expected ['R026'], got "
+        + (" | ".join(f.render() for f in errors) or "no errors at all")
+    )
+
+
+# --------------------------------------------------------------------------- #
 # Plausibility
 # --------------------------------------------------------------------------- #
 
@@ -1217,10 +1377,10 @@ def test_R070_silent_without_consistency_data(ctx):
 # --------------------------------------------------------------------------- #
 
 
-def test_all_30_rules_registered():
+def test_all_31_rules_registered():
     ids = [r.id for r in RULES]
-    assert len(ids) == 30
-    assert len(set(ids)) == 30
+    assert len(ids) == 31
+    assert len(set(ids)) == 31
 
 
 def test_validate_never_mutates_input(ctx):

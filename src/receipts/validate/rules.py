@@ -804,6 +804,114 @@ class TaxBreakdownSums(Rule):
         ]
 
 
+@register
+class LineSumUncomputable(Rule):
+    id = "R026"
+    severity = Severity.ERROR
+    description = "Line items were transcribed but no line-item sum could be computed."
+
+    def applies(self, r, ctx) -> bool:
+        """Rows were transcribed AND there is a printed figure to check them against.
+
+        Both halves are deference, not decoration. A receipt with no rows at all
+        is R013's subject; one with no printed figure is R010's, and its
+        arithmetic had nothing to do in the first place. Two rules reporting one
+        problem is the confusion R020 and R024 already split subtotal-present
+        from subtotal-absent to avoid.
+        """
+        return bool(r.line_items) and (
+            r.totals.subtotal is not None or r.totals.total is not None
+        )
+
+    def check(self, r, ctx) -> list[Finding]:
+        """A skip is not a pass: say so when the reconciliation never ran.
+
+        R020 and R024 both gate on ``sum_line_nets(r) is not None``, so anything
+        that makes that helper return None disarms the entire line-item
+        reconciliation -- and a rule that skips reports nothing. This is
+        ISSUE-006's arithmetic residual: the receipt is not merely
+        unreconciled, it is unreconciled *quietly*.
+
+        Measured 2026-08-24 via ``validate()`` over the golden corpus, flipping
+        every non-template row to ``is_template_row=True``: zero findings at any
+        severity on r001, r002 and r003 -- each has exactly one filled row.
+        Carried on through ``score_confidence``/``route``, r001 scored **0.850**,
+        identical to the untouched label and exactly ``AUTO_APPROVE_THRESHOLD``,
+        so it routed to ``auto_approved`` while ``export.xlsx._purchases`` wrote
+        no line rows at all. A 1000.00 purchase reached the ledger with no line
+        items and nothing was said.
+
+        **One property, two causes.** This watches ``sum_line_nets`` -- the
+        single point where the arithmetic goes offline -- rather than
+        enumerating the ways to reach it, because the ways are not what was
+        reported:
+
+          * every transcribed row is flagged, so ``_purchased`` is empty. This
+            is the shape ISSUE-006 names, and the one that empties the export.
+          * a purchased row has no ``line_total``. ``sum_line_nets`` treats that
+            as fatal for the WHOLE receipt (its docstring says so deliberately),
+            so the surviving rows are never reconciled either. Measured equally
+            silent -- zero findings, 0.850, ``auto_approved`` -- and **not
+            recorded in ISSUE-006**. A rule closing only the first cause would
+            have left this one exactly as quiet, which is the enumerated-defence
+            shape.
+
+        ERROR, matching R020 -- the rule that would have been in charge. A check
+        that cannot run must not be quieter than the check failing, and only
+        ERROR carries ``PENALTY_ANY_ERROR``, which is what takes the receipt off
+        the auto-approve path (measured: 0.850 -> 0.500, ``needs_review``
+        priority 1; as WARN it would be 0.770 and a mere quick-verify).
+        """
+        if sum_line_nets(r) is not None:
+            return []  # R020/R024 had a sum to work with
+
+        purchased = _purchased(r)
+        row_count = len(r.line_items)
+
+        if not purchased:
+            return [
+                self.finding(
+                    f"All {row_count} transcribed rows are flagged as pre-printed "
+                    "blanks, so this receipt records no purchase at all: the line "
+                    "items were reconciled against nothing, and none of them will "
+                    "appear in the export. If something was bought, clear "
+                    "is_template_row on the rows that were filled in -- it marks a "
+                    "row left blank ON THE PAPER, never a filled row that could not "
+                    "be read.",
+                    field_paths=["line_items"],
+                    context={
+                        "cause": "no_purchased_rows",
+                        "line_item_count": row_count,
+                        "purchased_count": 0,
+                        "rows_missing_line_total": [],
+                    },
+                )
+            ]
+
+        # ``net_total()`` is None exactly when ``line_total`` is, so these are
+        # the rows that took the sum offline -- named, because a reviewer has to
+        # find them.
+        missing = [i for i in purchased if i.line_total is None]
+        positions = [i.position for i in missing]
+        return [
+            self.finding(
+                f"{len(missing)} of {len(purchased)} purchased rows have no "
+                f"line_total (position {', '.join(str(p) for p in positions)}), so "
+                "no line-item sum could be computed and NONE of this receipt's "
+                "line items were reconciled against the printed figures. Read the "
+                "missing amount. A row that is blank on the paper is "
+                "is_template_row, not a purchase with no amount.",
+                field_paths=[f"line_items[{p}].line_total" for p in positions],
+                context={
+                    "cause": "purchased_row_without_line_total",
+                    "line_item_count": row_count,
+                    "purchased_count": len(purchased),
+                    "rows_missing_line_total": positions,
+                },
+            )
+        ]
+
+
 # =========================================================================== #
 # PLAUSIBILITY
 # =========================================================================== #

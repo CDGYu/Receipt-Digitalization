@@ -1148,18 +1148,20 @@ R051 and by nothing else, so the gap is open on the production path.
 
 *(Heading kept as written, and it stopped being true on 2026-08-23 — the review
 screen now shows the flag and lets a reviewer change it. Citations name the
-issue number, not the heading. What survives is the arithmetic residual below,
-which the control does not touch.)*
+issue number, not the heading. The arithmetic residual it names was itself
+closed on 2026-08-24 by R026 -- see the resolution below.)*
 
-**Status:** OPEN, NARROWED — **the visibility half is CLOSED 2026-08-23** on
-`feat/label-provenance-rule`. `LineItemsTable` renders a `Template` column, a
-per-row checkbox with the accessible name `Template row {position}`, bound to
-`line_items[{position}].is_template_row` and sending the text `_coerce_bool`
-reads. **The silent-arithmetic residual below is untouched and is what keeps
-this issue open.**
-**Owner action required:** no — the ruling was given 2026-08-23: *"I want it to
-be editable so if the result is wrong, they can change it."* Read-only was the
-alternative and was not chosen.
+**Status:** **RESOLVED 2026-08-24.** The visibility half closed 2026-08-23 on
+`feat/label-provenance-rule`; the arithmetic residual closed on
+`feat/arithmetic-went-offline` with **R026**. Everything below describes the
+defect as it stood until then, kept because it is what the diagnosis rests on.
+**One thing this issue was cited for is NOT closed and was never really this
+issue: ISSUE-033.** A reviewer who ticks the checkbox still sees nothing change,
+because no reviewer edit is re-validated by anything — which is true of every
+correction, not just this one.
+**Owner action required:** no. Both rulings were given: *"I want it to be
+editable so if the result is wrong, they can change it."* (2026-08-23), and the
+scope of the arithmetic fix (2026-08-24, validator rule only).
 **Discovered:** 2026-08-19, in the whole-branch review of
 `feat/buyer-and-blank-rows`. **Pre-existing:** no — the flag arrived on this
 branch. **Blocks:** nothing; it bounds what a reviewer's approval means.
@@ -1180,7 +1182,7 @@ the same binding `test_every_correctable_receipt_column_is_readable_in_the_detai
 already gives `_RECEIPT_FIELDS`. It names the missing column rather than
 failing a count, proven by writing it before the key existed.
 
-### What is still open
+### What the control does not carry
 
 *(This section read "The review UI does not render the flag" and set out why
 making it editable was a separate, unanswered question. **The user answered it
@@ -1246,25 +1248,76 @@ is what makes both the transcription and the vanishing possible, and this
 entry is the record that the second half arrived without a way for a reviewer
 to see it.
 
-### How to resume
+### Resolution, 2026-08-24 — measured, not asserted
 
-1. Answer the contract question: is the flag *shown* (a marker on the row, so
-   an approval means the reviewer accepted the split) or *shown and editable*
-   (a reviewer can re-classify a row)?
-2. If shown only: render it in `LineItemsTable` as a non-interactive marker.
-   No server change — the key is already in the detail response.
-3. If editable: it needs a control in `LineItemsTable` and a key in
-   `fieldsFromReceipt`, and `test_every_correctable_receipt_path_is_offered_by_the_review_client`
-   (`tests/test_repository.py`) — which today binds `_RECEIPT_FIELDS` only and
-   says why line items are out of scope — has to grow a line-item half. That
-   decision also has to say what happens to `position`, which is correctable
-   and deliberately not offered for a different reason.
-4. Either way, pin the arithmetic residual above with the **one-purchase**
-   shape, not the two-purchase one: a two-row mutation is caught by R020/R024
-   already and would prove nothing about the silent case.
+*(This section replaced "How to resume". Its steps 1-3 asked for a contract
+decision that was taken and shipped on 2026-08-23, and step 4 is what this
+section reports. ADR-0032: a step whose subject is a decision already taken is
+deleted, not kept with a caveat.)*
+
+**`R026` (`LineSumUncomputable`) is the fix, and it is one property rather than
+the shape that was reported.** R020 and R024 both gate on
+`sum_line_nets(r) is not None`, so that helper is the single point where the
+line-item reconciliation goes offline. R026 watches that point:
+
+> a receipt with line items **and** a printed figure to reconcile against must
+> have a computable line-item sum — or the report must say it had none.
+
+**The second cause, which this issue never recorded.** `sum_line_nets` returns
+`None` for *two* reasons, and only one of them is the flag. A purchased row with
+a null `line_total` takes the whole receipt's sum offline too — its own
+docstring says so deliberately — and measured 2026-08-24 that shape is **exactly
+as silent**: zero findings, confidence 0.850, `auto_approved`. A rule closing
+only the flag case would have left it untouched, which is the enumerated-defence
+shape (`enumerated-defence-never-converges`). Both causes now produce a finding,
+and the finding names which one happened: the flag case names `line_items`, the
+missing-amount case names `line_items[{position}].line_total` per offending row.
+
+**What the silence actually cost, measured through the pipeline** — not just
+`validate()`. On r001 with its sole purchase flagged: 0 findings, confidence
+**0.850**, routed `auto_approved`, and `export.xlsx._purchases` wrote **zero**
+line rows. `AUTO_APPROVE_THRESHOLD` is `0.85` exactly, so the mis-flagged
+receipt scored *identically* to the correct one. It did not merely go unwarned;
+it skipped review. As an ERROR, R026 takes it to **0.500** and
+`needs_review` priority 1 (full re-key); WARN would have been 0.770 and a mere
+quick-verify, which is why the severity matches R020 — the rule that would have
+been in charge.
+
+**The pins, and the mutation each survives.** The standing guard is
+`test_a_real_receipt_whose_line_sum_cannot_be_computed_is_never_silent`,
+parametrised over the **real labels** × both causes (6 cases). It uses the
+**one-purchase** shape this issue insisted on — all three golden receipts have
+exactly one filled row, so flagging it empties the purchase set, whereas
+mis-flagging one row of two is already caught by R020/R024 and would prove
+nothing. It asserts the exact ERROR rule ids, so an unrelated failure cannot
+satisfy it, and its precondition is read off the model rather than through
+`sum_line_nets` — asking the code under test whether the setup is right makes
+the check vacuous instead of red.
+
+Six mutations were run one at a time, each placed where the subject computes its
+answer (ADR-0051), each confirmed to still compile, each reverted by its inverse
+edit rather than by `git checkout`:
+
+| mutation | pin it reddens |
+|---|---|
+| `_purchased` ignores the flag | the flag case, and the corpus pin |
+| an empty purchase set sums to `Decimal(0)` | the flag case, and the corpus pin |
+| `applies` drops its has-rows half | the R013 deference |
+| `applies` drops its printed-figure half | the R010 deference |
+| the missing-amount finding names every purchased row | the row-naming pin |
+| severity demoted to WARN | the corpus pin |
+
+The last three of those pins **passed trivially** when first written, because a
+rule that does not exist fires on nothing. Their mutation is the only thing that
+makes them pins at all (`a-pin-never-proven-red-is-not-a-pin`).
+
+**Also updated:** `RECEIPT_SYSTEM_SPEC.md` §10.3's catalogue and the class list
+below it, which claims one class per catalogue rule and would otherwise have
+been false; and `test_all_30_rules_registered` became `..._31_...`.
 
 ### Related
 
+- ISSUE-033 - the reviewer-time half, which a validator rule cannot reach.
 - ISSUE-003 — the other open question about what a flagged row carries.
 - ADR-0044 §6 — what the label pins do and do not establish.
 - `docs/adr/0016-review-next-resumes-the-callers-task.md` — the P5.T3b defect
@@ -3253,3 +3306,86 @@ already names as "the only column that carries prose, so it takes the slack".
 - ISSUE-006 — the `is_template_row` control this column exists for.
 - ISSUE-028, ISSUE-031 — the other two found this day by running something
   rather than reading it.
+
+
+## ISSUE-033 — A reviewer's correction is never re-validated, so findings are history
+
+**Status:** OPEN — **found while closing ISSUE-006, and it is the half of
+ISSUE-006's headline that a validator rule cannot reach.** Not a defect in any
+one route; a contract nobody has ruled on.
+**Owner action required:** **yes.** "Are findings current state or history?" is
+an architectural question, not a repair — see the four things it moves, below.
+**Discovered:** 2026-08-24, while scoping ISSUE-006's arithmetic residual.
+**Pre-existing:** yes — it has been true since findings were first persisted.
+**Blocks:** nothing mechanically. It bounds what every correction means.
+
+### What is true, and how it was established
+
+`validate()` has **exactly one call site**: `src/receipts/extract/extractor.py`
+(line 319 as of 2026-08-24). Established by grepping every import of the
+validate package across `src/` — `from ..validate`, `from .validate`,
+`from receipts.validate` — which finds `report`, `context` and `rules` imported
+in several places and `validator.validate` imported in exactly one.
+
+So `PATCH /receipts/{id}` (`review/api.py`) calls `apply_corrections` and then
+`get_findings(session, receipt_id)` — the rows persisted at extraction time. It
+does not re-run validation, and neither does `POST /review/{task_id}/complete`.
+
+**This was already known on the frontend and written down there**, by a
+different instrument: `FindingsPanel.tsx`'s module docstring reaches the same
+conclusion from `grep -rn "save_findings" src/ tests/`, and its heading says the
+findings are "what the deterministic validator found **when the receipt was
+extracted**". That is an honest label, not a fix — and note it is a *second*
+derivation, so it is corroboration only to the extent the two greps could have
+disagreed (`two-derivations-from-one-source-are-one-derivation`).
+
+### Why this is the sharper half of ISSUE-006
+
+`docs/NEXT_SESSION_PROMPT.md` has carried, in several places, the claim that
+**"a reviewer who mis-flags the *sole* purchase gets zero findings at any
+severity"**. That reads as an arithmetic gap. It is not, or not only:
+
+- ISSUE-006's own measured table was produced by calling `validate()` directly,
+  which models the **extraction** emitting the mis-flag. R026 closes that.
+- A **reviewer** who ticks the checkbox gets zero new findings for the same
+  reason they get zero new findings for *any* edit: nothing recomputes. R026
+  cannot change that, and neither could any other rule.
+
+A reviewer can therefore correct a total from 949.20 to 1000.00 and the panel
+beside them still shows the findings the receipt arrived with. Confidence and
+routing are likewise never recomputed.
+
+### What a fix has to decide, and none of it is mechanical
+
+1. **Who writes findings.** `save_findings` is today written only from the
+   extraction pipeline (both callers in `pipeline.py`). Letting a review route
+   write it moves ownership of that table.
+2. **Whether the audit trail survives.** Findings are what the receipt *arrived*
+   with; overwriting them destroys that, and `resolved_by_repair` currently means
+   the extraction run's own repair pass, not a reviewer's edit. Two meanings, one
+   column.
+3. **Whether confidence and routing recompute.** A re-validated receipt that now
+   scores above `AUTO_APPROVE_THRESHOLD` — after a human has looked at it — is a
+   status transition nothing today defines.
+4. **What the PATCH response contract becomes.** `receipt_detail(receipt,
+   findings)` currently promises extraction-time findings to every caller.
+
+### How to resume
+
+Brainstorm it as its own design; it is architectural, not bounded. The cheapest
+partial that does **not** answer any of the four above: have the review screen
+compute the offline-arithmetic property from current form state and warn before
+save. That closes what a reviewer *sees* without moving any ownership — at the
+cost of a **third** copy of the purchase predicate. There are already two
+(`validate/rules.py::_purchased` and `export/xlsx.py::_purchases`) with nothing
+pinning them together, and `xlsx.py`'s own docstring flags that as a known
+hazard. Do not add the third without pinning all three.
+
+### Related
+
+- ISSUE-006 — the arithmetic half, closed by R026; this is the half that was
+  filed under it and is not the same problem.
+- ADR-0016 — the P5.T3b defect class: a reviewer overwriting what the machine
+  read without being shown it.
+
+---

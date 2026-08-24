@@ -818,6 +818,7 @@ Each rule is a function `(ReceiptExtraction, ValidationContext) -> list[Finding]
 | `R023` | `tender_change` | WARN | `tender − total ≈ change` |
 | `R024` | `line_items_sum_to_total` | WARN | Fallback when subtotal is null: `Σ line_total ≈ total − tax + discount`, or `≈ total` when the amount column is tax-inclusive |
 | `R025` | `tax_breakdown_sums` | WARN | `Σ tax_breakdown[].amount ≈ tax` |
+| `R026` | `line_sum_uncomputable` | ERROR | No line-item sum could be computed at all, so R020/R024 both skipped and nothing reconciled the rows: either every row is flagged `is_template_row` or a purchased row has no `line_total` (skipped when there are no rows, or no printed figure to compare against) |
 | **Plausibility** | | | |
 | `R030` | `date_parseable` | ERROR | `receipt.date` is a real calendar date |
 | `R031` | `date_not_future` | ERROR | Not more than 1 day ahead of now (timezone slack) |
@@ -1333,6 +1334,7 @@ def within_tolerance(a: Decimal | None, b: Decimal | None, *,
 #   MerchantPresent(R012), LineItemsPresent(R013),
 #   LineItemsSumToSubtotal(R020), LineItemMath(R021), TotalsEquation(R022),
 #   TenderChange(R023), LineItemsSumToTotal(R024), TaxBreakdownSums(R025),
+#   LineSumUncomputable(R026),
 #   DateParseable(R030), DateNotFuture(R031), DateNotAncient(R032),
 #   CurrencyKnown(R033), TotalPositive(R040), TotalMagnitude(R041),
 #   UnitPricesSane(R042), QtySane(R043), TaxRatePlausible(R044),
