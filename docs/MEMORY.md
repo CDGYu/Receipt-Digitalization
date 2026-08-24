@@ -45,7 +45,7 @@ moves, and this file has carried a wrong issue count before.
 **No count of refreshes is written here** — it is a number that moves without its
 sentence changing, which is review standard 5.
 
-**Freshness anchor `13faf0d`** — the last commit that is not this handoff pair.
+**Freshness anchor `c4b28c0`** — the last commit that is not this handoff pair.
 **It is written twice below — here and inside the command.** Moving one and not
 the other is what happened on an earlier refresh, and the gate caught it because
 it parses the anchor out of the *command*.
@@ -66,7 +66,7 @@ nothing else: a stamp cannot name the commit that writes it. The test is a
 command, not a commit and not a count:
 
 ```
-git log --oneline 13faf0d..main -- ":(top,exclude)docs/MEMORY.md" ":(top,exclude)docs/NEXT_SESSION_PROMPT.md"
+git log --oneline c4b28c0..main -- ":(top,exclude)docs/MEMORY.md" ":(top,exclude)docs/NEXT_SESSION_PROMPT.md"
 git log --oneline refs/remotes/origin/main..main   # what a push would send
 git ls-remote --heads origin main                  # authoritative on what is pushed
 git branch --no-merged main                        # named FOUR on 2026-08-25
@@ -147,10 +147,14 @@ stays reachable — ADR-0042. `git log --oneline -- docs/MEMORY.md` is the list.
   answer.
 - **THE TERMINAL-STATE GUARANTEE IS MERGED AND PUSHED** (2026-08-25,
   **ADR-0054**). Seven tasks on `feat/terminal-state-guarantee`; **all five gates
-  PASS at `5c1e8eb`**, suite **1430** — that is the anchor above, the last commit
-  before this pair, and it is named rather than called "the tip" because the
-  pair commit moves the tip and would falsify the sentence carrying it
-  (ADR-0032 section 2). Re-run them yourself; a gate run is about a commit. It closes **ISSUE-029** (`c08b718`),
+  PASS at `5c1e8eb`**, suite **1430**, named rather than called "the tip"
+  because the tip moves and would falsify the sentence carrying it (ADR-0032
+  section 2). *(This used to continue "that is the anchor above, the last commit
+  before this pair". It was true when `51726ae` wrote it and `cb8a9bf` falsified
+  it by moving the anchor without touching this line — the exact rot the naming
+  rule exists to prevent, one clause further along. The anchor is written in
+  exactly two places, the stamp and the command; this is deliberately not a
+  third.)* Re-run them yourself; a gate run is about a commit. It closes **ISSUE-029** (`c08b718`),
   **ISSUE-030** (`63084b6`, `41d2933`, `d1e446b`) and **ISSUE-031** (`2d1bea9`,
   `d1e446b`): a heartbeat written as the run works, `receipts sweep` and a
   single-row sweep on the progress route, and a progress route that falls back to
@@ -214,7 +218,11 @@ stays reachable — ADR-0042. `git log --oneline -- docs/MEMORY.md` is the list.
   moment `is_template_row` merged and nothing could tell anyone.
   The first is fixed (`0fe6be5`) and `--color-surface-raised` now sits **inside
   `INHERITABLE_SURFACES`**, so the class is gated rather than measured by luck.
-  The second is **ISSUE-032**, cause measured, **fix deliberately not chosen**.
+  The second is **ISSUE-032**, **RESOLVED 2026-08-25** at `443fa86` — candidate
+  1, `box-sizing: border-box` on `.head th`, plus a pin in `stylesheets.test.ts`
+  that reddens at "758.4px of a 704px table", the original defect state.
+  **`e2e/visual.spec.ts` was never re-run**, so `main`'s standing on that second
+  guard is inferred from an isolated probe of the real stylesheets, not observed.
 - **The first pipeline run that ever reached a real model exposed a chain of
   four, each hidden by the one before it.** **ISSUE-028** (the image lacked the
   `openai` extra, so the container could only ever run `fake` — every compose run

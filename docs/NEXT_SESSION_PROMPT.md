@@ -114,26 +114,28 @@ five gates green**) and a zero-width table column already sitting on `main`.
 Both invisible to pytest, ruff, `tsc -b`, vitest and the build. **Do this again
 on any visual milestone.** `scripts/verify.py` does not run Playwright.
 
-**THREE OF THESE FOUR RULINGS WERE TAKEN on 2026-08-25 (ADR-0054) and the rows
-below are kept as the record of what was decided, not as work.** ISSUE-029,
-ISSUE-030 and ISSUE-031 are **closed** on `feat/terminal-state-guarantee`:
-the ceiling is derived from the model budget rather than fixed; the stranded
-hole is closed by a heartbeat plus two runners; and the sink belongs inside
-`process_receipt`, which builds it rather than accepting it. **ISSUE-032 is
-still open and still needs you.**
+**ALL FOUR OF THESE RULINGS HAVE NOW BEEN TAKEN, and the rows below are kept as
+the record of what was decided, not as work.** ISSUE-029, ISSUE-030 and
+ISSUE-031 were closed on 2026-08-25 (ADR-0054) on
+`feat/terminal-state-guarantee`: the ceiling is derived from the model budget
+rather than fixed; the stranded hole is closed by a heartbeat plus two runners;
+and the sink belongs inside `process_receipt`, which builds it rather than
+accepting it. **ISSUE-032 was taken the same day** at `443fa86` — candidate 1,
+`box-sizing: border-box` on `.head th`.
 
-**The one remaining ruling, and three kept for the record. Do not guess a fix —
-read the issue, they are not equivalent:**
+**Four rulings, all taken, kept for the record:**
 
 | ruling | issue | why it needs you |
 |---|---|---|
 | **The job ceiling** | **ISSUE-029** | `DEFAULT_JOB_TIMEOUT_S = 900` is shorter than one receipt on this box — triage alone measured **696s**. The comment beside it already describes the failure it causes. A fixed constant that fits one model will not fit another. |
 | **The stranded-receipt hole** | **ISSUE-030** | An interrupted run leaves a receipt at `pending` **forever**, breaking the stated guarantee that every receipt reaches a terminal state. **Raising ISSUE-029's ceiling hides this without closing it.** Reproduced on two unrelated paths. A reaper needs no migration — `updated_at` does not advance mid-run — but cannot distinguish *slow* from *stranded*, and the signal that would (progress events) is ISSUE-031. |
 | **Where the progress sink belongs** | **ISSUE-031** | Narration exists on **exactly one of four** `process_receipt` call sites. `--inline` is the documented no-Redis deployment and narrates nothing, ever. Threading `progress=` through three more sites is the obvious move and may be wrong: a CLI has no Redis to write to on the deployment that most needs this. |
-| **The table column fix** | **ISSUE-032** | Cause **measured**: `th` is `box-sizing: content-box` with 8px padding, so seven columns demand more than the table has and the eighth collapses to 0 at every width. Three candidate fixes with different blast radii; **one repaints every table cell in the app.** |
+| **The table column fix** | **ISSUE-032** | **TAKEN 2026-08-25** at `443fa86`: candidate 1, `box-sizing: border-box` on `.head th`. The cause was `th` being content-box with 8px padding, so seven declared widths demanded `48 + 0.85W + 7x16px` and overflowed the table by themselves; the eighth got nothing. It now measures 57.5px at the 44rem floor. **`e2e/visual.spec.ts` was not re-run** — three sessions were live in the worktree and it rebuilds `dist`, reseeds a shared DB and binds port 8100. |
 
-**Two more await you and are older:** **ISSUE-027** (a PDF is accepted at the
-door and always dies at `preprocess`), and **ISSUE-006's arithmetic residual**.
+**One more awaits you and is older:** **ISSUE-006's arithmetic residual**.
+*(This said "two more" and named **ISSUE-027** first. That was ruled on
+2026-08-25 — wire `expand_pdf` — and a PDF is now one receipt per page, bounded
+at 50, resolved at `55f9847`.)*
 
 **Held, not lost — one thing a session deliberately did not commit.**
 
@@ -252,16 +254,68 @@ is the collapsed-table `border-radius`, a repo-wide question nobody has ruled on
 ### 2g. WAITING ON YOU, NOT ON ANYONE'S TIME
 
 The full list is under "BLOCKED ON THE USER" below. The ones that block work
-rather than merely tidy it: **ISSUE-032, the one ruling left in 2a** (029, 030
-and 031 were taken on 2026-08-25 — ADR-0054),
-**R060/R061 grounding** (which also gates bbox), and **what happens to
-`IMPLEMENTATION_PLAN.md`**. *(ISSUE-006's flag decision and ISSUE-026's upload
+rather than merely tidy it: **R060/R061 grounding** (which also gates bbox), and
+**what happens to `IMPLEMENTATION_PLAN.md`**. *(2a's four rulings are all taken:
+029, 030 and 031 on 2026-08-25 — ADR-0054 — and ISSUE-032 the same day at
+`443fa86`. **A fifth ruling exists and is NOT on `main` yet**: ISSUE-034,
+hermetic eval versus eval that mirrors production. It is filed on the unmerged
+branch `fix/prompt-hash-and-template-unit` — there is no register row and no
+`## ISSUE-034` heading in `docs/KNOWN_ISSUES.md` until that branch lands. See
+"An unmerged branch is waiting" below.)* *(ISSUE-006's flag decision and ISSUE-026's upload
 ruling were both given on 2026-08-23 and both shipped; this line asked for them
 again for a day.)* On the last: its checkboxes are **93 unticked out of
 93**, and its "Current state" still lists fourteen things as "Specified but not
 built" that all shipped, so it competes with the register instead of
 complementing it. **You ruled 2026-08-23 that the boxes stay unticked for now**;
 whether the file is corrected or retired is still open.
+
+### 2h. AN UNMERGED BRANCH IS WAITING, AND IT IS NOT ABANDONED
+
+**`fix/prompt-hash-and-template-unit` is finished, green, and deliberately not
+merged.** Do not start work that touches what it holds without reading it first,
+and do not assume it was forgotten.
+
+**No ahead/behind count is written here on purpose** — it changes every time
+either side moves, and this file has carried a stale count before. Derive it:
+
+```
+git log --oneline main..fix/prompt-hash-and-template-unit
+git rev-list --count fix/prompt-hash-and-template-unit..main   # 0 means a clean ff
+```
+
+What it holds, so nobody re-derives it:
+
+- **ISSUE-002** — a repair row's `prompt_hash` named a prompt that was not sent;
+  the repair branch of `_attempt_prompt_hash` was missing `P.SYSTEM_EXTRACTION`.
+- **ISSUE-003** — a blank pre-printed row transcribes the product name and
+  nothing else; pinned by an assertion added to the existing flagged-row test
+  rather than a new one, so **the "SIX pins" comment in `tests/test_eval_floor.py`
+  is still correct** and must not be bumped.
+- **ISSUE-034, newly filed** — the half of ISSUE-002 that is not a bug.
+  `run_receipt` (the `build_eval_pipeline` path) calls `extract_with_repair` with
+  no `hints` and no `few_shots`; `process_receipt` passes `hints=` at three call
+  sites. **So `eval` measures the unhinted prompt and production sends the hinted
+  one.** Verified independently on `main`, not taken on report.
+
+**Why it is not merged, and this is the part to respect.** The owner authorised
+the fast-forward — but in a *different session's* channel. The branch's own
+session correctly refuses to act on a relayed authorization: it cannot
+distinguish a faithful relay from a misread one, and `main` is the one place
+where that distinction has to hold. **The authorization has to arrive in that
+session's own channel with the owner.** That is the same rule that makes
+`feat/*` self-authorised and `main` not.
+
+**ISSUE-034 stays OPEN after the merge.** Merging lands the entry, not the
+decision, and the two answers are not fix-versus-no-fix: making eval mirror
+production costs reproducibility from the golden set alone, because two runs over
+identical images could diverge simply because a merchant gained a hint in
+between. That is why it is a ruling and not a patch.
+
+**And it already qualifies the headline number.** The baseline ran on
+2026-08-22, so **ADR-0049's 60.00–61.43% describes a prompt the product does not
+send**, and the results file does not record that. Quote ADR-0049's spread with
+the caveat attached; **do not imply a corrected figure exists, because none has
+been measured.**
 
 ## 3. How to work here, and why it is not optional
 
@@ -628,21 +682,21 @@ is a pointer; where it and an entry disagree, the entry wins.**
 | ISSUE-015 | `PassAttempt.rung` is **write-only in production** — four write sites, no reader in `src/` or `eval/`. | OPEN — either give it a reader (see ISSUE-013) or drop it |
 | ISSUE-016 | `read_nothing` still counts vacuous values as content: `merchant.name=""`, `totals.total=0`, `prices_include_tax=False`. The **third** never-fires shape in this predicate's history. **It gates a ladder configuration**, which its own "does not gate anything" filing denies. | OPEN — **report-don't-fix**; do not enumerate fields, do not change `is_filled` |
 | **ISSUE-017** | **The baseline's variance is across receipts, not repeats.** r001 60.71-64.29%, r002 91.67-95.83%, **r003 11.11% on all five repeats**. The headline averages receipts spanning 11% to 96% and describes none of them. | **OPEN — read before quoting any figure** |
-| **ISSUE-018** | **The escalation records that it escalated, never why.** ADR-0047 decision 3 discards on two clauses — raised, or read nothing — and `PassAttempt` has no field for which. A timeout and an unreadable page are different facts. | **OPEN — a decision, and ISSUE-015's missing reader** |
-| ISSUE-019 | "A label is committed whole or not at all" is a rule **no gate holds**, and the obvious pin is not writable — the README tells you to use `null` for what a receipt does not show, so redacted and absent look the same. | OPEN — structural |
+| ISSUE-018 | The escalation recorded that it escalated, never why. ADR-0047 decision 3 discards on two clauses — raised, or read nothing — and `PassAttempt` had no field for which. | **RESOLVED 2026-08-25** at `1d56a4d` — `discarded: DiscardReason \| None`, and `kept` is now *derived* from it so the two cannot disagree. **It did NOT close ISSUE-015**: `.rung` still has no reader |
+| ISSUE-019 | "A label is committed whole or not at all" was a rule no gate held; the obvious pin is not writable, because the README tells you to use `null` for what a receipt does not show, so redacted and absent look the same. | **RESOLVED 2026-08-25** at `be59045` — the manifest carries `withheld`, required present and empty for tracked labels. **Undeclared nulling still passes**; no static check can catch it |
 | ~~ISSUE-020~~ | A frozen `GOLDEN_TODAY` reddened the suite for any receipt dated after 2026-07-29. | **CLOSED 2026-08-22** |
 | ~~ISSUE-021~~ | One unloadable label silently took the whole real-corpus check to `{}` while the suite stayed green. | **CLOSED 2026-08-22** |
 | ~~ISSUE-022~~ | That abort named no file; it now prints `while loading golden label <name>`. | **CLOSED 2026-08-23** |
-| **ISSUE-023** | **Consistency voting has neither tolerance nor shared alignment.** `_vote` compares by exact string equality over `json.dumps(...)`, so `949.20` and `949.21` disagree and line items are compared positionally. `align_line_items` shipped for this and its only callers are `eval/metrics.py` and its own tests. | **OPEN — `IMPLEMENTATION_PLAN.md` P2.T1, never built. Fix before P7.T1** |
-| **ISSUE-024** | **Nothing cross-checks the triage line-count against what was extracted.** 30 rules registered, highest id R070, and both uses of `estimated_line_item_count` sit inside R013, which fires only at zero rows. Spec §18's silent truncation is undetected. | **OPEN — P2.T3, never built** |
-| ISSUE-025 | Best-attempt selection is proven only in isolation; no pipeline-level test drives a repair that makes things worse, which is exactly the direction P2.T4's acceptance names. | OPEN — coverage gap, not a behavioural defect |
-| ISSUE-026 | A receipt cannot enter the system from a browser. | **RESOLVED 2026-08-24** — `/app/upload` built, mounted, pinned by mutation |
-| **ISSUE-027** | **A PDF is accepted at the door and always fails at `preprocess`.** `validate_upload` accepts one, `load_image` raises `UnsupportedFormat`, and `expand_pdf` has zero callers. The upload screen refuses PDFs client-side as an interim. | **OPEN — needs your ruling: wire `expand_pdf`, or stop accepting PDFs?** |
+| ISSUE-023 | Consistency voting had neither tolerance nor shared alignment: `_vote` compared by exact string equality over `json.dumps(...)`, so `949.20` and `949.21` disagreed and line items were compared positionally. | **RESOLVED 2026-08-25** at `aa65a2b` — `within_tolerance` plus `align_line_items` against the longest run. P0.T3's acceptance is met **in substance only**: the `consistency.diff_extractions` it names has never existed; the second consumer is `_vote` |
+| ISSUE-024 | Nothing cross-checked the triage line-count against what was extracted; both uses of `estimated_line_item_count` sat inside R013, which fires only at zero rows. | **RESOLVED 2026-08-25** at `aa65a2b` — R071 WARNs when at most half survived and at least three rows are missing. **Deliberate blind spot, pinned:** 4 estimated against 2 extracted is half a receipt lost and does not fire |
+| ISSUE-025 | Best-attempt selection was proven only in isolation; no pipeline-level test drove a repair that makes things worse, which is exactly the direction P2.T4's acceptance names. | **RESOLVED 2026-08-25** at `aa65a2b` — a `process_receipt`-level test asserting the PERSISTED row, and that the repair was attempted at all |
+| ISSUE-026 | A receipt cannot enter the system from a browser. | **RESOLVED 2026-08-24** — `/app/upload` built, mounted, pinned by mutation. **Do not read this as P5.T2 being done:** measured 2026-08-25, two of its four items are still unbuilt — no drag-and-drop (no `onDrop`/`dataTransfer` anywhere) and no status/confidence filters (`ReceiptsScreen.tsx` says so in its own docstring). `c4b28c0` |
+| ISSUE-027 | A PDF was accepted at the door and always failed at `preprocess`: `validate_upload` accepted one, `load_image` raised `UnsupportedFormat`, and `expand_pdf` had zero callers. | **RESOLVED 2026-08-25** at `55f9847` — ruled "wire `expand_pdf`"; a PDF is now one receipt per page, bounded at 50. `ingest_file`/`ingest_bytes` return `list[ReceiptJob]` |
 | ISSUE-028 | The containerised worker could only ever run the `fake` VLM client — the image lacked the `openai` extra, so every OpenAI-shaped provider raised at client construction. **Every compose run this project has ever done was silently a fake-client run.** | **RESOLVED 2026-08-24** at `45b5329`; the re-reading of past runs is not |
 | ISSUE-029 | The job ceiling is shorter than one receipt. `DEFAULT_JOB_TIMEOUT_S = 900`; triage alone measured **696s** under the project's own local model. | **RESOLVED 2026-08-24** at `c08b718` — derived from the model budget, not a constant (ADR-0054) |
 | ISSUE-030 | An interrupted receipt has no terminal state, ever. Broke the stated "nothing is silently dropped" guarantee; **not RQ-specific**. | **RESOLVED 2026-08-25** at `63084b6`, `41d2933`, `d1e446b` — but **nothing schedules `receipts sweep`**, and a sweep nobody runs closes nothing |
 | ISSUE-031 | Progress narration existed on exactly one of four `process_receipt` call sites; `--inline` narrated nothing, ever. | **RESOLVED** in two halves at `2d1bea9` and `d1e446b` — but **nobody has watched a screen**; jsdom cannot see narration |
-| **ISSUE-032** | **A control paints over the column beside it at every width.** Cause measured: `th` is `box-sizing: content-box` with 8px padding, so seven columns demand more than the table has and the eighth renders at **0**. | **OPEN — needs your ruling: three fixes, one repaints every table cell** |
+| ISSUE-032 | A control painted over the column beside it at every width. Cause: `th` was `box-sizing: content-box` with 8px padding, so seven declared widths demanded more than the table had and the eighth rendered at **0**. | **RESOLVED 2026-08-25** at `443fa86` — candidate 1; the eighth is 57.5px at the 44rem floor. **`e2e/visual.spec.ts` was not re-run** |
 | ISSUE-033 | A `p*` label's value was printed by `validate_labels` — the command Task 3 tells a labeller to run after every batch — and by the pytest traceback. Per-field, not whole-label. | **CLOSED 2026-08-25** on `feat/golden-label-privacy` |
 
 ---
