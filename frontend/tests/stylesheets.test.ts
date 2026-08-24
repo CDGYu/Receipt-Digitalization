@@ -454,7 +454,7 @@ const CENSUS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
     '.table':
       'width, min-width, table-layout: fixed, border-collapse: collapse, border, border-radius, background, font-family, font-size, line-height',
     '.head th':
-      'padding, border-bottom, color, font-size, font-weight, letter-spacing, text-align: left, text-transform: uppercase',
+      'box-sizing: border-box, padding, border-bottom, color, font-size, font-weight, letter-spacing, text-align: left, text-transform: uppercase',
     '.head th:nth-child(1)': 'width, text-align: right',
     '.head th:nth-child(2)': 'width',
     '.head th:nth-child(3)': 'width',
@@ -765,6 +765,111 @@ describe('every declaration the app ships is accounted for', () => {
         `order. If the move is deliberate, reorder CENSUS to match and say in ` +
         `the commit what a browser showed you.`,
     ).toEqual(Object.keys(CENSUS[file]))
+  })
+})
+
+// --------------------------------------------------------------------------- //
+// The line-items table's column arithmetic (ISSUE-032). The census next door
+// pins that a declaration is PRESENT; it cannot tell whether the numbers add up.
+// --------------------------------------------------------------------------- //
+
+/** `3rem`, `24%` or `12px` as pixels, against a table of `basis` px.
+ *
+ *  Returns `null` for anything else -- a `calc()`, a `var()`, a keyword -- so an
+ *  unreadable width fails the test that calls this rather than silently
+ *  contributing zero to a sum. */
+function lengthPx(value: string, basis: number): number | null {
+  const rem = /^([\d.]+)rem$/.exec(value)
+  if (rem) return Number(rem[1]) * 16
+  const percent = /^([\d.]+)%$/.exec(value)
+  if (percent) return (Number(percent[1]) / 100) * basis
+  const px = /^([\d.]+)px$/.exec(value)
+  if (px) return Number(px[1])
+  return null
+}
+
+/** The px value of a `--space-*` token, read from `tokens.css` rather than
+ *  written down here, so the two cannot drift. */
+function spaceToken(name: string): number {
+  const match = new RegExp(`--${name}:\\s*([\\d.]+)px`).exec(read('styles/tokens.css'))
+  if (!match) throw new Error(`tokens.css declares no --${name} in px`)
+  return Number(match[1])
+}
+
+describe('the line items table leaves room for the columns its rules do not name', () => {
+  /** ISSUE-032, as a property rather than as the instance that was found.
+   *
+   * Seven declared widths, eight rendered columns, and `.head th` was
+   * content-box -- so the seven demanded `3rem + 85% + 7x16px = 758.4px` of a
+   * 704px table and overflowed it by themselves. The eighth got nothing, and
+   * under `table-layout: fixed` a zero-width cell does not grow: its 13px
+   * checkbox painted over the column beside it at every width and in both
+   * themes, and the em dash meaning "never extracted" was pushed outside the
+   * clipped scroller.
+   *
+   * **Why this is arithmetic and not a count.** The obvious pin -- "every
+   * column has a declared width" -- is wrong for this design: the eighth is
+   * *meant* to take the remainder. What must hold is that there IS a remainder.
+   * Reading `box-sizing` rather than assuming it is what makes this the pin
+   * that would have caught the original defect: with the declaration removed
+   * the padding term returns and the sum overflows again.
+   *
+   * So a ninth column, a widened Description, a lowered `min-width`, and
+   * `box-sizing` going back to content-box all land here -- the ways the rule
+   * list and the markup list fall out of step.
+   *
+   * Playwright is not one of the five gates (ADR-0029), which is why this is a
+   * filesystem test. It cannot see what the columns look like, only that none
+   * of them is impossible. */
+  it('every column the header renders computes to a positive width at the floor', () => {
+    const rules = rulesIn(read('review/LineItemsTable.module.css'))
+    const declarationOf = (selector: string, property: string): string | undefined =>
+      rules
+        .find((rule) => rule.selector === selector)
+        ?.declarations.find(([name]) => name === property)?.[1]
+
+    const floorValue = declarationOf('.table', 'min-width')
+    expect(floorValue, '.table declares no min-width, so there is no floor to check').toBeDefined()
+    const floor = lengthPx(floorValue as string, 0)
+    expect(floor, `.table's min-width (${floorValue}) is not a length this test reads`).not.toBeNull()
+
+    // The header cells are the boxes `table-layout: fixed` measures, so their
+    // padding is part of what each declared width demands -- unless the box
+    // model already counts it. This term IS ISSUE-032.
+    const padding =
+      declarationOf('.head th', 'box-sizing') === 'border-box' ? 0 : 2 * spaceToken('space-md')
+
+    const widths = rules
+      .filter((rule) => /^\.head th:nth-child\(\d+\)$/.test(rule.selector))
+      .map((rule) => rule.declarations.find(([name]) => name === 'width')?.[1])
+      .filter((value): value is string => value !== undefined)
+
+    const columns = (read('review/LineItemsTable.tsx').match(/<th>/g) ?? []).length
+    expect(
+      columns,
+      'no <th> found in LineItemsTable.tsx -- the count this compares against is vacuous',
+    ).toBeGreaterThan(0)
+    expect(
+      widths.length,
+      'more nth-child width rules than the header renders columns',
+    ).toBeLessThanOrEqual(columns)
+
+    const demanded = widths.reduce((total, value) => {
+      const px = lengthPx(value, floor as number)
+      expect(px, `a column width this test cannot read: ${value}`).not.toBeNull()
+      return total + (px as number) + padding
+    }, 0)
+
+    const remainder = (floor as number) - demanded
+    const unnamed = columns - widths.length
+
+    expect(
+      remainder,
+      `${widths.length} declared widths demand ${demanded.toFixed(1)}px of a ${floor}px ` +
+        `table, leaving ${remainder.toFixed(1)}px for the ${unnamed} column(s) no rule ` +
+        `names. Under table-layout: fixed those collapse to zero and their controls ` +
+        `paint over the column beside them -- ISSUE-032.`,
+    ).toBeGreaterThan(0)
   })
 })
 

@@ -27,7 +27,7 @@
  * regression -- the shape of silent breakage this milestone keeps finding.
  *
  * The scroller is only half of it: a table that is free to squeeze never
- * overflows, so `overflow-x` would never fire and seven columns would compress
+ * overflows, so `overflow-x` would never fire and eight columns would compress
  * to unreadable slivers instead. `.table`'s `min-width` is what gives the
  * scroller something to scroll, and `width: 100%` still lets it fill a wide
  * viewport.
@@ -66,8 +66,10 @@
 
 .table {
   width: 100%;
-  /* The floor that makes the scroller reachable. Seven columns whose widths are
-   * percentages of *this*, so below it the money columns stop lining up on the
+  /* The floor that makes the scroller reachable. Eight columns are laid out
+   * against *this*: the first is `3rem`, the next six are percentages of it, and
+   * the eighth takes what is left (`0.15W - 48`, so 57.5px here). Below the
+   * floor the money columns stop lining up on the
    * decimal -- the property Fira Code's tabular figures exist to make visible
    * (§3.1) -- and a description wraps to four lines. Scrolling is the honest
    * failure mode; squeezing is the silent one. */
@@ -83,7 +85,25 @@
   line-height: 1.3;
 }
 
+/* **`box-sizing` is what makes the widths below mean the painted box.** This app
+ * has no global reset -- it is declared per element, and this rule was not one of
+ * them -- so each width below was a *content* width and every column rendered
+ * 16px wider than its rule.
+ *
+ * That is what collapsed the eighth column to zero (ISSUE-032). The seven
+ * declared widths are `3rem + 85%`; as content widths they demand
+ * `48 + 0.85W + 7x16px`, which exceeds `W` for any table narrower than about
+ * 1067px. The review screen's scroller is a grid item beside the image pane and
+ * measured 777.3px at a 1440 viewport, so the seven overflowed by themselves at
+ * every real width, the unwidthed eighth got nothing, and under
+ * `table-layout: fixed` its 13px checkbox painted over the column beside it.
+ *
+ * Measured with the real stylesheet at table widths 704 / 734.8 / 777.3:
+ * eighth column `0, 0, 0` before this line and `57.5, 62.1, 68.5` after (the
+ * closed form is `0.15W - 48`; the tenths below it are `border-collapse`).
+ * `LoginPage.module.css:106` argues the same point for a control's 44px target. */
 .head th {
+  box-sizing: border-box;
   padding: var(--space-md) var(--space-md);
   border-bottom: 1px solid var(--color-border);
   color: var(--color-muted-foreground);
@@ -95,9 +115,16 @@
 }
 
 /* The widths that `table-layout: fixed` reads. Description is the only column
- * that carries prose, so it takes the slack; the three money columns are equal
- * so their decimals line up as a block, which is the property Fira Code's
- * tabular figures exist to make visible (§3.1). */
+ * that carries prose, so it takes the largest share.
+ *
+ * **This comment used to say "the three money columns are equal so their
+ * decimals line up as a block". Measured 2026-08-25: they are not.** The three
+ * cells carrying `.money` are Qty, Unit price and Line total -- `nth-child(4)`,
+ * `(6)` and `(7)` -- declared `12%`, `14%` and `14%`. Two are equal; Qty is not,
+ * and it is a count rather than money. Whether Qty should join them at 14% is a
+ * design question nobody has answered, so the declared widths are left as they
+ * are and the claim is removed rather than restated (ADR-0032: a correction that
+ * asserts more than was measured is how this file acquired the sentence above). */
 .head th:nth-child(1) {
   width: 3rem;
   text-align: right;
