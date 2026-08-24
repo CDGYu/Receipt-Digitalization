@@ -2767,6 +2767,34 @@ kept because it is the evidence the decision rested on, not because it still
 describes the tree.
 **Owner action required:** none. The ruling was given on 2026-08-23 — build the
 screen — and it was carried out.
+
+**Correction (2026-08-25): this issue is closed and `IMPLEMENTATION_PLAN.md`'s
+P5.T2 is NOT, and reading the two together is how that gets missed.** This
+issue's claim was narrow — no upload component exists and nothing mounts one —
+and it is genuinely resolved: `frontend/src/main.tsx:151` mounts
+`<UploadScreen />`. P5.T2 asks for four things, and **two of them have never
+been built**: upload drag-and-drop, and the receipts list's status/confidence
+filters. Derived item by item on 2026-08-25; the table is in P5.T2's own status
+note.
+
+**"Three shipped", below, was false when it was written.** It counted the
+receipts list among them, and that list has never had a filter — its own
+docstring has read "No filters, no sorting, no column choice" since it landed on
+2026-08-19 (`396e357`), and no status query parameter was ever added to
+`api/receipts.ts`. What shipped was a list *without* the filters P5.T2 asks for,
+so the count was two, not three. **The sentence is left standing below rather
+than edited**, because the body is the evidence the ruling rested on and a
+corrected premise would hide that the ruling was taken on a miscount.
+
+**Both unbuilt items nearly certified themselves by substring.** Searching for
+`drag` under `frontend/src` returns two lines, both comments, and one is the
+refusal to build it: "nothing here handles a drag, and a box that looks
+droppable and is not is a worse lie than a plain one". Searching `filter` in
+`ReceiptsScreen.tsx` returns comments plus a JS array method over alert sources.
+In a repository that records deliberate absences at length, **a presence-grep
+for a feature name matches hardest exactly where somebody documented not
+building it** — so it cannot answer "is X built". Grep for what would have to
+execute: `onDrop`, `order_by`, a call with parentheses.
 **Discovered:** 2026-08-23, auditing `IMPLEMENTATION_PLAN.md` against the tree.
 **Pre-existing:** it was, for as long as the frontend existed.
 
