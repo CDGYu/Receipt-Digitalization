@@ -3110,16 +3110,30 @@ queue.
 
 ## ISSUE-032 — The line-items table paints a control over the column beside it
 
-**Status:** OPEN. **Symptom measured, cause established 2026-08-24, fix not
-chosen.** The obvious fix — allocate a width for the eighth column — is *not*
-sufficient on its own; read the measured section before touching the stylesheet.
-**Owner action required:** **yes** — three candidate fixes have genuinely
-different blast radii and one of them repaints every table cell in the app.
-**Discovered:** 2026-08-24, by the Editorial refresh's browser pass (design
-decision 14). **Pre-existing:** yes — it arrived with the `is_template_row`
-control merged that morning, and **`main` is very likely red on this test now.**
-**Blocks:** nothing mechanically. It makes a reviewer's line-items table
-misread at every width.
+**Status:** **RESOLVED 2026-08-25** at `443fa86`, taking candidate 1 —
+`box-sizing: border-box` on `.head th`. The two prose defects and the missing
+pin are closed with it; "What survived" at the end says where each landed.
+Everything above that section describes the defect as it stood and is kept
+deliberately: two attempts to reason this out from the CSS failed, and *how*
+they failed is the reusable part. **Discovered:** 2026-08-24, by the Editorial
+refresh's browser pass (design decision 14). **Pre-existing:** yes — it arrived
+with the `is_template_row` control merged that morning. **Blocks:** nothing; it
+made a reviewer's line-items table misread at every width.
+
+**Measured after the fix**, real stylesheets in Chromium, by table width:
+
+| table W | 704 | 734.8 | 777.3 | 1024 | 1440 |
+|---|---|---|---|---|---|
+| 8th column, before | 0 | 0 | 0 | 0.1 | 55.4 |
+| 8th column, after | 57.5 | 62.1 | 68.5 | 105.5 | 167.9 |
+
+No cell in the table overflows its control at any width. **`e2e/visual.spec.ts`
+itself was not re-run**, and this is a gap rather than a claim: that suite
+rebuilds `dist`, reseeds a shared SQLite database and binds port 8100, and two
+other sessions were live in this worktree at the time. The numbers above come
+from an isolated probe that loads `LineItemsTable.module.css` and `tokens.css`
+verbatim from disk — which is the one thing the refuted reproduction below did
+not do.
 
 ### The symptom, measured
 
@@ -3226,7 +3240,7 @@ the same CSS, agreeing exactly** — and is wrong, because it models the
 **Agreement between two derivations is not evidence when both read the same
 source the same way.** What neither asked was whether there *is* a remainder.
 
-### The three candidate fixes, and why none is chosen here
+### The three candidate fixes, and the one that was taken (candidate 1)
 
 The cause is known; the remedy is a judgement about blast radius, not a
 derivation. All three make the eighth column non-zero:
@@ -3243,22 +3257,31 @@ derivation. All three make the eighth column non-zero:
 3. **Give the eighth an explicit width and rebalance the other seven.** Fixes
    this instance only, and re-creates the exact enumeration that produced it.
 
-**The three money columns being equal is a stated design property** — Fira
-Code's tabular figures exist to make those decimals line up as a block — so
-whichever is chosen, the slack should come from Description, which this file
-already names as "the only column that carries prose, so it takes the slack".
+**This section used to say "the three money columns being equal is a stated
+design property", and that was false.** Measured 2026-08-25: the three cells
+carrying `.money` are Qty, Unit price and Line total — `nth-child(4)`, `(6)` and
+`(7)` — declared `12%`, `14%` and `14%`. Two are equal; Qty is not, and it is a
+count rather than money. The claim was deleted from the stylesheet in `443fa86`
+rather than rewritten, because whether Qty should join the other two at 14% is a
+design question nobody has answered. The widths are unchanged.
 
-**What survives regardless of which fix is chosen:**
+**What survived regardless of which fix was chosen, and where each landed:**
 
-1. **The prose is wrong.** "Seven columns" appears twice while eight render.
-2. **A pin is missing, and it is the property rather than an instance:** *every
-   column the header renders has a declared width*, derived by counting `<th>`
-   against `nth-child` width rules. Without it, a ninth column repeats this
-   exactly — an enumerated list of rules silently falling out of step with a
-   markup list is what produced it.
-3. **Playwright is not one of the five gates**, so this shipped to `main` and
-   stayed there unseen. The guard that caught it was added by an *earlier*
-   browser pass; nothing ran it between that merge and 2026-08-24.
+1. **The prose was wrong.** "Seven columns" appeared twice while eight render.
+   Both corrected in `443fa86`, along with the money-column claim above.
+2. **A pin was missing — and the one named here was the wrong pin.** This asked
+   for *every column the header renders has a declared width*. That is wrong for
+   the fix that was taken: the eighth is now *meant* to take the remainder. What
+   must hold is that there IS a remainder, so the pin added in `443fa86`
+   computes what each column actually gets at the table's own floor, and reads
+   `box-sizing` rather than assuming it. Proven red by mutation both ways:
+   removing `box-sizing` reddens it at "758.4px of a 704px table" — the original
+   defect state, so it would have caught this issue — and widening Description
+   to 40% reddens it while the declaration census stays green, because the
+   census records `width` as a quantity by presence and cannot see a value.
+3. **Playwright is still not one of the five gates**, which is why that pin is a
+   filesystem test in `stylesheets.test.ts` and not a browser one. Nothing about
+   this fix changes what the gates certify (ADR-0029).
 
 ### Related
 
