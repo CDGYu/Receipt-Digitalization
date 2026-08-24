@@ -37,6 +37,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field, replace
 from datetime import date as date_cls
 from decimal import Decimal
+from enum import Enum
 from pathlib import Path
 from typing import Callable, Iterable
 
@@ -188,6 +189,26 @@ def _encode_for_model(rgb: Image.Image, max_edge: int) -> PreparedImage:
     return PreparedImage(b64=b64, media_type="image/jpeg", image_hash=image_hash)
 
 
+class DiscardReason(str, Enum):
+    """Which of ADR-0047 decision 3's two clauses discarded a rung.
+
+    They are different facts about the local model and an eval reads them
+    differently: :attr:`RAISED` says the box could not complete the call, and
+    :attr:`READ_NOTHING` says it completed and could not read the page. One is
+    an argument for more time or a bigger machine; the other is an argument
+    against the model.
+
+    **There is no third member, and that is the ADR's own reasoning rather than
+    an omission.** A parse failure resolves to ``response.parsed or
+    ReceiptExtraction()``, producing exactly a default extraction, which
+    :attr:`READ_NOTHING` already catches -- so a separate member would be one
+    that could never independently fire.
+    """
+
+    RAISED = "raised"
+    READ_NOTHING = "read_nothing"
+
+
 @dataclass(frozen=True)
 class PassAttempt:
     """One model call's provenance: which pass, which rung, which model, kept or not.
@@ -195,12 +216,28 @@ class PassAttempt:
     ``extraction_runs.model_id`` already records the model for every call the
     *service* path makes. The eval path touches no database, so attribution
     travels out through the return value instead.
+
+    **``kept`` is derived, not stored, and that is the point (ISSUE-018).** This
+    carried a stored ``kept: bool`` and nothing else, so a discarded rung
+    recorded *that* it was discarded and never *which clause* discarded it --
+    unrecoverable from a finished ladder run, and not inferable from elapsed
+    time, because ``VLM_TIMEOUT_S`` bounds one HTTP attempt and the SDK retries
+    (ADR-0047 decision 8). Adding a reason *beside* ``kept`` would have made two
+    stored sources of one fact, free to disagree. Storing only the reason leaves
+    the invariant nothing to police: a rung is kept exactly when nothing
+    discarded it.
     """
 
     pass_name: str
     model_id: str
     rung: int
-    kept: bool
+    #: ``None`` for a kept attempt. Every discard sets it.
+    discarded: DiscardReason | None = None
+
+    @property
+    def kept(self) -> bool:
+        """Whether this attempt's result was used. Derived from :attr:`discarded`."""
+        return self.discarded is None
 
 
 @dataclass(frozen=True)
@@ -275,7 +312,7 @@ def run_receipt(
 
     triage_source = triage_client or client
     triage_result, _triage_response = triage(image, triage_source)
-    attribution = [PassAttempt("triage", triage_source.model_id, rung=0, kept=True)]
+    attribution = [PassAttempt("triage", triage_source.model_id, rung=0)]
 
     rungs: list[VLMClient] = [client]
     if extract_fallback_client is not None:
@@ -306,7 +343,12 @@ def run_receipt(
             if is_last:
                 raise
             attribution.append(
-                PassAttempt("extract", rung.model_id, rung=index, kept=False)
+                PassAttempt(
+                    "extract",
+                    rung.model_id,
+                    rung=index,
+                    discarded=DiscardReason.RAISED,
+                )
             )
             continue
 
@@ -317,13 +359,16 @@ def run_receipt(
         # model produced, and the fallback would never fire.
         if is_last or not read_nothing(candidate.extraction):
             outcome = candidate
-            attribution.append(
-                PassAttempt("extract", rung.model_id, rung=index, kept=True)
-            )
+            attribution.append(PassAttempt("extract", rung.model_id, rung=index))
             break
 
         attribution.append(
-            PassAttempt("extract", rung.model_id, rung=index, kept=False)
+            PassAttempt(
+                "extract",
+                rung.model_id,
+                rung=index,
+                discarded=DiscardReason.READ_NOTHING,
+            )
         )
 
     # Not reachable as a failure: `rungs` is never empty, and the final rung
