@@ -353,6 +353,87 @@ def test_consistency_nulls_a_field_with_no_majority():
     assert "totals.total" in result.disputed
 
 
+def test_consistency_tolerates_cent_level_rounding():
+    """949.20 against 949.21 is rounding, not uncertainty (ISSUE-023).
+
+    `_vote` compared `json.dumps` of each value, so one cent between two runs of
+    the same model counted as disagreement and pushed a correct total into
+    `disputed`. Money now agrees through `within_tolerance`, whose floor is 0.02.
+    """
+    a, b, c = good(), good(), good()
+    b.totals.total = D("224.01")
+    client = FakeVLMClient([a, b, c])
+
+    result, _ = run_consistency(IMG, client, n=3)
+
+    assert "totals.total" not in result.disputed
+    assert result.agreement["totals.total"] == 1.0
+    assert result.consensus.totals.total == D("224.00")
+
+
+def test_consistency_still_disputes_a_difference_beyond_tolerance():
+    """The other end of the same bound, so the tolerance cannot swallow a misread.
+
+    Without this, widening `within_tolerance` to excuse anything at all would
+    leave every consistency test green -- which is the failure mode
+    `within_tolerance`'s own docstring warns about in capitals.
+    """
+    a, b, c = good(), good(), good()
+    b.totals.total = D("224.50")  # 50 cents: a digit, not a rounding
+    client = FakeVLMClient([a, b, c])
+
+    result, _ = run_consistency(IMG, client, n=3)
+
+    assert "totals.total" in result.disputed
+    assert result.agreement["totals.total"] == pytest.approx(2 / 3)
+
+
+def test_consistency_aligns_line_items_by_description_not_position():
+    """One dropped row must not make every later row disagree (ISSUE-023).
+
+    Flattened paths are positional, so a run that missed the FIRST row shifted
+    every later index and the whole tail read as disputed -- the
+    "differing count -> all disputed" cascade `align_line_items` was built to
+    end, and which consistency never adopted.
+
+    Here run `b` misses `RICE 5KG`. `OIL 1L` was read identically by all three
+    runs and must land in one slot, agreeing.
+    """
+    a, b, c = good(), good(), good()
+    del b.line_items[0]
+    client = FakeVLMClient([a, b, c])
+
+    result, _ = run_consistency(IMG, client, n=3)
+
+    assert "line_items[1].qty" not in result.disputed
+    assert result.agreement["line_items[1].qty"] == 1.0
+    # And the row that WAS genuinely missed is still reported, rather than the
+    # alignment quietly papering over a real loss.
+    assert "line_items[0].qty" in result.disputed
+
+
+def test_consistency_reports_a_row_no_other_run_saw():
+    """A reading with nowhere to be voted on is surfaced, not dropped.
+
+    The reference run is the longest, so a row only a SHORTER run holds has no
+    slot. That is a real disagreement about what is on the receipt and it is
+    reported against `line_items` rather than discarded in silence.
+    """
+    a, b, c = good(), good(), good()
+    # `a` and `c` are the longest and agree; `b` is shorter but holds a row
+    # neither of them read at all.
+    del b.line_items[1]
+    b.line_items[0] = LineItem(
+        position=0, description_raw="SOAP BAR", qty=D("1"),
+        unit_price=D("30.00"), line_total=D("30.00"),
+    )
+    client = FakeVLMClient([a, b, c])
+
+    result, _ = run_consistency(IMG, client, n=3)
+
+    assert "line_items" in result.disputed
+
+
 def test_consistency_survives_a_failed_run():
     client = FakeVLMClient([good(), "parse failure", good()])
     result, responses = run_consistency(IMG, client, n=3)

@@ -1212,15 +1212,68 @@ def test_R070_silent_without_consistency_data(ctx):
     assert not fired(clean_receipt(), ctx, "R070")
 
 
+def test_R071_fires_when_half_the_rows_are_missing(ctx):
+    """ISSUE-024's worked example, at the same ratio the issue states.
+
+    The issue says triage 12 against 6 extracted must WARN. `clean_receipt` has
+    three rows, so this drives 6 against 3 -- the same boundary, and the one the
+    factor was chosen to sit exactly on rather than just inside.
+    """
+    ctx.triage.estimated_line_item_count = 6
+    findings = validate(clean_receipt(), ctx).by_rule("R071")
+    assert findings
+    # The numbers are named, because the message is written for the repair model.
+    assert "6" in findings[0].message and "3" in findings[0].message
+
+
+def test_R071_silent_when_the_shortfall_is_small(ctx):
+    """Triage guesses. One or two rows out is a guess, not a loss."""
+    ctx.triage.estimated_line_item_count = 4
+    assert not fired(clean_receipt(), ctx, "R071")
+
+
+def test_R071_silent_on_the_shortfall_floor_it_deliberately_misses(ctx):
+    """The documented blind spot, pinned so it stays a decision.
+
+    Four estimated against two extracted is half a receipt lost and does NOT
+    fire, because `MIN_MISSING` is 3. That is a deliberate trade against firing
+    on short receipts, and a test is what stops it being quietly re-tuned.
+    """
+    receipt = clean_receipt()
+    receipt.line_items = receipt.line_items[:2]
+    ctx.triage.estimated_line_item_count = 4
+    assert not fired(receipt, ctx, "R071")
+
+
+def test_R071_silent_when_more_rows_were_extracted_than_triage_counted(ctx):
+    """Over-extraction is a different defect and not this rule's."""
+    ctx.triage.estimated_line_item_count = 1
+    assert not fired(clean_receipt(), ctx, "R071")
+
+
+def test_R071_silent_without_triage(ctx):
+    ctx.triage = None
+    assert not fired(clean_receipt(), ctx, "R071")
+
+
+def test_R071_leaves_the_zero_row_case_to_R013(ctx):
+    """Two rules firing on one cause writes the repair model a confused prompt."""
+    receipt = clean_receipt()
+    receipt.line_items = []
+    ctx.triage.estimated_line_item_count = 6
+    assert not fired(receipt, ctx, "R071")
+    assert fired(receipt, ctx, "R013")
+
+
 # --------------------------------------------------------------------------- #
 # Validator contract
 # --------------------------------------------------------------------------- #
 
 
-def test_all_30_rules_registered():
+def test_all_31_rules_registered():
     ids = [r.id for r in RULES]
-    assert len(ids) == 30
-    assert len(set(ids)) == 30
+    assert len(ids) == 31
+    assert len(set(ids)) == 31
 
 
 def test_validate_never_mutates_input(ctx):
