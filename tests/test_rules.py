@@ -861,6 +861,33 @@ def test_R051_non_contiguous_positions(ctx):
     assert fired(r, ctx, "R051")
 
 
+def test_R051_permuted_positions_are_not_printed_order(ctx):
+    """A permutation, not a gap -- ISSUE-005.
+
+    R051's message promises positions are "0-based, contiguous, **and in
+    printed order**", and its check was `sorted(positions) == expected`, which
+    discards order and passes every permutation. Only the first two thirds of
+    that sentence were enforced.
+
+    This has to be pinned with a permutation specifically: a gap or a repeat
+    fails under `sorted()` too, so a test built from one passes under both
+    implementations and proves nothing.
+
+    It matters beyond the sentence being untrue. `field_accuracy` joins
+    `line_items[i]` by ARRAY INDEX (ADR-0040) while `position` is what a human
+    reads, so when the two disagree every field of both rows is scored against
+    the wrong row, silently.
+    """
+    r = clean_receipt()
+    positions = [i.position for i in r.line_items]
+    assert len(positions) >= 2, "a permutation needs two rows to swap"
+    r.line_items[0].position, r.line_items[1].position = positions[1], positions[0]
+
+    # The set is still exactly 0..n-1 -- no gap, no repeat, no rebased index.
+    assert sorted(i.position for i in r.line_items) == list(range(len(positions)))
+    assert fired(r, ctx, "R051")
+
+
 @pytest.mark.parametrize(
     "description", ["SUBTOTAL", "Sub Total", "TOTAL", "VAT", "CHANGE",
                     "CASH TENDERED", "TOTAL: 847.50", "Amount Due"]

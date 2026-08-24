@@ -1131,15 +1131,25 @@ class NoDuplicateLineItems(Rule):
 class PositionsContiguous(Rule):
     id = "R051"
     severity = Severity.INFO
-    description = "Line item positions are 0..n-1 with no gaps or repeats."
+    description = "Line item positions are 0..n-1, in array order, no gaps or repeats."
 
     def applies(self, r, ctx) -> bool:
         return bool(r.line_items)
 
     def check(self, r, ctx) -> list[Finding]:
+        # `positions ==`, not `sorted(positions) ==`. ISSUE-005: sorting
+        # discards order, so every permutation passed while the message below
+        # promised "and in printed order" -- the third of its three clauses was
+        # enforced by nothing. Fixed 2026-08-24, pinned by
+        # `test_R051_permuted_positions_are_not_printed_order` with a
+        # permutation rather than a gap, because a gap fails under both forms.
+        #
+        # The `description` above gained "in array order" in the same change:
+        # it said "no gaps or repeats", which described the old check and would
+        # have understated the new one.
         positions = [i.position for i in r.line_items]
         expected = list(range(len(positions)))
-        if sorted(positions) == expected:
+        if positions == expected:
             return []
         return [
             self.finding(
