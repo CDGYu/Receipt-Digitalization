@@ -249,6 +249,19 @@ function censusFor(relative: string): Record<string, string> {
  *  point. A change to any entry below should be a deliberate edit in two places
  *  rather than an invisible one in one. */
 const CENSUS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
+  // Derived the same mechanical way as its neighbours: `censusFor` was run
+  // against the file and its output transcribed, not read off the stylesheet by
+  // eye. `.bar` is worn by `main.tsx`'s `<header>` and the rest by the `<nav>`
+  // inside it -- one bar, so one stylesheet.
+  'Nav.module.css': {
+    '.bar':
+      'display: flex, flex-wrap: wrap, align-items: center, gap, padding, border-bottom, background',
+    '.nav': 'display: flex, flex-wrap: wrap, align-items: center, gap, margin-right: auto',
+    '.link':
+      'padding, border-bottom, color, font-family, font-size, font-weight, text-decoration: none, transition',
+    '.link:hover': 'color',
+    '.current': 'border-bottom-color, color',
+  },
   // Derived by applying `censusOf`'s own rule to the file, not transcribed by
   // eye -- the header above calls this mechanical, and doing it by hand is how
   // a census drifts from the stylesheet it is supposed to guard.
@@ -664,7 +677,7 @@ describe('the census reads what is there, not what it hopes for', () => {
 
   it('is reading the real tree, not an empty one', () => {
     const files = stylesheets()
-    expect(files.length, 'no stylesheets found -- the whole census is vacuous').toBe(20)
+    expect(files.length, 'no stylesheets found -- the whole census is vacuous').toBe(21)
     let rules = 0
     let declarations = 0
     for (const file of files) {

@@ -37,6 +37,8 @@ import { ErrorBoundary } from './ErrorBoundary'
 import { currentRoute } from './route'
 import { currentIdentity, hydrateIdentity, isSignedIn, setSignedIn, subscribe } from './session'
 import { LoginPage } from './login/LoginPage'
+import { Nav } from './Nav'
+import navStyles from './Nav.module.css'
 import { ReceiptsScreen } from './receipts/ReceiptsScreen'
 import { ReviewScreen } from './review/ReviewScreen'
 import { SignOutControl } from './SignOutControl'
@@ -122,7 +124,8 @@ function App() {
   const route = currentRoute()
   return (
     <>
-      <header>
+      <header className={navStyles.bar}>
+        <Nav identity={identity} route={route} />
         <ThemeControl />
         <SignOutControl />
       </header>

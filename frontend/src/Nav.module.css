@@ -1,0 +1,73 @@
+/* The header bar and the navigation inside it.
+ *
+ * Two things share this file because they are one bar: `.bar` is worn by
+ * `main.tsx`'s `<header>`, the rest by the `<nav>` inside it. Splitting them
+ * into two stylesheets would put the gap between the nav and the controls in a
+ * different file from the padding that positions both.
+ *
+ * **Every value here is an existing token.** The Editorial refresh
+ * (docs/superpowers/plans/2026-08-24-editorial-visual-refresh.md) owns
+ * `tokens.css` and is being implemented alongside this; adding a token name
+ * here would collide with Task 1 and, worse, a token that does not exist
+ * renders as *nothing at all*, silently -- the trap `ThemeControl.module.css`
+ * records paying for. So this bar inherits the Editorial ramp instead of
+ * restating it, and moves with it when Tasks 3-6 land.
+ *
+ * **No `outline` anywhere.** `tokens.css` carries
+ * `:where(a, button, input, select, textarea):focus-visible`, so these links
+ * already have a keyboard ring in both themes. Setting one here would either
+ * duplicate it or, set to `none`, delete it.
+ *
+ * The header was unstyled until this file existed, which is why `Theme` sat
+ * flush against the left edge of the window with its first glyph clipped --
+ * visible in any screenshot of the app before today. `.bar`'s padding is what
+ * fixes that; it is not decoration.
+ */
+
+.bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-lg);
+  padding: var(--space-md) var(--space-2xl);
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+
+/* `margin-right: auto` rather than a spacer element: the nav takes the left of
+ * the bar and the controls are pushed to the right, and on a narrow window
+ * `flex-wrap` above drops them to a second line instead of overflowing. */
+.nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-lg);
+  margin-right: auto;
+}
+
+/* The transparent bottom border is load-bearing, not a placeholder: `.current`
+ * only recolours it, so a link does not change height when it becomes the
+ * current one and the row does not shift as a person moves between screens. */
+.link {
+  padding: var(--space-xs) 0;
+  border-bottom: 2px solid transparent;
+  color: var(--color-muted-foreground);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  text-decoration: none;
+  transition: color 150ms ease-out;
+}
+
+.link:hover {
+  color: var(--color-foreground);
+}
+
+/* Later in the file than `.link` and of equal specificity, so it wins on the
+ * two declarations it repeats. Colour and a rule underneath, not colour alone:
+ * on the review screen the current link would otherwise be the only difference
+ * between two states of the same word. */
+.current {
+  border-bottom-color: var(--color-primary);
+  color: var(--color-foreground);
+}
