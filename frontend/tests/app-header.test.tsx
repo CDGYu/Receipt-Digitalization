@@ -9,7 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
  * whole suite green and `tsc -b` at exit 0 -- the milestone's first named
  * deliverable could vanish without a word.
  *
- * `app-root.test.tsx` cannot see it: that file mocks `ReviewScreen` with a
+ * `app-root.test.tsx` cannot see it: that file mocks the same screen with a
  * component that throws, so the boundary replaces the entire tree and the header
  * is never in the document. Hence a second file with the same shape and a
  * *benign* stub -- the mock is file-scoped, which is why this is its own file.

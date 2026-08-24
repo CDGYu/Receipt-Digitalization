@@ -5,8 +5,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
  *
  * Unit-testing `ErrorBoundary` proves the component works; it says nothing about
  * whether `main.tsx` wraps `App` in it. This file imports `main.tsx` itself --
- * side effects, `createRoot` and all -- with `ReviewScreen` replaced by a
- * component that throws during render, so the only thing that can put words in
+ * side effects, `createRoot` and all -- with the screen that renders at
+ * jsdom's `/` replaced by a component that throws during render, so the only
+ * thing that can put words in
  * `#root` is a boundary above it. Deleting `<ErrorBoundary>` from `main.tsx`
  * turns this red.
  *

@@ -249,10 +249,6 @@ function censusFor(relative: string): Record<string, string> {
  *  point. A change to any entry below should be a deliberate edit in two places
  *  rather than an invisible one in one. */
 const CENSUS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
-  // Derived the same mechanical way as its neighbours: `censusFor` was run
-  // against the file and its output transcribed, not read off the stylesheet by
-  // eye. `.bar` is worn by `main.tsx`'s `<header>` and the rest by the `<nav>`
-  // inside it -- one bar, so one stylesheet.
   // Derived by running `censusFor` against the file and transcribing what the
   // assertion printed, the same mechanical way as every entry below.
   'home/HomeScreen.module.css': {
@@ -272,6 +268,10 @@ const CENSUS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
     '.wayLabel': 'color, font-size, font-weight, line-height',
     '.wayHint': 'color, font-size, line-height',
   },
+  // Derived the same mechanical way as its neighbours: `censusFor` was run
+  // against the file and its output transcribed, not read off the stylesheet by
+  // eye. `.bar` is worn by `main.tsx`'s `<header>` and the rest by the `<nav>`
+  // inside it -- one bar, so one stylesheet.
   'Nav.module.css': {
     '.bar':
       'display: flex, flex-wrap: wrap, align-items: center, gap, padding, border-bottom, background',

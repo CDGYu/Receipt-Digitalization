@@ -127,3 +127,20 @@ describe('the stylesheet and the component agree', () => {
     }
   })
 })
+
+describe('a fetch that never answers', () => {
+  it('falls back to its own words when the failure carries none', async () => {
+    // The 500 above is an `ApiError` and has a server sentence to show. A
+    // rejected fetch -- offline, DNS, a dropped connection -- is a `TypeError`
+    // with a browser-specific message, so the screen supplies its own. Without
+    // this test that fallback string is unreachable by any test in the suite
+    // and could be deleted with every gate green.
+    vi.stubGlobal('fetch', vi.fn(() => Promise.reject(new TypeError('Failed to fetch'))))
+    render(<HomeScreen />)
+
+    expect(await screen.findByText(/could not read the queue/)).toBeTruthy()
+    expect(screen.getByRole('link', { name: /^Upload a receipt/ }).getAttribute('href')).toBe(
+      '/app/upload',
+    )
+  })
+})

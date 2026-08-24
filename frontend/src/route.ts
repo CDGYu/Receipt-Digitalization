@@ -31,7 +31,7 @@ export function currentRoute(pathname: string = window.location.pathname): Route
     return 'login'
   }
   // `startsWith` rather than equality, so the trailing slash a browser adds is
-  // the same route and not a silent fall-through to the review queue.
+  // the same route and not a silent fall-through to the landing screen.
   if (pathname.startsWith('/app/admin')) {
     return 'admin'
   }
@@ -41,18 +41,20 @@ export function currentRoute(pathname: string = window.location.pathname): Route
   // This said "the results list is reached only by typing or bookmarking the
   // path -- nothing in the app links to it yet" until 2026-08-24. It was true
   // when written and `a7e5fa0` falsified it that morning by adding the nav,
-  // which links here and to every other screen; the home screen links here
-  // too. Missed in that commit's own sweep and corrected here.
+  // which links here, and the home screen links here too. (The nav reaches
+  // every signed-in screen except this file's own `login`, and `admin` only for
+  // an admin -- so "every other screen" would overstate it.) Missed in that
+  // commit's own sweep and corrected here.
   if (pathname.startsWith('/app/receipts')) {
     return 'receipts'
   }
   // `startsWith`, like its siblings, so the trailing slash a browser adds is
-  // the same route rather than a silent fall-through to the review queue.
+  // the same route rather than a silent fall-through to the landing screen.
   //
   // Its position relative to the other branches does not matter -- no two of
   // these prefixes overlap -- but its position above the `return` does, and that
   // is the whole hazard: an unrouted `/app/upload` does not throw, it quietly
-  // renders the review queue. Which is why the pin in
+  // renders the landing screen. Which is why the pin in
   // `tests/admin-screen.test.tsx` asserts the route BY NAME: "not admin" passes
   // with no branch here at all.
   if (pathname.startsWith('/app/upload')) {

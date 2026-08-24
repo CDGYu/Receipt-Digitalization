@@ -13,7 +13,10 @@ import type { Route } from '../src/route'
  * puts the two together. **Measured before this file existed** -- the same
  * measurement `app-header.test.tsx` records for `SignOutControl`, run again for
  * Task 4's own deliverable: with the import and the route branch deleted from
- * `main.tsx`, so that `App` renders `<ReviewScreen />` unconditionally,
+ * `main.tsx`, so that `App` rendered `<ReviewScreen />` unconditionally (that
+ * being the fall-through at the time; since `3f58425` the same deletion falls
+ * through to `<HomeScreen />` instead -- the measurement stands, the screen it
+ * lands on moved),
  * `tsc -b` exits 0, `oxlint` reports only its pre-existing fast-refresh warning,
  * and **all 316 tests pass**. The whole `/app/admin` surface could be built,
  * merged and then quietly unreachable, with every gate green.
@@ -72,11 +75,16 @@ import type { Route } from '../src/route'
  * it "strips nothing at all" was false, and only its `route.ts` read was ever
  * meant.)
  *
- * `/app/review` is not among the literals: `review` is the switch's *default*
- * and `route.ts` declares no string for it. The last case below covers it, and
- * that default is why every case here asserts the expected screen **by name**
- * rather than asserting "not the admin screen" -- an unmounted route does not
- * throw, it quietly serves the review queue.
+ * `/app/` is not among the literals: `home` is the switch's *default* and
+ * `route.ts` declares no string for it. The last case below covers it, and that
+ * default is why every case here asserts the expected screen **by name** rather
+ * than asserting "not the admin screen" -- an unmounted route does not throw,
+ * it quietly serves the landing screen.
+ *
+ * This named `review` as the default until 2026-08-24. True when written;
+ * `3f58425` made `/app/` a landing screen, so `home` took the default and
+ * `review` gained the explicit `/app/review` literal it had never needed while
+ * it *was* the default.
  *
  * Every screen is mocked, and that is the point rather than a shortcut: what is
  * under test is the *switch*, not any one of the components. A real

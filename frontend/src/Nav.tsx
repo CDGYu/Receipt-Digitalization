@@ -13,15 +13,20 @@ interface Destination {
   readonly route: Route
 }
 
-/** The three screens every signed-in person can reach, in the order the work
- *  runs: a receipt arrives, someone reviews it, the result is read back.
+/** The screens every signed-in person can reach, in the order the work runs: a
+ *  landing screen, a receipt arrives, someone reviews it, the result is read
+ *  back. `Admin` is appended below and is role-gated, so this list is not the
+ *  whole nav.
  *
  * `href` and `route` are both spelled out rather than one derived from the
  * other, because they genuinely differ: the results list lives at
- * `/app/receipts` and its route is named `receipts`, while `Review` points at
- * `/app/review` -- a path `route.ts` matches no branch for and resolves to
- * `review` only by falling through to its default. Deriving either from the
- * other would make that fall-through look deliberate.
+ * `/app/receipts` and its route is named `receipts`, while `Home` points at
+ * `/app/` and has no literal in `route.ts` at all -- it is the default. Neither
+ * mapping is derivable from the other.
+ *
+ * This said `/app/review` was "a path `route.ts` matches no branch for" until
+ * 2026-08-24. True when written; `3f58425` gave it an explicit branch two lines
+ * below this comment and did not correct it here.
  */
 const DESTINATIONS: readonly Destination[] = [
   // `/app/` rather than a named path: home is `route.ts`'s default, so it has
