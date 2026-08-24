@@ -29,7 +29,7 @@ import json
 import math
 import re
 import uuid
-from datetime import date, time
+from datetime import UTC, date, datetime, time
 from decimal import Decimal
 from pathlib import Path
 
@@ -77,6 +77,7 @@ from receipts.persist.repository import (
     _PAN_MIN_DIGITS,
     _PAN_RE,
     _RECEIPT_FIELDS,
+    record_progress,
 )
 from receipts.persist.session import make_engine, make_session_factory
 from receipts.score.confidence import ReceiptStatus
@@ -998,6 +999,104 @@ def test_empty_reasons_and_missing_reasons_are_different(engine: sa.Engine) -> N
         session.commit()
         # [] means "nothing lowered the score"; NULL means "never recorded".
         assert receipt.confidence_reasons == []
+
+
+# --------------------------------------------------------------------------- #
+# record_progress
+# --------------------------------------------------------------------------- #
+
+
+def test_record_progress_stamps_stage_and_time(engine: sa.Engine) -> None:
+    job = _job()
+    with Session(engine) as session:
+        create_pending_receipt(session, job)
+        session.commit()
+
+    stamped = datetime(2026, 8, 24, 12, 0, tzinfo=UTC)
+    with Session(engine) as session:
+        record_progress(session, job.id, "extract", now=stamped)
+        session.commit()
+
+    with Session(engine) as session:
+        receipt = get_receipt(session, job.id)
+        assert receipt.progress_stage == "extract"
+        assert receipt.progress_at is not None
+
+
+def test_record_progress_stamps_the_time_it_was_given(engine: sa.Engine) -> None:
+    """``now`` is the stamp, not a hint.
+
+    Nothing else pins it: every other beat in this section passes an
+    implementation that ignores ``now`` and always reads the clock, and the
+    stage-and-time test above can only assert ``is not None`` because SQLite
+    drops the offset on the way back out -- measured 2026-08-24, ``12:00+00:00``
+    stored and ``tzinfo=None`` read back, so an equality against the aware
+    value it was handed is ``False`` here for a reason that has nothing to do
+    with what was written. Re-attaching UTC compares the instant instead; on
+    PostgreSQL's ``TIMESTAMPTZ`` the column comes back aware already and the
+    re-attach is a no-op.
+    """
+    job = _job()
+    with Session(engine) as session:
+        create_pending_receipt(session, job)
+        session.commit()
+
+    stamped = datetime(2026, 8, 24, 12, 0, tzinfo=UTC)
+    with Session(engine) as session:
+        record_progress(session, job.id, "extract", now=stamped)
+        session.commit()
+
+    with Session(engine) as session:
+        written = get_receipt(session, job.id).progress_at
+        assert written.replace(tzinfo=written.tzinfo or UTC) == stamped
+
+
+def test_record_progress_overwrites_the_previous_beat(engine: sa.Engine) -> None:
+    """A heartbeat is the LAST time seen alive, not a log."""
+    job = _job()
+    with Session(engine) as session:
+        create_pending_receipt(session, job)
+        session.commit()
+
+    with Session(engine) as session:
+        record_progress(session, job.id, "triage")
+        session.commit()
+    with Session(engine) as session:
+        record_progress(session, job.id, "extract")
+        session.commit()
+
+    with Session(engine) as session:
+        assert get_receipt(session, job.id).progress_stage == "extract"
+
+
+def test_record_progress_does_not_commit(engine: sa.Engine) -> None:
+    """ADR-0006: the caller owns the transaction.
+
+    Rolling back after the call must lose the write. If record_progress
+    committed, the stage would survive the rollback.
+    """
+    job = _job()
+    with Session(engine) as session:
+        create_pending_receipt(session, job)
+        session.commit()
+
+    with Session(engine) as session:
+        record_progress(session, job.id, "extract")
+        session.rollback()
+
+    with Session(engine) as session:
+        assert get_receipt(session, job.id).progress_stage is None
+
+
+def test_record_progress_on_an_unknown_receipt_writes_nothing(engine: sa.Engine) -> None:
+    """A heartbeat for a row that is gone is a no-op, not an error.
+
+    Narration must never be load-bearing, and a receipt deleted mid-run is not
+    a reason to take an extraction down.
+    """
+    with Session(engine) as session:
+        record_progress(session, uuid.uuid4(), "extract")
+        session.commit()
 
 
 # --------------------------------------------------------------------------- #

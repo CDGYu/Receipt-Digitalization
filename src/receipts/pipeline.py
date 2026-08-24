@@ -68,6 +68,7 @@ from .persist.repository import (
     find_duplicate_by_phash,
     get_receipt,
     mark_duplicate,
+    record_progress,
     redact_pan,
     save_extraction,
     save_extraction_run,
@@ -523,6 +524,40 @@ def _stage(name: str, progress: "ProgressSink | None" = None):
         raise
     except Exception as exc:
         raise _StageFailure(name, exc) from exc
+
+
+def _heartbeat_sink(
+    session_factory: Callable[[], Session], receipt_id: uuid.UUID
+) -> ProgressSink:
+    """A :data:`ProgressSink` that records liveness on the receipt row.
+
+    Its own short session per event, opened and closed around a single write.
+    It deliberately does not reuse the pipeline's session: that one may be
+    mid-stage or already rolled back, which is the same reason
+    :func:`_persist_failure` takes a fresh one.
+
+    It commits, because a heartbeat no other process can see is not a
+    heartbeat. That is consistent with ADR-0006, which puts the transaction in
+    the caller's hands -- here the sink is the caller.
+
+    It may raise. Every call site is already guarded (:func:`_stage`,
+    :func:`~receipts.extract.extractor._report`, and the best-attempt block in
+    ``extract_with_repair``), so a database blip costs narration and never the
+    extraction.
+    """
+
+    def sink(event: ProgressEvent) -> None:
+        session = session_factory()
+        try:
+            record_progress(session, receipt_id, event.stage)
+            session.commit()
+        except Exception:
+            session.rollback()
+            raise
+        finally:
+            session.close()
+
+    return sink
 
 
 def process_receipt(

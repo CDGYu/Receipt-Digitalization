@@ -31,8 +31,8 @@ import math
 import re
 import uuid
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from datetime import date as date_cls
-from datetime import datetime
 from datetime import time as time_cls
 from decimal import Decimal, InvalidOperation
 from enum import Enum
@@ -40,6 +40,7 @@ from typing import Any, Callable
 
 from pydantic import BaseModel
 from sqlalchemy import or_, select
+from sqlalchemy import update as sa_update
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -817,6 +818,32 @@ def save_findings(
 def get_receipt(session: Session, receipt_id: uuid.UUID) -> Receipt | None:
     """One receipt by id, or ``None``. Line items load on access."""
     return session.get(Receipt, receipt_id)
+
+
+def record_progress(
+    session: Session,
+    receipt_id: uuid.UUID,
+    stage: str,
+    *,
+    now: datetime | None = None,
+) -> None:
+    """Stamp ``receipt_id`` as last known alive at ``stage``.
+
+    A heartbeat, not a log: it overwrites, because the only question anyone
+    asks of it is "when was this last moving". ``receipts.sweep`` reads it to
+    tell a slow receipt from a stranded one.
+
+    An unknown ``receipt_id`` writes nothing and raises nothing. Narration is
+    never load-bearing, and a heartbeat is not a reason to fail a run.
+
+    Flushes; does not commit (ADR-0006).
+    """
+    session.execute(
+        sa_update(Receipt)
+        .where(Receipt.id == receipt_id)
+        .values(progress_stage=stage, progress_at=now or datetime.now(UTC))
+    )
+    session.flush()
 
 
 def get_findings(session: Session, receipt_id: uuid.UUID) -> list[ValidationFinding]:
