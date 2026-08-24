@@ -58,6 +58,7 @@ Accepted; supersede it with a new ADR rather than editing history.
 | [0050](0050-a-label-is-fully-public-or-fully-private.md) | A golden label is fully public or fully private | Accepted |
 | [0051](0051-a-guard-must-not-share-its-derivation-with-its-subject.md) | A guard must not share its derivation with its subject | Accepted |
 | [0052](0052-the-editorial-visual-system.md) | The Editorial visual system: the ramp changed hue, not brightness | Accepted |
+| [0053](0053-two-derivations-from-one-source-are-one-derivation.md) | Two derivations from one source are one derivation | Accepted |
 
 Read **0001** first: it is the invariant everything else defers to. **0007** is
 the one to read before touching anything that writes card data or money, and
