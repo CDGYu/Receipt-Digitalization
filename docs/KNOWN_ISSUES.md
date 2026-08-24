@@ -2945,3 +2945,72 @@ has a reachable path to no terminal state at all.
 - ISSUE-028 — why both were unreachable until 2026-08-24.
 - ADR-0022 — failure egress redaction, the other place a failure path is
   contractual.
+- ISSUE-031 — found by being forced off the queue path by this one.
+
+---
+
+## ISSUE-031 — Progress narration exists on exactly one of four entry points
+
+**Status:** OPEN — the progress feature is dead by construction on a deployment
+the project explicitly supports.
+**Owner action required:** **yes** — it is a decision about where the sink
+belongs, not a missing argument to add in three places without thinking.
+**Discovered:** 2026-08-24, after ISSUE-029 forced the run off the queue path
+onto a CLI one. **Pre-existing:** yes, since the progress sink was added.
+**Blocks:** any narration on `--inline`, `reprocess` or `process_batch`.
+
+### Re-derived rather than asserted, because "the one X" is the shape this
+### project keeps getting wrong
+
+Every `process_receipt(` call site in `src/`:
+
+| site | path | supplies `progress=`? |
+|---|---|---|
+| `cli.py:874` | `receipts process --inline` | **no** |
+| `cli.py:982` | `receipts reprocess` | **no** |
+| `pipeline.py:1330` | `process_batch` | **no** |
+| `worker.py:272` | the RQ job | **yes**, at `worker.py:279` |
+
+Every `progress=` supplied in `src/`: `pipeline.py:687` (internal, passing it
+further down) and `worker.py:279`. (`review/queue.py:599` is `in_progress=`, a
+substring false positive — named here so the next person does not re-find it.)
+
+**Four call sites, one narrator.** `stage` is `null` for every receipt processed
+off the queue, by construction rather than by accident.
+
+### Why it matters more than "a CLI flag is quiet"
+
+`--inline` is the **documented** path for a single machine or a box with no
+Redis — `cli.py:30`, `cli.py:406-407`, and ADR-0013. On such a deployment the
+upload screen polls `GET /receipts/{id}/progress`, receives `stage: null` every
+time, and the STEPS list stays empty for every receipt forever. **The processing
+screen's entire narration feature is dead on a supported deployment**, and no
+gate can see it because nothing exercises the screen against an
+inline-processed receipt.
+
+### The near-miss that is worth as much as the finding
+
+The run that surfaced this was watching for events between `extract` and
+`normalize` — whether the repair loop narrates at all. It was run through
+`reprocess`, which is one of the three silent paths. **"The repair loop emits
+nothing" would have been true of the observation and false about the cause**,
+and it was caught before being reported rather than after. The repair-loop
+question therefore **remains open**: it cannot be answered on any path but the
+queue.
+
+### Resume
+
+1. Decide where the sink belongs. Threading `progress=` through three more call
+   sites is the obvious move and may be the wrong one — a CLI has no Redis to
+   write to on the deployment that most needs this.
+2. Answering the repair-loop question needs the **queue** path with a raised
+   `job_timeout`. `enqueue_receipt` already accepts one as a parameter while
+   `_default_submit` uses the constant — see ISSUE-029.
+3. Nothing exercises the screen against an inline-processed receipt. Consider
+   whether that gap is worth a test before the narration is trusted anywhere.
+
+### Related
+
+- ISSUE-029 — forced the run off the queue path, which is how this was found.
+- ADR-0013 — ingest does not enqueue, and `--inline` is the no-Redis path.
+- ADR-0048 — a rationale is a second claim; see the near-miss above.
