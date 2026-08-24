@@ -399,6 +399,44 @@ the theme and the one question it opened are deliberately **not** copied into
 this ADR. A verdict in two documents is a verdict that can disagree with
 itself.**]**
 
+## Correction (2026-08-24) — decision 2's palette values are superseded by ADR-0052; its reasoning is not
+
+**The light palette values quoted in and implied by decision 2 were superseded on
+2026-08-24 by ADR-0052**, which retunes the light ramp for the Editorial visual
+direction. This is a dated record of what moved, not an edit to any decision.
+
+**All five decisions on this page stand, unchanged.** ADR-0052 changes *values*
+on names decision 2 already established, and adds four new non-colour token
+names (`--font-display`, `--text-3xl`, `--space-4xl`, `--space-5xl`). It
+introduces no new colour token, no second stylesheet and no build-config change,
+which is decision 2 continuing to hold rather than being set aside.
+
+Two figures in decision 2's own text are stale as a result, and are recorded here
+rather than rewritten above:
+
+| decision 2 says | reads in the tree on 2026-08-24 |
+|---|---|
+| "**`--color-muted-foreground` is `#475569` in light**" | **`#57534E`** — 7.63:1 on `#FFFFFF`, against `#475569`'s 7.58:1. The *argument* that sentence makes is untouched: the generated `#94A3B8` still fails the body-text rule, and the replacement still clears it comfortably. |
+| "one file with **35 custom properties** in three blocks" | **39**, over **69** declarations. The four new names above, declared once each. The 2026-08-07 correction's method still re-derives it: strip comments, match `--name:`, count distinct. |
+
+**Decision 2's reasoning is what forced the new ramp's shape, and is the reason
+ADR-0052 exists in the form it does.** *Severity colours are reserved* — "if
+amber is the brand colour, a WARN finding has no colour left" — so the reserved
+colours could not be retuned to make room for a warmer ground. Measured under
+that constraint: `--color-severity-error` `#DC2626` clears the 4.5:1 floor by
+**0.12** on the light background (4.62:1 on the old `#F8FAFC`, 4.62:1 on the new
+`#FAFAF9`), and `--color-null` cleared it by **0.05** (4.55:1). With that little
+headroom the ground **cannot get darker**; it can only change hue at roughly
+constant luminance, which is exactly what it did — relative luminance 0.95356
+before, 0.95535 after. A ruling made on this page in 2026-08-05 set the shape of
+a palette written nineteen days later.
+
+**The dark blocks are byte-identical.** ADR-0052 declines to touch them because
+the 2026-08-06 pass above is what backs them, and `--color-null: #7C8CA2` at
+**5.43:1** is the subject of a correction on this very page and of a pinned
+arithmetic control in `stylesheets.test.ts`. The stated cost is that light now
+reads neutral-warm while dark stays blue-slate.
+
 ## References
 
 `docs/superpowers/specs/2026-08-05-review-ui-design-system.md` (the design,
