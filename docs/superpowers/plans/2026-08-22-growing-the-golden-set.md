@@ -474,6 +474,69 @@ does, stop: the ignore rule failed and Task 1's pin should have caught it.
 **This plan does not self-amend.** Everything above is the text as written; this
 log is what was wrong with it and when.
 
+### 2026-08-25 — caught pre-flighting Task 3, by probing rather than reading
+
+**Defect 9 — Task 3's own commands print a private label's contents, and the
+plan's four "things that will bite" describe the smaller half of it.** Step 1
+and Step 3 both instruct the labeller to run `validate_labels` and read its
+output. Measured against a `p042.json` containing
+`{"merchant": {"tax_id": 7888999000}}` — an id typed without quotes, which is
+an ordinary slip beside the README's money-as-string rule — the printed entry
+read `... input_value=7888999000, input_type=int ...`. **Following the plan's
+own instruction put a real third party's tax id on the screen.**
+
+The hazard was known, but only in its quieter form: the handoff records "a `p*`
+label puts real merchant data in pytest output." The terminal surface a
+labeller runs after every batch was named nowhere, and it is the one that fires
+first.
+
+Two corrections to what the hazard *is*, both measured:
+
+- **Pydantic echoes the failing field's value, not the label's content.** A
+  record carrying PII in `merchant` that fails on `totals.total` rendered the
+  total and none of the merchant fields; a record failing on `merchant.name`
+  rendered that field and not the sibling `address` or `tax_id`. The leak is
+  per-field, which is why "suppress `input_value`" closes it and "stop echoing
+  the label" was never the change to make.
+- **A JSON *syntax* error is a second shape and is not per-field.** It echoes a
+  truncated window of the raw file: `input_value='{"merchant": {"name":
+  "A...HARMACY CORPORATION",}}'`. The ellipsis splits the name, so the first
+  probe run here — an exact-string search for the full name — reported the data
+  as *not present* while it was plainly on screen. **A needle that cannot match
+  is not evidence of absence.**
+
+Closed as ISSUE-033 on `feat/golden-label-privacy`. `p*` only, reusing
+`.gitignore`'s own prefix; the scope is forced by
+`test_naming_the_label_does_not_change_what_escapes`, which exercises a public
+label and goes red if the redaction is made a blanket.
+
+**Defect 10 — Step 3's first instruction certifies almost nothing, and the
+sentence that makes it safe is Defect 7's, not Step 3's.** Step 3 says
+"`validate_labels` must stay `[]`." Measured: it returns `[]` for a label whose
+every key is misspelled **and** for `{}`. Both load as a fully-null
+`ReceiptExtraction`, because the schema sets `extra='ignore'` and every field is
+optional. A labeller who mistypes `totals` as `total` therefore gets a green
+validator and a near-empty truth — and the README's own worked example (`r003`,
+2 of 18 fields read) explains what a near-empty truth does to a measurement.
+
+**This is not a hole, and the reason matters.** `tests/test_eval_floor.py`
+fails all three shapes — floor `1.0` for `{}`, `1.0` for an all-typo label, and
+`16.7%` for a partial typo where `merchant` parsed and `totals` did not, each at
+or above its `MAX_FLOOR = 0.10`. So the guard exists, but it is the *suite*, and
+Step 3 names only `test_eval_floor.py` while Defect 7 already corrected that to
+"run the whole suite." **Defect 7's correction is what carries Step 3's safety,
+and Step 3's own first command carries none of it.** Stated here so the next
+reader does not re-run the probe: the suspicion is correct, the conclusion is
+not.
+
+Bound on that result: the floor test catches these because a typo makes the
+truth *emptier*, which drives the floor up. Three shapes were tried, not all.
+
+**Unrelated, found by the same probe, not investigated:** `receipt.date` is
+`str | None`, so the loader accepts `"14/03/2026 ACME PHARMACY QC"` as a date
+without complaint. Whether the rule engine rejects it downstream was not
+checked. Do not assume a malformed date fails at load.
+
 ### 2026-08-23 — caught before Task 3, by the session that would have run it
 
 **Defect 8 — the self-review declares §5's gap closed, on a reason that does not
