@@ -47,6 +47,9 @@ Everything below was re-derived here rather than relayed from the register
 | One `complete_json` can take up to `3 x VLM_TIMEOUT_S`; the SDK's `max_retries` defaults to 2 and is never set here | ADR-0047 lines 222-224 |
 | Whether to pin `max_retries` is explicitly **not decided** | ADR-0047 line 232 |
 | No scheduler exists in the tree -- no rq-scheduler, no APScheduler, no FastAPI `lifespan` | `git grep -niE 'rq_scheduler\|apscheduler\|lifespan\|on_event'` over `src` and `pyproject.toml` |
+| `_persist_outcome` closes a review task on auto-approval and updates the one existing row otherwise; `review_tasks.receipt_id` is UNIQUE | read `_persist_outcome`'s enqueue/close branch and `enqueue_review`'s docstring |
+| `enqueue_review` keeps the more urgent priority and keeps `reason` in step with it | `enqueue_review` docstring |
+| Tests build `session_factory` from a **file-based** SQLite in `tmp_path`, not in-memory; there is no `tests/conftest.py` | read the fixture in `tests/test_pipeline_merchant_hints.py`; `ls tests/conftest.py` fails |
 
 Two notes on numbers that look like they disagree and do not. The compose
 comment cites **590 s** triage at `max_edge=2048`, matching ADR-0047 line 55;
@@ -242,9 +245,25 @@ the path-independence that is the whole point.
 
 A queue backlog longer than `unstarted_cutoff` produces a spurious sweep. It
 self-corrects, because `needs_review` is not `reviewed` and the worker's own
-write will overwrite it -- but a review task will have been opened in the
-meantime. **Whether that task is closed or lingers is not verified here.** The
-implementation pins it; this document does not assert it.
+write overwrites it.
+
+**The review task self-corrects too.** Verified by reading `_persist_outcome`: when the
+later run auto-approves it calls `close_review_for_receipt`, whose docstring
+gives exactly this reason -- a task left open after auto-approval would be
+handed out by `GET /review/next` and would inflate the `/metrics` backlog. When
+the later run routes to review instead, `enqueue_review` updates the one row
+rather than adding a second, because `review_tasks.receipt_id` is UNIQUE. So a
+spurious sweep leaves neither a duplicate task nor a stale approved-but-queued
+one.
+
+**One residual it does leave.** `enqueue_review` keeps the *more urgent*
+priority and keeps `reason` in step with it. The sweep writes
+`_FAILURE_PRIORITY` (1, the most urgent), so a receipt swept and then
+legitimately re-processed to `needs_review` at a calmer priority keeps the
+sweep's priority **and its reason** -- a reviewer would read "interrupted"
+where the real finding was something else. This is accepted rather than fixed:
+in the genuine stranded case, which is the case this exists for, both the
+priority and the reason are correct.
 
 ### 6.3 The reviewed-row refusal is structural
 
