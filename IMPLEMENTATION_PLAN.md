@@ -54,14 +54,17 @@ admin and receipts screens. Deployment is complete too — entry point
 
 **What is genuinely NOT built**, each with its status note on the task below:
 the golden set (P0.T1 — three receipts of a documented 50), bounding-box
-highlighting (P5.T1, gated on P2.T2), the upload screen (P5.T2 / ISSUE-026),
+highlighting (P5.T1, gated on P2.T2), **two of P5.T2's four items — upload
+drag-and-drop and the receipts list's status/confidence filters**,
 self-consistency wiring (P7.T1), and all of Phases 8 and 9.
 
 *(P2.T1, P2.T3 and P2.T4 stood in that list until 2026-08-25, when all three
-were built at `aa65a2b`. **The `P5.T2 / ISSUE-026` entry is left as written and
-is probably stale** — ISSUE-026 is marked RESOLVED 2026-08-24 in the register,
-but whether P5.T2's whole scope landed with it was not re-derived here, and a
-list of what is unbuilt is the wrong place to guess.)*
+were built at `aa65a2b`. **The `P5.T2 / ISSUE-026` entry said "the upload
+screen" and that was wrong in both directions**, which is why it was flagged as
+suspect rather than deleted and then derived on 2026-08-25: the upload screen
+IS built and mounted, so ISSUE-026 is genuinely closed — and P5.T2 is still
+unmet on two items nobody was tracking, because the entry named the wrong
+thing. See its status note.)*
 
 **The single blocking fact:** nothing in Phases 8 or 9, and no acceptance
 phrased as "measure X before and after", can start until the golden set grows.
@@ -430,15 +433,42 @@ The screen where the ongoing cost of the system lives. Optimise for time-per-rec
 
 ### Task P5.T2 — Upload, list, queue, export pages `[frontend]`
 
-> **STATUS 2026-08-23 — three of four. Filed as ISSUE-026.** The receipts list,
-> the review queue and the export trigger all ship (ADR-0046). **There is no
-> upload UI**: no component exists and `main.tsx` mounts none. `POST /upload` is
-> complete, guarded and size-bounded, so today a receipt enters only through a
-> shell. The user ruled 2026-08-23 that the screen **gets built**, as part of a
-> wider UI/UX pass.
+> **STATUS 2026-08-25 — two of four, and NOT the two this row used to name.**
+> Each item derived against the tree rather than inferred from ISSUE-026 being
+> closed:
+>
+> | item | state | evidence |
+> |---|---|---|
+> | upload drag-and-drop | **NOT built, deliberately** | the only two matches for `drag` under `frontend/src` are comments; `UploadScreen.module.css` records the decision — "nothing here handles a drag, and a box that looks droppable and is not is a worse lie than a plain one" |
+> | upload progress | built | `ProcessingView`, mounted in place by `UploadScreen` |
+> | list status/confidence filters | **NOT built** | no control and no query param; `ReceiptsScreen.tsx` says so itself — "No filters, no sorting, no column choice" |
+> | queue ordered by priority | built | `order_by(ReviewTask.priority, ReviewTask.opened_at, ReviewTask.id)`, `review/queue.py:92` and `:466` |
+> | export trigger | built | `requestBlob('/export/xlsx')`, `frontend/src/api/receipts.ts:40` |
+>
+> **ISSUE-026 is closed and this task is not, and those were being confused.**
+> The issue's claim was that no upload component existed and `main.tsx` mounted
+> none; `main.tsx:151` mounts `<UploadScreen />`, so it is genuinely resolved.
+> This task asks for four things and two of them have never been built.
+>
+> *(The earlier version of this note read "three of four" and named the upload
+> screen as the missing one. That was true on 2026-08-23. What made it hard to
+> correct is that the screen landing looked like the whole row landing.)*
+>
+> **Drag-and-drop is a decision, not a gap to fill silently.** Adding it means
+> overturning a recorded refusal to make the chooser look droppable, and it
+> needs the drop handler, not just the styling that was withheld.
 
-- [ ] Upload (drag-drop, progress); receipts list with status/confidence filters; review queue ordered by priority; export trigger hitting `GET /export/xlsx`.
-- [ ] Tests + commit.
+- [ ] Upload **drag-drop** — not built, and deliberately so; see the note above.
+- [x] Upload **progress** — `ProcessingView`, replacing the chooser in place.
+- [ ] Receipts list with **status/confidence filters** — not built; the screen
+      has no filter control at all.
+- [x] Review queue **ordered by priority** — `review/queue.py:92`, `:466`.
+- [x] Export trigger hitting `GET /export/xlsx` — `api/receipts.ts:40`.
+- [ ] Tests + commit — outstanding for the two unbuilt items only.
+
+*(One checkbox held all four items until 2026-08-25. It could not be ticked
+while any item was missing and could not show which, so the two that shipped
+and the two that never did were indistinguishable from outside.)*
 
 ---
 
