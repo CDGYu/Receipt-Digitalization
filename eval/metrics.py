@@ -392,6 +392,25 @@ class EvalReport:
     #: fact that everything escalated, and this is the figure that answers it.
     extract_rung_counts: dict[str, int] | None = None
 
+    #: Why each *discarded* extract rung was discarded, keyed model id -> reason
+    #: -> count. The counterpart to ``extract_rung_counts`` above, which counts
+    #: only the rung that was KEPT: a ladder run reporting
+    #: ``{"gemma4:cloud": 1}`` said granite ran and was discarded, and which of
+    #: ADR-0047 decision 3's two clauses fired was unrecoverable from the
+    #: artifact (ISSUE-018). They are different facts -- a raise says the box
+    #: could not finish the call, a read-nothing says the model could not read
+    #: the page -- and only one of them is an argument for a bigger machine.
+    #:
+    #: **Do not infer this from elapsed time.** ``VLM_TIMEOUT_S`` bounds one
+    #: HTTP attempt and the SDK retries (decision 8), so an elapsed figure
+    #: covers an unknown number of attempts.
+    #:
+    #: ``None`` rather than ``{}`` on the same rule as the field above, with one
+    #: difference worth stating: here ``None`` and "nothing was discarded" are
+    #: genuinely different, and a run where every receipt was served by its
+    #: first rung leaves this ``None``.
+    extract_discard_counts: dict[str, dict[str, int]] | None = None
+
     #: Receipts that failed anywhere in ``run_eval``, and ``(receipt_id, error)``
     #: for each. See the class docstring: reading, the pipeline call and scoring alike.
     n_failed: int = 0

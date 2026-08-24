@@ -40,6 +40,7 @@ from receipts.extract.schema import (  # noqa: E402
     TriageResult,
 )
 from receipts.pipeline import (  # noqa: E402
+    DiscardReason,
     PassAttempt,
     build_eval_pipeline,
     prepare_image,
@@ -257,6 +258,78 @@ def test_a_raising_first_rung_falls_back_rather_than_propagating(tmp_path):
     # pinned by nothing -- a rung that failed would vanish from the record.
     discarded = [a for a in outcome.attribution if a.pass_name == "extract" and not a.kept]
     assert [a.model_id for a in discarded] == ["local"]
+
+
+def test_a_discarded_rung_records_which_clause_discarded_it(tmp_path):
+    """ISSUE-018: the record said a rung was discarded, never why.
+
+    ADR-0047 decision 3 discards on **two** clauses -- the call raised, or the
+    extraction read nothing -- and they are different facts about the local
+    model. A raise says the box is too slow; a read-nothing says the model
+    cannot read the page. `extract_rung_counts` in a real ladder run showed
+    granite discarded and the cloud rung kept, and which clause fired was
+    unrecoverable from the artifact.
+
+    **Do not infer it from elapsed time.** `VLM_TIMEOUT_S` bounds one HTTP
+    attempt and the SDK retries (decision 8), so any elapsed figure covers an
+    unknown number of attempts.
+    """
+    png = tmp_path / "receipt.png"
+    _write_png(png)
+    first = _RaisingClient(model_id="local")
+    fallback = FakeVLMClient([_good()], model_id="cloud")
+
+    outcome = run_receipt(png, first, CTX, triage_client=FakeVLMClient([_triage()]),
+                          extract_fallback_client=fallback)
+
+    discarded = [a for a in outcome.attribution if a.pass_name == "extract" and not a.kept]
+    assert [(a.model_id, a.discarded) for a in discarded] == [
+        ("local", DiscardReason.RAISED)
+    ]
+
+
+def test_a_rung_that_read_nothing_is_distinguishable_from_one_that_raised(tmp_path):
+    """The other clause, and the reason this pin is two tests rather than one.
+
+    A single test on one clause would stay green with both construction sites
+    setting the same reason -- which is exactly the defect ISSUE-018 describes,
+    one step along. These two fail differently.
+    """
+    png = tmp_path / "receipt.png"
+    _write_png(png)
+    first = FakeVLMClient([_triage(), _unparseable()], model_id="local")
+    fallback = FakeVLMClient([_good()], model_id="cloud")
+
+    outcome = run_receipt(png, first, CTX, extract_fallback_client=fallback)
+
+    discarded = [a for a in outcome.attribution if a.pass_name == "extract" and not a.kept]
+    assert [(a.model_id, a.discarded) for a in discarded] == [
+        ("local", DiscardReason.READ_NOTHING)
+    ]
+
+
+def test_kept_and_discarded_cannot_disagree(tmp_path):
+    """One stored field, not two, so the invariant has nothing to police.
+
+    `kept` was a stored `bool` beside which a reason field would have been a
+    second source of the same fact -- and two sources of one fact drift. It is
+    now derived: a rung is kept exactly when nothing discarded it. This pins
+    the equivalence over every entry a real run produces, including triage.
+    """
+    png = tmp_path / "receipt.png"
+    _write_png(png)
+    first = _RaisingClient(model_id="local")
+    fallback = FakeVLMClient([_good()], model_id="cloud")
+
+    outcome = run_receipt(png, first, CTX, triage_client=FakeVLMClient([_triage()]),
+                          extract_fallback_client=fallback)
+
+    assert outcome.attribution, "no attribution entries -- this would pass vacuously"
+    for entry in outcome.attribution:
+        assert entry.kept == (entry.discarded is None), (
+            f"{entry.pass_name}/{entry.model_id} says kept={entry.kept} with "
+            f"discarded={entry.discarded}"
+        )
 
 
 def test_a_raising_last_rung_still_propagates(tmp_path):

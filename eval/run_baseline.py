@@ -138,12 +138,23 @@ def run_baseline(
     # not produce the extraction this report scored -- counting either would
     # turn the answer to "did everything escalate?" into a call tally.
     counts: dict[str, int] = {}
+    # ...and the discarded ones, by the clause that discarded them. Without
+    # this the ladder's own record answers "which rung won" and not "why the
+    # others lost", which is the question a ladder run is asked (ISSUE-018).
+    discards: dict[str, dict[str, int]] = {}
     for entry in attribution:
-        if entry.pass_name == "extract" and entry.kept:
+        if entry.pass_name != "extract":
+            continue
+        if entry.kept:
             counts[entry.model_id] = counts.get(entry.model_id, 0) + 1
+        else:
+            by_reason = discards.setdefault(entry.model_id, {})
+            reason = entry.discarded.value
+            by_reason[reason] = by_reason.get(reason, 0) + 1
     # ``None``, not ``{}``: an empty dict would read as "measured, and no rung
     # ran". Only a run that scored no receipt at all leaves this empty.
     report.extract_rung_counts = counts or None
+    report.extract_discard_counts = discards or None
     return report
 
 
