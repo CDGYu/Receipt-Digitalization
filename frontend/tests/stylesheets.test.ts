@@ -548,7 +548,7 @@ const CENSUS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
   'upload/UploadScreen.module.css': {
     '.screen':
       'box-sizing: border-box, display: flex, flex-direction: column, align-items: stretch, gap, max-width, margin, padding, color, font-family',
-    '.heading': 'margin, font-size, font-weight, line-height',
+    '.heading': 'margin, font-family, font-size, font-weight, line-height',
     '.scope': 'margin, color, font-size, line-height',
     // `border` before `border-left-width`, for the reason `admin/AdminScreen`'s
     // `.alert` records: the shorthand resets the longhand, so this order is the
@@ -556,7 +556,7 @@ const CENSUS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
     '.alert':
       'margin, padding, border, border-left-width, border-radius, background, color, font-size, line-height',
     '.field':
-      'display: flex, flex-direction: column, align-items: center, gap, box-sizing: border-box, padding, border, border-radius, background, cursor: pointer',
+      'display: flex, flex-direction: column, align-items: center, gap, box-sizing: border-box, padding, border, border-radius, background, box-shadow, cursor: pointer',
     '.label': 'color, font-size, font-weight, line-height',
     '.input': 'max-width, color, font-family, font-size, cursor: pointer',
     // The ring is on the card and not on the control: the `<label>` wraps its
@@ -572,10 +572,10 @@ const CENSUS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
   'upload/ProcessingView.module.css': {
     '.screen':
       'box-sizing: border-box, display: grid, grid-template-columns, align-content: start, gap, max-width, margin, padding, color, font-family',
-    '.heading': 'grid-column, margin, font-size, font-weight, line-height',
+    '.heading': 'grid-column, margin, font-family, font-size, font-weight, line-height',
     '.scope': 'grid-column, margin, color, font-size, line-height',
     '.receipt':
-      'grid-column, box-sizing: border-box, display: flex, flex-direction: column, gap, min-width, padding, border, border-radius, background',
+      'grid-column, box-sizing: border-box, display: flex, flex-direction: column, gap, min-width, padding, border, border-radius, background, box-shadow',
     '.steps': 'grid-column, display: flex, flex-direction: column, gap, min-width',
     '.paneHeading':
       'margin, color, font-size, font-weight, letter-spacing, line-height, text-transform: uppercase',
