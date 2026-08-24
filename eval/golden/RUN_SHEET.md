@@ -70,13 +70,33 @@ what the image shows.**
   tell you (see below).
 - **Transcribe what is printed even if it does not add up.** Do not fix the
   receipt.
+- **A blank pre-printed row gets its printed product name and nothing else.**
+  Set `is_template_row: true`, write `description_raw`, and leave `qty`, `unit`,
+  `unit_price` and `line_total` `null` — **even where the form pre-prints a unit
+  beside the name**, as `r001`'s does with `Lt.` on six rows. Filling those
+  cells looks more complete and is worse: the contract never asks for them on a
+  blank row, so they become paths no model can earn, and a model doing exactly
+  what it was told loses them anyway (ISSUE-003). Pinned by
+  `test_every_flagged_row_carries_a_printed_name_and_no_amounts`.
+  This is *not* a withholding — `withheld` stays `[]`; see below.
 - Dates are ISO `YYYY-MM-DD`; keep the printed form in `date_raw` when it is
   ambiguous. **A malformed date is accepted at load** — `receipt.date` is a
   plain string — so nothing will catch `"14/03/2026"` sitting in that field.
 
-**4. Record it in `manifest.json`** — id, category, holdout. **Do this for `p`
-receipts too.** An id, a category and a flag carry no personal data, and the
-manifest is what lets `composition_stats` report the real mix.
+**4. Record it in `manifest.json`** — id, category, holdout, **and `withheld`**.
+**Do this for `p` receipts too.** An id, a category and a flag carry no personal
+data, and the manifest is what lets `composition_stats` report the real mix.
+
+`withheld` names the label paths you deliberately left out for privacy, and on a
+tracked `r*` label **it must be `[]`** — a label is committed whole or not at
+all (ADR-0050 decision 1, ISSUE-019). **The key is required, and absent is not
+the same as empty:** a missing `withheld` reads as "nothing withheld" while
+asserting nothing, so the pin refuses it. If you find yourself wanting a
+non-empty `withheld` on an `r*` label, the label should have been `p*`.
+
+A cell the contract never asked for is **not** a withholding — a blank
+pre-printed row's `unit` stays `null` with `withheld: []`, and those two
+statements agree.
 
 ---
 

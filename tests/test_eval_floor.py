@@ -173,6 +173,32 @@ def test_every_flagged_row_carries_a_printed_name_and_no_amounts():
     neither of the other two can see: `_purchased` excludes flagged rows from
     every total and every arithmetic check, so an amount parked on one is money
     that silently leaves the books.
+
+    **`unit` is checked here too, and it is not an amount** -- so this test now
+    covers slightly more than its name says. The name is left alone on purpose:
+    it is cited by **ADR-0044** and by `docs/KNOWN_ISSUES.md`, and renaming a
+    string an Accepted ADR points at costs more than the imprecision does. Read
+    the docstring, not the name.
+
+    `unit` is here because of **ISSUE-003**. `r001` is a BIR form that
+    pre-prints `Lt.` in the unit column on six rows, five of them blank.
+    Transcribing `unit: "Lt."` onto those five would create five paths **no
+    model can ever earn**: `is_template_row`'s own description asks for "the
+    printed product name" and nothing else, so a model doing exactly what it is
+    told loses them anyway. That is the punish-a-correct-model defect the golden
+    labels were corrected to remove, rebuilt on a new axis.
+
+    Until this assertion existed that edit left the whole suite green, and the
+    argument *for* making it is in the tracked tree -- `r001`'s own `meta.notes`
+    records the six pre-printed `Lt.`s -- while the ruling against it lived only
+    in `docs/KNOWN_ISSUES.md`. Green the day it was added, so the mutation is
+    what certifies it, not a RED phase.
+
+    **Not ISSUE-019's withheld declaration, and must not be read as one.** That
+    rule is about PII deliberately left out of a tracked label and requires
+    `withheld == []`. A null here is the opposite: the contract never asked for
+    the cell, so leaving it empty withholds nothing. A flagged row with
+    `unit: null` under `withheld: []` is consistent, not contradictory.
     """
     flagged = [
         (path.stem, item)
@@ -190,6 +216,13 @@ def test_every_flagged_row_carries_a_printed_name_and_no_amounts():
             f"of anything"
         )
         assert item.qty is None, f"{stem}/{item.description_raw}: qty"
+        assert item.unit is None, (
+            f"{stem}/{item.description_raw}: unit. A blank pre-printed row "
+            f"transcribes its printed product name and nothing else, even where "
+            f"the form prints a unit beside it -- the contract never asks for "
+            f"that cell on such a row, so a value here is a path no model can "
+            f"earn (ISSUE-003)."
+        )
         assert item.unit_price is None, f"{stem}/{item.description_raw}: unit_price"
         assert item.line_total is None, f"{stem}/{item.description_raw}: line_total"
 
