@@ -101,6 +101,62 @@ services:
       # The worker reads and writes the same blobs the API wrote, so it shares
       # the volume. It needs no SESSION_SECRET: it serves no HTTP and builds no
       # app -- `receipts.asgi` is never imported here.
+      #
+      # --- the model layer -------------------------------------------------- #
+      # Without these the worker falls back to `vlm_provider="fake"` (the
+      # default in config/settings.py) and every triage call raises
+      # `FakeVLMClient exhausted`, which is why extract, validate, score and the
+      # repair loop had never run end to end. `.env` cannot supply them: it is
+      # excluded from the image by .dockerignore:45, deliberately.
+      #
+      # **The base URL is not the one a host uses.** On the host the Docker
+      # Ollama is `localhost:11435`; inside this network it is the service name
+      # and the container port, `ollama:11434`. The published 11435 exists only
+      # to leave 11434 free for the Windows-native Ollama, which this project
+      # does not read.
+      VLM_PROVIDER: ollama
+      VLM_BASE_URL: http://ollama:11434/v1
+      # Ollama ignores the key; the factory's `_require` does not, and refuses
+      # to build a client without one.
+      VLM_API_KEY: ollama-local-unused
+      # Local and CPU-only. ADR-0039 records ~1896s per receipt on this box and
+      # rules local inference a liveness check, never a measurement. The
+      # `:cloud` models Ollama also lists are NOT used here: cloud egress is
+      # authorised for the golden set alone, and routing an uploaded receipt to
+      # a hosted model is a decision nobody has taken.
+      VLM_MODEL_EXTRACT: granite3.2-vision:2b
+      VLM_MODEL_TRIAGE: granite3.2-vision:2b
+      # The default is 120s and would abort this model mid-call: triage alone
+      # measured 590s at max_edge=2048.
+      #
+      # **This one setting derives three others** (ADR-0054 decision 5 derives
+      # them rather than fixing them). Measured by calling the real functions,
+      # not by doing the arithmetic here:
+      #
+      #   one_call = 3600 x 3 SDK attempts       = 10800s   (3h)
+      #   job ceiling (worker.job_timeout_for)   = 32580s   (9.05h)
+      #   sweep started_cutoff                   = 21600s   (6h)
+      #   sweep unstarted_cutoff                 = 388800s  (4.5 DAYS)
+      #
+      # At the 120s default those are 1260s, 720s and 3.6h, so this line
+      # multiplies every one of them by 30. Two consequences, because the
+      # design left landing this file open on exactly this question:
+      #
+      #   * **The nine-hour job ceiling is deliberate and no longer decides
+      #     anything important.** `job_timeout_for`'s docstring records why:
+      #     now that `receipts.sweep` carries the terminal-state guarantee,
+      #     the ceiling is a resource guard on a worker slot, not the thing
+      #     that decides whether an interrupted receipt is recoverable. It can
+      #     afford to be generous. Before the sweep existed it could not, which
+      #     is why this file was held back until ISSUE-029 and ISSUE-030 closed.
+      #   * **The 4.5-day unstarted window is the one to watch.** A receipt that
+      #     is enqueued and never picked up -- a dead worker -- is not swept
+      #     until then, and the progress route sweeps its own row on the same
+      #     clock, so a waiting screen waits just as long. That is the trade
+      #     UNSTARTED_MARGIN states outright: marking a healthy queued receipt
+      #     is worse than noticing a dropped one late. Lower `VLM_TIMEOUT_S`
+      #     and all four numbers come down together.
+      VLM_TIMEOUT_S: "3600"
     volumes:
       - receipts_blobs:/var/receipts/blobs
     depends_on:
