@@ -82,25 +82,61 @@ source disagree, the source wins** (ADR-0030). **No issue count is written in th
 section** — count `^## ISSUE-` headings in the register, and note that its
 `**Status:**` lines are one per heading by design, so the two answers must agree.
 
-### 2a. Plan 3 — the Editorial visual refresh, and the browser pass
+### 2a. Plan 3 is MERGED. What it left behind is four owner rulings.
 
-**Plans 1 and 2 merged 2026-08-24.** What is left of that design is **plan 3**:
-the Editorial palette, the grotesque display face, real elevation
-(`--color-surface-raised` is still identical to `--color-surface`), a spacing
-scale past 32px, and a display step above `--text-2xl`.
+**Plan 3, the Editorial visual refresh, merged 2026-08-24** — true fast-forward
+`9b15d6a` -> `68217a2`, 32 commits, zero merge commits, all five gates PASS at
+the tip. Plan: `docs/superpowers/plans/2026-08-24-editorial-visual-refresh.md`.
+Spec: `docs/superpowers/specs/2026-08-23-upload-and-visual-refresh-design.md`
+§5–§7. Decision: **ADR-0052**.
 
-**Its decision 14 matters more than the palette: the browser pass is inside the
-milestone, not after it.** The declaration census pins declarations *by name and
-is silent on values*, jsdom lays nothing out, and Vitest returns a proxy for
-class names — so **every colour, space and type size in that refresh can change
-with all five gates byte-identically green and nobody having looked.** Three
-findings already wait on that pass: raw stage identifiers shown to an audience,
-the production `setInterval` body being unexercised, and
-`app-admin-route.test.tsx` being misnamed.
+**Its decision 14 — the browser pass inside the milestone — is the reason four
+of the issues below exist.** It found a regression *the plan itself introduced*
+(severity text at **4.39:1** on a raised surface, under the floor, **with all
+five gates green**) and a zero-width table column already sitting on `main`.
+Both invisible to pytest, ruff, `tsc -b`, vitest and the build. **Do this again
+on any visual milestone.** `scripts/verify.py` does not run Playwright.
 
-**Read the design's two dated corrections first** — §3 describes a drop zone, a
-list, `multiple` and a HEIC chip that were deliberately not built, and §4
-described a narration sequence the pipeline never emits.
+**The four rulings, each with a measured cause and no chosen fix. Do not guess
+one — read the issue, they are not equivalent:**
+
+| ruling | issue | why it needs you |
+|---|---|---|
+| **The job ceiling** | **ISSUE-029** | `DEFAULT_JOB_TIMEOUT_S = 900` is shorter than one receipt on this box — triage alone measured **696s**. The comment beside it already describes the failure it causes. A fixed constant that fits one model will not fit another. |
+| **The stranded-receipt hole** | **ISSUE-030** | An interrupted run leaves a receipt at `pending` **forever**, breaking the stated guarantee that every receipt reaches a terminal state. **Raising ISSUE-029's ceiling hides this without closing it.** Reproduced on two unrelated paths. A reaper needs no migration — `updated_at` does not advance mid-run — but cannot distinguish *slow* from *stranded*, and the signal that would (progress events) is ISSUE-031. |
+| **Where the progress sink belongs** | **ISSUE-031** | Narration exists on **exactly one of four** `process_receipt` call sites. `--inline` is the documented no-Redis deployment and narrates nothing, ever. Threading `progress=` through three more sites is the obvious move and may be wrong: a CLI has no Redis to write to on the deployment that most needs this. |
+| **The table column fix** | **ISSUE-032** | Cause **measured**: `th` is `box-sizing: content-box` with 8px padding, so seven columns demand more than the table has and the eighth collapses to 0 at every width. Three candidate fixes with different blast radii; **one repaints every table cell in the app.** |
+
+**Two more await you and are older:** **ISSUE-027** (a PDF is accepted at the
+door and always dies at `preprocess`), and **ISSUE-006's arithmetic residual**.
+
+**Held, not lost — two things a session deliberately did not commit.**
+
+- **The compose `VLM_*` env.** The image can now reach Ollama (ISSUE-028 fixed
+  at `45b5329`), but pointing the dev worker at a real model **while ISSUE-029
+  is open** turns every dev upload into a ~15-minute hang that ends by stranding
+  the receipt — strictly worse than today's fast, honest `FakeVLMClient
+  exhausted`. **It should land after the ceiling, not before.** The change sits
+  uncommitted in `docker-compose.yml`.
+- **The `docs/` prose sweep.** A sample of six falsifiable claims in the
+  high-traffic docs found **two false, both in this handoff pair** — including
+  one telling the owner to rule on whether to build a screen that had shipped
+  that morning. The register-wide surface (~100 falsifiable claims across
+  `MEMORY.md`, this file, and `KNOWN_ISSUES.md`) is **unswept**. Note the true
+  bound: **no gate checks whether any doc's prose claims are true; one gate
+  (`tests/test_freshness_check.py:84,137-138`) reads this pair and checks the
+  *form of one command* in it.**
+
+**What the browser pass still owes.**
+
+It ran and produced findings, but three items deferred from the previous
+milestone were not closed by it and remain open: **raw stage identifiers shown
+to an audience** (`dedupe`, `persist` are operational vocabulary), **the
+production `setInterval` body is unexercised by any test**, and
+**`app-admin-route.test.tsx` is misnamed** for what it now covers. Also open:
+the three count cards on `/app/` keep their `min-width` at 375 and read as
+unfinished — `flex: 1 1 10rem` would fix 375 *and* change the 1440 look
+materially, so it is a decision.
 
 ### 2b. THE ONE THAT UNBLOCKS EVERYTHING ELSE — ISSUE-001
 
@@ -162,11 +198,11 @@ records its provenance" as the reason to do them. That reason was checked on
 
 ### 2e. SPECIFIED, NEVER BUILT
 
-- **ISSUE-026** *(new 2026-08-23)* — **a receipt cannot enter the system from a
-  browser.** No upload component exists and nothing mounts one; `POST /upload` is
-  complete, guarded and size-bounded. Today only someone with a shell can ingest.
-  **Needs your ruling**: is the CLI the intended ingestion path, or does the
-  screen get built?
+- ~~**ISSUE-026** — a receipt cannot enter the system from a browser.~~
+  **RESOLVED 2026-08-24.** `/app/upload` was built, mounted and merged, and is
+  **pinned as mounted** by mutation. This bullet asked you to rule on building a
+  screen that had already shipped, for a day — found by a query, not by anyone
+  re-reading it.
 - **P5.T1's bounding-box highlighting** — never built, and gated on the R060/R061
   grounding decision, because nothing produces the text layer it would key off.
 - **P7.T1 self-consistency** — `run_consistency` lives in `extract/extractor.py`
@@ -244,10 +280,25 @@ git log --oneline refs/remotes/origin/main..main  # what the pending push would 
 > third time, in the very refresh that carried the warning. **Read the git
 > commands above, not this heading.**
 
-**ISSUE-001 step 7's MACHINERY — the private-label convention and
-`scored_receipts` — merged by true fast-forward on 2026-08-22** —
-`7afafcf` -> `e58a13f`, **15 commits**, single parent each, zero merge commits.
-Decision: **ADR-0050**. `feat/golden-set-privacy` is kept at its merge point.
+**PLAN 3 — the Editorial visual refresh — merged by true fast-forward on
+2026-08-24**: `9b15d6a` -> `68217a2`, **32 commits**, single parent each, **zero
+merge commits**. All five gates PASS at the tip, controller-run.
+`feat/editorial-refresh` is kept at its merge point. Decisions: **ADR-0052**
+(the ramp changed hue, not brightness) and **ADR-0053** (two derivations from
+one source are one derivation). **ADR-0023 widened a third time**: creating a
+file is a shared-state write.
+
+**A second Claude session shared that branch** and contributed six commits — a
+nav bar, the `/app/` home screen, a Docker blob-volume fix, an approve-button
+label, and R051's ordering fix. All were reviewed on the same terms as the
+plan's own work.
+
+**That gate run is worth one line of its own.** Three earlier full-suite
+attempts failed on `Test timed out in 5000ms`, with jsdom environment setup at
+**32s against a normal ~1s**, while an unrelated process held **23,590 seconds
+of CPU on four cores**. **A timeout is not an assertion failure.** Re-run before
+believing one, and do not merge on "probably environmental" — the clean run is
+what settled it.
 
 **It grows the golden set by nothing, and that is the whole remaining job.**
 Task 3 of `docs/superpowers/plans/2026-08-22-growing-the-golden-set.md` is
@@ -495,7 +546,7 @@ is a pointer; where it and an entry disagree, the entry wins.**
 | ISSUE-002 | A repair attempt's `extraction_runs.prompt_hash` names a prompt that was never sent. | OPEN, pre-existing, deliberately not fixed |
 | ISSUE-003 | A blank pre-printed row drops the unit the form prints on it (`Lt.` on all six r001 rows). | OPEN by design — labelling it creates five unearnable paths |
 | ISSUE-004 | Nothing checks a golden label against its photograph; per-label content rot is open. | OPEN **by design** — re-reading the image is the only instrument |
-| ISSUE-005 | `R051`'s message promises printed order; its check accepts any permutation. | OPEN — one-line fix, needs its own RED |
+| ISSUE-005 | `R051`'s message promises printed order; its check accepted any permutation. | **RESOLVED 2026-08-24** at `5c72af5` — pinned by a permutation, not a gap |
 | **ISSUE-006** | **A reviewer who mis-flags the *sole* purchase gets zero findings at any severity and the row silently leaves the export.** All three golden receipts have that shape. | **OPEN — the only silent-wrong-answer** |
 | ISSUE-007 | `PROMPT_VERSION` is unenforced; reverting it passes the whole suite. **Its easiest green is the defect.** | OPEN — needs a contract decision |
 | ISSUE-008 | `xlsx._purchases` and `rules._purchased` are identical predicates with nothing binding them. | OPEN — drift risk, not wrong today |
@@ -516,8 +567,13 @@ is a pointer; where it and an entry disagree, the entry wins.**
 | **ISSUE-023** | **Consistency voting has neither tolerance nor shared alignment.** `_vote` compares by exact string equality over `json.dumps(...)`, so `949.20` and `949.21` disagree and line items are compared positionally. `align_line_items` shipped for this and its only callers are `eval/metrics.py` and its own tests. | **OPEN — `IMPLEMENTATION_PLAN.md` P2.T1, never built. Fix before P7.T1** |
 | **ISSUE-024** | **Nothing cross-checks the triage line-count against what was extracted.** 30 rules registered, highest id R070, and both uses of `estimated_line_item_count` sit inside R013, which fires only at zero rows. Spec §18's silent truncation is undetected. | **OPEN — P2.T3, never built** |
 | ISSUE-025 | Best-attempt selection is proven only in isolation; no pipeline-level test drives a repair that makes things worse, which is exactly the direction P2.T4's acceptance names. | OPEN — coverage gap, not a behavioural defect |
-| **ISSUE-026** | **A receipt cannot enter the system from a browser.** No upload component exists and nothing mounts one; `POST /upload` is complete and guarded. Only a shell can ingest. | **OPEN — needs your ruling: CLI-only, or build the screen?** |
+| ISSUE-026 | A receipt cannot enter the system from a browser. | **RESOLVED 2026-08-24** — `/app/upload` built, mounted, pinned by mutation |
 | **ISSUE-027** | **A PDF is accepted at the door and always fails at `preprocess`.** `validate_upload` accepts one, `load_image` raises `UnsupportedFormat`, and `expand_pdf` has zero callers. The upload screen refuses PDFs client-side as an interim. | **OPEN — needs your ruling: wire `expand_pdf`, or stop accepting PDFs?** |
+| ISSUE-028 | The containerised worker could only ever run the `fake` VLM client — the image lacked the `openai` extra, so every OpenAI-shaped provider raised at client construction. **Every compose run this project has ever done was silently a fake-client run.** | **RESOLVED 2026-08-24** at `45b5329`; the re-reading of past runs is not |
+| **ISSUE-029** | **The job ceiling is shorter than one receipt.** `DEFAULT_JOB_TIMEOUT_S = 900`; triage alone measured **696s** under the project's own local model. Its own comment already describes the failure it causes. | **OPEN — needs your ruling: what ceiling, and derived from what?** |
+| **ISSUE-030** | **An interrupted receipt has no terminal state, ever.** Breaks the stated "nothing is silently dropped" guarantee. **Not RQ-specific** — reproduced on a synchronous CLI path. Raising ISSUE-029's ceiling **hides this without closing it**. | **OPEN — needs your ruling: reaper, per-runner hook, or both?** |
+| **ISSUE-031** | **Progress narration exists on exactly one of four `process_receipt` call sites.** `--inline` — the documented no-Redis deployment — narrates nothing, ever. | **OPEN — needs your ruling: where does the sink belong?** |
+| **ISSUE-032** | **A control paints over the column beside it at every width.** Cause measured: `th` is `box-sizing: content-box` with 8px padding, so seven columns demand more than the table has and the eighth renders at **0**. | **OPEN — needs your ruling: three fixes, one repaints every table cell** |
 
 ---
 

@@ -42,7 +42,7 @@ moves, and this file has carried a wrong issue count before.
 **No count of refreshes is written here** — it is a number that moves without its
 sentence changing, which is review standard 5.
 
-**Freshness anchor `9170151`** — the last commit that is not this handoff pair.
+**Freshness anchor `68217a2`** — the last commit that is not this handoff pair.
 **It is written twice below — here and inside the command.** Moving one and not
 the other is what happened on this file's previous refresh, and the gate caught
 it because it parses the anchor out of the *command*.
@@ -56,7 +56,7 @@ nothing else: a stamp cannot name the commit that writes it. The test is a
 command, not a commit and not a count:
 
 ```
-git log --oneline 9170151..main -- ":(top,exclude)docs/MEMORY.md" ":(top,exclude)docs/NEXT_SESSION_PROMPT.md"
+git log --oneline 68217a2..main -- ":(top,exclude)docs/MEMORY.md" ":(top,exclude)docs/NEXT_SESSION_PROMPT.md"
 git log --oneline refs/remotes/origin/main..main   # what a push would send
 git ls-remote --heads origin main                  # authoritative on what is pushed
 git branch --no-merged main                        # must name NOTHING
@@ -126,38 +126,60 @@ stays reachable — ADR-0042. `git log --oneline -- docs/MEMORY.md` is the list.
   than believing this sentence — this bullet read "NO BRANCH IN FLIGHT" for three
   days while one existed, and announcing one after it landed would be the same
   defect in the other direction.
-- **Plans 1 and 2 of the upload/processing/refresh design are MERGED** (2026-08-24).
-  True fast-forward `791c356` -> `9170151`, **38 commits, single parent each,
-  zero merge commits**; `feat/label-provenance-rule` is kept at its merge point.
-  Five gates PASS at the merged tip, controller-run.
-  **What landed:** pipeline progress end to end — a pure `receipts.progress`
-  vocabulary, an optional default-`None` sink through `extract_with_repair` and
-  `process_receipt`, a Redis writer in the worker, and
-  `GET /receipts/{id}/progress`; plus `/app/upload` with a live processing view
-  that narrates stages and stops on **`status`, never on `stage`**. Also:
-  `is_template_row` is editable (ISSUE-006's visibility half),
-  `IMPLEMENTATION_PLAN.md` is corrected against the tree, and ISSUE-023 through
-  ISSUE-027 are filed.
-  **What did NOT land: plan 3, the Editorial visual refresh** — and with it the
-  browser pass, which is the only thing that can see any of this.
-- **The golden set is still three receipts, and that has not changed all session.**
-  Everything above is machinery. **ISSUE-001 step 7 Task 3 — collect and label
-  real receipts — is still the top of the board**, still needs a person and a
-  camera, and still gates every accuracy claim in the project.
-- **The design carries TWO dated corrections, both mine, and plan 3 inherits the
-  document.** §4's hero-beat sequence named `validate`, `findings` and `repair`
-  as narrated steps; there are exactly three `ProgressEvent` constructions in the
-  tree and **only `stage="extract"` ever carries a detail**, so those three emit
-  nothing. §3's decisions 5 and 9 describe a drop zone, a file list, `multiple`
-  and a HEIC chip — **none of which was built**, deliberately and for a recorded
-  reason. And I invented a timing figure: "~25–60s" had no source. The only
-  measured pipeline timing in the tree is **25 seconds** for `gemma4:cloud` on
-  r002. **Read both corrections before building from §3 or §4.**
-- **Nothing has ever run the join.** `worker -> Redis -> route -> screen` is
-  pinned in halves and exercised end to end by nothing: `redis` is not installed
-  on this machine, so no gate and no reviewer crossed that boundary. The design's
-  §9 already calls for a dry run of the full stack; **it should happen before any
-  demo, not before a merge.**
+- **Plan 3, the Editorial visual refresh, is MERGED** (2026-08-24). True
+  fast-forward `9b15d6a` -> `68217a2`, **32 commits, single parent each, zero
+  merge commits**; `feat/editorial-refresh` is kept at its merge point. **All
+  five gates PASS at the merged tip, controller-run** — and that run mattered:
+  three earlier attempts failed on `Test timed out in 5000ms` with jsdom setup
+  at 32s against ~1s, while an unrelated game process held 23,590s of CPU on
+  four cores. **A timeout is not an assertion failure; re-run before believing
+  one.**
+  **What landed:** the Editorial token layer on a measured ramp (ADR-0052), a
+  self-hosted display face, the refresh across all seven screens, **and the
+  browser pass of design decision 14**. A second Claude session shared the
+  branch and contributed a nav bar, a `/app/` home screen, a Docker blob-volume
+  fix, an approve-button label, and R051's ordering fix (ISSUE-005).
+- **THE BROWSER PASS PAID FOR ITSELF TWICE, AND THIS IS THE POINT OF ADR-0029.**
+  It found (a) a regression **this plan introduced** — Task 3 put severity text
+  on `--color-surface-raised`, measuring **4.39:1** in dark, under design §6's
+  floor, **with all five gates green**; and (b) a table column rendering at
+  **zero width** that was already on `main`. **Playwright is not one of the five
+  gates** (`scripts/verify.py`), so `main` sat red on that second guard from the
+  moment `is_template_row` merged and nothing could tell anyone.
+  The first is fixed (`0fe6be5`) and `--color-surface-raised` now sits **inside
+  `INHERITABLE_SURFACES`**, so the class is gated rather than measured by luck.
+  The second is **ISSUE-032**, cause measured, **fix deliberately not chosen**.
+- **The first pipeline run that ever reached a real model exposed a chain of
+  four, each hidden by the one before it.** **ISSUE-028** (the image lacked the
+  `openai` extra, so the container could only ever run `fake` — every compose run
+  this project has ever done was silently a fake-client run); **ISSUE-029** (the
+  900s job ceiling is shorter than one receipt: triage alone measured **696s**);
+  **ISSUE-030** (an interrupted run strands a receipt at `pending` **forever**,
+  breaking the stated terminal-state guarantee — **not RQ-specific**, reproduced
+  on a synchronous CLI path); **ISSUE-031** (**narration exists on exactly one of
+  four `process_receipt` call sites**, so `--inline` — the documented no-Redis
+  deployment — narrates nothing, ever).
+- **The golden set is STILL three receipts.** Everything above is machinery.
+  **ISSUE-001 step 7 Task 3 — collect and label real receipts — is still the top
+  of the board**, still needs a person and a camera, and still gates every
+  accuracy claim in this project. Nothing merged today moved it.
+- **The design carries FOUR dated corrections and ADR-0052 carries one of its
+  own.** Read them before building from either. §0's "~25–60s" was invented;
+  §3's drop zone, file list, `multiple` and HEIC chip were never built; §4's hero
+  sequence named three steps that emit nothing; §7's "every colour can change
+  with gates green" is half wrong — the 4.5:1 floor **is** enforced, so the
+  ramp's *brightness* is gated and its *hue* is not. And ADR-0052's own
+  correction records three **present-tense invariants** that aged within four
+  hours of it being written. **Every value in it verified exact; only the
+  sentences that said *is* rather than *was on this date* went stale.**
+- **The dry run is DONE and its bound is recorded.** `worker -> Redis -> route ->
+  screen` was finally exercised end to end, and the property held **on the case
+  that could falsify it**: two unrelated failure modes both produced a terminal
+  `status` beside a `stage` frozen at a non-terminal value, and the screen
+  stopped on `status` both times. **What it did NOT cross: extract, validate,
+  score and the repair loop** — the worker was on the fake client (ISSUE-028).
+  And **the narration has never been seen narrating**: one stage of three at a
+  1.9s run.
 - **The labelling rule is now where a labeller meets it.** Design §5's "labels are
   not seeded from the pipeline's own output" existed only in the design;
   `eval/golden/README.md` and `TEMPLATE.json` contained no word of the "seed"
