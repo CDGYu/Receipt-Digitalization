@@ -2655,14 +2655,37 @@ selects, not where the test states its expectation (ADR-0051).
 
 ## ISSUE-026 — A receipt cannot enter the system from a browser
 
-**Status:** OPEN — recorded, not fixed. It is the unbuilt half of
-`IMPLEMENTATION_PLAN.md` P5.T2.
-**Owner action required:** **yes** — whether the upload screen gets built is a
-scope decision, not a bug fix.
+*(Heading kept exactly as filed, because every prior citation points at it.
+It stopped being true on 2026-08-24 — see the resolution immediately below.
+Citations name the issue number, not the heading.)*
+
+**Status:** **RESOLVED 2026-08-24.** The screen was built, mounted and merged.
+Everything below the resolution is a **record of what was true on 2026-08-23**,
+kept because it is the evidence the decision rested on, not because it still
+describes the tree.
+**Owner action required:** none. The ruling was given on 2026-08-23 — build the
+screen — and it was carried out.
 **Discovered:** 2026-08-23, auditing `IMPLEMENTATION_PLAN.md` against the tree.
-**Pre-existing:** yes — no upload UI has ever existed.
-**Blocks:** nothing mechanical. It bounds who can use the product: today, only
-someone with a shell.
+**Pre-existing:** it was, for as long as the frontend existed.
+
+### Resolution, 2026-08-24 — measured, not asserted
+
+- `frontend/src/upload/UploadScreen.tsx` exists.
+- `frontend/src/main.tsx` imports it at **:47** and renders `<UploadScreen />`
+  at **:151**.
+- `route.ts` declares `'upload'` in the `Route` union (**:27**) and returns it
+  (**:61**), so `/app/upload` resolves.
+- It is **pinned as mounted**, not merely present: deleting the import and the
+  `route === 'upload'` branch reds a test, measured 2026-08-24 and recorded in
+  `frontend/tests/app-admin-route.test.tsx:30-32`. That closes ADR-0046
+  decision 5 for this screen rather than leaving it to memory.
+
+**This entry said "OPEN — recorded, not fixed" until 2026-08-24**, and the
+register row in the handoff pair still asked the owner to rule on whether to
+build a screen that had already shipped. Found by a query over the *only /
+nothing / yet* register, not by anyone re-reading the issue. **The document
+whose job is to say what is true was the document that was wrong**, which is
+why that sweep is worth finishing.
 
 ### What is wrong
 
