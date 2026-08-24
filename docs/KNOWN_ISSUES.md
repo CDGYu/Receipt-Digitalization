@@ -1153,7 +1153,7 @@ closed on 2026-08-24 by R026 -- see the resolution below.)*
 
 **Status:** **RESOLVED 2026-08-24.** The visibility half closed 2026-08-23 on
 `feat/label-provenance-rule`; the arithmetic residual closed on
-`feat/arithmetic-went-offline` with **R026**. Everything below describes the
+`feat/arithmetic-went-offline` at `d6418f3` with **R026**. Everything below describes the
 defect as it stood until then, kept because it is what the diagnosis rests on.
 **One thing this issue was cited for is NOT closed and was never really this
 issue: ISSUE-033.** A reviewer who ticks the checkbox still sees nothing change,
