@@ -2900,10 +2900,11 @@ nobody has watched narrate: a whole capability absent, with everything green.
 
 ## ISSUE-029 — The job ceiling is shorter than one receipt on this hardware
 
-**Status:** OPEN — live on default configuration.
-**Owner action required:** **yes** — it is a decision (raise the ceiling, derive
-it from the model's measured cost, or make it explicit per deployment), not a
-line to change.
+**Status:** **RESOLVED 2026-08-24** at `c08b718`. The ceiling is derived from
+the model budget rather than fixed — the second of the three options named
+below. Everything after this block describes the defect as it stood until then.
+**Owner action required:** none. The decision was taken; deriving it is what
+keeps the ceiling and the sweep's cutoffs from disagreeing about "too long".
 **Discovered:** 2026-08-24, on the first pipeline run that ever reached a real
 model. It was unreachable before — see ISSUE-028.
 **Pre-existing:** yes. **Blocks:** any containerised run completing on this box.
@@ -2946,9 +2947,14 @@ first instance as though it were the mechanism and made this look
 RQ-specific. It is not — see "Reproduced on a second, unrelated path" below.
 Citations name the issue number, not the heading.)*
 
-**Status:** OPEN. **This one breaks a stated guarantee**, and raising ISSUE-029's
-ceiling hides it without closing it.
-**Owner action required:** **yes.**
+**Status:** **RESOLVED 2026-08-25** at `63084b6`, with `41d2933` and `d1e446b`.
+The guarantee is now carried by something that *survives* the run, which is what
+it always needed: `63084b6` is the sweep, `41d2933` the `receipts sweep` command
+that runs it on a schedule, and `d1e446b` the progress route stranding the single
+cold row a screen is waiting on. Everything after this block describes the defect
+as it stood until then.
+**Owner action required:** none, beyond scheduling `receipts sweep` wherever this
+is deployed. Nothing schedules it for you, and a sweep nobody runs closes nothing.
 **Discovered:** 2026-08-24, as the consequence of ISSUE-029 firing.
 **Pre-existing:** yes, on every path where a job dies without raising.
 
@@ -3029,10 +3035,17 @@ could reasonably have concluded that raising ISSUE-029's ceiling closes this.
 
 ## ISSUE-031 — Progress narration exists on exactly one of four entry points
 
-**Status:** OPEN — the progress feature is dead by construction on a deployment
-the project explicitly supports.
-**Owner action required:** **yes** — it is a decision about where the sink
-belongs, not a missing argument to add in three places without thinking.
+**Status:** **RESOLVED** in two halves — the signal at `2d1bea9` (2026-08-24),
+the reader at `d1e446b` (2026-08-25). `process_receipt` builds its own heartbeat
+sink, so a run cannot be constructed without one whichever of the four entry
+points started it; and the progress route falls back to the row when nothing is
+narrating, so a deployment with no Redis narrates at all. The call-site table
+below was made moot by the signal fix rather than corrected — it describes
+where things stood when this was filed.
+**Owner action required:** none. **But nobody has watched this on a screen.**
+Both halves are pinned at the API and pipeline level; no browser pass has seen
+an `--inline` receipt narrate, and jsdom cannot see one. That is a browser pass,
+not a test.
 **Discovered:** 2026-08-24, after ISSUE-029 forced the run off the queue path
 onto a CLI one. **Pre-existing:** yes, since the progress sink was added.
 **Blocks:** any narration on `--inline`, `reprocess` or `process_batch`.
