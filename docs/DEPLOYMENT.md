@@ -538,7 +538,7 @@ published to the host.
 | the UI only ever shows the sign-in form | no account exists | step 4 |
 | `/app/` logs two 401s on load | `/auth/me` and `/metrics` fired anonymously | nothing — expected, ADR-0026 |
 | a receipt sits at `stage: triage` forever | either the model was never pulled, or it is simply slow | `docker exec ollama ollama list`, then `docker stats` — high `ollama` CPU means it is working |
-| a receipt reaches `needs_review` with every field `null` and `confidence 0.000` | the work-horse was killed mid-pipeline; the terminal-state guarantee marked it rather than leaving it stuck | `docker logs receipts-worker` and look for `killed horse` — see §6 step 7. **Not** the job ceiling; check `job_timeout_for` before assuming it is |
+| a receipt reaches `needs_review` with every field `null` and `confidence 0.000`, `review_tasks.priority 1`, reason `processing was interrupted at …` | **the API's sweep stranded it**, on a `started_cutoff` derived from the API container's own `VLM_TIMEOUT_S`. The worker may still be working it | check the **running** API's value, not the file — §6 step 7. `docker logs receipts-worker` for `killed horse` says whether the job actually died. **Not** the job ceiling |
 | `receipts users add` hangs with no output | a TTY was allocated, so `_read_password` took the `getpass` branch instead of reading the pipe | add `-T` to `docker compose run` |
 
 **Which of those were actually seen, and which are derived.** Rows 2, 3, 5 and
@@ -550,9 +550,20 @@ derived from the code (`build_auth_router` has no bootstrap account and no
 registration route; `_read_password` branches on `isatty()`) and were **not**
 reproduced. Treat the derived rows as leads, not as findings.
 
-**Row 7's *cause* is a lead even though the row itself was observed.** That the
-horse was killed and the receipt still went terminal is measured; *why* it was
-killed is not. The two halves of that row have different standing.
+**Row 7 contains two events with different standing, and conflating them is
+how this document was wrong for an hour.** That the API's sweep stranded the
+receipt is **measured** — the discriminator and both containers' cutoffs are in
+§6 step 7. That the work-horse was killed at 1320s is **also measured**. *Why*
+it was killed is **not**, and OOM remains a lead. A stranded row does not imply
+a dead worker and a dead worker does not imply a stranded row; here both
+happened, which is precisely why the first reading of it was wrong.
+
+**A note on how that error survived.** An earlier version said "the
+terminal-state guarantee worked". When the correction came, grepping for that
+sentence returned zero and the fix looked complete — but the same claim was
+still sitting in row 7 of this table in different words. **Grep for the claim,
+not for the phrase**, and not for the section: a claim stated twice is not
+corrected by fixing the copy you happened to reread.
 
 ---
 
