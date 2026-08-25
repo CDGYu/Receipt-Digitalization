@@ -131,6 +131,10 @@ def _build_report(results: list[EvalResult], acc: _Accumulator) -> EvalReport:
     return EvalReport(
         n_receipts=n,
         n_auto_approved=n_approved,
+        # The interval's numerator. Stored rather than left for a caller to
+        # reconstruct from `auto_approval_precision`, which is a float and
+        # would round the count back out of it.
+        n_auto_approved_correct=n_approved_correct,
         n_critical_correct=acc.n_critical_correct,
         auto_approve_threshold=AUTO_APPROVE_THRESHOLD,
         # ``None`` when nothing was approved: undefined, not perfect. The two
@@ -166,6 +170,11 @@ def _report_to_dict(report: EvalReport) -> dict[str, Any]:
             "receipts": report.n_receipts,
             "auto_approved": report.n_auto_approved,
             "critical_correct": report.n_critical_correct,
+            # The precision interval's numerator. A count, so it belongs here
+            # rather than in `metrics` -- and `metrics` is value-checked against
+            # attribute names of the same spelling, which `n_auto_approved_correct`
+            # is not.
+            "auto_approved_correct": report.n_auto_approved_correct,
             "failed": report.n_failed,
         },
         "metrics": {
@@ -214,6 +223,27 @@ def _report_to_dict(report: EvalReport) -> dict[str, Any]:
         # Verbatim error text, not just a count: a run that silently reports
         # "2 failed" is not debuggable four minutes per receipt later.
         "failures": [[receipt_id, detail] for receipt_id, detail in report.failures],
+        # **The interval each rate supports, and it is not decoration.** Spec
+        # section 70 asks for >= 99% precision on auto-approved receipts -- a
+        # claim about evidence, which a bare percentage can neither support nor
+        # refute. Measured at perfect precision: 3-of-3 is roughly [44%, 100%]
+        # and the lower bound does not clear 99% until about a thousand clean
+        # receipts, against the 50 P0.T1 asks for.
+        #
+        # Lists, not tuples, because JSON has no tuples -- and at top level
+        # rather than inside `metrics`, whose keys are value-checked against
+        # attributes of the same name and would compare a round-tripped list
+        # against a tuple.
+        "auto_approval_precision_interval": (
+            list(report.auto_approval_precision_interval)
+            if report.auto_approval_precision_interval is not None
+            else None
+        ),
+        "critical_field_accuracy_interval": (
+            list(report.critical_field_accuracy_interval)
+            if report.critical_field_accuracy_interval is not None
+            else None
+        ),
         "calibration": [
             [str(threshold), rate, precision]
             for threshold, rate, precision in report.calibration

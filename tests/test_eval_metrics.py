@@ -12,11 +12,13 @@ from eval.harness import run_eval
 from eval.metrics import (
     EvalReport,
     EvalResult,
+    FieldBreakdown,
     calibration_curve,
     critical_field_accuracy,
     field_accuracy,
     field_breakdown,
     line_item_f1,
+    wilson_interval,
 )
 from receipts.extract.schema import (
     LineItem,
@@ -894,3 +896,114 @@ def test_the_tier_key_and_the_rung_identity_agree():
                 f"{rung_identity(left)} vs {rung_identity(right)}: "
                 f"keys {tier_key(left)!r} / {tier_key(right)!r}"
             )
+
+
+# --------------------------------------------------------------------------- #
+# The precision interval (P8.T2)
+# --------------------------------------------------------------------------- #
+
+
+def test_a_perfect_run_on_three_receipts_cannot_support_the_99_percent_claim():
+    """The spec's headline number, against the corpus that exists.
+
+    `RECEIPT_SYSTEM_SPEC.md` line 70 asks for **>= 99% precision on
+    auto-approved receipts**. The golden set is three. A *perfect* three-of-three
+    run reports 100% and its 95% interval is roughly [44%, 100%] -- so the point
+    estimate clears 99% and the evidence does not come close.
+
+    This is the whole reason the interval is reported: without it, "100%" off
+    three receipts reads as the criterion being met.
+    """
+    low, high = wilson_interval(3, 3)
+    assert high == 1.0
+    assert low < 0.5
+    assert low < 0.99, "a 3-of-3 run must not be able to support the >=99% claim"
+
+
+def test_the_interval_narrows_as_the_sample_grows():
+    """Monotonic in n, which is the property that makes it worth printing.
+
+    Asserted as a *sequence* rather than at one size: a function returning a
+    constant wide band would satisfy any single-size assertion and say nothing
+    about sample size, which is the only thing this measures.
+    """
+    lows = [wilson_interval(n, n)[0] for n in (3, 30, 100, 300, 1000)]
+    assert lows == sorted(lows), f"lower bound is not monotonic in n: {lows}"
+    assert lows[0] < 0.5
+    # Roughly a thousand clean receipts before the EVIDENCE clears 99%, against
+    # the 50 P0.T1 asks for. Recorded because it re-scopes that task.
+    assert lows[-1] >= 0.99
+    assert wilson_interval(300, 300)[0] < 0.99
+
+
+def test_an_interval_over_no_samples_is_undefined_not_perfect():
+    """`None`, never `(0.0, 1.0)` and never `(1.0, 1.0)`.
+
+    A ratio over nothing is undefined, which is the rule
+    `auto_approval_precision` already follows -- it is `None` when nothing was
+    approved. An interval that rendered as a number here would be a measurement
+    of a run that measured nothing.
+    """
+    assert wilson_interval(0, 0) is None
+
+
+def test_the_reports_interval_brackets_its_own_point_estimate():
+    """The bound on storing a count and a ratio separately.
+
+    `auto_approval_precision` is stored; the interval is derived from
+    `n_auto_approved_correct` over `n_auto_approved`. Two sources for one fact
+    can drift, so this is the assertion that they have not: whatever the report
+    says its precision is, its interval must contain it.
+    """
+    report = EvalReport(
+        n_receipts=10,
+        n_auto_approved=8,
+        n_auto_approved_correct=7,
+        n_critical_correct=9,
+        auto_approve_threshold=D("0.85"),
+        auto_approval_precision=7 / 8,
+        auto_approval_rate=8 / 10,
+        critical_field_accuracy=9 / 10,
+        breakdown=FieldBreakdown(),
+        line_item_precision=1.0,
+        line_item_recall=1.0,
+        line_item_f1=1.0,
+    )
+    low, high = report.auto_approval_precision_interval
+    assert low <= report.auto_approval_precision <= high
+    crit_low, crit_high = report.critical_field_accuracy_interval
+    assert crit_low <= 9 / 10 <= crit_high
+
+
+def test_a_report_built_by_run_eval_carries_a_bracketing_interval(tmp_path):
+    """The wiring, not the arithmetic.
+
+    `wilson_interval` is pinned above on numbers handed straight to it. This
+    pins that `_build_report` fills `n_auto_approved_correct` from the run --
+    left at its `0` default, every real report would compute an interval whose
+    numerator is zero, report something like [0%, 37%] beside a precision of
+    100%, and no test touching the function directly would notice.
+
+    An end-to-end path is the only place that can see it, because the defect is
+    a field nobody populated rather than a formula anybody got wrong.
+    """
+    golden = tmp_path / "golden"
+    (golden / "labels").mkdir(parents=True)
+    truth = _extraction()
+    (golden / "labels" / "r001.json").write_text(
+        truth.model_dump_json(), encoding="utf-8"
+    )
+
+    def pipeline_fn(_path):
+        return _extraction(), D("0.99")
+
+    report = run_eval(golden, pipeline_fn, results_dir=tmp_path / "results")
+
+    assert report.n_auto_approved == 1
+    assert report.n_auto_approved_correct == 1, (
+        "_build_report left the interval's numerator at its default"
+    )
+    low, high = report.auto_approval_precision_interval
+    assert low <= report.auto_approval_precision <= high
+    # A single receipt says almost nothing, and the interval is how that shows.
+    assert low < 0.5

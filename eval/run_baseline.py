@@ -268,6 +268,24 @@ def format_report(report: EvalReport) -> str:
         if report.cost_per_receipt is not None
         else "n/a"
     )
+    def _interval(bounds: tuple[float, float] | None) -> str:
+        """The 95% interval beside a rate, or nothing when it is undefined.
+
+        **A rate without a sample size cannot support the spec's criterion.**
+        Section 70 asks for >= 99% precision on auto-approved receipts; that is
+        a claim about evidence, and "100.00%" over three receipts and over three
+        hundred render identically without this. Measured at perfect precision:
+        3-of-3 is roughly [44%, 100%], and the lower bound does not clear 99%
+        until about a thousand.
+
+        Empty string rather than `n/a` when undefined: the rate beside it
+        already renders `n/a`, and a second one would say the same thing twice.
+        """
+        if bounds is None:
+            return ""
+        low, high = bounds
+        return f"   95% CI [{low * 100:.1f}%, {high * 100:.1f}%]"
+
     p50 = f"{report.p50_latency_s:.2f}s" if report.p50_latency_s is not None else "n/a"
     p95 = f"{report.p95_latency_s:.2f}s" if report.p95_latency_s is not None else "n/a"
 
@@ -296,9 +314,11 @@ def format_report(report: EvalReport) -> str:
         f"  Failed:                   {report.n_failed:>12d}",
         f"  Auto-approve threshold:   {str(report.auto_approve_threshold):>12}",
         rule,
-        f"  Auto-approval precision:  {precision}",
+        f"  Auto-approval precision:  {precision}"
+        f"{_interval(report.auto_approval_precision_interval)}",
         f"  Auto-approval rate:       {_pct(report.auto_approval_rate)}",
-        f"  Critical-field accuracy:  {_pct(report.critical_field_accuracy)}",
+        f"  Critical-field accuracy:  {_pct(report.critical_field_accuracy)}"
+        f"{_interval(report.critical_field_accuracy_interval)}",
         format_breakdown(report.breakdown),
         f"  Line-item precision:      {_pct(report.line_item_precision)}",
         f"  Line-item recall:         {_pct(report.line_item_recall)}",

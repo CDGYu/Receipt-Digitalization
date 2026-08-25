@@ -23,6 +23,7 @@ Design notes that are load-bearing:
 
 from __future__ import annotations
 
+import math
 import re
 from dataclasses import dataclass, field, fields
 from decimal import Decimal
@@ -321,6 +322,44 @@ def critical_field_accuracy(
 # --------------------------------------------------------------------------- #
 
 
+def wilson_interval(
+    successes: int, total: int, z: float = 1.96
+) -> tuple[float, float] | None:
+    """A Wilson score interval for a proportion. ``None`` when ``total`` is 0.
+
+    **Why this exists (P8.T2).** The spec asks for **>= 99% precision on
+    auto-approved receipts**, and a point estimate cannot support that claim
+    without a sample size beside it. `IMPLEMENTATION_PLAN.md` has said so since
+    2026-08-23 -- "track the precision confidence interval, not just the point
+    estimate" -- and nothing computed one, so every report printed a bare
+    percentage against a criterion that is a statement about evidence.
+
+    Measured, at perfect precision: 3-of-3 gives roughly [44%, 100%], 100-of-100
+    [96.3%, 100%], 300-of-300 [98.7%, 100%], and the lower bound does not clear
+    99% until about a thousand clean receipts. **The golden set is three**, so
+    today the interval's job is to make that visible in every run rather than in
+    a note somebody has to find.
+
+    **Wilson rather than the textbook normal approximation**, and the difference
+    is the whole point here: the normal interval on 3-of-3 is
+    `1.0 +/- 1.96*sqrt(0/3)` = **[100%, 100%]** -- a perfect run reports perfect
+    certainty and the criterion looks met. Wilson does not collapse at p=0 or
+    p=1, which is exactly the regime this project is in.
+
+    ``None`` for an empty sample, never ``(0.0, 1.0)``: a proportion over nothing
+    is undefined, which is the rule ``auto_approval_precision`` already follows.
+    """
+    if total <= 0:
+        return None
+    p = successes / total
+    denominator = 1 + z * z / total
+    centre = (p + z * z / (2 * total)) / denominator
+    spread = (
+        z * math.sqrt(p * (1 - p) / total + z * z / (4 * total * total)) / denominator
+    )
+    return (max(0.0, centre - spread), min(1.0, centre + spread))
+
+
 def tier_key(client: Any) -> str:
     """One rung as a report key: the ``(model, use_tools)`` pair, rendered.
 
@@ -410,6 +449,16 @@ class EvalReport:
     line_item_precision: float            # 5
     line_item_recall: float               # 5
     line_item_f1: float                   # 5
+    #: How many auto-approved receipts were critical-correct. Stored so the
+    #: precision INTERVAL derives from the same two counts the point estimate
+    #: came from -- see `auto_approval_precision_interval`. Without it an
+    #: interval would reconstruct the numerator from a float, which is a second
+    #: source for one fact.
+    #:
+    #: Defaulted, and placed among the defaulted fields rather than beside
+    #: `n_auto_approved` where it reads better: a dataclass cannot take a
+    #: defaulted field before a non-defaulted one.
+    n_auto_approved_correct: int = 0
     cost_per_receipt: Decimal | None = None    # 6
     p50_latency_s: float | None = None         # 6
     p95_latency_s: float | None = None         # 6
@@ -503,6 +552,35 @@ class EvalReport:
         would-be denominator is a property of the schema, not of the receipt.
         """
         return self.breakdown.structural_mismatch
+
+    @property
+    def auto_approval_precision_interval(self) -> tuple[float, float] | None:
+        """A 95% Wilson interval on :attr:`auto_approval_precision`.
+
+        **Derived, never stored.** The point estimate is a stored float and this
+        comes from the two counts it was computed from, so the pair cannot drift
+        into disagreeing about one fact --
+        ``test_the_reports_interval_brackets_its_own_point_estimate`` is the
+        bound on that.
+
+        This is what P8.T2 asks to "document alongside the point estimate", and
+        why: the spec's criterion is **>= 99% precision**, which is a claim
+        about evidence, and a bare percentage cannot support or refute it. On
+        today's three-receipt golden set a *perfect* run reports 100% with an
+        interval of roughly [44%, 100%].
+        """
+        return wilson_interval(self.n_auto_approved_correct, self.n_auto_approved)
+
+    @property
+    def critical_field_accuracy_interval(self) -> tuple[float, float] | None:
+        """The same interval for :attr:`critical_field_accuracy`.
+
+        Both counts are already stored, so this needed nothing added. Reported
+        for the same reason: a critical-field accuracy over three receipts and
+        one over three hundred are different measurements, and the point
+        estimate alone renders them identically.
+        """
+        return wilson_interval(self.n_critical_correct, self.n_receipts)
 
 
 def calibration_curve(

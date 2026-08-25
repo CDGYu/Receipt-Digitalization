@@ -370,7 +370,7 @@ def _write_results(results_dir: Path, *, receipts: int, results: list[dict]) -> 
         "prompt_bundle_hash": "0000000000000000",
         "auto_approve_threshold": "0.85",
         "counts": {"receipts": receipts, "auto_approved": 0,
-                   "critical_correct": 0, "failed": 0},
+                   "critical_correct": 0, "auto_approved_correct": 0, "failed": 0},
         "metrics": {"auto_approval_precision": 0.0, "auto_approval_rate": 0.0,
                     "critical_field_accuracy": 0.0, "transcription_accuracy": 0.0,
                     "transcription_accuracy_core": 0.0,
@@ -381,6 +381,12 @@ def _write_results(results_dir: Path, *, receipts: int, results: list[dict]) -> 
                     "line_item_precision": 0.0, "line_item_recall": 0.0,
                     "line_item_f1": 0.0, "cost_per_receipt": None,
                     "p50_latency_s": None, "p95_latency_s": None},
+        # P8.T2: a rate with no sample size cannot support the spec's >=99%
+        # precision criterion. `None` here because this fixture approves
+        # nothing -- an interval over no decisions is undefined, the rule
+        # `auto_approval_precision` already follows.
+        "auto_approval_precision_interval": None,
+        "critical_field_accuracy_interval": None,
         # ISSUE-012: the artefact records which rung produced the extraction and
         # why the others lost. `None` here rather than a dict because this
         # fixture is a one-rung run with no ladder to attribute -- which is what
