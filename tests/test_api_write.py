@@ -61,10 +61,10 @@ from receipts.persist.repository import (  # noqa: E402
     _RECEIPT_FIELDS,
 )
 from receipts.persist.session import make_engine, make_session_factory  # noqa: E402
-from receipts.review.schemas import CorrectionPatch  # noqa: E402
 from receipts.persist.users import ROLE_ADMIN, ROLE_REVIEWER, create_user  # noqa: E402
 from receipts.review.api import create_app  # noqa: E402
 from receipts.review.queue import enqueue_review, next_task  # noqa: E402
+from receipts.review.schemas import CorrectionPatch  # noqa: E402
 from receipts.score.confidence import ReceiptStatus  # noqa: E402
 
 #: Minimal but genuinely JPEG-sniffable bytes (see
