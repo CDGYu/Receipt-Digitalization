@@ -377,12 +377,51 @@ Three things follow, and the order matters:
   gives `job_timeout_for(settings) = 32580` — 9.05 hours. The horse died at
   1320s, 4% of the way to it. **ISSUE-029's fix is in place and is not the
   cause here**; do not "fix" this by raising the ceiling again.
-* **The terminal-state guarantee worked.** A SIGKILLed work-horse raises no
-  Python exception — there is nothing to catch — so before ADR-0054 this
-  receipt would have sat `pending` forever. It reached a terminal state anyway.
-  **That is the guarantee firing against a real kill rather than a test
-  double**, and it is the reason a dead job here costs you a bad row instead of
-  a stuck queue.
+* **The terminal-state guarantee fired — but it fired for the wrong reason,
+  and an earlier version of this section wrongly called that a success.** The
+  receipt did reach a terminal state, and a SIGKILLed work-horse raises no
+  Python exception, so before ADR-0054 it would have sat `pending` forever.
+  What actually marked it, though, was not the pipeline noticing a dead job. It
+  was **`receipts.sweep.strand_receipt`, called from the API's progress route,
+  deciding the receipt was too old** — identified from the discriminator rather
+  than assumed, because `_persist_failure` and `strand_receipt` write different
+  rows:
+
+  ```
+  review_tasks.priority -> 1   (_STRANDED_PRIORITY, sweep.py:59)
+  review_tasks.reason   -> "processing was interrupted at extract and never resumed"
+                           (sweep.py:110, verbatim)
+  ```
+
+  **And it should not have been able to reach that conclusion**, which is the
+  next bullet.
+
+* **The API and the worker disagree about what "too long" means, by a factor
+  of 30.** `docker-compose.yml` sets the `VLM_*` block on the **`worker`
+  service only**, so the API container runs the 120s default. Measured by
+  calling `_cutoffs` inside each running container, not by arithmetic:
+
+  | container | `vlm_timeout_s` | `started_cutoff` |
+  |---|---|---|
+  | `worker` | 3600 | **21600s** (6h) |
+  | `api` | 120 (unset → default) | **720s** (12 min) |
+
+  The worker will spend hours on one model call. The API's progress route
+  sweeps its own row and gives up after **twelve minutes**. A receipt well
+  inside the worker's budget is far outside the API's.
+
+* **So this is the default outcome on this box, not bad luck.** The heartbeat
+  (`receipts.progress_at`) updates per stage, not during a model call —
+  measured on a healthy in-flight receipt whose heartbeat age tracked elapsed
+  time 1:1 at 353s while the worker was actively working it. Triage alone
+  measured **1259s** on `9a21e64d`. So a perfectly healthy receipt crosses the
+  API's 720s line roughly **nine minutes before triage can finish**, and
+  **anyone opening the processing screen at that moment strands it** — which is
+  the exact screen the single-row sweep was added to serve.
+
+  **Do not read a stranded receipt here as a dead worker.** Check
+  `docker logs receipts-worker` for `killed horse` first; without it, the job
+  is very likely still running and the row is simply wrong.
 * **The cause of the kill is NOT established.** The leading hypothesis is the
   kernel OOM killer — 7.59 GiB total on this box, `ollama` already holding 3.94
   GiB, and the horse died 61s into a retry that would ask for a second
@@ -393,9 +432,20 @@ Three things follow, and the order matters:
 
 So: on this hardware the runbook above proves the **plumbing** end to end —
 auth, upload, blob, queue, worker, a real HTTP 200 from a real model, and a
-terminal state. It does **not** demonstrate a working extraction, and no run on
-this box has. ADR-0039 already rules local inference a liveness check and never
-a measurement; this is what that looks like from the operator's side.
+terminal state instead of an indefinite `pending`. It does **not** demonstrate
+a working extraction, and no run on this box has. It does **not** demonstrate
+the terminal-state guarantee behaving correctly either — the state was reached
+by a premature strand, and a reader who took it as the guarantee working would
+inherit a wrong model of it. ADR-0039 already rules local inference a liveness
+check and never a measurement; this is what that looks like from the operator's
+side.
+
+**One more thing the operator cannot see.** `extraction_runs` was unchanged at
+3 across all of this — the killed horse wrote nothing on its way out. So a
+receipt with every field `null` carries **no database evidence that a run was
+ever attempted**. The only record is the worker log, which is not persisted
+anywhere. If you need to know whether a receipt was tried, capture
+`docker logs receipts-worker` before the container is replaced.
 
 ### Step 8 — run the gates
 
