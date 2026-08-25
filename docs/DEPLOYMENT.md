@@ -5,8 +5,13 @@ worker. The decision and its reasoning are **ADR-0036**; the entry point it
 serves is **ADR-0035**.
 
 Everything below was run against the image built from this repository on
-2026-08-11. **Re-derive rather than trust** (ADR-0028 rule 1) — the commands are
+2026-08-11, and §4 and §6 were **re-run end to end on 2026-08-25** on the
+compose stack — every command in §6 was executed and its output read, not
+recalled. **Re-derive rather than trust** (ADR-0028 rule 1) — the commands are
 here so you can.
+
+**If you just want to start it**, skip to **§6**, which is the ordered runbook.
+§1–§5 are what a real deployment has to know; §6 is the local stack.
 
 ---
 
@@ -130,6 +135,25 @@ Verified against the running container on 2026-08-11:
 | `GET /receipts` with no session | `401` |
 | `python -m receipts.worker` with no broker | fails **connecting** to Redis, not importing |
 
+Re-verified on 2026-08-25 against the compose stack (§6), via `curl` against
+`localhost:8000` and a Playwright load of `/app/`. The first three rows above
+still hold; the fourth was **not** re-run, and stays a 2026-08-11 observation.
+What was added:
+
+| request | result |
+|---|---|
+| `POST /auth/login` with a real account | `200 {"username":...,"role":"admin"}` + session cookie |
+| `GET /auth/me` with that cookie | `200` — same body |
+| `GET /receipts`, `GET /metrics` with that cookie | `200`, real rows |
+| `POST /upload` (multipart `file=@…jpg`) | `202 {"receipts":[{"receipt_id":…,"image_key":…}],"status":"pending"}` |
+| `GET /receipts/{id}/progress` right after | `200 {"status":"pending","stage":"triage","detail":null}` |
+| the worker's log, same moment | `Processing receipt {id} from api` — it picked the job up |
+| `/app/` in a browser, anonymous | sign-in form renders; **two 401s in the console** (`/metrics`, `/auth/me`) |
+
+Those two console 401s are **expected, not a fault**: `GET /auth/me` is
+deliberately inside `require_user`, so an anonymous cold load always logs one —
+`build_auth_router`'s docstring records the trade and ADR-0026 is the decision.
+
 ---
 
 ## 5. What the platform has to provide
@@ -149,27 +173,261 @@ Verified against the running container on 2026-08-11:
 
 ---
 
-## 6. Local development stack
+## 6. Running the whole system locally — the ordered runbook
 
-`docker-compose.yml` runs the whole thing — Postgres, Redis, the API, the
-worker, and Ollama:
+`docker-compose.yml` runs all five pieces: Postgres, Redis, the API, the queue
+worker, and Ollama. **Every step below is required on a fresh machine**, and
+three of them (0, 4, 5) used to be missing from this document — each was found
+by a session that could not get the system running without it.
 
-```
-export SESSION_SECRET=$(python -c "import secrets; print(secrets.token_urlsafe(32))")
-docker compose up -d --build
-docker compose run --rm api python -m alembic upgrade head
-```
-
-Compose **fails to start** if `SESSION_SECRET` is unset rather than inventing
-one — verified: `required variable SESSION_SECRET is missing a value`.
-
-The `api` service sets `SESSION_COOKIE_SECURE=false` **and**
-`ALLOW_INSECURE_SESSION_COOKIE=true`, because the stack is plain HTTP on
-loopback. That pair is exactly what a real deployment must not copy.
+Run the steps in order. Nothing here needs a Python or Node install on the host
+**except step 8**, which is the gate suite and runs outside Docker.
 
 ---
 
-## 7. What this does not cover
+### Step 0 — create the `ollama` model volume
+
+```
+docker volume create ollama
+```
+
+The compose file declares this volume **`external: true`** so that pulled
+models survive a `docker compose down -v`. The cost is that compose will not
+create it: with it absent, **every** compose command fails with
+
+```
+external volume "ollama" not found
+```
+
+before anything starts. Verified 2026-08-25 with a throwaway compose file
+naming a volume that did not exist — the message above is that probe's, with
+the name substituted. `docker volume create` on a volume that already exists is
+a no-op, so this step is safe to repeat.
+
+### Step 1 — set `SESSION_SECRET`
+
+```
+export SESSION_SECRET=$(python -c "import secrets; print(secrets.token_urlsafe(32))")
+```
+
+Compose **refuses to run** rather than inventing one — verified 2026-08-25:
+
+```
+error while interpolating services.api.environment.SESSION_SECRET:
+required variable SESSION_SECRET is missing a value
+```
+
+Three things about this that cost time:
+
+* **`.env` does not contain it** as of 2026-08-25, so the export is not
+  optional. Put it in `.env` if you want it to survive a new shell; the
+  variable is read by compose, not by the image.
+* **It blocks every compose subcommand, not just `up`.** Compose interpolates
+  the whole file before it decides which service you meant, so
+  `docker compose exec ollama ollama list` fails on it too. Either keep the
+  export set, or address a container directly — `docker exec ollama ollama list`
+  needs no interpolation and works regardless.
+* **Changing it signs every reviewer out**, because it signs the session
+  cookie. That is the same property §2 relies on; here it just means don't
+  regenerate it casually mid-session.
+
+### Step 2 — build and start
+
+```
+docker compose up -d --build
+```
+
+Five containers: `receipts-postgres`, `receipts-redis`, `receipts-api`,
+`receipts-worker`, `ollama`. Postgres and Redis have healthchecks and the API
+and worker `depends_on` them being **healthy**, so the ordering is handled —
+you do not need to stagger it.
+
+```
+docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'
+```
+
+`receipts-worker` in `Restarting` and `receipts-postgres`/`receipts-redis` in
+`Exited` is the signature of a stack that was left half-up (the worker cannot
+reach a broker that is not running); `docker compose up -d` again fixes it.
+
+### Step 3 — migrate
+
+```
+docker compose run --rm api python -m alembic upgrade head
+```
+
+Nothing in the compose file runs migrations, deliberately (§3). Run this after
+**every** `git pull` as well as on a fresh database — on 2026-08-25 a stack that
+had been up for 18 hours still needed `c7f1a9e4d208, receipt progress
+heartbeat` applied.
+
+### Step 4 — create an account
+
+**Without this you cannot sign in at all**, and there is no bootstrap account,
+no seeded admin, and no self-registration route. This is the step most likely to
+be missing when someone reports "the UI just shows a login form".
+
+```
+# does one already exist?
+docker compose run --rm -T api receipts users list
+
+# create one -- the password comes from stdin, never a flag
+echo "your-password-here" | docker compose run --rm -T api receipts users add alice --role admin
+```
+
+`-T` matters: without it compose allocates a TTY, `_read_password` sees an
+interactive terminal and prompts instead of reading the pipe. Roles are
+`admin` and `reviewer`; `--role` defaults to `reviewer`. There is no
+`--password` flag and `receipts users add` will never grow one — it would land
+in shell history and in `ps`.
+
+### Step 5 — pull the vision model
+
+```
+docker exec ollama ollama pull granite3.2-vision:2b
+docker exec ollama ollama list
+```
+
+This is the model the `worker` service names in **both** `VLM_MODEL_EXTRACT`
+and `VLM_MODEL_TRIAGE`. Without it every triage call fails at the model layer —
+the API still accepts uploads and the worker still picks them up, so the failure
+shows up as a stuck receipt rather than a startup error.
+
+**Two Ollamas are easy to confuse.** This project reads the **Docker** one,
+published on **`localhost:11435`** (`11434` is left free for a Windows-native
+install, which the project does not read). Inside the compose network the
+worker addresses it as `http://ollama:11434/v1` — the service name and the
+*container* port, not the published one. From the host:
+
+```
+curl -s http://localhost:11435/api/tags
+```
+
+The `:cloud` entries Ollama also lists are **not** used by this stack. Cloud
+egress is authorised for the golden-set evaluation alone; routing an uploaded
+receipt to a hosted model is a decision nobody has taken.
+
+### Step 6 — smoke-test the API
+
+```
+curl -s http://localhost:8000/health                 # {"status":"ok"}
+curl -s -o /dev/null -w '%{http_code}\n' http://localhost:8000/app/   # 200
+curl -s http://localhost:8000/receipts               # 401, no session
+
+curl -s -c cookies.txt -H 'Content-Type: application/json' \
+     -d '{"username":"alice","password":"your-password-here"}' \
+     http://localhost:8000/auth/login                # 200 + Set-Cookie
+
+curl -s -b cookies.txt http://localhost:8000/metrics
+```
+
+All five verified 2026-08-25 — see the second table in §4 for the bodies.
+
+### Step 7 — drive it: upload a receipt end to end
+
+```
+curl -s -b cookies.txt -F "file=@eval/golden/images/r001.jpg" \
+     http://localhost:8000/upload
+# 202 {"receipts":[{"receipt_id":"<id>","image_key":"receipts/2026/08/<id>/original.jpg"}],
+#      "status":"pending"}
+
+curl -s -b cookies.txt http://localhost:8000/receipts/<id>/progress
+docker logs receipts-worker --tail 5
+```
+
+Or do it in a browser: **<http://localhost:8000/app/>**, sign in, and use the
+Upload screen. Both paths reach the same queue.
+
+**Expect it to take roughly half an hour, and do not read that as a hang.**
+Inference here is CPU-only — ADR-0039 measured **~1896s per receipt** on this
+box and rules local inference a *liveness check, never a measurement*. The way
+to tell "working" from "wedged" is the model container's CPU:
+
+```
+docker stats --no-stream --format 'table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}'
+```
+
+Measured 2026-08-25 while a real upload was in `stage: triage`: `ollama` at
+**195% CPU / 3.94 GiB**, every other container near zero. That is the pipeline
+running. `VLM_TIMEOUT_S: "3600"` in the compose file exists for exactly this,
+and it derives three other timeouts — the comment on that line in
+`docker-compose.yml` has the four numbers and why the 4.5-day unstarted window
+is the one to watch.
+
+### Step 8 — run the gates
+
+On the **host**, not in a container:
+
+```
+python scripts/verify.py
+```
+
+Five gates, and it names each one and its command:
+
+```
+PASS    pytest     python -m pytest
+PASS    ruff       python -m ruff check .
+PASS    typecheck  npm run typecheck
+PASS    vitest     npm test
+PASS    build      npm run build
+```
+
+Verified 2026-08-25 at `3d0a979`: **all five PASS**. Needs `pip install -e
+".[dev]"` and an `npm install` in `frontend/`; the npm gates skip rather than
+fail if npm is absent, so read the summary line — "every gate that **ran**
+passed" is not the same claim as five PASS rows.
+
+**`scripts/verify.py` does not run Playwright**, and green gates have twice
+shipped defects a person could see in a browser and no gate could — a contrast
+regression under the accessibility floor, and a zero-width table column. On any
+visual change, load `/app/` and look at it.
+
+### Teardown
+
+```
+docker compose down          # keeps the database and the blobs
+docker compose down -v       # also drops receipts_pgdata and receipts_blobs
+```
+
+Neither removes the `ollama` volume — it is external (step 0), which is the
+point: `down -v` will not cost you the model pull.
+
+---
+
+### What this stack does that a real deployment must not copy
+
+The `api` service sets `SESSION_COOKIE_SECURE=false` **and**
+`ALLOW_INSECURE_SESSION_COOKIE=true`, because the stack is plain HTTP on
+loopback. That pair is exactly what §2's escape hatches exist to make
+deliberate — and exactly what a deployment behind TLS sets neither of.
+Postgres also runs with the password `receipts`, and `5432` and `6379` are
+published to the host.
+
+---
+
+## 7. When it does not work
+
+| symptom | cause | fix |
+|---|---|---|
+| any `docker compose` command: `external volume "ollama" not found` | the model volume was never created | step 0 |
+| any `docker compose` command: `required variable SESSION_SECRET is missing a value` | not exported, and not in `.env` | step 1 — or use `docker exec` to skip interpolation |
+| `receipts-worker` restarting, Postgres/Redis exited | half-up stack; the worker cannot reach the broker | `docker compose up -d` |
+| the UI only ever shows the sign-in form | no account exists | step 4 |
+| `/app/` logs two 401s on load | `/auth/me` and `/metrics` fired anonymously | nothing — expected, ADR-0026 |
+| a receipt sits at `stage: triage` forever | either the model was never pulled, or it is simply slow | `docker exec ollama ollama list`, then `docker stats` — high `ollama` CPU means it is working |
+| `receipts users add` hangs with no output | a TTY was allocated, so `_read_password` took the `getpass` branch instead of reading the pipe | add `-T` to `docker compose run` |
+
+**Which of those were actually seen, and which are derived.** Rows 2, 3 and 5
+were observed directly on 2026-08-25. Row 1's message was produced by a
+throwaway compose file naming a volume that did not exist, not by removing the
+`ollama` volume — the name in the table is substituted. Rows 4, 6 and 7 are
+derived from the code (`build_auth_router` has no bootstrap account and no
+registration route; `_read_password` branches on `isatty()`) and were **not**
+reproduced. Treat the derived rows as leads, not as findings.
+
+---
+
+## 8. What this does not cover
 
 No CI pipeline, no registry or image-promotion policy, no orchestration
 manifests, no secret manager, no backup or restore procedure, and no
