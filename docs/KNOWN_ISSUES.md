@@ -3453,9 +3453,39 @@ work-horse was killed at 1320s — `killed horse pid 14 -- Work-horse terminated
 unexpectedly; waitpid returned None` — having reached `extract` and never
 returned. **The receipt is terminal: `needs_review`.** Measured directly against
 the deployed Postgres, not inferred from a log line. Everything below describes
-the defect as it stood before `63084b6`; this is the first evidence in this
-entry that the fix holds when a process is actually killed rather than when a
-test simulates it.*
+the defect as it stood before `63084b6`.
+
+**CORRECTED hours later, and the correction is the useful half.** This note first
+said the run was evidence that *the fix holds when a process is actually killed*.
+It is not. The receipt did reach a terminal state — that part is measured and
+stands — but the thing that produced it was **not** kill-detection. It was
+`sweep.strand_receipt`, and the row says so unambiguously:
+
+    review_tasks.priority -> 1   (_STRANDED_PRIORITY, sweep.py:59)
+    review_tasks.reason   -> "processing was interrupted at extract and never
+                              resumed"   (sweep.py:110, and no other writer in
+                              src/ emits that string)
+
+**And it fired early because the containers disagree about the timeout.**
+Measured inside each running container:
+
+    receipts-api     VLM_TIMEOUT_S unset -> vlm_timeout_s=120
+    receipts-worker  VLM_TIMEOUT_S=3600  -> vlm_timeout_s=3600
+
+so the sweep reached from the API's progress route uses a cutoff derived from
+120s while the work it is judging runs under 3600s. The receipt was stranded in
+minutes rather than hours.
+
+**Do not read this as "the guarantee failed".** It did not fail; it was never
+exercised. With matching cutoffs the sweep would still have stranded this
+receipt, just far later — so the guarantee may well hold, and **this run does not
+show it either way**. What the run validates is a *premature strand* caused by a
+configuration mismatch. The kill-detection path remains **unvalidated against a
+real SIGKILL**, exactly as it was before.
+
+*(Found by two other sessions within the hour, after this note had reached
+`origin/main`. The wording was honest when written and false by the time it was
+read, which is the failure this register exists to catch and did not.)*
 
 *Two things it does **not** establish, stated because the temptation is to claim
 them. **The kill was not the job ceiling** — `job_timeout_for(settings)` returns
