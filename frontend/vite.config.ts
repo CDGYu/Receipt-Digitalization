@@ -84,5 +84,26 @@ export default defineConfig({
   // else. Measured by dropping this `exclude` and running `npx vitest run`:
   // `FAIL e2e/review.spec.ts` / `Error: Playwright Test did not expect test()
   // to be called here.`, one failed file alongside the fifteen that pass.
-  test: { environment: 'jsdom', exclude: [...configDefaults.exclude, 'e2e/**'] },
+  // `testTimeout` is 15s, not Vitest's 5s default, and the reason is measured
+  // rather than defensive. Four runs of the SAME tree gave 4, 1, 0 and 5
+  // failures; every failure was `Test timed out in 5000ms` in a test that
+  // mounts the whole app or `await import('../src/main')`, and the durations
+  // cluster just past the line -- 5046, 5151, 5296, 5411, 6572, 7121ms. The
+  // files differ run to run, which is the signature of a budget being crossed
+  // rather than a defect: bisecting it reads as noise.
+  //
+  // `main.tsx` now imports eight screens plus the nav and sign-out control, and
+  // the entry module pulls seven `@fontsource` packages, on a 2-core box that
+  // is also running Postgres, Redis, two Ollamas and four Claude sessions. The
+  // 5s default stopped being generous somewhere in that growth.
+  //
+  // 15s is three times the observed worst case, and still fails fast on a real
+  // hang. **This does not make a slow test pass** -- it stops a loaded machine
+  // reporting a green tree as red, which is worse than useless because it
+  // teaches everyone to re-run rather than to read.
+  test: {
+    environment: 'jsdom',
+    exclude: [...configDefaults.exclude, 'e2e/**'],
+    testTimeout: 15_000,
+  },
 })
