@@ -403,6 +403,16 @@ The rules and the repair loop exist. This phase wires them into the pipeline and
 > receipts. Blocked on P0.T1 / ISSUE-001 step 7.
 
 - [ ] Implement `receipts calibrate` using `calibration_curve` (P0.T2) over the held-out set; print the precision/throughput curve; set `AUTO_APPROVE_THRESHOLD` to the lowest threshold holding precision >= target. Commit results.
+  > **HALF BUILT, and the halves fail for different reasons — audited
+  > 2026-08-25.** The command exists: `cmd_calibrate` (`cli.py`), registered as
+  > `calibrate` and dispatched, printing threshold / auto-approve rate /
+  > precision from `calibration_curve` and recommending the lowest threshold
+  > that reaches `--target`. **It recommends; it does not set.** And "over the
+  > held-out set … commit results" needs a real eval run, which the box at
+  > P8.T1 already records as impossible here (ADR-0039). *(The handoff pair
+  > listed this as one of three boxes for work that is built. That reading
+  > came from the symbol existing. The box asks for a number to be chosen from
+  > data and written down, and no such number exists.)*
 **Acceptance:** calibration report committed; threshold chosen from data (with the sample-size caveat noted).
 
 ### Task P3.T7 — Complete the XLSX workbook (all four sheets, §13) `[backend]`
@@ -461,11 +471,46 @@ The screen where the ongoing cost of the system lives. Optimise for time-per-rec
 > nothing about a human reviewer. **No human trial has ever been run.**
 
 - [ ] Image pane on the left with **bounding-box highlighting** from `line_items[].bbox`; editable fields on the right; keyboard-first (Tab between fields, Enter to approve).
+  > **THREE OF FOUR CLAUSES ARE BUILT; the highlighting is the only one that is
+  > not — audited 2026-08-25.** `ImagePane` is mounted in `ReviewScreen`;
+  > fields are editable through `LineItemsTable`; keyboard-first is deliberate
+  > and *deviates from this box*: Tab order is native and plain Enter is left
+  > to the browser, with **Ctrl/Cmd+Enter** to approve, because a bare Enter
+  > moving focus through a form must keep working. That deviation is reasoned
+  > at the call site and is better than what this box asks for.
+  > **The highlighting is blocked on a step that appears in no plan.** A text
+  > layer now exists (`preprocess/ocr.py`, P2.T2, `3b023a4`) and its `OcrWord`s
+  > carry 0-1 boxes matching `LineItem.bbox`'s convention deliberately — but
+  > `OcrLayer.words` has **zero consumers**, `_ground_in_ocr` keeps
+  > `layer.text` and drops the geometry, and **nothing maps a word box onto a
+  > line item.** `bbox` is omitted from the frontend types on purpose. There
+  > are also **0 rows in `line_items`** to build against, and the model that
+  > runs here does not ground. Whoever takes this: it is a design step and then
+  > a feature, not the one-task green light the handoff called it.
 - [ ] Show the confidence explanation from `explain_confidence` so the reviewer sees *why* it was flagged.
+  > **BUILT — audited 2026-08-25.** `ConfidenceRail` renders `confidence` and
+  > `confidence_reasons`, mounted in `ReviewScreen`.
 - [ ] On approve/edit, `PATCH /receipts/{id}` -> writes to `corrections`.
+  > **BUILT — audited 2026-08-25.** `@app.patch("/receipts/{receipt_id}")` in
+  > `review/api.py`. *(Note the standing tension: **`corrections` is empty**,
+  > which P8.T1 and P9.T1 are blocked on. The route exists; nobody has used
+  > it.)*
 - [ ] Test (component + e2e via Playwright): editing a field and approving persists and advances to the next task; measure a scripted correction completes under 60s.
+  > **BUILT, and it tightened this box rather than meeting it — audited
+  > 2026-08-25.** `frontend/e2e/review.spec.ts`: "a reviewer corrects a receipt
+  > and the correction is persisted". It asserts **under 10s, not 60**, with
+  > the reason written down: a scripted run does it in about two seconds, so
+  > **60s would pass even if the screen had become unusably slow**. The
+  > acceptance line below still says 60 seconds; that is the number for a
+  > *human*, and the two should not be conflated.
 - [ ] Commit.
+  > **Done for everything above that is built.**
 **Acceptance:** a full correction in under 60 seconds; every edit lands in `corrections`.
+  > **Unmet, and not for want of code — audited 2026-08-25.** "A full correction
+  > in under 60 seconds" is a claim about **a human**, and no human trial has
+  > ever been run (see the note above this task). "Every edit lands in
+  > `corrections`" is untested against reality because **`corrections` has zero
+  > rows.** Both halves need a person, not a commit.
 
 ### Task P5.T2 — Upload, list, queue, export pages `[frontend]`
 
