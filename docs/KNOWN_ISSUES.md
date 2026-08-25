@@ -836,13 +836,18 @@ real receipt to process. Measured against **that** database:
     merchants with non-empty hints         -> 0
     extraction_runs                        -> 3
     extraction_runs where pass_name=repair -> 0
-    receipts                               -> 6
+    extraction_runs where pass_name=triage -> 1
+    receipts                               -> 7
 
 So the deployed instance **does** hold `extraction_runs` rows — the bound's
 trigger — and **none of them are repair rows**, which is the only class this
 decision was ever about. The conclusion survives; the evidence behind it was the
 wrong database, and would have stayed wrong had a fourth session not started the
-stack. *`receipts.db` is not the runtime: the compose deployment reads Postgres,
+stack. *The counts above were re-taken 2026-08-25 after the in-flight receipt
+terminated, so they describe a settled table. The first reading of them was
+taken mid-pipeline and `extraction_runs` was the same either way — the receipt
+was killed at `extract` and never reached `repair`, which is the only class
+this decision turns on.* *`receipts.db` is not the runtime: the compose deployment reads Postgres,
 and ADR-0039's local path is a liveness check.*
 **The other half of this entry is NOT resolved and is now ISSUE-034** — the eval
 path extracting unhinted while `process_receipt` sends hints.
@@ -3431,6 +3436,26 @@ docstring says so (`src/receipts/worker.py:246`): *"The one `except` below is
 not a second net around the processing"* — that single `except` guards the Redis
 progress write. **This is correct design for a throw**: `process_receipt`
 re-raises, and RQ records a failed job.
+
+*(**Validated against a real SIGKILL on 2026-08-25**, not a test double. Another
+session ran `eval/golden/images/r001.jpg` through the compose stack; the
+work-horse was killed at 1320s — `killed horse pid 14 -- Work-horse terminated
+unexpectedly; waitpid returned None` — having reached `extract` and never
+returned. **The receipt is terminal: `needs_review`.** Measured directly against
+the deployed Postgres, not inferred from a log line. Everything below describes
+the defect as it stood before `63084b6`; this is the first evidence in this
+entry that the fix holds when a process is actually killed rather than when a
+test simulates it.*
+
+*Two things it does **not** establish, stated because the temptation is to claim
+them. **The kill was not the job ceiling** — `job_timeout_for(settings)` returns
+32580s at `VLM_TIMEOUT_S=3600`, called inside the running container rather than
+derived on paper, and the horse died at 4% of it. So ISSUE-029's fix is in place
+and is not the cause; do not "fix" this by raising the ceiling. **And the cause
+is not established.** OOM is a lead — 7.59 GiB on this box with ollama holding
+3.94 GiB — but `docker inspect` reports `OOMKilled=false` with 0 restarts, which
+is consistent with a child dying while PID 1 survives and is not evidence for
+OOM. Nobody has measured it.)*
 
 **A SIGKILLed work-horse throws nothing.** No Python exception is raised in that
 process at all, so no handler of any kind can run. Verified statically here and
