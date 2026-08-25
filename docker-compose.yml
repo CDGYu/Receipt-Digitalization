@@ -208,6 +208,38 @@ services:
       #     is worse than noticing a dropped one late. Lower `VLM_TIMEOUT_S`
       #     and all four numbers come down together.
       VLM_TIMEOUT_S: ${VLM_TIMEOUT_S:-3600}
+
+      # --- Self-consistency (P7.T1) ------------------------------------- #
+      #
+      # **On the worker only, and that is not an oversight.** `process_receipt`
+      # runs here; `review/api.py` mentions it in one docstring and never calls
+      # it. Copying these to `api` would be four settings that read as live and
+      # decide nothing -- do not "fix" the asymmetry.
+      #
+      # All four default to what the code already defaults to, so an operator
+      # who sets nothing gets exactly today's behaviour: consistency off, and
+      # no escalation even if it were on.
+      #
+      # CONSISTENCY_ENABLED is the expensive one. It costs CONSISTENCY_RUNS
+      # extra extract calls on every handwritten or low-legibility receipt, and
+      # ADR-0039 measures one extract on this box in minutes.
+      CONSISTENCY_ENABLED: ${CONSISTENCY_ENABLED:-false}
+      CONSISTENCY_RUNS: ${CONSISTENCY_RUNS:-3}
+
+      # The second, larger n, spent only on a receipt whose total, date or
+      # merchant came back with no majority. Leave at 0 and nothing escalates;
+      # set it to 5 and a doubtful critical field buys two more passes. Below
+      # or equal to CONSISTENCY_RUNS it is inert.
+      CONSISTENCY_CRITICAL_RUNS: ${CONSISTENCY_CRITICAL_RUNS:-0}
+
+      # **A JSON array, not a comma-separated list.** `Settings` is a pydantic
+      # `BaseSettings` and this field is a `tuple[str, ...]`, so the value is
+      # parsed as JSON. Measured, not assumed: `totals.total,receipt.date`
+      # raises `SettingsError: error parsing value for field
+      # "consistency_critical_fields"` and the service refuses to boot. Failing
+      # loudly is the good outcome, but the syntax surprises people.
+      CONSISTENCY_CRITICAL_FIELDS: >-
+        ${CONSISTENCY_CRITICAL_FIELDS:-["totals.total","receipt.date","merchant.name"]}
     volumes:
       - receipts_blobs:/var/receipts/blobs
     depends_on:

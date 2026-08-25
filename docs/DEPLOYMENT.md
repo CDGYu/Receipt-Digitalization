@@ -82,6 +82,56 @@ because the default is relative to the working directory.
 | `SESSION_TTL_S` | `43200` | 12h. Logout cannot revoke an exfiltrated cookie; this is the exposure window |
 | `DOCS_ENABLED` | `false` | `/docs`, `/redoc`, `/openapi.json`. None takes a session or a key |
 
+### Self-consistency, and what it costs
+
+Four settings, **on the `worker` service only** — `process_receipt` runs there,
+and `review/api.py` mentions it in one docstring without ever calling it.
+Copying these to `api` gives you four values that read as live and decide
+nothing.
+
+| variable | default | notes |
+|---|---|---|
+| `CONSISTENCY_ENABLED` | `false` | extracts a handwritten or low-legibility receipt `CONSISTENCY_RUNS` times and votes |
+| `CONSISTENCY_RUNS` | `3` | the smallest n that can produce a majority; two can only agree or disagree |
+| `CONSISTENCY_CRITICAL_RUNS` | `0` | a second, larger n, spent only when a critical field failed to resolve. `0` disables it; any value ≤ `CONSISTENCY_RUNS` is inert |
+| `CONSISTENCY_CRITICAL_FIELDS` | the §12 triple | **a JSON array** — see below |
+
+**`CONSISTENCY_ENABLED` is the most expensive flag in the service.** It costs
+`CONSISTENCY_RUNS` *extra* model calls on exactly the receipts that are already
+slowest, and ADR-0039 measures one extract on a CPU-only box in minutes. Turn it
+on deliberately, on hardware that can afford it, and measure — nobody has yet
+established that it improves precision here.
+
+**`CONSISTENCY_CRITICAL_RUNS` is spent on demand, not always.** No field can be
+sampled on its own — every path comes out of the same whole-receipt call — so
+the extra evidence is whole extra passes. The pass runs `CONSISTENCY_RUNS`, and
+escalates only when the total, date or merchant came back with **no majority**
+and was nulled; then it re-votes over all the runs in hand. A receipt whose
+critical fields all resolve still costs `CONSISTENCY_RUNS`.
+
+The trigger is deliberately not "the field was disputed". `disputed` means *not
+unanimous*, and these calls run at a non-zero temperature so that the runs
+differ — escalating on it would spend the extra passes on nearly every
+handwritten receipt, which is what setting `CONSISTENCY_RUNS=5` already does
+more simply.
+
+**`CONSISTENCY_CRITICAL_FIELDS` is a JSON array, not a comma-separated list.**
+`Settings` is a pydantic `BaseSettings` and the field is a `tuple[str, ...]`, so
+the value is parsed as JSON. Measured rather than assumed:
+
+```
+CONSISTENCY_CRITICAL_FIELDS=totals.total,receipt.date
+  -> SettingsError: error parsing value for field "consistency_critical_fields"
+```
+
+The service refuses to boot, which is the right failure — but the syntax catches
+people out. Paths use `extract.paths` grammar (`totals.total`,
+`line_items[2].qty`). The default is the §12 triple: the same three fields
+`score.confidence` penalises for being missing and the eval harness scores as
+`critical_correct`.
+
+---
+
 ### The two escape hatches
 
 Both default safe, and both exist so that doing the unsafe thing is a line

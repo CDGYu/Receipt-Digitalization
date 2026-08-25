@@ -475,6 +475,35 @@ pip install -e ".[dev]"     # installs pydantic + pyyaml + pytest
 python -m pytest            # no count here either; pyproject sets pythonpath=src and testpaths=tests
 ```
 
+### Running the whole system
+
+`pip install` + `pytest` above is the library. To bring up the five services --
+Postgres, Redis, the API (which serves the built frontend), the RQ worker and
+Ollama -- follow **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) §6**, an ordered
+runbook from an empty machine to a receipt processed end to end.
+
+Do not follow a shortened copy of it from here. The runbook is nine steps
+because several of them fail quietly if skipped or reordered -- the model pull
+does not fail at `up`, it fails at the first receipt -- and a second, shorter
+copy in this file would drift from it within a week.
+
+Three things from it worth knowing before you start:
+
+- **Migrations are a deliberate operator step**, not part of the boot path.
+  `docker compose exec api alembic upgrade head`, run once, by a person. An
+  entrypoint that migrated would have every replica race on startup.
+- **Ollama is published on `localhost:11435`**, not 11434, so it cannot collide
+  with a Windows-native Ollama. Inside the compose network it is still
+  `ollama:11434`, which is why `VLM_BASE_URL` reads that way. If you have both
+  daemons, they have different models installed -- run `docker ps` before
+  concluding which one answered you.
+- **There is no default account and no signup screen.** `docker compose exec -it
+  api receipts users add <name> --role admin`, password read from stdin.
+
+`.env.example` is the tracked template for every variable `docker-compose.yml`
+interpolates, each with the default it already applies. Copying it to `.env`
+changes no behaviour; it exists so the knobs are discoverable.
+
 ---
 
 ## 10. Which file to read for what
