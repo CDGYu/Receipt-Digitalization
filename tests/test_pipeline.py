@@ -224,6 +224,44 @@ def test_the_fallback_runs_when_the_first_rung_reads_nothing(tmp_path):
     assert [a.model_id for a in discarded] == ["local"]
 
 
+def test_the_ladder_numbers_its_extract_rungs(tmp_path):
+    """ISSUE-015: `rung` was written at four sites and read at none.
+
+    `git grep "\\.rung\\b" -- src eval` returned nothing, so **a ladder that
+    recorded `rung=0` for every rung left every gate green.** One test read it
+    — the triage one below — which pins the triage pass's value and nothing
+    about the extract rungs, where the number is the one that carries
+    information.
+
+    **`rung` now has a production reader**: `run_baseline` resolves each
+    attempt's tier through `extract_rungs[entry.rung]`, because when two rungs
+    share a `model_id` and differ only in their tools answer, `rung` is the
+    only thing that says which one ran (ISSUE-013). So this is no longer a
+    field nothing consumes — and this pin is what stops the numbering itself
+    from being wrong underneath that reader.
+
+    **The issue offered deleting it instead, on the grounds that "`attribution`
+    is a tuple in ladder order, so the index is recoverable". That is not
+    true as stated** and the assertion below shows why: `attribution` holds the
+    triage entry first, so a tuple index is offset from the rung index by the
+    number of preceding non-extract entries. Recovering it means knowing how
+    many passes precede the ladder, which is exactly the coupling storing the
+    number avoids.
+    """
+    png = tmp_path / "receipt.png"
+    _write_png(png)
+    first = FakeVLMClient([_triage(), _unparseable()], model_id="local")
+    fallback = FakeVLMClient([_good()], model_id="cloud")
+
+    outcome = run_receipt(png, first, CTX, extract_fallback_client=fallback)
+
+    extract = [a for a in outcome.attribution if a.pass_name == "extract"]
+    assert [(a.model_id, a.rung) for a in extract] == [("local", 0), ("cloud", 1)]
+    # The offset the docstring describes, asserted rather than asserted-about:
+    # the extract rungs do not start at tuple index 0.
+    assert outcome.attribution[0].pass_name == "triage"
+
+
 def test_triage_runs_on_its_own_client_when_one_is_given(tmp_path):
     png = tmp_path / "receipt.png"
     _write_png(png)

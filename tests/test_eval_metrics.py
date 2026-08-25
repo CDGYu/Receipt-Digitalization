@@ -735,3 +735,50 @@ def test_the_rung_counts_default_to_none_when_unobservable(tmp_path):
     report = run_eval(golden, pipeline_fn, results_dir=tmp_path / "results")
 
     assert report.extract_rung_counts is None
+
+
+class _Rung:
+    """A duck-typed rung. `use_tools` is omitted entirely when `None`, which is
+    the shape `FakeVLMClient` really has -- not `use_tools = None`."""
+
+    def __init__(self, model_id: str, use_tools: bool | None) -> None:
+        self.model_id = model_id
+        if use_tools is not None:
+            self.use_tools = use_tools
+
+
+def test_the_tier_key_and_the_rung_identity_agree():
+    """The bound on a deliberate duplication (ISSUE-013).
+
+    `eval.metrics.tier_key` keys the counts and `eval.run_repeats.rung_identity`
+    writes the ladder into the aggregate's `config`. Both render the same
+    `(model, use_tools)` pair, and a reader joins the two by it. They are not
+    shared code, because `run_repeats` calls `run_baseline` and importing back
+    would be a cycle -- so the duplication is bound here instead.
+
+    **The property is injectivity, not string equality.** Asserting a rendered
+    format would re-implement `tier_key` in its own test and pass by
+    construction. What must hold is that the key distinguishes exactly the
+    rungs the identity distinguishes: two rungs share a key if and only if they
+    share an identity. A `tier_key` that dropped `use_tools` merges a pair the
+    identity separates, and fails here.
+    """
+    from eval.metrics import tier_key
+    from eval.run_repeats import rung_identity
+
+    rungs = [
+        _Rung(model, tools)
+        for model in ("m", "n")
+        for tools in (True, False, None)
+    ]
+    assert len(rungs) == 6, "the matrix below is vacuous if this is not 6"
+
+    for left in rungs:
+        for right in rungs:
+            same_identity = rung_identity(left) == rung_identity(right)
+            same_key = tier_key(left) == tier_key(right)
+            assert same_key == same_identity, (
+                f"tier_key and rung_identity disagree about "
+                f"{rung_identity(left)} vs {rung_identity(right)}: "
+                f"keys {tier_key(left)!r} / {tier_key(right)!r}"
+            )
