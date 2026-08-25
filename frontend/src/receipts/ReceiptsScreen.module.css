@@ -284,3 +284,23 @@
   letter-spacing: normal;
   text-transform: none;
 }
+
+/* The row's View action. A real button rather than a link: it opens a panel in
+   place and changes no URL, so a link would promise navigation it does not do. */
+.detail {
+  padding: var(--space-sm) var(--space-lg);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.view {
+  min-height: 44px;
+  padding: var(--space-sm) var(--space-lg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-foreground);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}

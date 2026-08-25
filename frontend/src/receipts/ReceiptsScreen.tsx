@@ -5,7 +5,15 @@ import type { Identity } from '../api/admin'
 import type { ReceiptSummary } from '../api/types'
 import { Button } from '../ui/Button'
 import { Value } from '../ui/Value'
+import { ReceiptDetailPanel } from './ReceiptDetailPanel'
 import styles from './ReceiptsScreen.module.css'
+
+/** The one status with nothing to show yet.
+ *
+ *  Named rather than spelled inline at the row: the wire spelling is the
+ *  server's, and a second literal is the copy that drifts when it changes.
+ */
+const PENDING_STATUS = 'pending'
 
 /** The API's own words when it gave us any, and the caller's sentence when not.
  *
@@ -176,6 +184,10 @@ export function ReceiptsScreen({ identity }: ReceiptsScreenProps) {
   const [exportFailure, setExportFailure] = useState<string | null>(null)
   const [pageInFlight, setPageInFlight] = useState(false)
   const [exporting, setExporting] = useState(false)
+  /** The receipt whose detail panel is open, or `null` for none. Held as an
+   *  id rather than a row: the panel fetches the full detail itself, and a
+   *  summary held here would be a second, staler copy of what it shows. */
+  const [viewing, setViewing] = useState<string | null>(null)
 
   /** The active filters. Held together in one object so `loadMore` sends BOTH
    *  -- the route ANDs them, and paging with only the most recently changed one
@@ -406,6 +418,14 @@ export function ReceiptsScreen({ identity }: ReceiptsScreenProps) {
                 <th scope="col">Total</th>
                 <th scope="col">Status</th>
                 <th scope="col">Confidence</th>
+                {/* A real header rather than an empty cell: a column with no
+                    name is a column a screen reader announces as nothing, and
+                    the row's action needs saying once here instead of being
+                    inferred from six identical buttons. Safe to add because this
+                    table is automatic-layout by design (see the docstring) --
+                    the fixed-width arithmetic that collapsed a column in
+                    ISSUE-032 has no counterpart here. */}
+                <th scope="col">Detail</th>
               </tr>
             </thead>
             <tbody>
@@ -450,6 +470,21 @@ export function ReceiptsScreen({ identity }: ReceiptsScreenProps) {
                   <td className={styles.number}>
                     <Value value={row.confidence} kind="count" align="end" />
                   </td>
+                  <td className={styles.detail}>
+                    {/* Absent, not disabled, while a receipt is still `pending`:
+                        there is no extraction to read and no image to compare it
+                        against, and a control that can be pressed for nothing is
+                        the complaint this action exists to answer. */}
+                    {row.status === PENDING_STATUS ? null : (
+                      <button
+                        type="button"
+                        className={styles.view}
+                        onClick={() => setViewing(row.id)}
+                      >
+                        View
+                      </button>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -470,6 +505,18 @@ export function ReceiptsScreen({ identity }: ReceiptsScreenProps) {
         >
           {pageInFlight ? 'Loading' : 'Load more'}
         </Button>
+      ) : null}
+
+      {/* Mounted beside the list rather than in place of it: closing returns to
+          the same rows, the same filters and the same scroll position, which is
+          the whole reason this is a panel and not a route. `key` forces a fresh
+          fetch when a second row is viewed without closing the first. */}
+      {viewing !== null ? (
+        <ReceiptDetailPanel
+          key={viewing}
+          receiptId={viewing}
+          onClose={() => setViewing(null)}
+        />
       ) : null}
     </main>
   )

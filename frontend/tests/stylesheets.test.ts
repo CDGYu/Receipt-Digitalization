@@ -360,6 +360,22 @@ const CENSUS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
     '.button:hover:not(:disabled)': 'border-color',
     '.button:disabled': 'opacity, cursor: not-allowed',
   },
+  'receipts/ReceiptDetailPanel.module.css': {
+    '.panel':
+      'position: fixed, top, right, bottom, z-index, display: flex, flex-direction: column, gap, box-sizing: border-box, width, padding, overflow-y: auto, border-left, background, box-shadow',
+    '.bar': 'display: flex, align-items: center, justify-content: space-between, gap',
+    '.heading': 'margin, font-family, font-size',
+    '.actions': 'display: flex, gap',
+    '.save':
+      'min-height, padding, border, border-radius, background, color, font-family, font-size, font-weight, cursor: pointer',
+    '.close':
+      'min-height, padding, border, border-radius, background, color, font-family, font-size, cursor: pointer',
+    '.failure': 'margin, padding, border, border-radius, color, font-family, font-size',
+    '.saved': 'margin, font-family, font-size, color',
+    '.loading': 'margin, font-family, font-size, color',
+    '.body': 'display: flex, gap, align-items: flex-start',
+    '.side': 'display: flex, flex, flex-direction: column, gap, min-width',
+  },
   'receipts/ReceiptsScreen.module.css': {
     '.screen':
       'box-sizing: border-box, display: flex, flex-direction: column, align-items: stretch, gap, max-width, margin, padding, color, font-family',
@@ -392,6 +408,9 @@ const CENSUS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
       'display: flex, flex-direction: column, gap, color, font-family, font-size, font-weight, letter-spacing, text-transform: uppercase',
     '.filterControl':
       'box-sizing: border-box, min-height, padding, border, border-radius, background, color, font-family, font-size, letter-spacing: normal, text-transform: none',
+    '.detail': 'padding, text-align: right, white-space: nowrap',
+    '.view':
+      'min-height, padding, border, border-radius, background, color, font-family, font-size, cursor: pointer',
   },
   'review/ConfidenceRail.module.css': {
     '.rail': 'border, border-radius, background, padding',
@@ -702,7 +721,7 @@ describe('the census reads what is there, not what it hopes for', () => {
 
   it('is reading the real tree, not an empty one', () => {
     const files = stylesheets()
-    expect(files.length, 'no stylesheets found -- the whole census is vacuous').toBe(21)
+    expect(files.length, 'no stylesheets found -- the whole census is vacuous').toBe(22)
     let rules = 0
     let declarations = 0
     for (const file of files) {

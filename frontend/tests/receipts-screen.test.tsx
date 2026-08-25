@@ -224,14 +224,26 @@ describe('the screen asks for nothing until it knows who is asking', () => {
 // --------------------------------------------------------------------------- //
 
 describe('the table renders the row shape the serializer sends', () => {
-  it('carries the five columns in the order the design sets', async () => {
+  it('carries the six columns in the order the design sets', async () => {
+    // Five until 2026-08-25, when the row gained a View action. The count is in
+    // the name because the name is what a reader checks the header against --
+    // and this assertion is the reason a sixth column could not be added
+    // silently. `Detail` carries a real header rather than an empty cell: an
+    // unnamed column is announced as nothing.
     stubPage({ items: [rowFixture()], has_more: false })
 
     render(<ReceiptsScreen identity={ADMIN} />)
 
     const table = await screen.findByRole('table')
     const headers = [...table.querySelectorAll('thead th')].map((th) => th.textContent?.trim())
-    expect(headers).toEqual(['Date', 'Merchant', 'Total', 'Status', 'Confidence'])
+    expect(headers).toEqual([
+      'Date',
+      'Merchant',
+      'Total',
+      'Status',
+      'Confidence',
+      'Detail',
+    ])
   })
 
   it('puts each value under its own column', async () => {
@@ -692,5 +704,47 @@ describe('the status and confidence filters (P5.T2)', () => {
       offset: 1,
       status: 'needs_review',
     })
+  })
+})
+
+/** The View action -- opening one finished receipt without leaving the list.
+ *
+ * The panel itself is pinned in `receipt-detail-panel.test.tsx`; what belongs
+ * here is only the list's half: which rows offer the action, and that using it
+ * puts the panel on screen. Asserting the panel's *contents* from here would
+ * re-derive that file's assertions against a second fixture.
+ */
+describe('viewing one finished receipt from the list', () => {
+  it('offers View on a finished row', async () => {
+    stubPage({ items: [rowFixture({ status: 'reviewed' })], has_more: false })
+    render(<ReceiptsScreen identity={REVIEWER} />)
+    const row = await screen.findByText('Summit Fuel')
+    expect(
+      within(row.closest('tr') as HTMLElement).getByRole('button', { name: /view/i }),
+    ).toBeDefined()
+  })
+
+  it('offers no View on a row that has not finished', async () => {
+    // `pending` is an upload still in flight: there is no extraction to look at
+    // and no image pane worth opening. The action is absent rather than
+    // disabled -- a control a person can press and get nothing from reads as
+    // the defect this feature was asked to fix.
+    stubPage({ items: [rowFixture({ status: 'pending' })], has_more: false })
+    render(<ReceiptsScreen identity={REVIEWER} />)
+    const row = await screen.findByText('Summit Fuel')
+    expect(
+      within(row.closest('tr') as HTMLElement).queryByRole('button', { name: /view/i }),
+    ).toBeNull()
+  })
+
+  it('puts the detail panel on screen when View is used', async () => {
+    stubPage({ items: [rowFixture({ status: 'needs_review' })], has_more: false })
+    render(<ReceiptsScreen identity={REVIEWER} />)
+    const row = await screen.findByText('Summit Fuel')
+    expect(screen.queryByLabelText('Receipt detail')).toBeNull()
+    await userEvent.click(
+      within(row.closest('tr') as HTMLElement).getByRole('button', { name: /view/i }),
+    )
+    expect(screen.getByLabelText('Receipt detail')).toBeDefined()
   })
 })

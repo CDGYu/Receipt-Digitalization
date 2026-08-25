@@ -1,0 +1,117 @@
+/* The results detail panel: one finished receipt, over the list.
+ *
+ * ## Placed by class, never by position
+ *
+ * Every rule below is reached by a `styles.x` reference in
+ * `ReceiptDetailPanel.tsx`, so a renamed class fails the class-name guard in
+ * `stylesheets.test.ts` rather than silently rendering unstyled -- the failure
+ * names the stylesheet, so read it as a missing class and not as a CSS bug.
+ *
+ * ## It scrolls itself rather than the page
+ *
+ * The panel is taller than the viewport on a receipt with many line items, and
+ * the list behind it keeps its own scroll position -- that is the whole reason
+ * this is a panel and not a route. `overflow-y: auto` here rather than on the
+ * body is what keeps both true at once.
+ */
+
+.panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+  box-sizing: border-box;
+  width: min(64rem, 100vw);
+  padding: var(--space-2xl);
+  overflow-y: auto;
+  border-left: 1px solid var(--color-border);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-md);
+}
+
+.bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-lg);
+}
+
+.heading {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: var(--text-lg);
+}
+
+.actions {
+  display: flex;
+  gap: var(--space-md);
+}
+
+/* Both controls carry the 44px minimum a pointer target needs, for the reason
+   `LoginPage.module.css` argues at its own button. */
+.save {
+  min-height: 44px;
+  padding: var(--space-sm) var(--space-lg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-foreground);
+  color: var(--color-surface);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.close {
+  min-height: 44px;
+  padding: var(--space-sm) var(--space-lg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-foreground);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.failure {
+  margin: 0;
+  padding: var(--space-md) var(--space-lg);
+  border: 1px solid var(--color-severity-error);
+  border-radius: var(--radius-md);
+  color: var(--color-severity-error);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+}
+
+.saved {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  color: var(--color-muted-foreground);
+}
+
+.loading {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  color: var(--color-muted-foreground);
+}
+
+.body {
+  display: flex;
+  gap: var(--space-2xl);
+  align-items: flex-start;
+}
+
+.side {
+  display: flex;
+  flex: 1 1 28rem;
+  flex-direction: column;
+  gap: var(--space-lg);
+  min-width: 0;
+}
