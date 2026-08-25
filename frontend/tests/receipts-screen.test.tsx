@@ -784,3 +784,71 @@ describe('viewing one finished receipt from the list', () => {
     expect(screen.getByLabelText('Receipt detail')).toBeDefined()
   })
 })
+
+describe('the status column as a chip', () => {
+  /** The chip's text and its glyph, read off the rendered row. */
+  function statusCell(): HTMLElement {
+    const row = screen.getByText('Summit Fuel').closest('tr') as HTMLElement
+    // The chip is the only element in the row carrying an svg; the row's other
+    // controls are text boxes and a button.
+    //
+    // `parentElement` of the icon's own span, NOT `svg.closest('span')`: `Chip`
+    // wraps its glyph in an inner `<span className={icon}>`, so `closest`
+    // returns that wrapper and its `textContent` is `''` -- which is how the
+    // first version of this helper reported an empty status cell on a row that
+    // was rendering correctly.
+    return row.querySelector('svg')?.closest('span')?.parentElement as HTMLElement
+  }
+
+  it('reads as words, not as the column it came out of', async () => {
+    // The wire spelling is `needs_review`. A badge that shows it has leaked its
+    // database into the interface -- which is what the row did until the chip
+    // landed, and what this pins against a regression to `<Value>`.
+    stubPage({ items: [rowFixture({ status: 'needs_review' })], has_more: false })
+    render(<ReceiptsScreen identity={REVIEWER} />)
+    await screen.findByText('Summit Fuel')
+
+    expect(statusCell().textContent).toContain('needs review')
+    expect(statusCell().textContent).not.toContain('needs_review')
+  })
+
+  it('gives each status its own glyph, so the chip reads without its colour', async () => {
+    // The rule `admin/TaskTable.tsx` states for `GlyphPriority` and the reason
+    // five tones are not enough on their own: a reader who cannot separate the
+    // green from the amber still has to be able to tell these apart.
+    const seen = new Map<string, string>()
+    for (const status of ['auto_approved', 'reviewed', 'needs_review', 'failed', 'extracted']) {
+      cleanup()
+      stubPage({ items: [rowFixture({ status })], has_more: false })
+      render(<ReceiptsScreen identity={REVIEWER} />)
+      await screen.findByText('Summit Fuel')
+      const svg = statusCell().querySelector('svg') as SVGElement
+      seen.set(status, svg.innerHTML)
+    }
+    // Five statuses, five DISTINCT drawings. Sharing one would make two states
+    // indistinguishable to anyone reading shape rather than hue.
+    expect(new Set(seen.values()).size).toBe(5)
+  })
+
+  it('gives an unknown status a chip rather than a blank cell', async () => {
+    // `GET /export/receipts` decides which statuses reach this list and has
+    // changed before. A status the map has never heard of must still arrive as
+    // something a reader can see.
+    stubPage({ items: [rowFixture({ status: 'quarantined' })], has_more: false })
+    render(<ReceiptsScreen identity={REVIEWER} />)
+    await screen.findByText('Summit Fuel')
+
+    expect(statusCell().textContent).toContain('quarantined')
+  })
+
+  it('renders no chip at all for an empty status', async () => {
+    // `receipt_summary` types this `str` and never sends null, but `request<T>`
+    // is an unchecked cast. An empty chip is a coloured pill with nothing in
+    // it; `Value` owns that case and says so with an em dash.
+    stubPage({ items: [rowFixture({ status: '' })], has_more: false })
+    render(<ReceiptsScreen identity={REVIEWER} />)
+    const row = (await screen.findByText('Summit Fuel')).closest('tr') as HTMLElement
+
+    expect(row.querySelector('svg')).toBeNull()
+  })
+})

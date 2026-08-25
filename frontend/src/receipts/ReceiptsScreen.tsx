@@ -4,6 +4,8 @@ import { downloadExportWorkbook, fetchExportReceipts } from '../api/receipts'
 import type { Identity } from '../api/admin'
 import type { ReceiptSummary } from '../api/types'
 import { Button } from '../ui/Button'
+import type { JSX } from 'react'
+import { Chip } from '../ui/Chip'
 import { Value } from '../ui/Value'
 import { ReceiptDetailPanel } from './ReceiptDetailPanel'
 import styles from './ReceiptsScreen.module.css'
@@ -69,6 +71,92 @@ const NO_FILTERS: Filters = { status: '', minConfidence: '' }
  *  a control that can only ever return nothing.
  */
 const STATUS_OPTIONS = ['auto_approved', 'needs_review', 'reviewed'] as const
+
+/* --------------------------------------------------------------------------
+ * Status glyphs.
+ *
+ * 20x20, `stroke="currentColor"`, stroke width 1.5 -- the house shape, matched
+ * to `admin/TaskTable.tsx` rather than invented alongside it.
+ *
+ * **Each reads without its colour.** That is TaskTable's own stated rule for
+ * `GlyphPriority` and it matters more here, where the five tones carry meaning:
+ * a reader who cannot separate the green from the amber still sees a tick, a
+ * bolt, an exclamation, a cross or a bare ring.
+ * ------------------------------------------------------------------------ */
+
+/** Passed without a human: a bolt. */
+function GlyphAuto() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <path d="M11 3 L6 10.5 H9.5 L9 17 L14 9.5 H10.5 Z" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+/** A person looked and accepted it: a tick in a ring. */
+function GlyphReviewed() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <circle cx="10" cy="10" r="6.25" />
+      <path d="M6.75 10.25 L9 12.5 L13.25 7.75" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+/** Waiting on a person: an exclamation in a ring. */
+function GlyphNeedsReview() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <circle cx="10" cy="10" r="6.25" />
+      <path d="M10 6.5 V10.5" strokeLinecap="round" />
+      <path d="M10 13.25 V13.26" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+/** It did not get through: a cross in a ring. */
+function GlyphFailed() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <circle cx="10" cy="10" r="6.25" />
+      <path d="M7.75 7.75 L12.25 12.25 M12.25 7.75 L7.75 12.25" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+/** Anything still on its way through: a bare ring, the same one
+ *  `TaskTable`'s `GlyphOpen` draws. */
+function GlyphInFlight() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <circle cx="10" cy="10" r="6.25" />
+    </svg>
+  )
+}
+
+/** A `ReceiptStatus` as a tone and a glyph.
+ *
+ *  **The default is deliberate and is not an error branch.** `GET
+ *  /export/receipts` decides which statuses reach this list, and it has changed
+ *  before; a status this map has never heard of gets the neutral ring and its
+ *  own name rather than nothing, so a new one appears as a plain chip instead
+ *  of a blank cell.
+ */
+function chipFor(status: string): { tone: 'error' | 'warn' | 'positive' | 'neutral'; icon: JSX.Element } {
+  switch (status) {
+    case 'auto_approved':
+      return { tone: 'positive', icon: <GlyphAuto /> }
+    case 'reviewed':
+      return { tone: 'positive', icon: <GlyphReviewed /> }
+    case 'needs_review':
+      return { tone: 'warn', icon: <GlyphNeedsReview /> }
+    case 'failed':
+    case 'rejected':
+      return { tone: 'error', icon: <GlyphFailed /> }
+    default:
+      return { tone: 'neutral', icon: <GlyphInFlight /> }
+  }
+}
 
 /** Confidence floors, as strings, coarse on purpose: this is a filter, not a
  *  calibration instrument, and a free-text number would invite `0.9` / `.9` /
@@ -170,9 +258,12 @@ export interface ReceiptsScreenProps {
  * page and silently claim to have filtered the set -- and `has_more` would then
  * describe a different query than the one the reader is looking at.
  *
- * There is no `Chip` on the status column either. `Chip` requires an `icon` per
- * tone and which icon each `ReceiptStatus` gets is a design decision nobody has
- * made, so no glyph is invented for it here.
+ * **The status column IS a `Chip` now**, on the owner's instruction 2026-08-25.
+ * This paragraph used to say the opposite -- that `Chip` needs an icon per tone
+ * and "which icon each `ReceiptStatus` gets is a design decision nobody has
+ * made, so no glyph is invented for it here". That was the correct call to make
+ * without authority. The authority arrived, the five glyphs are defined below,
+ * and each is drawn to read without its colour.
  *
  * The screen does not poll. Like `AdminScreen`, it is current as of its last
  * render.
@@ -459,13 +550,37 @@ export function ReceiptsScreen({ identity }: ReceiptsScreenProps) {
                     )}
                     <Value value={row.total} kind="money" align="end" />
                   </td>
-                  {/* Plain text rather than a `Chip` -- see the docstring -- and `Value`
-                      is how this tree renders plain text. `receipt_summary` types
-                      this `str` and never sends null, but `request<T>` is an
-                      unchecked cast and `''` is the third state `Value` exists to
-                      catch. The wire spelling is carried unchanged. */}
+                  {/* A `Chip`, on the owner's instruction 2026-08-25, which
+                      supersedes two rulings this file used to carry and which
+                      are quoted here so the change is legible rather than
+                      silent:
+
+                        "There is no `Chip` on the status column either. `Chip`
+                        requires an `icon` per tone and which icon each
+                        `ReceiptStatus` gets is a design decision nobody has
+                        made, so no glyph is invented for it here."
+
+                        "The wire spelling is carried unchanged."
+
+                      The first was a refusal to make a design decision without
+                      authority, and it was right to make it. The authority
+                      arrived; the glyphs are above. The second falls with it --
+                      a badge reading `needs_review` is a badge that leaked its
+                      database.
+
+                      **`Value` still owns the empty case.** `receipt_summary`
+                      types this `str` and never sends null, but `request<T>` is
+                      an unchecked cast, and `''` inside a chip would be a
+                      coloured pill with nothing in it. A chip is for a status
+                      there IS. */}
                   <td className={styles.status}>
-                    <Value value={row.status} kind="text" />
+                    {row.status === '' || row.status == null ? (
+                      <Value value={row.status} kind="text" />
+                    ) : (
+                      <Chip tone={chipFor(row.status).tone} icon={chipFor(row.status).icon}>
+                        {row.status.replace(/_/g, ' ')}
+                      </Chip>
+                    )}
                   </td>
                   <td className={styles.number}>
                     <Value value={row.confidence} kind="count" align="end" />
