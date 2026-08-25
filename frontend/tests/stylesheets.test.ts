@@ -610,17 +610,63 @@ const CENSUS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
     // thicker left edge and the other order is not.
     '.alert':
       'margin, padding, border, border-left-width, border-radius, background, color, font-size, line-height',
+    // `position: relative` is load-bearing rather than tidy: `.input` below is
+    // absolutely positioned, and without a positioned ancestor it is placed
+    // against the viewport and scrolls away from the card it belongs to.
     '.field':
-      'display: flex, flex-direction: column, align-items: center, gap, box-sizing: border-box, padding, border, border-radius, background, box-shadow, cursor: pointer',
-    '.label': 'color, font-size, font-weight, line-height',
-    '.input': 'max-width, color, font-family, font-size, cursor: pointer',
+      'position: relative, display: flex, flex-direction: column, align-items: center, gap, box-sizing: border-box, padding, border, border-radius, background, box-shadow, cursor: pointer',
+    '.icon': 'width, height, color',
+    // `.label` became `.prompt` and gained `.secondary`/`.cta` beside it on
+    // 2026-08-25. The old single line read "Receipt photograph", which named the
+    // subject and not the gesture -- P5.T2's drop handlers had shipped the day
+    // before and nothing on screen said a drop was possible.
+    '.prompt': 'color, font-family, font-size, font-weight, line-height, text-align: center',
+    '.secondary': 'margin, color, font-size, line-height, text-align: center',
+    // The visible control, and the reason the native one is clipped: a file
+    // input's button half measures roughly 24px tall against a 44px floor, and
+    // it is a shadow-DOM part with no portable selector, so it cannot be raised
+    // to the floor in all three engines. This element can.
+    '.cta':
+      'display: inline-flex, align-items: center, justify-content: center, min-height, padding, border, border-radius, background, color, font-family, font-size, font-weight, line-height',
+    // Hover lights the button from the CARD, because the card is the hit target:
+    // a click lands anywhere in the dashed box, so the affordance cannot respond
+    // for only the part of it that looks pressable.
+    '.field:hover .cta': 'border-color, background',
+    // **Clipped, never `display: none` or `visibility: hidden`.** Both of those
+    // drop an element out of the tab order, which would trade the keyboard path
+    // for a tidier pointer one. Verified in Chromium on 2026-08-25 by focusing
+    // the `<h1>` and pressing Tab: focus lands on `INPUT:file`, and
+    // `.field:focus-within` draws the ring on the card.
+    '.input':
+      'position: absolute, width, height, padding, margin, border, overflow: hidden, white-space: nowrap, clip-path',
     // The ring is on the card and not on the control: the `<label>` wraps its
     // input, so the click target is the whole box and the focus indicator has to
     // be the same box.
     '.field:focus-within': 'outline, outline-offset',
     '.limits': 'margin, color, font-size, line-height, text-align: center',
-    '.sending': 'margin, color, font-size, line-height, text-align: center',
-    '.dragging': 'border-color, background',
+    '.sending':
+      'display: flex, align-items: center, justify-content: center, gap, margin, color, font-size, line-height',
+    // An upload crosses the network, which is past the 300ms at which a wait
+    // needs a moving signal and not only a sentence. `transform` and not
+    // `width`/`height`: the other two relayout every frame.
+    '.spinner': 'flex: none, width, height, border, border-top-color, border-radius, animation',
+    '@keyframes spin to': 'transform',
+    // Not a nicety: a small thing rotating forever at the edge of vision is the
+    // shape that provokes vestibular symptoms, and the sentence beside it
+    // carries the whole message without it.
+    '@media (prefers-reduced-motion: reduce) .spinner': 'animation: none',
+    // The one moment the card refuses a file. Before this, `disabled` was set on
+    // the input and nothing about the card changed -- so the state that turns a
+    // second drop away looked exactly like the state that wants one.
+    '.busy': 'opacity, cursor: not-allowed',
+    '.busy .cta': 'border-color, background',
+    // `.dragging` and `.busy` can both be set at once -- a drag entered while an
+    // upload is in flight -- and they set DISJOINT properties: `.busy` is
+    // opacity and cursor, `.dragging` is border and background. So both apply
+    // and the source order between them decides nothing. Stated because the
+    // tempting explanation ("`.busy` is last so it wins") is false twice over:
+    // it is not last, and nothing it sets is contested.
+    '.dragging': 'border-color, border-style: solid, background',
   },
   // The processing view. Two columns placed by class rather than by position --
   // `grid-column` on `.receipt` and `.steps` -- so there is no `>` selector here

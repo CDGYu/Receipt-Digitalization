@@ -149,6 +149,27 @@ function pageNameFor(accepted: Accepted): string {
     : `${accepted.fileName} (page 1)`
 }
 
+/** The chooser card's classes: the drag state, the in-flight state, or neither.
+ *
+ * Written as a function rather than a nested ternary in the JSX because the two
+ * states are independent and a reader has to be able to see that they compose.
+ * They can genuinely coincide -- a drag entered while an upload is in flight
+ * sets `dragging` and leaves `sending` set -- and in that case the card must
+ * read as busy, because `onDropped` returns early and will discard the file.
+ *
+ * **The order of the names in this string decides nothing**, and saying it does
+ * is the mistake this sentence replaced. CSS precedence is source order in the
+ * stylesheet and specificity; the order of tokens in a `class` attribute has
+ * never entered into it. The two states compose here because `.busy` and
+ * `.dragging` set disjoint properties -- opacity and cursor against border and
+ * background -- not because one of them is written second.
+ */
+function fieldClass(dragging: boolean, sending: boolean): string {
+  return [styles.field, dragging ? styles.dragging : null, sending ? styles.busy : null]
+    .filter((name) => name !== null)
+    .join(' ')
+}
+
 export function UploadScreen({ upload = uploadReceipt, progress }: UploadScreenProps) {
   const [error, setError] = useState<string | null>(null)
   const [accepted, setAccepted] = useState<Accepted | null>(null)
@@ -240,9 +261,12 @@ export function UploadScreen({ upload = uploadReceipt, progress }: UploadScreenP
       {/* What this page does, said in what it does TODAY. The narration of each
           stage arrives with `ProcessingView`; promising it here first would be
           this screen making a claim the next task has to come true. */}
+      {/* Em dashes, not `--`. The pair rendered literally in the browser as two
+          hyphens, which is the one typographic tell a display face cannot
+          cover; the prose is unchanged. */}
       <p className={styles.scope}>
-        One file at a time -- a photograph, or a PDF that becomes one receipt per page. It is
-        stored and queued straight away, and this page stays with it -- there is nothing to
+        One file at a time — a photograph, or a PDF that becomes one receipt per page. It is
+        stored and queued straight away, and this page stays with it — there is nothing to
         reload and nowhere to come back to.
       </p>
 
@@ -256,12 +280,39 @@ export function UploadScreen({ upload = uploadReceipt, progress }: UploadScreenP
       )}
 
       <label
-        className={dragging ? `${styles.field} ${styles.dragging}` : styles.field}
+        className={fieldClass(dragging, sending)}
         onDragOver={onDragOver}
         onDragLeave={onDragLeave}
         onDrop={onDropped}
       >
-        <span className={styles.label}>Receipt photograph</span>
+        {/* Decorative: the two lines under it say everything this says, so a
+            screen reader that announced it would hear the same fact twice.
+            `currentColor` and no fill, so it tracks the card's foreground
+            through the drag state instead of being repainted for it. */}
+        <svg
+          className={styles.icon}
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+          focusable="false"
+        >
+          <path d="M12 16V4" />
+          <path d="m7 9 5-5 5 5" />
+          <path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" />
+        </svg>
+        {/* The gesture, named. P5.T2 shipped the drop handlers and this line
+            said "Receipt photograph", so the only way to discover a drop was to
+            try one. The word "receipt" is load-bearing twice over: it is what a
+            person is holding, and it is what `getByLabelText(/receipt/i)` finds
+            the control by -- this text IS the input's accessible name. */}
+        <span className={styles.prompt}>Drag a receipt here</span>
+        <span className={styles.secondary}>
+          or <span className={styles.cta}>Choose a file</span>
+        </span>
         <input
           className={styles.input}
           type="file"
@@ -278,10 +329,18 @@ export function UploadScreen({ upload = uploadReceipt, progress }: UploadScreenP
           comment that sat here said `.pdf` was absent and did NOT self-update;
           it has been corrected. */}
       <p className={styles.limits}>
-        {ACCEPTED_SUFFIXES.join(', ')} -- up to {MAX_UPLOAD_MB} MB.
+        {ACCEPTED_SUFFIXES.join(', ')} — up to {MAX_UPLOAD_MB} MB.
       </p>
 
-      {sending ? <p className={styles.sending}>Sending the photograph.</p> : null}
+      {sending ? (
+        <p className={styles.sending}>
+          {/* The sentence carries the message; the spinner carries the fact that
+              it is still true. `aria-hidden` so a screen reader hears it once,
+              from the words, and `prefers-reduced-motion` stops it moving. */}
+          <span className={styles.spinner} aria-hidden="true" />
+          Sending the photograph.
+        </p>
+      ) : null}
     </main>
   )
 }

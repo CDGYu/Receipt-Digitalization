@@ -11,7 +11,10 @@
  * element with every gate green. This screen owns its markup, so every element
  * it places carries a class and every selector below names one -- there is no
  * type selector and no child combinator in this file at all, so no rule here can
- * follow a wrapper onto the wrong box.
+ * follow a wrapper onto the wrong box. The two descendant combinators added by
+ * the 2026-08-25 pass (`.field:hover .cta`, `.busy .cta`) name a class at BOTH
+ * ends for the same reason: neither can land on an element that was not asked
+ * for.
  *
  * ## A single column, and the chooser at its centre
  *
@@ -25,8 +28,6 @@
  * something that is not here yet" in this vocabulary -- dashed border,
  * `--radius-lg`, surface, centred. The chooser is the same statement with a
  * control in it, so it borrows the same shape rather than inventing a second
- * one. It is deliberately NOT called a drop zone anywhere: nothing here handles
- * a drag, and a box that looks droppable and is not is a worse lie than a plain
  * one.
  *
  * No new token is introduced, and the token *values* plan 3 moves did arrive here
@@ -35,7 +36,35 @@
  * are new declarations rather than new values: `.screen` took `--space-4xl` of
  * vertical padding, `.heading` took `--font-display` at `--text-3xl`, and `.field`
  * moved to `--color-surface-raised` with `--shadow-md`. This paragraph claimed the
- * whole refresh was inherited; corrected 2026-08-24, once it was not. */
+ * whole refresh was inherited; corrected 2026-08-24, once it was not.
+ *
+ * ## What the 2026-08-25 pass changed, and the one thing it deliberately did not
+ *
+ * Four defects, each against a named rule rather than taste:
+ *
+ *   1. **The drop target did not say it was one.** P5.T2 shipped the handlers on
+ *      2026-08-24 and the card went on reading "Receipt photograph" -- a feature
+ *      a person could only find by guessing. `.prompt` now names the gesture.
+ *   2. **Touch target.** The native file input's button half measures roughly
+ *      24px tall; the floor is 44. `.cta` is a real target and the native
+ *      control is clipped behind it.
+ *   3. **Disabled state.** `sending` set `disabled` on the input while the card
+ *      kept full opacity and `cursor: pointer`, so the one moment the screen
+ *      refuses a second file looked identical to the moment it wants one.
+ *      `.busy` is that state.
+ *   4. **Loading feedback.** A grey line of text was the only signal for an
+ *      operation that crosses the network. `.spinner` joins it.
+ *
+ * **What it did not do is restyle the native control**, and the old docstring's
+ * reason still holds: the button half is a shadow-DOM part with no portable
+ * selector, so painting it half-works differently in each of the three engines
+ * this project tests. The move here is the other one -- clip the native control
+ * out of sight and put a real element where it was. `.input` is *clipped*, never
+ * `display: none` or `visibility: hidden`: both of those remove it from the tab
+ * order, which would take the keyboard path away to tidy the pointer one. It
+ * stays focusable, `:focus-within` still draws the ring on the card, and the
+ * picker still opens from a click anywhere on the label.
+ */
 
 .screen {
   box-sizing: border-box;
@@ -91,14 +120,19 @@
 }
 
 /* The chooser. A `<label>` wrapping its own control, so the whole card is the
- * hit target and the association needs no generated id to survive a rename. */
+ * hit target and the association needs no generated id to survive a rename.
+ *
+ * `position: relative` is not decoration: `.input` is clipped and absolutely
+ * positioned, and without a positioned ancestor it would be placed against the
+ * viewport and scroll away from the card it belongs to. */
 .field {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: var(--space-lg);
   box-sizing: border-box;
-  padding: var(--space-3xl) var(--space-2xl);
+  padding: var(--space-4xl) var(--space-2xl);
   border: 1px dashed var(--color-border);
   border-radius: var(--radius-lg);
   background: var(--color-surface-raised);
@@ -106,30 +140,95 @@
   cursor: pointer;
 }
 
-.label {
+/* The glyph. `currentColor` rather than a colour of its own, so it inherits
+ * `.field`'s foreground and cannot drift from the text beside it -- including
+ * in the drag state, where the whole card shifts. Stroke-drawn and thin to sit
+ * with a display face rather than shout over it: motion and ornament are both
+ * dialled low in this system, and a filled glyph would be the loudest thing on
+ * a page whose subject is a photograph. */
+.icon {
+  width: 32px;
+  height: 32px;
+  color: var(--color-muted-foreground);
+}
+
+/* The gesture, named. This is the line that made drag-and-drop discoverable
+ * rather than merely present, and it carries the word "receipt" because
+ * `tests/upload-screen.test.tsx` finds the control by `getByLabelText(/receipt/i)`
+ * -- the accessible name is this label's text, so the copy and the test are the
+ * same fact. */
+.prompt {
   color: var(--color-foreground);
+  font-family: var(--font-display);
   font-size: var(--text-lg);
   font-weight: 600;
   line-height: 1.3;
+  text-align: center;
 }
 
-/* A file input is barely styleable across engines -- the button half is a
- * shadow-DOM part with no portable selector -- so this sets the type and the
- * focus ring and leaves the control's own chrome alone rather than half-painting
- * something that would look different in each of the three engines this project
- * tests in. */
-.input {
-  max-width: 100%;
+/* The second route, for anyone who cannot drag one: a trackpad, a touch screen,
+ * a screen reader, or a person who simply does not know the card takes a drop. */
+.secondary {
+  margin: 0;
+  color: var(--color-muted-foreground);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  text-align: center;
+}
+
+/* The visible control. A `<span>`, not a `<button>`: a button inside a label is
+ * a second interactive element competing for the same click, and the label
+ * already opens the picker. It looks like a button because it is the thing to
+ * press; it is not one, because the input behind it already is.
+ *
+ * `min-height: 44px` is the touch floor, and it is the reason this element
+ * exists at all -- the native control's button half measures roughly 24. */
+.cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 var(--space-2xl);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
   color: var(--color-foreground);
   font-family: var(--font-sans);
   font-size: var(--text-sm);
-  cursor: pointer;
+  font-weight: 600;
+  line-height: 1;
+}
+
+/* Hover is on the CARD, not on the button, because the card is the hit target:
+ * a person aiming anywhere inside the dashed box will land the click, so the
+ * affordance has to light up for all of it rather than for the 44px of it that
+ * looks pressable. Both ends of the combinator name a class. */
+.field:hover .cta {
+  border-color: var(--color-ring);
+  background: var(--color-surface-active);
+}
+
+/* Clipped, not hidden. `display: none` and `visibility: hidden` both drop an
+ * element out of the tab order; this technique does not, so the input keeps its
+ * keyboard focus and `.field:focus-within` below still draws the ring where a
+ * sighted keyboard user is looking. The picker still opens from the label. */
+.input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  border: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  clip-path: inset(50%);
 }
 
 /* The label wraps the input, so a click anywhere on the card reaches the
  * control -- which means the ring must be drawn on the card, not on the sliver
  * of a control that has focus. `:focus-within` is what makes the keyboard path
- * and the pointer path land on the same visible box. */
+ * and the pointer path land on the same visible box, and it is what the clipped
+ * input above is preserved for. */
 .field:focus-within {
   outline: 2px solid var(--color-ring);
   outline-offset: 2px;
@@ -152,11 +251,63 @@
  * `.waiting` gets, and `role="alert"` belongs to the one region above
  * (ADR-0024). */
 .sending {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-md);
   margin: 0;
   color: var(--color-muted-foreground);
   font-size: var(--text-sm);
   line-height: 1.5;
-  text-align: center;
+}
+
+/* An upload crosses the network, so it is over the 300ms threshold at which a
+ * wait needs a moving signal rather than only a sentence. `transform` and not
+ * `width`/`height`: the other two relayout every frame.
+ *
+ * `aria-hidden` on the element itself, because the sentence beside it already
+ * says what is happening and a screen reader should hear that once. */
+.spinner {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--color-border);
+  border-top-color: var(--color-foreground);
+  border-radius: 50%;
+  animation: spin 800ms linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Not a nicety. A spinner is a small thing rotating forever in the corner of
+ * the eye, which is the shape that provokes vestibular symptoms; the sentence
+ * beside it carries the whole message without it. */
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation: none;
+  }
+}
+
+/* The one moment the card refuses a file. Before this existed, `disabled` was
+ * set on the input and nothing about the card changed -- so the state that
+ * turns a second drop away looked exactly like the state that wants one, and a
+ * person whose photograph was already in flight got no answer for the click.
+ *
+ * `cursor: not-allowed` is the half a drop cannot see: `onDropped` returns early
+ * while `sending`, and a pointer that still reads "pointer" over a box that will
+ * silently discard what it is holding is the misleading part. */
+.busy {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.busy .cta {
+  border-color: var(--color-border);
+  background: var(--color-surface);
 }
 
 /* The drag-over state (P5.T2).
@@ -173,5 +324,6 @@
  * box can say so. */
 .dragging {
   border-color: var(--color-ring);
+  border-style: solid;
   background: var(--color-surface-active);
 }
