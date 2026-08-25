@@ -19,6 +19,7 @@ import { classifyFailure } from './failure'
 import type { Failure } from './failure'
 import { buildPatch, fieldsFromReceipt } from './patch'
 import type { FieldMap } from './patch'
+import { TaxBands } from './TaxBands'
 import { clear as clearStash, remember, restore } from './stash'
 import styles from './ReviewScreen.module.css'
 
@@ -567,6 +568,17 @@ export function ReviewScreen() {
       <ReceiptForm fields={fields} onChange={edit} errors={fieldErrors} />
       <LineItemsTable
         items={receipt.line_items}
+        fields={fields}
+        onChange={edit}
+        errors={fieldErrors}
+      />
+      {/* Beneath the items, which is where the summary block sits on the paper.
+          `receipt.totals.tax_breakdown` is the list the API sent; `fields`
+          carries the editable values under `totals.tax_breakdown[i].*`, so the
+          two are read from one render and cannot disagree about how many bands
+          there are. */}
+      <TaxBands
+        bands={receipt.totals.tax_breakdown}
         fields={fields}
         onChange={edit}
         errors={fieldErrors}

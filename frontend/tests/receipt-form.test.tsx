@@ -42,6 +42,9 @@ const ITEMS: LineItem[] = [
 const RECEIPT: ReceiptDetail = {
   id: 'a1',
   status: 'needs_review',
+  // The document's stated tax convention. `null` is the ordinary
+  // reading: most receipts do not print one.
+  prices_include_tax: null,
   confidence: '0.620' as Money,
   confidence_reasons: [],
   merchant_name_raw: 'METRO OIL',
@@ -71,6 +74,8 @@ const RECEIPT: ReceiptDetail = {
     total: '1080.00' as Money,
     tender: '1100.00' as Money,
     change: '20.00' as Money,
+    // No printed VAT bands: this fixture does not exercise a breakdown.
+    tax_breakdown: [],
   },
   line_items: ITEMS,
   findings: [],

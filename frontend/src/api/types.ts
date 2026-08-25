@@ -72,6 +72,27 @@ export interface Finding {
   resolved_by_repair: boolean
 }
 
+/** One printed band of a receipt's tax breakdown.
+ *
+ *  The VATABLE SALES / VAT-EXEMPT SALES / zero-rated rows a Philippine BIR
+ *  sales invoice prints beneath its items grid, one object per printed band.
+ *
+ *  Every field is nullable but the position it arrives in: a band may print a
+ *  label and an amount with no base, or a base with no rate. Nothing is
+ *  computed -- "Do not compute bands that are not printed" is the extraction
+ *  prompt's own rule, so a missing figure is `null` and never `0`.
+ *
+ *  **`rate` carries no stated convention.** A 12% band may arrive as `12` or as
+ *  `0.12`; the column that stores it holds both and nothing rescales it. Render
+ *  it as sent.
+ */
+export interface TaxBand {
+  label: string | null
+  base: Money | null
+  rate: Money | null
+  amount: Money | null
+}
+
 export interface ReceiptDetail {
   id: string
   status: string
@@ -134,7 +155,20 @@ export interface ReceiptDetail {
     total: Money | null
     tender: Money | null
     change: Money | null
+    /** The printed breakdown, in printed order. **A list, never null**: a
+     *  receipt with no tax block and one whose block was unreadable both
+     *  arrive as `[]`, because the extractor emits a list and the API has no
+     *  third value to send.
+     *
+     *  **Empty on every receipt processed before the `tax_bands` table
+     *  existed**, and that is not a bug: the data was extracted and discarded
+     *  at persistence, so there was nothing to backfill from. */
+    tax_breakdown: TaxBand[]
   }
+  /** Whether the line-item amounts already include tax, **as the document
+   *  states it** -- not a computed fact. `null` is the ordinary reading: most
+   *  receipts do not say. */
+  prices_include_tax: boolean | null
   line_items: LineItem[]
   findings: Finding[]
 }

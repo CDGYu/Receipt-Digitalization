@@ -181,6 +181,9 @@ function detail(over: Partial<ReceiptDetail> = {}): ReceiptDetail {
   return {
     id: 'r1',
     status: 'reviewed',
+    // The document's stated tax convention. `null` is the ordinary
+    // reading: most receipts do not print one.
+    prices_include_tax: null,
     confidence: '0.620' as Money,
     confidence_reasons: [],
     merchant_name_raw: 'METRO OIL',
@@ -204,6 +207,10 @@ function detail(over: Partial<ReceiptDetail> = {}): ReceiptDetail {
       total: '1000.0000' as Money,
       tender: null,
       change: null,
+      // The printed VAT bands. Empty here: these fixtures
+      // predate the `tax_bands` table and none of them
+      // exercises a breakdown.
+      tax_breakdown: [],
     },
     line_items: [],
     findings: [],

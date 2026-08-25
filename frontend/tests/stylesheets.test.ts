@@ -585,6 +585,28 @@ const CENSUS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
     '.error': 'color, margin',
     '.unknown': 'color',
   },
+  'review/TaxBands.module.css': {
+    '.panel':
+      'display: flex, flex-direction: column, gap, padding, border, border-radius, background, box-shadow',
+    '.heading': 'margin, font-family, font-size, font-weight, line-height',
+    '.hint': 'margin, color, font-size, line-height',
+    '.scroller': 'overflow-x: auto',
+    '.table': 'border-collapse: collapse, width',
+    '.table th, .table td':
+      'box-sizing: border-box, border-bottom, padding, text-align: left, vertical-align: top',
+    '.table th':
+      'color, font-size, font-weight, letter-spacing, text-transform: uppercase, white-space: nowrap',
+    // Compound, not a bare `.numeric`: (0,1,0) loses to `.table th, .table td`
+    // at (0,1,1), which is exactly how the review queue's money columns
+    // rendered left-aligned under their own headers with every gate green.
+    '.table th.numeric, .table td.numeric': 'text-align: right, white-space: nowrap',
+    // `MoneyInput`'s own min-width is sized for the receipt form. Measured: the
+    // table wanted 982px inside a 752px scroller, so AMOUNT sat outside the
+    // visible box -- no page overflow, no clipped cell, invisible to the gates.
+    '.table td label': 'min-width',
+    '.table td input': 'box-sizing: border-box, width',
+    '.empty': 'margin, color, font-size, line-height',
+  },
   'review/ReviewScreen.module.css': {
     '.screen':
       'box-sizing: border-box, display: grid, grid-template-columns, align-content: start, gap, max-width, margin, padding, font-family, color',
@@ -827,13 +849,13 @@ describe('the census reads what is there, not what it hopes for', () => {
 
   it('is reading the real tree, not an empty one', () => {
     const files = stylesheets()
-    // 23 since `review/ReviewQueue.module.css` was added on 2026-08-25. The
+    // 24 since `review/TaxBands.module.css` was added on 2026-08-25. The
     // number is deliberate here, unlike in the parser's docblock next door: the
     // point is that the walk found the real tree rather than an empty one, and
     // an exact count is what makes "found nothing" and "found one" both fail.
     // It is expected to move whenever a stylesheet is added, and the census
     // entry that must accompany it is the other half of the same step.
-    expect(files.length, 'no stylesheets found -- the whole census is vacuous').toBe(23)
+    expect(files.length, 'no stylesheets found -- the whole census is vacuous').toBe(24)
     let rules = 0
     let declarations = 0
     for (const file of files) {

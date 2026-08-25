@@ -108,6 +108,9 @@ const SUMMARY: ReceiptSummary = {
 const RECEIPT: ReceiptDetail = {
   id: 'a1',
   status: 'needs_review',
+  // The document's stated tax convention. `null` is the ordinary reading:
+  // most receipts do not print one.
+  prices_include_tax: null,
   confidence: '0.620' as Money,
   confidence_reasons: [{ reason: 'validation errors present', penalty: '-0.35' as Money }],
   merchant_name_raw: 'Whole Foods Market',
@@ -137,6 +140,10 @@ const RECEIPT: ReceiptDetail = {
     total: '97.43' as Money,
     tender: '100.00' as Money,
     change: '2.57' as Money,
+    // The printed VAT bands. Empty here: these fixtures
+    // predate the `tax_bands` table and none of them
+    // exercises a breakdown.
+    tax_breakdown: [],
   },
   line_items: [],
   findings: [

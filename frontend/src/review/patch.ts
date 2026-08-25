@@ -41,6 +41,21 @@ function boolText(value: boolean | null): string | null {
 /** Every correctable field of one line item except `position`, which is
  *  deliberately absent -- see `LineItemsTable`. No count is written here: it
  *  read "six" until `is_template_row` became the seventh on 2026-08-23. */
+function taxBandFields(fields: FieldMap, receipt: ReceiptDetail): void {
+  // `totals.tax_breakdown[i]` addresses the band at *position* `i`, and here
+  // the index IS the position: `TaxBand` has no position field for the model to
+  // emit, so `_build_tax_bands` numbers them by list order and nothing can put
+  // a gap in them. That is the one way this differs from `lineItemFields`,
+  // which must use `item.position` because the model emits those itself.
+  receipt.totals.tax_breakdown.forEach((band, index) => {
+    const at = `totals.tax_breakdown[${index}]`
+    fields[`${at}.label`] = band.label
+    fields[`${at}.base`] = band.base
+    fields[`${at}.rate`] = band.rate
+    fields[`${at}.amount`] = band.amount
+  })
+}
+
 function lineItemFields(fields: FieldMap, receipt: ReceiptDetail): void {
   for (const item of receipt.line_items) {
     // `line_items[i]` addresses the item at *position* `i`, not at index `i`:
@@ -140,6 +155,7 @@ export function fieldsFromReceipt(receipt: ReceiptDetail): FieldMap {
     'meta.receipt_is_inconsistent': boolText(receipt.receipt_is_inconsistent),
   }
   lineItemFields(fields, receipt)
+  taxBandFields(fields, receipt)
   return fields
 }
 
@@ -179,13 +195,21 @@ export interface Rewrite {
   readonly stored: string | null
 }
 
-/** The nine correctable paths whose column is `Numeric`, so their text form
- *  carries a scale. Read off `_RECEIPT_FIELDS`/`_LINE_ITEM_FIELDS` by asking
- *  which entries coerce with `_coerce_money`:
+/** The correctable paths whose column is `Numeric`, so their text form carries
+ *  a scale. Read off `_RECEIPT_FIELDS` / `_LINE_ITEM_FIELDS` / `_TAX_BAND_FIELDS`
+ *  by asking which entries coerce with `_coerce_money`:
  *
  *      receipt  : totals.change discount subtotal tax tender total
  *      line item: line_total qty unit_price
- */
+ *      tax band : amount base rate
+ *
+ *  **No count in this sentence.** It said "the nine correctable paths" and the
+ *  three band fields made it twelve; a number in prose here rots on the next
+ *  `Numeric` column anyone adds, and the lists below are the actual claim.
+ *
+ *  `rate` is in the money set because its column is `Numeric` and `_coerce_money`
+ *  parses it -- not because a tax rate is money. What the set governs is scale
+ *  handling on a decimal string, which is the same question for both. */
 const MONEY_RECEIPT_PATHS: ReadonlySet<string> = new Set([
   'totals.subtotal',
   'totals.tax',
@@ -195,11 +219,17 @@ const MONEY_RECEIPT_PATHS: ReadonlySet<string> = new Set([
   'totals.change',
 ])
 const MONEY_ITEM_FIELDS: ReadonlySet<string> = new Set(['qty', 'unit_price', 'line_total'])
+const MONEY_BAND_FIELDS: ReadonlySet<string> = new Set(['base', 'rate', 'amount'])
+const TAX_BAND_FIELD = /^totals\.tax_breakdown\[\d+\]\.([A-Za-z_][A-Za-z0-9_]*)$/
 const LINE_ITEM_FIELD = /^line_items\[\d+\]\.([A-Za-z_][A-Za-z0-9_]*)$/
 
 function isMoneyPath(path: string): boolean {
   if (MONEY_RECEIPT_PATHS.has(path)) {
     return true
+  }
+  const band = TAX_BAND_FIELD.exec(path)
+  if (band !== null) {
+    return MONEY_BAND_FIELDS.has(band[1])
   }
   const match = LINE_ITEM_FIELD.exec(path)
   return match !== null && MONEY_ITEM_FIELDS.has(match[1])
