@@ -1934,3 +1934,76 @@ def test_review_claim_lets_the_holder_reclaim_their_own_task(
     assert first.status_code == 200
     assert again.status_code == 200
     assert again.json()["task"]["assigned_to"] == "alice"
+
+
+# --------------------------------------------------------------------------- #
+# ISSUE-033: a reviewer's correction is re-validated on read
+# --------------------------------------------------------------------------- #
+
+
+def test_a_reviewer_who_empties_the_purchase_set_is_told(reviewer_client, session_factory):
+    """ISSUE-006's headline, closed through the API a reviewer actually uses.
+
+    Flagging the only purchased row takes the line-item arithmetic offline:
+    ``sum_line_nets`` returns None, R020 and R024 both skip, and before R026 the
+    receipt produced zero findings at any severity while its row silently left
+    the export. R026 catches it, and this asserts the REVIEWER is the one told --
+    which needs the detail response to re-check, not merely the rule to exist.
+    """
+    from receipts.persist.models import LineItem
+
+    rid = uuid.uuid4()
+    with session_factory() as session:
+        session.add(
+            Receipt(
+                id=rid,
+                status=ReceiptStatus.NEEDS_REVIEW,
+                confidence=Decimal("0.700"),
+                merchant_name_raw="FUEL CO",
+                txn_date=date(2026, 7, 1),
+                currency="PHP",
+                subtotal=Decimal("1785.71"),
+                tax_total=Decimal("214.29"),
+                total=Decimal("2000.00"),
+                image_key=make_image_key(rid, "original"),
+                image_phash="",
+                line_items=[
+                    LineItem(position=0, description_raw="MaxiPower", is_template_row=True),
+                    LineItem(
+                        position=1,
+                        description_raw="DieselPlus",
+                        line_total=Decimal("1500.00"),
+                    ),
+                ],
+            )
+        )
+        session.commit()
+
+    # Before the correction: the receipt has a purchase and the line sum does
+    # not match subtotal (1500 vs 1785.71), so R020 fires. R026 does NOT fire
+    # because sum_line_nets is computable.
+    detail = reviewer_client.get(f"/receipts/{rid}").json()
+    current_ids_before = [f["rule_id"] for f in detail["current_findings"]]
+    assert current_ids_before, (
+        "the pre-PATCH assertion below is only meaningful if this key is "
+        "populated at all -- an absent or always-empty key makes it vacuous"
+    )
+    assert "R026" not in current_ids_before
+
+    # Flag the only purchased row -> purchase set is now empty.
+    response = reviewer_client.patch(
+        f"/receipts/{rid}", json={"line_items[1].is_template_row": "true"}
+    )
+    assert response.status_code == 200
+    body = response.json()
+
+    # R026 now fires in the current findings -- the reviewer is told.
+    current_ids = [f["rule_id"] for f in body["current_findings"]]
+    assert "R026" in current_ids
+
+    # The extraction-time findings are untouched by the reviewer's edit.
+    assert body["findings"] == detail["findings"]
+
+    # not_rechecked is returned and is not empty (rules that need run context).
+    assert body["not_rechecked"]
+    assert "R001" in body["not_rechecked"]
