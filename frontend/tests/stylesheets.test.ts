@@ -368,7 +368,7 @@ const CENSUS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
   },
   'login/LoginPage.module.css': {
     '.form':
-      'box-sizing: border-box, display: flex, flex-direction: column, gap, width, max-width, margin, padding, border, border-radius, background, box-shadow, font-family, color',
+      'box-sizing: border-box, display: flex, flex-direction: column, gap, width, max-width, margin-inline: auto, margin-block, padding, border, border-radius, background, box-shadow, font-family, color',
     '.heading': 'margin, font-family, font-size, font-weight, line-height',
     '.field': 'display: flex, flex-direction: column, gap, min-width, color, font-family, font-size',
     '.input':

@@ -47,6 +47,14 @@ import styles from './ReviewQueue.module.css'
  * a mutation that breaks one is masked by the other, and the test that claimed
  * to pin this passed with the filter deleted.
  *
+ * ## The title is not "Review queue"
+ *
+ * `AdminScreen`'s h1 is already "Review queue", and it is the right title
+ * there: that screen lists every task in every state with its id and assignee.
+ * This one is a reviewer's pick list. Two screens under one title is a thing
+ * only a browser shows you -- the measurement that found it was reading `h1`
+ * text across four screens for an unrelated reason.
+ *
  * ## Order
  *
  * Untouched. `list_tasks` orders by `priority, opened_at, id`, the same total
@@ -160,7 +168,7 @@ export function ReviewQueue({ navigate }: ReviewQueueProps = {}) {
   if (error !== null) {
     return (
       <main className={styles.screen}>
-        <h1 className={styles.heading}>Review queue</h1>
+        <h1 className={styles.heading}>Receipts to review</h1>
         <div className={styles.queue}>
           <p className={styles.error} role="alert">
             {error}
@@ -176,7 +184,7 @@ export function ReviewQueue({ navigate }: ReviewQueueProps = {}) {
   if (rows === null) {
     return (
       <main className={styles.screen}>
-        <h1 className={styles.heading}>Review queue</h1>
+        <h1 className={styles.heading}>Receipts to review</h1>
         <p className={styles.empty}>Loading the review queue...</p>
       </main>
     )
@@ -187,7 +195,7 @@ export function ReviewQueue({ navigate }: ReviewQueueProps = {}) {
 
   return (
     <main className={styles.screen}>
-      <h1 className={styles.heading}>Review queue</h1>
+      <h1 className={styles.heading}>Receipts to review</h1>
       <div className={styles.queue}>
         {claimError !== null ? (
         <p className={styles.error} role="alert">

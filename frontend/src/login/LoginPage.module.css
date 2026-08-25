@@ -55,7 +55,19 @@
   gap: var(--space-lg);
   width: calc(100% - 2 * var(--space-xl));
   max-width: 24rem;
-  margin: var(--space-3xl) auto;
+  /* Centred horizontally, and pushed down PROPORTIONALLY rather than by a fixed
+   * 32px. The `<form>` is this screen's top-level element -- there is no
+   * wrapper to centre against -- so true vertical centring would mean adding
+   * one. `max()` gets most of the benefit with no markup: 12vh on a tall
+   * viewport, never less than the original `--space-3xl` on a short one, so the
+   * 375-height case cannot push the card off the fold.
+   *
+   * What it fixes: at 1440x1000 the card sat 32px from the top with roughly
+   * 600px of empty page beneath it, which reads as a page that failed to
+   * finish loading rather than as a sign-in screen. Seen in Chromium; no gate
+   * can see it. */
+  margin-inline: auto;
+  margin-block: max(var(--space-3xl), 12vh);
   padding: var(--space-4xl);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
