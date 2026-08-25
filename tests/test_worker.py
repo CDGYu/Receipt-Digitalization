@@ -33,7 +33,6 @@ from PIL import Image  # noqa: E402
 from config.settings import Settings  # noqa: E402
 from receipts import worker  # noqa: E402
 from receipts import worker as worker_module  # noqa: E402
-from receipts.extract.clients.factory import PassClients  # noqa: E402
 from receipts.extract.clients.fake import FakeVLMClient  # noqa: E402
 from receipts.extract.schema import (  # noqa: E402
     DocumentType,
@@ -249,9 +248,7 @@ def test_build_deps_builds_a_second_rung_when_one_is_configured(monkeypatch, tmp
     """`build_deps` reads the ladder from settings rather than ignoring it."""
     primary, cloud = object(), object()
     monkeypatch.setattr(
-        worker_module,
-        "make_pass_clients",
-        lambda _settings: PassClients(triage=object(), extract_rungs=(primary, cloud)),
+        worker_module, "make_extract_ladder", lambda _settings: (primary, cloud)
     )
     monkeypatch.setattr(worker_module, "make_engine", lambda _url: make_engine("sqlite://"))
 
@@ -267,9 +264,7 @@ def test_build_deps_leaves_the_fallback_unset_when_there_is_one_rung(monkeypatch
     """The unconfigured deployment keeps its single rung and no fallback."""
     only = object()
     monkeypatch.setattr(
-        worker_module,
-        "make_pass_clients",
-        lambda _settings: PassClients(triage=object(), extract_rungs=(only,)),
+        worker_module, "make_extract_ladder", lambda _settings: (only, None)
     )
     monkeypatch.setattr(worker_module, "make_engine", lambda _url: make_engine("sqlite://"))
 
@@ -607,9 +602,7 @@ def test_build_deps_wires_a_progress_factory_that_writes_where_the_reader_looks(
     # ladder as of 2026-08-25, so that is the seam a provider-free test has to
     # cut. A one-rung result is what an unconfigured deployment gets.
     monkeypatch.setattr(
-        worker_module,
-        "make_pass_clients",
-        lambda _settings: PassClients(triage=object(), extract_rungs=(object(),)),
+        worker_module, "make_extract_ladder", lambda _settings: (object(), None)
     )
     monkeypatch.setattr(worker_module, "make_engine", lambda _url: make_engine("sqlite://"))
 

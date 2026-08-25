@@ -710,15 +710,25 @@ def test_the_ladder_is_built_in_one_place() -> None:
     enumerated defence then and it still is -- it is kept because one bounded
     place to look is worth something, not because it is airtight.
     """
-    assert "make_pass_clients" not in inspect.getsource(cli), (
-        "cli.py builds a tier ladder: the escalation should have one "
-        "construction site in production code, and it is worker.build_deps"
-    )
-    assert "make_pass_clients" in inspect.getsource(worker), (
-        "worker.py stopped building the ladder, so VLM_MODEL_EXTRACT_FALLBACK "
-        "is a setting that changes nothing again -- which is the exact defect "
-        "the 2026-08-25 wiring fixed"
-    )
+    # **Corrected the same day, by running a real receipt.** This first said
+    # `cli` must NOT build a ladder and only `worker` may -- and that was the
+    # bug, not the boundary: `receipts reprocess` then ran a receipt with one
+    # rung, no deadline and no escalation, while `extraction_runs` showed three
+    # granite rows and a 1154s extract against a 300s limit. Wiring one entry
+    # point is not wiring the feature.
+    for module in (cli, worker):
+        assert "make_extract_ladder" in inspect.getsource(module), (
+            f"{module.__name__} runs receipts without building the extract "
+            "ladder, so VLM_MODEL_EXTRACT_FALLBACK changes nothing on that path"
+        )
+    # One builder, so there is one thing to audit. `make_pass_clients` stays the
+    # eval path's entry; everything that runs a real receipt goes through the
+    # wrapper.
+    for module in (cli, worker):
+        assert "make_pass_clients" not in inspect.getsource(module), (
+            f"{module.__name__} reaches past make_extract_ladder to the raw "
+            "builder, so the ladder has more than one construction site again"
+        )
 
 
 # --------------------------------------------------------------------------- #

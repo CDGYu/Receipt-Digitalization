@@ -174,6 +174,26 @@ class PassClients:
     extract_rungs: tuple[VLMClient, ...]
 
 
+def make_extract_ladder(settings: Settings) -> tuple[VLMClient, VLMClient | None]:
+    """The extract rungs as ``(primary, fallback_or_None)``, for any entry point.
+
+    **Exists because wiring one entry point is not wiring the feature.** On
+    2026-08-25 the ladder was wired into ``worker.build_deps`` and left out of
+    ``cli.cmd_process`` and ``cli.cmd_reprocess``, both of which build a single
+    client with :func:`make_client`. The gap was found the only way it could
+    be -- by running a real receipt through ``receipts reprocess`` and reading
+    ``extraction_runs`` afterwards: three ``granite3.2-vision:2b`` rows, a
+    1154s extract against a 300s deadline, a repair round a probe rung is not
+    given, and no ``gemma4:cloud`` row at all. Every one of those is what "the
+    ladder was not on this path" looks like.
+
+    So the escalation now has **one** construction site that every runner
+    shares, rather than a correct one and two that quietly do not escalate.
+    """
+    rungs = make_pass_clients(settings).extract_rungs
+    return rungs[0], (rungs[1] if len(rungs) > 1 else None)
+
+
 def _client_for(
     settings: Settings,
     *,

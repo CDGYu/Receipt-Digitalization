@@ -35,7 +35,7 @@ from sqlalchemy.orm import Session
 from config.settings import Settings, get_settings
 
 from .extract.clients.base import VLMClient
-from .extract.clients.factory import make_pass_clients
+from .extract.clients.factory import make_extract_ladder
 from .ingest.ingest import ReceiptJob
 from .ingest.storage import LocalStorage, S3Storage, StorageBackend
 from .persist.session import make_engine, make_session_factory
@@ -71,10 +71,11 @@ DEFAULT_QUEUE_NAME = "receipts"
 #:
 #: **ADR-0047's open question -- whether to set ``max_retries`` rather than
 #: derive from its default -- was taken on 2026-08-25, and only for the probe
-#: rung.** ``OpenAICompatClient`` now accepts ``max_retries`` and
-#: ``make_pass_clients`` passes 0 to a first rung that has an escalation
-#: deadline, because three silent retries turn a five-minute deadline into a
-#: fifteen-minute one. So the sentence this comment used to carry -- "which
+#: rung.** ``OpenAICompatClient`` now accepts ``max_retries``, and the factory
+#: that builds the extract ladder passes 0 to a first rung that has an
+#: escalation deadline, because three silent retries turn a five-minute
+#: deadline into a fifteen-minute one. So the sentence this comment used to
+#: carry -- "which
 #: ``OpenAICompatClient`` never overrides" -- is no longer true and has been
 #: deleted rather than softened.
 #:
@@ -253,18 +254,19 @@ def build_deps(settings: Settings | None = None) -> WorkerDeps:
         )
 
     engine = make_engine(settings.database_url)
-    # **The ladder is built here now, not just in the eval path.**
-    # `make_pass_clients` had no code caller anywhere -- it was named in one
-    # `pipeline.py` docstring and nothing else -- so `VLM_MODEL_EXTRACT_FALLBACK`
-    # was a setting that could be set and would change nothing for an uploaded
-    # receipt. `extract_rungs[0]` is the primary; a second entry exists only
-    # when a fallback model is configured.
-    rungs = make_pass_clients(settings)
+    # **The ladder is built here now, not just in the eval path.** Its builder
+    # had no code caller anywhere -- it was named in one `pipeline.py` docstring
+    # and nothing else -- so `VLM_MODEL_EXTRACT_FALLBACK` was a setting that
+    # could be set and would change nothing for an uploaded receipt. `fallback`
+    # is `None` unless a fallback model is configured.
+    #
+    # Built through `make_extract_ladder` rather than the raw builder so this
+    # path and the CLI's cannot drift: wiring only this one is how `receipts
+    # reprocess` came to run a receipt with no escalation at all.
+    primary, fallback = make_extract_ladder(settings)
     return WorkerDeps(
-        client=rungs.extract_rungs[0],
-        extract_fallback_client=(
-            rungs.extract_rungs[1] if len(rungs.extract_rungs) > 1 else None
-        ),
+        client=primary,
+        extract_fallback_client=fallback,
         storage=storage,
         session_factory=make_session_factory(engine),
         settings=settings,

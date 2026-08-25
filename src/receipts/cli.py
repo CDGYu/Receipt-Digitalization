@@ -133,7 +133,7 @@ from sqlalchemy.exc import DBAPIError
 from config.settings import Settings, get_settings
 
 from .extract.clients.base import VLMClient
-from .extract.clients.factory import make_client
+from .extract.clients.factory import make_client, make_extract_ladder
 from .ingest.ingest import ReceiptJob, ingest_file
 from .ingest.storage import StorageBackend, make_storage
 from .persist.models import Merchant, Receipt
@@ -893,6 +893,10 @@ def cmd_process(
             print(f"failed: {failed}")
         return EXIT_FAILED if failed else EXIT_OK
 
+    # An injected `client_factory` is a test seam and stays single-rung: a test
+    # that hands over one scripted client must not silently acquire a second
+    # from this machine's settings. A real run builds the ladder.
+    fallback = None if client_factory is not None else make_extract_ladder(settings)[1]
     client_factory = (
         client_factory if client_factory is not None else (lambda: make_client(settings))
     )
@@ -901,6 +905,7 @@ def cmd_process(
         try:
             result = process_receipt(
                 job, client=client_factory(), storage=storage,
+                extract_fallback_client=fallback,
                 session_factory=session_factory, settings=settings,
             )
         except _UNCONTAINED:
@@ -1004,11 +1009,14 @@ def cmd_reprocess(
         )
         return EXIT_FAILED
 
+    # Same seam rule as `cmd_process` above.
+    fallback = None if client_factory is not None else make_extract_ladder(settings)[1]
     client_factory = (
         client_factory if client_factory is not None else (lambda: make_client(settings))
     )
     result = process_receipt(
         job, client=client_factory(), storage=storage,
+        extract_fallback_client=fallback,
         session_factory=session_factory, settings=settings,
     )
 
