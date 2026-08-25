@@ -926,6 +926,15 @@ one-purchase shape), ISSUE-007 (`PROMPT_VERSION` is unpinned, and the honest fix
 is a production caller for `prompt_bundle_hash()`, not a checked-in hash table
 whose easiest green is the defect), ISSUE-008, ISSUE-009.
 
+**Dated 2026-08-25: all seven of those are now CLOSED** — 003 `d683134`, 005
+`5c72af5`, 006 `2abf688`, 007 `d7e985a`, 008 `07d96ef`, 009 `ee4858d`; only
+**ISSUE-004 remains open**, and its own entry opens "There is no code change
+that closes this". The paragraph above is kept as the record of what that merge
+left behind, which is what it was written to be — but it reads as a live list,
+and this line is here because a reader scanning for work would otherwise take it
+as one. **Every issue-list in a dated record needs this treatment**: the list
+was true when written and is a task list to anyone who does not check the dates.
+
 **Not fixed, deliberately:** `is_template_row` is now readable in the detail
 payload and pinned by a property -- *correctable implies readable* -- but it is
 **not rendered in the review UI**, so a reviewer still cannot see which rows will

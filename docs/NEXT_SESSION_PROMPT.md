@@ -181,52 +181,50 @@ top-10-merchant accuracy before/after few-shot", P8.T1's fitted weights, P8.T2's
 statistically valid held-out set, and P9.T1's self-hosted benchmark. **None of
 them is startable today.**
 
-### 2c. WHERE THE SYSTEM CAN STILL BE WRONG
+### 2c. WHERE THE SYSTEM CAN STILL BE WRONG — **ALL CLOSED 2026-08-25**
 
-- **ISSUE-006** — **the only issue on the board where a user gets a confidently
-  wrong answer.** A reviewer who mis-flags the *sole* purchase gets zero findings
-  at any severity and the row silently leaves the export; all three golden
-  receipts have that shape. **The visibility half is DONE**: you ruled 2026-08-23
-  that `is_template_row` is **editable**, and it shipped in plan 2 — a reviewer
-  can now see and correct which rows leave the export. **The arithmetic residual
-  is still open**: nothing warns when the correction empties the purchase set.
-- **ISSUE-024** *(new 2026-08-23)* — nothing cross-checks the triage line-count
-  against what was extracted, so spec §18's silent tall-receipt truncation goes
-  undetected. `IMPLEMENTATION_PLAN.md` P2.T3, never built.
-- **ISSUE-023** *(new 2026-08-23)* — consistency voting compares by exact string
-  equality, so `949.20` and `949.21` disagree, and line items are compared
-  positionally so one lost row cascades into every later one. P2.T1, never built.
-  **Fix it before P7.T1**, not after.
-- ~~**ISSUE-005** — `R051`'s message promises printed order; its check accepts
-  any permutation.~~ **RESOLVED 2026-08-24** at `5c72af5`, pinned by a
-  permutation whose sorted set is still `0..n-1` — a gap or a repeat would have
-  passed under the old check and proved nothing.
-- **ISSUE-025** *(new 2026-08-23)* — best-attempt selection is proven only in
-  isolation; no pipeline-level test drives a repair that makes things worse.
-- **ISSUE-002 / ISSUE-003** — recorded, deliberately not fixed. Read the entries
-  before reopening either.
+**Nothing in this section is work.** Every issue it named is resolved; it is kept
+because the *reasoning* is what a later reader needs, not the task list.
 
-### 2d. THE ESCALATION IS UNOBSERVABLE — four issues, one shape
+- **ISSUE-006** — a reviewer who mis-flagged the *sole* purchase got zero
+  findings at any severity and the row left the export silently; all three golden
+  receipts have that shape. Visibility half ruled 2026-08-23 (`is_template_row`
+  editable); **the arithmetic residual closed at `2abf688`** with R026.
+- **ISSUE-023** — `_vote` compared by exact string equality over `json.dumps`, so
+  `949.20` and `949.21` disagreed. **Closed at `aa65a2b`.** The "fix it before
+  P7.T1" gate below is therefore **discharged**.
+- **ISSUE-024** — nothing cross-checked triage's line count against what was
+  extracted. **Closed at `aa65a2b`** by R071, which carries a *deliberate* blind
+  spot: 4 estimated against 2 extracted does not fire.
+- **ISSUE-025** — best-attempt selection was proven only in isolation.
+  **Closed at `aa65a2b`.**
+- **ISSUE-002 / ISSUE-003** — closed at `cdc7b89` and `d683134`. ISSUE-003 was
+  ruled *product name only*; **r001 was NOT relabelled**, because that option
+  manufactures five permanently unearnable paths.
+- ~~**ISSUE-005**~~ — **RESOLVED 2026-08-24** at `5c72af5`.
 
-Worth taking as one milestone rather than four line-fixes, because **ISSUE-015's
-missing reader is ISSUE-013's natural fix**:
+### 2d. THE ESCALATION IS UNOBSERVABLE — **ALL SIX CLOSED 2026-08-25**
 
-- **ISSUE-012** — the per-rung counts never reach the committed results JSON.
-- **ISSUE-013** — they are keyed by `model_id`, but a tier is `(model, use_tools)`.
-- **ISSUE-015** — `PassAttempt.rung` is write-only in production.
-- **ISSUE-018** — the escalation records *that* it escalated, never *why*.
+**This section proposed a milestone. It is done, and it collapsed to less work
+than it looked.** Kept for the one structural finding, which generalises:
 
-**Two of these were once called gates on step 6's number; step 6 committed one
-without them.** Read them as caveats on that figure rather than as blockers.
-**And they will not bite the next baseline either** — today's config is one rung
-and granite is too slow on this box for a laddered run, so a re-baseline after
-Task 3 will be cloud-only again. *(Do not use "fix these first so the new baseline
-records its provenance" as the reason to do them. That reason was checked on
-2026-08-23 and it does not hold.)*
+**ISSUE-013 and ISSUE-015 were one defect from two ends.** Keying the counts by
+tier `(model, use_tools)` *requires* reading `PassAttempt.rung`, because when two
+rungs share a `model_id` only the rung index says which ran. The write-only field
+and the wrong key were the same problem. Closed together at `b51fb1d`.
 
-- **ISSUE-014 / ISSUE-016** — the other two ADR-0047 residuals. **ISSUE-016 is
-  report-don't-fix**: do not enumerate fields, and do not change `is_filled` —
-  `field_accuracy` shares it by design.
+- **ISSUE-012** — counts never reached the committed results JSON. `1637058`:
+  `run_eval` gained a `finalize` hook called **before** the write.
+- **ISSUE-018** — the record never said *why* a rung was discarded. `1d56a4d`.
+- **ISSUE-014** — `frozen=True` was unpinned. `99f62d5`, as one property at both
+  ends rather than eleven near-identical tests.
+- **ISSUE-016** — a vacuous value counted as content, so a rung that read nothing
+  was kept. `bf55102`, by **neither** of the two fixes the entry ruled out:
+  `is_filled` untouched, no field enumerated, *vacuity* added as a third concept.
+
+**The caveat that outlived them:** these were once called gates on step 6's
+number and step 6 committed one without them. They were always caveats on that
+figure, never blockers — and **ISSUE-034 is now the caveat that matters** (2h).
 
 ### 2e. SPECIFIED, NEVER BUILT
 
@@ -239,17 +237,29 @@ records its provenance" as the reason to do them. That reason was checked on
   grounding decision, because nothing produces the text layer it would key off.
 - **P7.T1 self-consistency** — `run_consistency` lives in `extract/extractor.py`
   with **zero callers**. Gate on `triage.is_handwritten`, **never
-  `document_type`**; consistency runs are never cached. **Close ISSUE-023 first**
-  or you wire two known defects onto a live path.
+  `document_type`**; consistency runs are never cached. ~~Close ISSUE-023
+  first~~ — **that gate is discharged**: ISSUE-023 closed at `aa65a2b`, so
+  `_vote` now compares money through `within_tolerance` and line items through
+  `align_line_items`. Wiring P7.T1 no longer puts two known defects on a live
+  path.
 
-### 2f. RECORDED, HARMLESS, CHEAP
+### 2f. RECORDED, HARMLESS, CHEAP — **TWO LEFT**
 
-**ISSUE-008** (a `LineItem.is_purchase` on the schema is the single source),
-**ISSUE-009** (declarations plus a docstring), **ISSUE-011** (four deletions — say
-the class *ships unpainted*, do not describe the mechanism), **ISSUE-007** (needs
-a contract decision first), **ISSUE-004** and **ISSUE-019** (both structural — a
-rule no gate holds, recorded rather than fixable), **ISSUE-010** (all that remains
-is the collapsed-table `border-radius`, a repo-wide question nobody has ruled on).
+**Still open:** **ISSUE-004** (structural — a rule no gate holds, recorded
+rather than fixable; its own entry opens "There is no code change that closes
+this") and **ISSUE-010** (all that remains is the collapsed-table
+`border-radius`, a repo-wide question nobody has ruled on).
+
+**Closed 2026-08-25, and none of them cost what this section estimated:**
+**ISSUE-007** (`d7e985a` — the "needs a contract decision first" was given and
+taken), **ISSUE-008** (`07d96ef` — **not** by putting `is_purchase` on the
+schema as this section proposed; the two copies stay separate because ADR-0010's
+decoupling is why the second exists, so the fix is an agreement test in neither
+module's suite), **ISSUE-009** (`ee4858d` — declarations *plus a pin*, because
+the declarations alone leave the next gap open), **ISSUE-011** (`07d96ef`),
+**ISSUE-019** (`be59045` — filed here as "structural, recorded rather than
+fixable", and it turned out to be fixable: a `withheld` declaration in the
+manifest, enforced for tracked labels).
 
 ### 2g. WAITING ON YOU, NOT ON ANYONE'S TIME
 
@@ -262,11 +272,26 @@ ISSUE-034, hermetic eval versus eval that mirrors production. It is on `main`
 with a register row, and it is the reason ADR-0049's headline accuracy figure
 describes a prompt the product does not send.)* *(ISSUE-006's flag decision and ISSUE-026's upload
 ruling were both given on 2026-08-23 and both shipped; this line asked for them
-again for a day.)* On the last: its checkboxes are **93 unticked out of
-93**, and its "Current state" still lists fourteen things as "Specified but not
-built" that all shipped, so it competes with the register instead of
-complementing it. **You ruled 2026-08-23 that the boxes stay unticked for now**;
-whether the file is corrected or retired is still open.
+again for a day.)*
+
+**On `IMPLEMENTATION_PLAN.md`: this paragraph said "93 unticked out of 93" and
+that Current state "still lists fourteen things as Specified but not built that
+all shipped". Both were false when the pair was refreshed.** Measured
+2026-08-25: **71 ticked, 26 unticked**, and Current state records both
+corrections — project-35 fixed it at `b3fc5ea` that morning, *before* the
+refresh that repeated the stale claim.
+
+**At least 3 of the 26 remaining boxes are for work that is built**, spot-checked
+rather than assumed: P3.T6's `receipts calibrate` (`cmd_calibrate` exists,
+`calibration_curve` used nine times in `cli.py`), and two of P5.T1's — the
+confidence explanation (`frontend/src/review/ConfidenceRail.tsx`) and the
+corrections write path (`apply_corrections` in `review/api.py`). **The other 23
+are not claimed either way**; those three were checked because they named things
+someone had seen ship.
+
+**You ruled 2026-08-23 that the boxes stay unticked for now**; whether the file
+is corrected or retired is still open — but decide it knowing the count is 71/26
+and that some unticked boxes describe shipped work.
 
 ### 2h. ISSUE-034 QUALIFIES EVERY ACCURACY NUMBER THIS PROJECT HAS
 
