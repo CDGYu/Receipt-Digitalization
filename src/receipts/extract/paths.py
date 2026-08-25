@@ -10,6 +10,7 @@ Path grammar:  totals.total | line_items[2].qty | totals.tax_breakdown[0].amount
 from __future__ import annotations
 
 import re
+from decimal import Decimal
 from typing import Any
 
 from pydantic import BaseModel
@@ -160,12 +161,73 @@ def is_filled(value: object) -> bool:
     return not (isinstance(value, (list, dict)) and len(value) == 0)
 
 
+def _is_vacuous(value: object) -> bool:
+    """True when a leaf is its own type's empty value, whatever that type is.
+
+    **The third concept ISSUE-016 asked whether there was room for**, and there
+    was: a leaf can be *filled* (:func:`is_filled` says so) and still carry no
+    reading. ``""``, ``0`` and ``False`` are each the nothing of their type, and
+    an extraction whose leaves are all of that shape transcribed nothing from
+    the paper however many keys it emitted.
+
+    **This is deliberately not :func:`is_filled`, and must not be folded into
+    it.** ``is_filled`` is shared with ``field_accuracy`` by design (design
+    §3.3, §4) so that "content" has exactly one definition: a read zero *is*
+    content for accuracy scoring, and a model that correctly reads a zero
+    discount must score for it. Vacuity is a different question -- "did this
+    rung read the page at all" -- asked in exactly one place, by
+    :func:`read_nothing`, and answered for the ladder rather than for scoring.
+
+    **Defined against the value, never against a field list.** Every earlier
+    version of this predicate was wrong because some field rested at a default
+    ``is_filled`` accepts, and each fix made the baseline more like the thing
+    being judged rather than naming the field that had just been found. A list
+    would rot on the next schema change; this covers a field nobody has added
+    yet.
+
+    ``bool`` is tested before ``int`` because ``isinstance(False, int)`` is true
+    in Python, and ``False`` reaching the numeric branch would work by accident
+    rather than by statement.
+    """
+    if value is None:
+        return True
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return True
+        # **A money zero arrives here as a string, not a Decimal.** `flatten`
+        # renders `Decimal("0")` as `'0'` so the JSON round trip keeps the
+        # scale (ADR-0001), so the numeric branch below never sees it and a
+        # `str`-only check would call `'0'` a reading. Measured: without this,
+        # `totals.total = Decimal("0")` still read as content.
+        try:
+            return Decimal(text) == 0
+        except (ArithmeticError, ValueError):
+            return False
+    if isinstance(value, bool):
+        return value is False
+    if isinstance(value, (int, float, Decimal)):
+        return value == 0
+    if isinstance(value, (list, dict)):
+        return len(value) == 0
+    return False
+
+
 def _content_paths(extraction: Any) -> dict[str, Any]:
-    """The filled ``core`` and ``line_items`` leaves of one extraction."""
+    """The ``core`` and ``line_items`` leaves that carry a reading.
+
+    ``is_filled`` and then ``_is_vacuous``: the first is the shared definition
+    of content, the second removes the leaves that are filled and say nothing
+    (ISSUE-016). Both, rather than the second alone, so ``is_filled``'s role
+    here stays visible -- it is the reason ``[]`` means "had none" rather than
+    "not read".
+    """
     return {
         path: value
         for path, value in flatten(extraction).items()
-        if group_of(path) in ("core", "line_items") and is_filled(value)
+        if group_of(path) in ("core", "line_items")
+        and is_filled(value)
+        and not _is_vacuous(value)
     }
 
 

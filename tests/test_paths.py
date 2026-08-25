@@ -116,3 +116,50 @@ def test_self_report_alone_is_not_content() -> None:
     only_meta = ReceiptExtraction()
     only_meta.meta.is_handwritten = True
     assert read_nothing(only_meta) is True
+
+
+def test_a_vacuous_value_is_not_something_the_model_read() -> None:
+    """ISSUE-016: a model answering with an empty-but-present value kept its rung.
+
+    `is_filled` accepts `0`, `False` and `""` as content **by design** -- a read
+    zero and a read false are content, and it is shared with `field_accuracy`
+    so that "content" has one definition (design 3.3, 4). The consequence was
+    that an extraction carrying nothing but those values differed from the
+    baseline and read as "it read something", so the local rung was kept and
+    the cloud rung never ran.
+
+    Measured 2026-08-21, each on an otherwise default `ReceiptExtraction()`:
+    `merchant.name = ""`, `totals.total = Decimal("0")` and
+    `totals.prices_include_tax = False` all returned `False`. **This was the
+    third time this predicate was found wrong in the never-fires direction** --
+    design 3 records the first, 3.1 the second.
+
+    The fix is neither of the two the issue ruled out. `is_filled` is untouched,
+    and no field is named: *vacuity* is a third concept, defined against a
+    value's own type, and the baseline comparison it feeds is unchanged.
+    """
+    for label, extraction in [
+        ("empty string", ReceiptExtraction(merchant={"name": ""})),
+        ("read zero", ReceiptExtraction(totals={"total": Decimal("0")})),
+        ("read false", ReceiptExtraction(totals={"prices_include_tax": False})),
+    ]:
+        assert read_nothing(extraction) is True, (
+            f"{label}: an extraction carrying only a vacuous value read nothing, "
+            f"and the ladder must escalate rather than keep this rung"
+        )
+
+
+def test_one_real_reading_is_enough_to_keep_the_rung() -> None:
+    """The bound on the fix above, and the direction that costs.
+
+    A predicate that is too eager escalates a receipt the local rung actually
+    read, and an extract call on this hardware is measured in minutes. So
+    vacuity has to be a conjunction: *every* core and line-item path vacuous.
+    One genuine reading -- here a merchant name, beside the very zeros the test
+    above rules out -- keeps the rung.
+    """
+    read_something = ReceiptExtraction(
+        merchant={"name": "SUPERMART INC."},
+        totals={"total": Decimal("0"), "prices_include_tax": False},
+    )
+    assert read_nothing(read_something) is False
