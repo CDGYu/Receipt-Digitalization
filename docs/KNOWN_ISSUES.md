@@ -1992,6 +1992,36 @@ It is not a defect in code. It is a fact about a three-receipt corpus, and the
 remedy is ISSUE-001 step 7 — grow the golden set — which this makes more urgent
 than the model choice does.
 
+### A SECOND caveat on the same figure, added 2026-08-25
+
+**This entry framed the corpus as *the* explanation for what that number hides.
+It is now one of two, and they are independent.** The other is ISSUE-034: the
+eval path measures a prompt production does not send.
+
+Verified here rather than relayed, by reading the signatures:
+
+- `run_receipt` takes no `hints` parameter and no `session`.
+- `build_eval_pipeline` takes no `session` either, so the merchant registry is
+  **unreachable from the eval path by construction** — not by omission at a call
+  site, which could be fixed by passing an argument.
+- `process_receipt` builds `MerchantHints` from that registry and passes them.
+
+So ADR-0049's 60.00–61.43% describes the **unhinted** prompt. Growing the golden
+set fixes the across-receipts problem this entry is about and does **not** fix
+that one: a hundred receipts measured through `build_eval_pipeline` would still
+be measuring the wrong prompt.
+
+**Read together, the two caveats compose rather than overlap.** ISSUE-017 says
+the average hides an 85-point spread across receipts. ISSUE-034 says the thing
+being averaged is not what production runs. Either alone is enough to refuse a
+single-figure accuracy claim; both together mean the figure has no defensible
+reading at all until the corpus grows *and* the eval path can reach the
+registry.
+
+*(Found by another session building an ISSUE-034 board and handed over as
+evidence rather than as a conclusion, which is why it was checked here before
+being written down.)*
+
 ### How to resume
 
 Derive it from the committed per-repeat files:
