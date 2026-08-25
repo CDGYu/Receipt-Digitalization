@@ -257,11 +257,10 @@ The full list is under "BLOCKED ON THE USER" below. The ones that block work
 rather than merely tidy it: **R060/R061 grounding** (which also gates bbox), and
 **what happens to `IMPLEMENTATION_PLAN.md`**. *(2a's four rulings are all taken:
 029, 030 and 031 on 2026-08-25 — ADR-0054 — and ISSUE-032 the same day at
-`443fa86`. **A fifth ruling exists and is NOT on `main` yet**: ISSUE-034,
-hermetic eval versus eval that mirrors production. It is filed on the unmerged
-branch `fix/prompt-hash-and-template-unit` — there is no register row and no
-`## ISSUE-034` heading in `docs/KNOWN_ISSUES.md` until that branch lands. See
-"An unmerged branch is waiting" below.)* *(ISSUE-006's flag decision and ISSUE-026's upload
+`443fa86`. **A fifth ruling is open and it is the one that matters most**:
+ISSUE-034, hermetic eval versus eval that mirrors production. It is on `main`
+with a register row, and it is the reason ADR-0049's headline accuracy figure
+describes a prompt the product does not send.)* *(ISSUE-006's flag decision and ISSUE-026's upload
 ruling were both given on 2026-08-23 and both shipped; this line asked for them
 again for a day.)* On the last: its checkboxes are **93 unticked out of
 93**, and its "Current state" still lists fourteen things as "Specified but not
@@ -269,53 +268,60 @@ built" that all shipped, so it competes with the register instead of
 complementing it. **You ruled 2026-08-23 that the boxes stay unticked for now**;
 whether the file is corrected or retired is still open.
 
-### 2h. AN UNMERGED BRANCH IS WAITING, AND IT IS NOT ABANDONED
+### 2h. ISSUE-034 QUALIFIES EVERY ACCURACY NUMBER THIS PROJECT HAS
 
-**`fix/prompt-hash-and-template-unit` is finished, green, and deliberately not
-merged.** Do not start work that touches what it holds without reading it first,
-and do not assume it was forgotten.
+**`fix/prompt-hash-and-template-unit` merged on 2026-08-25** — true fast-forward
+to `0363d81`, pushed, `origin/main` in sync. ISSUE-002, 003, 006 and 007 landed
+with it. **ISSUE-034 landed as an entry and stays OPEN**: merging lands the
+filing, not the decision.
 
-**No ahead/behind count is written here on purpose** — it changes every time
-either side moves, and this file has carried a stale count before. Derive it:
+**The finding.** `run_receipt` — the `build_eval_pipeline` path — calls
+`extract_with_repair` with no `hints` and no `few_shots`; `process_receipt`
+passes `hints=` at three call sites. **So eval measures the unhinted prompt and
+production sends the hinted one.** Verified independently on `main`, not taken
+on report.
 
-```
-git log --oneline main..fix/prompt-hash-and-template-unit
-git rev-list --count fix/prompt-hash-and-template-unit..main   # 0 means a clean ff
-```
+**What that does to the headline number.** The baseline ran on 2026-08-22 and
+nothing updated the entry, so **ADR-0049's 60.00–61.43% describes a prompt the
+product does not send**, and the results file does not record that. Quote
+ADR-0049's spread *with the caveat attached*, and **do not imply a corrected
+figure exists — none has been measured.**
 
-What it holds, so nobody re-derives it:
+**Why it is a ruling and not a patch, which is easy to flatten into "just send
+the hints".** Mirroring production costs reproducibility from the golden set
+alone: two runs over identical images could diverge because a merchant gained a
+hint in between. And the eval path takes **no session** — `run_receipt` and
+`build_eval_pipeline` have no `session` parameter — so "mirror production" means
+*giving eval a database*, not adding an argument.
 
-- **ISSUE-002** — a repair row's `prompt_hash` named a prompt that was not sent;
-  the repair branch of `_attempt_prompt_hash` was missing `P.SYSTEM_EXTRACTION`.
-- **ISSUE-003** — a blank pre-printed row transcribes the product name and
-  nothing else; pinned by an assertion added to the existing flagged-row test
-  rather than a new one, so **the "SIX pins" comment in `tests/test_eval_floor.py`
-  is still correct** and must not be bumped.
-- **ISSUE-034, newly filed** — the half of ISSUE-002 that is not a bug.
-  `run_receipt` (the `build_eval_pipeline` path) calls `extract_with_repair` with
-  no `hints` and no `few_shots`; `process_receipt` passes `hints=` at three call
-  sites. **So `eval` measures the unhinted prompt and production sends the hinted
-  one.** Verified independently on `main`, not taken on report.
+`tests/test_eval_prompt_conditioning.py` asserts neither entry point accepts
+`hints`/`few_shots`/`session`/`registry`. That is deliberate: it reddens when
+someone threads conditioning through, so `config_identity`'s recorded
+`"prompt_conditioning": {"merchant_hints": false, "few_shots": false}` cannot
+quietly become a lie. **If you take the mirror-production side, that test is
+telling you to update `config_identity`, not to delete it.**
 
-**Why it is not merged, and this is the part to respect.** The owner authorised
-the fast-forward — but in a *different session's* channel. The branch's own
-session correctly refuses to act on a relayed authorization: it cannot
-distinguish a faithful relay from a misread one, and `main` is the one place
-where that distinction has to hold. **The authorization has to arrive in that
-session's own channel with the owner.** That is the same rule that makes
-`feat/*` self-authorised and `main` not.
+### 2i. WHAT THREE SESSIONS IN ONE REPOSITORY COST, MEASURED
 
-**ISSUE-034 stays OPEN after the merge.** Merging lands the entry, not the
-decision, and the two answers are not fix-versus-no-fix: making eval mirror
-production costs reproducibility from the golden set alone, because two runs over
-identical images could diverge simply because a merchant gained a hint in
-between. That is why it is a ruling and not a patch.
+2026-08-25 ran three concurrent sessions — one in this checkout, two in
+worktrees. Nothing was lost, and four things were learned the hard way:
 
-**And it already qualifies the headline number.** The baseline ran on
-2026-08-22, so **ADR-0049's 60.00–61.43% describes a prompt the product does not
-send**, and the results file does not record that. Quote ADR-0049's spread with
-the caveat attached; **do not imply a corrected figure exists, because none has
-been measured.**
+- **A worktree does not isolate imports.** `pip install -e` wrote a finder with a
+  hardcoded `MAPPING` to *this* checkout, so `import receipts` from any worktree
+  resolves to `C:\Users\user\Downloads\Project\src\receipts`. A suite run in a
+  worktree tests **this** tree's `src/`. Fix: `PYTHONPATH="<worktree>/src"`, run
+  from the worktree root. **Use one entry** — the separator must match the path
+  style (`;` for `C:/...`, `:` for `/c/...`, because Git Bash only rewrites lists
+  it recognises as POSIX), and a single entry sidesteps the question.
+- **"Green" is a claim about a named command, not a mood.** `pytest` was run six
+  times and `ruff` never, reported as "full suite green"; `main` sat red on one
+  of five gates for three sessions. Say which command you ran.
+- **A branch push carries every session's commits to the remote.** Merging `main`
+  into a feature branch to stay fast-forward-ready and pushing it publishes
+  whatever is on `main`. "Unpushed" is not a per-session property.
+- **An authorisation must arrive in the channel that acts on it.** A relayed
+  "the owner said yes" is indistinguishable from a misread one. `feat/*` is
+  self-authorised; `main` is not.
 
 ## 3. How to work here, and why it is not optional
 
@@ -658,7 +664,7 @@ where a user gets a confidently wrong answer.
 
 ## THE COMPLETE ISSUE REGISTER
 
-**Every issue, as of 2026-08-25 — with three exceptions.** ISSUE-020, ISSUE-021 and ISSUE-022 are closed and have no row here: the register carries 33 `^## ISSUE-` headings and this table 30, compared 2026-08-25. `docs/KNOWN_ISSUES.md` is the source for
+**Every issue, as of 2026-08-25 — with three exceptions.** ISSUE-020, ISSUE-021 and ISSUE-022 are closed and have no row here: the register carries 34 `^## ISSUE-` headings and this table 31, re-derived 2026-08-25 by counting both rather than by adjusting the previous numbers — that sentence has been wrong twice, both times by someone doing the arithmetic. `docs/KNOWN_ISSUES.md` is the source for
 every row and **is not to be re-derived** — each entry there records the
 diagnosis, what was already fixed, and the exact steps to resume. **This table
 is a pointer; where it and an entry disagree, the entry wins.**
@@ -666,21 +672,21 @@ is a pointer; where it and an entry disagree, the entry wins.**
 | issue | one line | state |
 |---|---|---|
 | **ISSUE-001** | **Step 6 is DONE (2026-08-22).** `transcription_accuracy` min 60.00% / max 61.43% / median 60.00% over five repeats — but read ISSUE-017 before quoting it. Steps 7 and 8 remain. | **OPEN, NARROWED** |
-| ISSUE-002 | A repair attempt's `extraction_runs.prompt_hash` names a prompt that was never sent. | OPEN, pre-existing, deliberately not fixed |
-| ISSUE-003 | A blank pre-printed row drops the unit the form prints on it (`Lt.` on all six r001 rows). | OPEN by design — labelling it creates five unearnable paths |
+| ISSUE-002 | A repair attempt's `extraction_runs.prompt_hash` names a prompt that was never sent. | **RESOLVED 2026-08-25** at `cdc7b89` — the repair branch of `_attempt_prompt_hash` was missing `P.SYSTEM_EXTRACTION` |
+| ISSUE-003 | A blank pre-printed row drops the unit the form prints on it (`Lt.` on all six r001 rows). | **RESOLVED 2026-08-25** at `d683134` — ruled *product name only*, pinned inside the existing flagged-row test. **r001 was NOT relabelled**: that option creates five permanently unearnable paths |
 | ISSUE-004 | Nothing checks a golden label against its photograph; per-label content rot is open. | OPEN **by design** — re-reading the image is the only instrument |
 | ISSUE-005 | `R051`'s message promises printed order; its check accepted any permutation. | **RESOLVED 2026-08-24** at `5c72af5` — pinned by a permutation, not a gap |
-| **ISSUE-006** | **A reviewer who mis-flags the *sole* purchase gets zero findings at any severity and the row silently leaves the export.** All three golden receipts have that shape. | **OPEN — the only silent-wrong-answer** |
-| ISSUE-007 | `PROMPT_VERSION` is unenforced; reverting it passes the whole suite. **Its easiest green is the defect.** | OPEN — needs a contract decision |
-| ISSUE-008 | `xlsx._purchases` and `rules._purchased` are identical predicates with nothing binding them. | OPEN — drift risk, not wrong today |
-| ISSUE-009 | `CorrectionPatch`'s docstring no longer describes the contract it validates; OpenAPI omits `buyer.*` and `is_template_row`. | OPEN — harmless, misleading |
+| **ISSUE-006** | **A reviewer who mis-flags the *sole* purchase gets zero findings at any severity and the row silently leaves the export.** All three golden receipts have that shape. | **RESOLVED 2026-08-25** at `2abf688` — R026 closes the one place a mis-flagged row was silent |
+| ISSUE-007 | `PROMPT_VERSION` is unenforced; reverting it passes the whole suite. **Its easiest green is the defect.** | **RESOLVED 2026-08-25** at `d7e985a` — results keyed `{date}-{prompt_version}-{prompt_bundle_hash}`, so an un-bumped prompt can no longer overwrite a run's artefact |
+| ISSUE-008 | `xlsx._purchases` and `rules._purchased` are identical predicates with nothing binding them. | **RESOLVED 2026-08-25** at `07d96ef` — an agreement test in neither module's suite; the two copies stay separate, because ADR-0010's decoupling is why the second exists |
+| ISSUE-009 | `CorrectionPatch`'s docstring no longer describes the contract it validates; OpenAPI omits `buyer.*` and `is_template_row`. | **RESOLVED 2026-08-25** at `ee4858d` — `buyer.*` and `is_template_row` published, plus a pin asserting the schema **equals** the correctable set, both directions |
 | ISSUE-010 | `/app/receipts` **has now been opened**, in three engines. The download **works**; the predicted defect was refuted. One real finding (the gutter) is fixed. | **OPEN, narrowed** — only the collapsed-table `border-radius`, a repo-wide question |
-| ISSUE-011 | A measured-false `class="undefined"` spelling survives in **three** test files (four sentences). | OPEN — pre-existing, cosmetic |
-| **ISSUE-012** | **The per-rung counts never reach the committed results JSON.** They reach the printed report and the return value; `run_eval` writes the file before it returns and `run_baseline` folds them in after. | **OPEN.** This row said "must close before step 6 commits a number"; step 6 committed one on 2026-08-22 without it |
-| **ISSUE-013** | **`extract_rung_counts` is keyed by `model_id`, but ADR-0047 defines a tier as `(model, use_tools)`** — so two rungs on one model with opposed tools flags are two tiers and one count, and the escalation goes invisible in the figure that exists to expose it. | **OPEN — a decision ADR-0047 does not take** |
-| ISSUE-014 | `frozen=True` on `PassAttempt`, `RunOutcome` and `PassClients` is pinned by nothing; dropping any one leaves the suite green. Tree-wide there are 10 frozen dataclasses and 0 `FrozenInstanceError` assertions. | OPEN — stated interface property, unenforced |
-| ISSUE-015 | `PassAttempt.rung` is **write-only in production** — four write sites, no reader in `src/` or `eval/`. | OPEN — either give it a reader (see ISSUE-013) or drop it |
-| ISSUE-016 | `read_nothing` still counts vacuous values as content: `merchant.name=""`, `totals.total=0`, `prices_include_tax=False`. The **third** never-fires shape in this predicate's history. **It gates a ladder configuration**, which its own "does not gate anything" filing denies. | OPEN — **report-don't-fix**; do not enumerate fields, do not change `is_filled` |
+| ISSUE-011 | A measured-false `class="undefined"` spelling survives in **three** test files (four sentences). | **RESOLVED 2026-08-25** at `07d96ef` |
+| **ISSUE-012** | **The per-rung counts never reach the committed results JSON.** They reach the printed report and the return value; `run_eval` writes the file before it returns and `run_baseline` folds them in after. | **RESOLVED 2026-08-25** at `1637058` — `run_eval` gained a `finalize` hook called **before** the write, so the committed artefact records which rung produced it |
+| **ISSUE-013** | **`extract_rung_counts` is keyed by `model_id`, but ADR-0047 defines a tier as `(model, use_tools)`** — so two rungs on one model with opposed tools flags are two tiers and one count, and the escalation goes invisible in the figure that exists to expose it. | **RESOLVED 2026-08-25** at `b51fb1d` — counts keyed by tier `(model, use_tools)`, bound to `run_repeats.rung_identity` by an injectivity test |
+| ISSUE-014 | `frozen=True` on `PassAttempt`, `RunOutcome` and `PassClients` is pinned by nothing; dropping any one leaves the suite green. Tree-wide there are 10 frozen dataclasses and 0 `FrozenInstanceError` assertions. | **RESOLVED 2026-08-25** at `99f62d5` — one property at **both** ends: the named set refuses mutation, and that set is exactly what the tree declares frozen |
+| ISSUE-015 | `PassAttempt.rung` is **write-only in production** — four write sites, no reader in `src/` or `eval/`. | **RESOLVED 2026-08-25** at `b51fb1d` — `rung` gained a **load-bearing** reader: ISSUE-013 needs it to resolve which rung ran when two share a model |
+| ISSUE-016 | `read_nothing` still counts vacuous values as content: `merchant.name=""`, `totals.total=0`, `prices_include_tax=False`. The **third** never-fires shape in this predicate's history. **It gates a ladder configuration**, which its own "does not gate anything" filing denies. | **RESOLVED 2026-08-25** at `bf55102` — *vacuity* is a third concept, defined against the value's type. `is_filled` untouched; no field named |
 | **ISSUE-017** | **The baseline's variance is across receipts, not repeats.** r001 60.71-64.29%, r002 91.67-95.83%, **r003 11.11% on all five repeats**. The headline averages receipts spanning 11% to 96% and describes none of them. | **OPEN — read before quoting any figure** |
 | ISSUE-018 | The escalation recorded that it escalated, never why. ADR-0047 decision 3 discards on two clauses — raised, or read nothing — and `PassAttempt` had no field for which. | **RESOLVED 2026-08-25** at `1d56a4d` — `discarded: DiscardReason \| None`, and `kept` is now *derived* from it so the two cannot disagree. **It did NOT close ISSUE-015**: `.rung` still has no reader |
 | ISSUE-019 | "A label is committed whole or not at all" was a rule no gate held; the obvious pin is not writable, because the README tells you to use `null` for what a receipt does not show, so redacted and absent look the same. | **RESOLVED 2026-08-25** at `be59045` — the manifest carries `withheld`, required present and empty for tracked labels. **Undeclared nulling still passes**; no static check can catch it |
@@ -698,6 +704,7 @@ is a pointer; where it and an entry disagree, the entry wins.**
 | ISSUE-031 | Progress narration existed on exactly one of four `process_receipt` call sites; `--inline` narrated nothing, ever. | **RESOLVED** in two halves at `2d1bea9` and `d1e446b` — but **nobody has watched a screen**; jsdom cannot see narration |
 | ISSUE-032 | A control painted over the column beside it at every width. Cause: `th` was `box-sizing: content-box` with 8px padding, so seven declared widths demanded more than the table had and the eighth rendered at **0**. | **RESOLVED 2026-08-25** at `443fa86` — candidate 1; the eighth is 57.5px at the 44rem floor. **`e2e/visual.spec.ts` was not re-run** |
 | ISSUE-033 | A `p*` label's value was printed by `validate_labels` — the command Task 3 tells a labeller to run after every batch — and by the pytest traceback. Per-field, not whole-label. | **CLOSED 2026-08-25** on `feat/golden-label-privacy` |
+| **ISSUE-034** | **Eval measures a different prompt than production sends.** `run_receipt` (the `build_eval_pipeline` path) calls `extract_with_repair` with no `hints` and no `few_shots`; `process_receipt` passes `hints=` at three call sites. **So ADR-0049's 60.00–61.43% describes a prompt the product does not send**, and the results file does not record that. | **OPEN — needs your ruling: hermetic eval, or eval that mirrors production?** The two are not fix-vs-no-fix: mirroring production costs reproducibility from the golden set alone, and the eval path takes **no session**, so it means giving eval a database rather than adding an argument |
 
 ---
 

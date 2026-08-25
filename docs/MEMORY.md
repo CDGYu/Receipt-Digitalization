@@ -45,7 +45,7 @@ moves, and this file has carried a wrong issue count before.
 **No count of refreshes is written here** — it is a number that moves without its
 sentence changing, which is review standard 5.
 
-**Freshness anchor `c4b28c0`** — the last commit that is not this handoff pair.
+**Freshness anchor `0363d81`** — the last commit that is not this handoff pair.
 **It is written twice below — here and inside the command.** Moving one and not
 the other is what happened on an earlier refresh, and the gate caught it because
 it parses the anchor out of the *command*.
@@ -66,7 +66,7 @@ nothing else: a stamp cannot name the commit that writes it. The test is a
 command, not a commit and not a count:
 
 ```
-git log --oneline c4b28c0..main -- ":(top,exclude)docs/MEMORY.md" ":(top,exclude)docs/NEXT_SESSION_PROMPT.md"
+git log --oneline 0363d81..main -- ":(top,exclude)docs/MEMORY.md" ":(top,exclude)docs/NEXT_SESSION_PROMPT.md"
 git log --oneline refs/remotes/origin/main..main   # what a push would send
 git ls-remote --heads origin main                  # authoritative on what is pushed
 git branch --no-merged main                        # named FOUR on 2026-08-25
@@ -401,10 +401,12 @@ stays reachable — ADR-0042. `git log --oneline -- docs/MEMORY.md` is the list.
   `max_repairs=0`; and **`VLM_TIMEOUT_S` bounds one HTTP attempt, not one call**
   — the SDK retries twice, so any elapsed timing covers an unknown number of
   attempts.
-  **What it does NOT do:** produce an accuracy number. That is step 6. It also
-  leaves **ISSUE-012 through ISSUE-016**, two of which (how the per-rung counts
-  are keyed, and that they never reach the committed results file) are
-  decisions ADR-0047 deliberately does not take.
+  **What it does NOT do:** produce an accuracy number. That is step 6. It left
+  **ISSUE-012 through ISSUE-016** — two of which (how the per-rung counts are
+  keyed, and that they never reach the committed results file) were decisions
+  ADR-0047 deliberately did not take. **All five are closed as of 2026-08-25**;
+  the two decisions turned out to be one change, because keying the counts by
+  tier is what finally reads `PassAttempt.rung`.
   **What the close cost, and it is the argument for running it:** the
   whole-branch review found **three stated guarantees deletable with all five
   gates green** — including the rule that makes the final rung final, and the
