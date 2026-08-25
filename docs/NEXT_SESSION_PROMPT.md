@@ -132,10 +132,14 @@ accepting it. **ISSUE-032 was taken the same day** at `443fa86` — candidate 1,
 | **Where the progress sink belongs** | **ISSUE-031** | Narration exists on **exactly one of four** `process_receipt` call sites. `--inline` is the documented no-Redis deployment and narrates nothing, ever. Threading `progress=` through three more sites is the obvious move and may be wrong: a CLI has no Redis to write to on the deployment that most needs this. |
 | **The table column fix** | **ISSUE-032** | **TAKEN 2026-08-25** at `443fa86`: candidate 1, `box-sizing: border-box` on `.head th`. The cause was `th` being content-box with 8px padding, so seven declared widths demanded `48 + 0.85W + 7x16px` and overflowed the table by themselves; the eighth got nothing. It now measures 57.5px at the 44rem floor. **`e2e/visual.spec.ts` was not re-run** — three sessions were live in the worktree and it rebuilds `dist`, reseeds a shared DB and binds port 8100. |
 
-**One more awaits you and is older:** **ISSUE-006's arithmetic residual**.
-*(This said "two more" and named **ISSUE-027** first. That was ruled on
-2026-08-25 — wire `expand_pdf` — and a PDF is now one receipt per page, bounded
-at 50, resolved at `55f9847`.)*
+**Nothing older awaits you here.** *(This said "two more" and named
+**ISSUE-027**; then "one more", naming **ISSUE-006's arithmetic residual**. Both
+were ruled and both shipped — ISSUE-027 on 2026-08-25, wire `expand_pdf`, a PDF
+is now one receipt per page bounded at 50, at `55f9847`; and ISSUE-006's
+residual at `2abf688` with R026. **This document recorded the second resolution
+in §2b while this line was still asking for it**, which is the same shape as
+ISSUE-026: a bullet outliving its own answer, found by a query rather than by
+anyone re-reading it.)*
 
 **Held, not lost — one thing a session deliberately did not commit.**
 
@@ -233,15 +237,32 @@ figure, never blockers — and **ISSUE-034 is now the caveat that matters** (2h)
   **pinned as mounted** by mutation. This bullet asked you to rule on building a
   screen that had already shipped, for a day — found by a query, not by anyone
   re-reading it.
-- **P5.T1's bounding-box highlighting** — never built, and gated on the R060/R061
-  grounding decision, because nothing produces the text layer it would key off.
-- **P7.T1 self-consistency** — `run_consistency` lives in `extract/extractor.py`
-  with **zero callers**. Gate on `triage.is_handwritten`, **never
-  `document_type`**; consistency runs are never cached. ~~Close ISSUE-023
-  first~~ — **that gate is discharged**: ISSUE-023 closed at `aa65a2b`, so
-  `_vote` now compares money through `within_tolerance` and line items through
-  `align_line_items`. Wiring P7.T1 no longer puts two known defects on a live
-  path.
+- **P5.T1's bounding-box highlighting** — still never built, and **the gate
+  named here is discharged, but a bigger one nobody wrote down is in its
+  place.** R060/R061 was decided and built at `3b023a4` (P2.T2):
+  `preprocess/ocr.py` returns an `OcrLayer` of `OcrWord`s, each carrying text
+  and a 0-1 `bbox` deliberately matching `LineItem.bbox`'s convention, behind
+  `ocr_grounding_enabled` (default `False`). A text layer exists.
+  **What does not exist is the step from those words to a line item's box**, and
+  it is in no spec, no plan and no checkbox. Measured 2026-08-25 rather than
+  reasoned about: `OcrLayer.words` has **zero consumers** anywhere in `src/`,
+  because `_ground_in_ocr` keeps `layer.text` and drops the geometry;
+  `LineItem.bbox` is declared, persisted and serialised to the review UI but is
+  only ever filled by a grounding-capable model, which is not what runs here;
+  and `line_items` holds **0 rows, 0 with a bbox**. **So this is a design step
+  plus a feature, not a build**, and there is no extracted data on this box to
+  build it against. *(An earlier version of this correction called P5.T1 "the
+  one thing that became buildable" once P2.T2 landed. That was wrong, and wrong
+  in the direction that costs a session: it reads as a green light.)*
+- **P7.T1 self-consistency** — **BUILT, and this bullet was false.** It said
+  `run_consistency` had **zero callers**: `pipeline.py` imports it and calls it,
+  landed at `b3bc14e`, gated on `settings.consistency_enabled` **and**
+  `_wants_consistency(triage_result)` — the `is_handwritten` spelling this
+  bullet asked for, with a comment at the call site on why `document_type` alone
+  would miss a hand-annotated thermal receipt — and no `cache=` is passed.
+  **The ordering this bullet insisted on was honoured**: `aa65a2b` is an
+  ancestor of `b3bc14e` (`git merge-base --is-ancestor`), so the wiring never
+  put the untoleranced `_vote` on a live path.
 
 ### 2f. RECORDED, HARMLESS, CHEAP — **TWO LEFT**
 
@@ -263,9 +284,11 @@ manifest, enforced for tracked labels).
 
 ### 2g. WAITING ON YOU, NOT ON ANYONE'S TIME
 
-The full list is under "BLOCKED ON THE USER" below. The ones that block work
-rather than merely tidy it: **R060/R061 grounding** (which also gates bbox), and
-**what happens to `IMPLEMENTATION_PLAN.md`**. *(2a's four rulings are all taken:
+The full list is under "BLOCKED ON THE USER" below. The one that blocks work
+rather than merely tidying it is **what happens to `IMPLEMENTATION_PLAN.md`**.
+*(**R060/R061 grounding was the other and it is taken** — decided and built at
+`3b023a4`. Note what it did *not* do: bbox highlighting is still blocked, on a
+words-to-line-item step nobody has specified. See §2e.)* *(2a's four rulings are all taken:
 029, 030 and 031 on 2026-08-25 — ADR-0054 — and ISSUE-032 the same day at
 `443fa86`. **A fifth ruling is open and it is the one that matters most**:
 ISSUE-034, hermetic eval versus eval that mirrors production. It is on `main`
@@ -882,19 +905,20 @@ caller, which changes spec §16's filename), **ISSUE-002**, **ISSUE-003**,
 
 ### §4. T7 — Phases 7 and 8
 
-- **P7.T1 self-consistency.** `run_consistency` exists in `extract/extractor.py`
-  with **zero references in `pipeline.py`**. Gate on `triage.is_handwritten`,
-  **never `document_type`**; consistency runs are never cached. **Its value went
-  up for a reason it was not designed for**: cloud inference is nondeterministic
-  at `temperature=0`, and self-consistency is exactly that remedy. r002 *is*
-  handwritten, so the gate would fire.
+- ~~**P7.T1 self-consistency.**~~ **BUILT at `b3bc14e`**, uncached, gated on
+  `settings.consistency_enabled` and `_wants_consistency(triage_result)`.
+  "**Zero references in `pipeline.py`**" was true when written and is not now.
+  **The reason its value went up outlived the task and is worth keeping**: cloud
+  inference is nondeterministic at `temperature=0`, self-consistency is exactly
+  that remedy, and r002 *is* handwritten, so the gate fires on it.
 - **P3.T6 / P8.T1** threshold sweep + confidence weights into
   `config/rules.yaml` — **blocked on ISSUE-001**.
 - **P8.T2** grow the held-out set. Target 50–100 receipts; it is 3.
 
 ### §5. T8 — still open from earlier phases
 
-R060/R061 grounding decision (also gates bbox highlighting); score
+~~R060/R061 grounding decision (also gates bbox highlighting)~~ — **taken and
+built at `3b023a4`, and it did NOT unblock bbox** (§2e); score
 `is_handwritten` from triage too; `is_receipt` has no consumer (**never
 hard-reject on it**). §6 below has the full list, §7 what is deferred with
 rulings.
@@ -964,8 +988,10 @@ rather than as blockers:**
    not yet** — it would pin 43 recorded undersized hit targets as the baseline.
 7. **Should the citation sweep become a repo script?** Recommended **no** —
    every prose defect found needed a human to notice the *claim* was wrong.
-8. **R060/R061 grounding**, and the **two queued PAN scoped decisions** (the
-   grouping residual and the `{1,2}` separator) — all recommended **defer**.
+8. ~~**R060/R061 grounding**~~ — **taken 2026-08-25 and built at `3b023a4`**.
+   What is left under this number is the **two queued PAN scoped decisions** (the
+   grouping residual and the `{1,2}` separator), both still recommended
+   **defer**.
 
 ---
 
@@ -974,7 +1000,9 @@ rather than as blockers:**
 The deployment story is complete: entry point (**ADR-0035**), container
 (**ADR-0036**), CI (**ADR-0037**), guide (`docs/DEPLOYMENT.md`). Eval field
 accuracy is redefined (**ADR-0040**, corrected by **ADR-0044**). Also shipped:
-the theme control (**ADR-0038**), the shared page bound (**ADR-0034**), the
+the theme control (**ADR-0038** — shipped, then **removed on your ruling at
+`824bf46`**; the ADR is superseded and dark now follows the OS), the shared page
+bound (**ADR-0034**), the
 corrections read route (**ADR-0031**), the CLI `--limit` bound, merchant
 fingerprinting (**ADR-0043**), buyer/blank-row capture (**ADR-0044**), and the
 results list (**ADR-0046**). §1.6's "packaging gap" was **withdrawn** — it was
@@ -1064,12 +1092,16 @@ never one.
      eval harness or believing its output.** A local run prints the six §16
      metrics and licenses only "the pipeline completes"; liveness artefacts stay
      out of `eval/results/`; and the local timing is **not** to be re-derived.
-   - **0038** — the theme control. **Read before touching the theme, the
-     header, or anything that wants browser storage.** Three states (`system`
-     removes the attribute, so ADR-0027's precedence rule stays reachable both
-     ways); a pre-paint script in `index.html` whose duplicated storage key is
-     pinned by a text-reading test; and the **narrowing of ADR-0024** that
-     permits exactly one key, which nothing else inherits.
+   - **0038** — the theme control, **SUPERSEDED 2026-08-25**: you ruled the
+     chooser out, and it was removed end to end at `824bf46` — the control, its
+     stylesheet, `src/theme.ts`, the pre-paint script in `index.html` and both
+     test files. **ADR-0027's dark theme survives entire**; nothing writes
+     `data-theme` any more, so `tokens.css` falls back to `prefers-color-scheme`
+     and a reviewer on a dark-set OS still gets the dark palette. Still worth
+     reading before touching the theme or the header — for **why the removal
+     could not stop at the button**, which is the part that generalises.
+     **ADR-0024's narrowing is moot rather than reversed**: this application now
+     writes nothing to browser storage at all.
    - **0037** — CI runs the gate runner. **Read before touching CI or adding a
      test that needs an optional package.** The workflow runs
      `scripts/verify.py` rather than re-listing gates; it fires on every branch
@@ -2003,9 +2035,13 @@ until ISSUE-001 runs. Phase 6 was built and cannot be validated.
 
 ## 4. Phase 7 — self-consistency (P7.T1)
 
-Wire `run_consistency` (`extract/extractor.py`, zero references in
-`pipeline.py`) for handwritten/low-legibility; **gate on
-`triage.is_handwritten`, never `document_type`**; consistency runs never cached.
+**DONE 2026-08-25 at `b3bc14e`.** `pipeline.py` calls `run_consistency` for
+handwritten/low-legibility under `settings.consistency_enabled` **and**
+`_wants_consistency(triage_result)` — the `is_handwritten` spelling, never
+`document_type` — and passes no `cache=`, because a cache hit would return the
+same answer n times and manufacture perfect agreement. **The "zero references in
+`pipeline.py`" this section opened with is history**; it was the third copy of
+that claim in this file.
 
 **Its value went up on 2026-08-18 for a reason it was not designed for.** Cloud
 inference is **not deterministic at `temperature=0`** — two identical
@@ -2026,7 +2062,8 @@ only the number that gets written down and kept was wrong.
 
 ## 6. Still open from earlier phases
 
-R060/R061 grounding decision (also gates bbox); score `is_handwritten` from
+~~R060/R061 grounding decision (also gates bbox)~~ **taken, built at
+`3b023a4` — and it did not unblock bbox**; score `is_handwritten` from
 triage too; `is_receipt` has no consumer (never hard-reject on it); blank
 ~~blank pre-printed template rows (sibling of R052)~~ **DONE 2026-08-19** — `is_template_row`, ADR-0044.
 
@@ -2411,11 +2448,25 @@ measured text disagree, the measurement wins.**
    > someone was handed, and it is **yours** — I withdraw the "sooner is
    > cheaper" framing, because the history exposure is already at its maximum
    > and does not grow.
-8. **R060/R061 grounding (P2.T2)** — also gates bbox highlighting.
-   > **Recommended: defer behind item 1.** It is a three-way choice (model
-   > returns the text it read / a cheap OCR pass / drop the rules) and none of
-   > the three can be evaluated without a working provider. Deciding it now is
-   > guessing.
+8. ~~**R060/R061 grounding (P2.T2)** — also gates bbox highlighting.~~
+   **TAKEN 2026-08-25, built at `3b023a4`.** Of the three options below, the
+   middle one was chosen: **a cheap OCR pass**. `preprocess/ocr.py` reads a text
+   layer with word boxes; `_ground_in_ocr` carries its text onto the validation
+   context; `ocr_grounding_enabled` defaults to `False`, so the pass costs
+   nothing until someone turns it on.
+   > **The "also gates bbox highlighting" half did not come true, and that is
+   > worth more than the ruling.** A text layer was necessary for bbox and is
+   > nowhere near sufficient: `OcrLayer.words` has zero consumers,
+   > `_ground_in_ocr` keeps `layer.text` and drops the geometry, and nothing
+   > maps a word box onto a line item. That mapping is in no spec and no
+   > checkbox. **Discharging a gate is not the same as unblocking what it
+   > gated**, and this entry is left in place, struck, because the inference
+   > was made out loud here and was wrong.
+   >
+   > **Superseded reasoning, kept:** defer behind item 1; a three-way choice
+   > (model returns the text it read / a cheap OCR pass / drop the rules) that
+   > cannot be evaluated without a working provider, so deciding it now is
+   > guessing. What changed is that a provider *does* work now.
 9. **Close the PAN grouping residual?** Which priced route?
    > **Recommended: defer, and answer it together with item 10.** Both surfaces
    > are measured and pinned, so nothing is leaking while they wait.

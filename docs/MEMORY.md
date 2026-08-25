@@ -13,6 +13,61 @@ fast-forward and PUSHED** — 30 commits, zero merge commits — and the compose
 `VLM_*` environment landed after it. Verify with the commands below rather than
 believing this sentence.
 
+**THE GUARANTEE SHIPPED WITH A LIVE DEFECT AND THIS SESSION PUT IT THERE.** The
+`VLM_*` block went to the **worker only**, at `dbc1365`. `VLM_TIMEOUT_S` is the
+one variable in it the **API** also reads, because the progress route sweeps the
+row it is asked about (ADR-0054, `d1e446b`) and `_cutoffs` derives
+`started_cutoff` as `vlm_timeout_s * _SDK_ATTEMPTS * STRAND_MARGIN`, i.e.
+`x * 3 * 2`. The worker's 3600 gave **21600 s**; the API's unset default of 120
+gave **720 s**. A real receipt on this box takes about thirty minutes, so
+**opening a receipt's processing screen stranded the receipt it was showing**.
+Receipt `9a21e64d` is the evidence: `needs_review`, priority 1, carrying
+`strand_receipt`'s own reason — which no other writer emits — at a heartbeat age
+of **1206 s**, read as `review_tasks.opened_at - receipts.progress_at` in the
+running database. Past 720, nowhere near 21600.
+
+**Fixed in the file at `9d3a0df`. The running container is a separate act:**
+`docker compose up -d --no-deps api`. That had **not** been run when this was
+written — the attempt was refused by the permission classifier, correctly, and
+left with the owner. Until it runs, the hazard is armed and a peer confirmed the
+live API container still reports `vlm_timeout_s = 120`.
+
+**It falsifies a sentence in ADR-0054 written by the session that wrote the
+ADR**: that deriving the cutoff from `VLM_TIMEOUT_S` rather than configuring it
+separately meant two services could not disagree. They cannot disagree about the
+*formula*. They disagree about the *input*, which is the same bug one level
+down. **No test can see it** — both halves are individually correct and differ
+only across a container boundary, so a green suite after the fix proves nothing
+about the fix. The guard is that the two values now sit ten lines apart in one
+file with a comment saying they must match.
+
+**ELEVEN STALE CLAIMS WERE CORRECTED IN THE PROMPT THE SAME DAY, AND TWO WOULD
+HAVE SENT THE NEXT SESSION TO BUILD WORK THAT ALREADY EXISTED.**
+`run_consistency` was described as having "zero callers" in **three** places; it
+was wired at `b3bc14e`, gated on `settings.consistency_enabled` and
+`_wants_consistency(triage_result)`. The R060/R061 grounding decision was listed
+as blocking in **five**; it was taken and built at `3b023a4`. **The count is the
+lesson**: a claim in this pair is never in one place, so grep for the whole class
+before believing a correction is finished. The ordering advice attached to the
+first one — "close ISSUE-023 before P7.T1" — turned out to have been honoured,
+checked with `git merge-base --is-ancestor aa65a2b b3bc14e` rather than assumed.
+
+**And one of this session's own corrections was wrong in the direction that
+costs a session.** It said P5.T1's bounding boxes "became buildable" once the
+text layer landed. They did not. `OcrLayer.words` has **zero consumers** in
+`src/`; `_ground_in_ocr` keeps `layer.text` and drops the geometry; nothing maps
+a word box onto a line item, and that mapping is in no spec and no checkbox; and
+`line_items` holds **0 rows, 0 with a bbox**. **Discharging a gate is not the
+same as unblocking what it gated** — and a wrong claim that reads as a green
+light is worse than one that reads as a blocker.
+
+**The theme chooser is gone**, removed end to end on an owner ruling at
+`824bf46` — control, stylesheet, `src/theme.ts`, the `index.html` pre-paint
+script and both test files. **ADR-0027's dark theme survives entire**; nothing
+writes `data-theme`, so `tokens.css` falls back to `prefers-color-scheme`.
+ADR-0038 is **superseded**, and ADR-0024's narrowing is moot rather than
+reversed: this application writes nothing to browser storage at all.
+
 **Do not quote a single figure.** `transcription_accuracy` over five repeats of
 the three golden receipts is **min 60.00%, max 61.43%, median 60.00%** — and
 that is an average over receipts that scored **11%, 64% and 96%**. The spread
@@ -45,7 +100,7 @@ moves, and this file has carried a wrong issue count before.
 **No count of refreshes is written here** — it is a number that moves without its
 sentence changing, which is review standard 5.
 
-**Freshness anchor `0363d81`** — the last commit that is not this handoff pair.
+**Freshness anchor `49e49ec`** — the last commit that is not this handoff pair.
 **It is written twice below — here and inside the command.** Moving one and not
 the other is what happened on an earlier refresh, and the gate caught it because
 it parses the anchor out of the *command*.
@@ -66,7 +121,7 @@ nothing else: a stamp cannot name the commit that writes it. The test is a
 command, not a commit and not a count:
 
 ```
-git log --oneline 0363d81..main -- ":(top,exclude)docs/MEMORY.md" ":(top,exclude)docs/NEXT_SESSION_PROMPT.md"
+git log --oneline 49e49ec..main -- ":(top,exclude)docs/MEMORY.md" ":(top,exclude)docs/NEXT_SESSION_PROMPT.md"
 git log --oneline refs/remotes/origin/main..main   # what a push would send
 git ls-remote --heads origin main                  # authoritative on what is pushed
 git branch --no-merged main                        # named FOUR on 2026-08-25
