@@ -354,6 +354,49 @@ and it derives three other timeouts — the comment on that line in
 `docker-compose.yml` has the four numbers and why the 4.5-day unstarted window
 is the one to watch.
 
+#### What that upload actually did, measured
+
+**It did not produce an extraction, and you should expect the same.** Receipt
+`9a21e64d`, `eval/golden/images/r001.jpg`, on 2026-08-25, from the worker's own
+timestamps:
+
+| t | event |
+|---|---|
+| `06:44:44` | `Processing receipt 9a21e64d… from api` |
+| `07:05:43` | `POST http://ollama:11434/v1/chat/completions "HTTP/1.1 200 OK"`, then the OpenAI SDK **retries** |
+| `07:06:44` | `killed horse pid 14` — `Work-horse terminated unexpectedly; waitpid returned None` |
+
+**1320s, and the job died.** The receipt is nonetheless terminal —
+`status: needs_review`, `stage: extract`, `confidence: 0.000`, every field
+`null`, no line items, no findings.
+
+Three things follow, and the order matters:
+
+* **This was NOT the job ceiling.** Verified by calling the real function in
+  the running container rather than doing the arithmetic: `VLM_TIMEOUT_S=3600`
+  gives `job_timeout_for(settings) = 32580` — 9.05 hours. The horse died at
+  1320s, 4% of the way to it. **ISSUE-029's fix is in place and is not the
+  cause here**; do not "fix" this by raising the ceiling again.
+* **The terminal-state guarantee worked.** A SIGKILLed work-horse raises no
+  Python exception — there is nothing to catch — so before ADR-0054 this
+  receipt would have sat `pending` forever. It reached a terminal state anyway.
+  **That is the guarantee firing against a real kill rather than a test
+  double**, and it is the reason a dead job here costs you a bad row instead of
+  a stuck queue.
+* **The cause of the kill is NOT established.** The leading hypothesis is the
+  kernel OOM killer — 7.59 GiB total on this box, `ollama` already holding 3.94
+  GiB, and the horse died 61s into a retry that would ask for a second
+  inference. But the container's own `OOMKilled` flag is `false` with 0
+  restarts, which is consistent with the *child* being killed while PID 1
+  survived and is **not** evidence for OOM. Nobody has measured it. Treat it as
+  a lead.
+
+So: on this hardware the runbook above proves the **plumbing** end to end —
+auth, upload, blob, queue, worker, a real HTTP 200 from a real model, and a
+terminal state. It does **not** demonstrate a working extraction, and no run on
+this box has. ADR-0039 already rules local inference a liveness check and never
+a measurement; this is what that looks like from the operator's side.
+
 ### Step 8 — run the gates
 
 On the **host**, not in a container:
@@ -423,15 +466,21 @@ published to the host.
 | the UI only ever shows the sign-in form | no account exists | step 4 |
 | `/app/` logs two 401s on load | `/auth/me` and `/metrics` fired anonymously | nothing — expected, ADR-0026 |
 | a receipt sits at `stage: triage` forever | either the model was never pulled, or it is simply slow | `docker exec ollama ollama list`, then `docker stats` — high `ollama` CPU means it is working |
+| a receipt reaches `needs_review` with every field `null` and `confidence 0.000` | the work-horse was killed mid-pipeline; the terminal-state guarantee marked it rather than leaving it stuck | `docker logs receipts-worker` and look for `killed horse` — see §6 step 7. **Not** the job ceiling; check `job_timeout_for` before assuming it is |
 | `receipts users add` hangs with no output | a TTY was allocated, so `_read_password` took the `getpass` branch instead of reading the pipe | add `-T` to `docker compose run` |
 
-**Which of those were actually seen, and which are derived.** Rows 2, 3 and 5
-were observed directly on 2026-08-25. Row 1's message was produced by a
+**Which of those were actually seen, and which are derived.** Rows 2, 3, 5 and
+**7** were observed directly on 2026-08-25 — row 7 on receipt `9a21e64d`, with
+the worker's timestamps in §6 step 7. Row 1's message was produced by a
 throwaway compose file naming a volume that did not exist, not by removing the
-`ollama` volume — the name in the table is substituted. Rows 4, 6 and 7 are
+`ollama` volume — the name in the table is substituted. Rows 4, 6 and 8 are
 derived from the code (`build_auth_router` has no bootstrap account and no
 registration route; `_read_password` branches on `isatty()`) and were **not**
 reproduced. Treat the derived rows as leads, not as findings.
+
+**Row 7's *cause* is a lead even though the row itself was observed.** That the
+horse was killed and the receipt still went terminal is measured; *why* it was
+killed is not. The two halves of that row have different standing.
 
 ---
 
