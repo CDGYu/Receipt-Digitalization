@@ -318,7 +318,23 @@ worktrees. Nothing was lost, and four things were learned the hard way:
   of five gates for three sessions. Say which command you ran.
 - **A branch push carries every session's commits to the remote.** Merging `main`
   into a feature branch to stay fast-forward-ready and pushing it publishes
-  whatever is on `main`. "Unpushed" is not a per-session property.
+  whatever is on `main`. "Unpushed" is not a per-session property. **This is not
+  a policy breach** — `feat/*` is self-authorised and `origin/main` never moved
+  unauthorised. What nobody noticed was the *disclosure surface*.
+- **"It is on the remote" is a disclosure, not a backup, and all three sessions
+  said it the wrong way round.** Each of us reassured a user that another's work
+  "was backed up on the remote, so nothing is at risk", citing a *feature*
+  branch. A branch ref is not durable: its owner may delete or force-push it at
+  any time, and it is not what anyone restores from. **`origin/main` is the
+  durable ref here.** The reassurance was true by coincidence and unsound as
+  reasoning, which is the worst combination — nobody had done anything wrong,
+  and the sentence would still have misled.
+- **Ancestor: inseparable. Tip: separable.** If your commit is an *ancestor* of
+  someone else's, their push carries it and they cannot split it without
+  rewriting your commit. If it is the *tip*, it can be left behind —
+  `git push origin <earlier-sha>:main` publishes up to that point and holds the
+  rest. Worth knowing before anyone concludes a push is all-or-nothing; it was
+  asserted here about one case and quietly false about the next.
 - **An authorisation must arrive in the channel that acts on it.** A relayed
   "the owner said yes" is indistinguishable from a misread one. `feat/*` is
   self-authorised; `main` is not.
