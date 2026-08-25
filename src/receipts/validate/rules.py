@@ -804,6 +804,80 @@ class TaxBreakdownSums(Rule):
         ]
 
 
+@register
+class NothingWasPurchased(Rule):
+    id = "R026"
+    severity = Severity.ERROR
+    description = (
+        "Every transcribed line is flagged as a blank pre-printed row, on a "
+        "receipt that shows money."
+    )
+
+    """The one shape where mis-flagging a row is silent instead of loud.
+
+    A mis-flagged row is caught by arithmetic only while another purchase
+    survives: with two filled rows the sum goes short and R020 fires (or R024,
+    with no printed subtotal). With **one** filled row, flagging it empties
+    `_purchased`, `sum_line_nets` returns None, both rules SKIP, and the
+    reconciliation goes offline rather than failing -- measured 2026-08-19 as
+    zero findings at any severity (ISSUE-006).
+
+    That silence is deliberate in `sum_line_nets` and must stay: a null
+    `line_total` on any blank pre-printed row would otherwise take the whole
+    receipt's arithmetic offline. So the gap is closed by a rule that asks a
+    different question -- not by loosening the two that skip.
+
+    It matters because the flag also governs the export: `_purchased` is what
+    `export/xlsx.py` writes, so the row leaves the books at the same moment it
+    stops being checked. It is the shape the entire golden corpus has -- r001,
+    r002 and r003 each carry exactly one filled row on a pre-printed form.
+    """
+
+    def _printed_money(self, r) -> Decimal | None:
+        """What the receipt claims to have charged, or None if it claims nothing.
+
+        `total` first, `subtotal` as the fallback for a form that prints no
+        total. A zero or absent figure is not a defect: an unfilled
+        pre-printed form legitimately has every row flagged and charges
+        nothing, and firing there would make the rule "every row is flagged",
+        which is not the defect.
+        """
+        for value in (r.totals.total, r.totals.subtotal):
+            if value is not None and value > 0:
+                return value
+        return None
+
+    def applies(self, r, ctx) -> bool:
+        # An empty body is R013's case; two rules must not report one problem.
+        return (
+            bool(r.line_items)
+            and not _purchased(r)
+            and self._printed_money(r) is not None
+        )
+
+    def check(self, r, ctx) -> list[Finding]:
+        money = self._printed_money(r)
+        if money is None:  # gated by applies(); a rule must never raise
+            return []
+        return [
+            self.finding(
+                f"All {len(r.line_items)} transcribed lines are flagged as blank "
+                f"pre-printed rows, but the receipt shows {money}. Nothing counts "
+                "as a purchase, so the line-item arithmetic cannot run and every "
+                "row is excluded from the export. If one of these was actually "
+                "bought, clear its template flag.",
+                field_paths=[
+                    f"line_items[{item.position}].is_template_row"
+                    for item in r.line_items
+                ],
+                context={
+                    "flagged_rows": len(r.line_items),
+                    "printed_amount": str(money),
+                },
+            )
+        ]
+
+
 # =========================================================================== #
 # PLAUSIBILITY
 # =========================================================================== #

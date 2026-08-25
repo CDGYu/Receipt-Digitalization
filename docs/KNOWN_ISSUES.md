@@ -1173,15 +1173,38 @@ R051 and by nothing else, so the gap is open on the production path.
 
 *(Heading kept as written, and it stopped being true on 2026-08-23 — the review
 screen now shows the flag and lets a reviewer change it. Citations name the
-issue number, not the heading. What survives is the arithmetic residual below,
-which the control does not touch.)*
+issue number, not the heading. The arithmetic residual below outlived it and
+was closed 2026-08-25 by R026.)*
 
-**Status:** OPEN, NARROWED — **the visibility half is CLOSED 2026-08-23** on
-`feat/label-provenance-rule`. `LineItemsTable` renders a `Template` column, a
+**Status:** **RESOLVED 2026-08-25** on `fix/prompt-hash-and-template-unit`, in
+two halves. The **visibility half closed 2026-08-23** on
+`feat/label-provenance-rule`: `LineItemsTable` renders a `Template` column, a
 per-row checkbox with the accessible name `Template row {position}`, bound to
 `line_items[{position}].is_template_row` and sending the text `_coerce_bool`
-reads. **The silent-arithmetic residual below is untouched and is what keeps
-this issue open.**
+reads. The **silent-arithmetic residual closed 2026-08-25** with **R026**, which
+fires when every transcribed line is flagged on a receipt that shows money —
+the one shape where `sum_line_nets` returns `None`, R020 and R024 both skip, and
+the reconciliation went offline instead of failing.
+
+**Measured on the corpus this issue was measured on.** As labelled, R026 is
+silent on r001, r002 and r003 and the error count stays 0. Mis-flag the sole
+purchase on each and R026 fires on all three — where 2026-08-19 measured
+**zero findings at any severity**.
+
+**R020 and R024 were deliberately not widened.** Their silence comes from
+`sum_line_nets` returning `None` on an empty purchase set, and that is
+load-bearing: a null `line_total` on any blank pre-printed row would otherwise
+take the whole receipt's arithmetic offline. The gap is closed by a rule asking
+a different question, and `test_R020_and_R024_really_are_silent_on_that_shape`
+records that so nobody deletes R026 and loosens those two instead.
+**Two things under "What is still open" survive this resolution and are not
+claimed by it**, both recorded there rather than dropped: the editable column
+set is bound to `_LINE_ITEM_FIELDS` by prose and not by any property (a
+deliberate asymmetry, because `position` is correctable and deliberately not
+offered), and a checkbox cannot carry design section 4's `null` mark, so an
+`is_template_row` of `null` renders identically to `false` — pre-existing,
+shared with `meta.is_handwritten` and `meta.receipt_is_inconsistent`, and an
+ADR-0027 decision rather than a repair.
 **Owner action required:** no — the ruling was given 2026-08-23: *"I want it to
 be editable so if the result is wrong, they can change it."* Read-only was the
 alternative and was not chosen.

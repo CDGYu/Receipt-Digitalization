@@ -438,6 +438,138 @@ def test_R024_silent_when_subtotal_present(ctx):
 
 
 # --------------------------------------------------------------------------- #
+# The sole purchase, mis-flagged (R026 / ISSUE-006)
+#
+# A mis-flagged row is loud only while another purchase survives: with two
+# filled rows the sum goes short and R020 (or R024, with no subtotal) fires.
+# With ONE filled row `_purchased` becomes empty, `sum_line_nets` returns None,
+# both rules SKIP, and the arithmetic goes offline rather than failing --
+# measured 2026-08-19 as zero findings at any severity.
+#
+# **The one-purchase shape is the whole point of these tests.** A two-row
+# fixture is caught by R020/R024 already and would prove nothing about the
+# silent case, which is ISSUE-006 step 4's explicit warning. It is also the
+# shape every golden receipt has: r001, r002 and r003 each carry exactly one
+# filled row on a pre-printed form.
+# --------------------------------------------------------------------------- #
+
+
+def sole_purchase_receipt() -> ReceiptExtraction:
+    """A pre-printed form with blank product rows and exactly one filled line."""
+    r = clean_receipt()
+    r.line_items = [
+        LineItem(position=0, description_raw="PREMIUM 97", is_template_row=True),
+        LineItem(position=1, description_raw="REGULAR 91", is_template_row=True),
+        LineItem(
+            position=2,
+            description_raw="CLEAN DIESEL",
+            qty=D("10"),
+            unit_price=D("98.00"),
+            line_total=D("980.00"),
+        ),
+    ]
+    r.totals = Totals(
+        subtotal=D("980.00"),
+        tax=D("0.00"),
+        discount=D("0.00"),
+        total=D("980.00"),
+        tender=D("1000.00"),
+        change=D("20.00"),
+    )
+    return r
+
+
+def test_the_sole_purchase_receipt_is_clean_as_labelled(ctx):
+    """The precondition. Without it the test below cannot tell a rule that fires
+    on the mis-flag from one that fires on the fixture."""
+    report = validate(sole_purchase_receipt(), ctx)
+    assert not report.has_errors, report.summary()
+    assert not report.fired("R026")
+
+
+def test_mis_flagging_the_sole_purchase_is_not_silent(ctx):
+    """ISSUE-006's residual: the only silent-wrong-answer on the board.
+
+    Flagging the one filled row empties the purchase set, so the row leaves
+    every total, every arithmetic check AND the export -- and before R026
+    nothing said so at any severity. A reviewer could approve a receipt whose
+    money had quietly left the books.
+
+    Asserted as the property first (**something** fires) and only then as the
+    rule, so a later rule that catches this differently keeps the test honest
+    rather than making it wrong.
+    """
+    r = sole_purchase_receipt()
+    r.line_items[2].is_template_row = True
+
+    report = validate(r, ctx)
+
+    assert report.findings, "a mis-flagged sole purchase produced no findings at all"
+    assert report.has_errors, f"not raised to error severity: {report.summary()}"
+    assert report.fired("R026"), report.summary()
+
+
+def test_R020_and_R024_really_are_silent_on_that_shape(ctx):
+    """Why R026 has to exist rather than R020/R024 being widened.
+
+    Both skip on an empty purchase set by way of `sum_line_nets` returning
+    None -- deliberately, because a null `line_total` on any blank pre-printed
+    row would otherwise take the whole reconciliation offline. This records
+    that the silence is by construction and not an oversight, so nobody
+    "fixes" R026 by deleting it and loosening those two instead.
+    """
+    r = sole_purchase_receipt()
+    r.line_items[2].is_template_row = True
+
+    assert not fired(r, ctx, "R020")
+    assert not fired(r, ctx, "R024")
+
+
+def test_R026_silent_on_a_wholly_blank_form(ctx):
+    """A form with nothing bought and nothing owed is consistent, not broken.
+
+    This is the case that stops R026 from being "every row is flagged" -- an
+    unfilled pre-printed form is exactly that and is not a defect. What makes
+    it one is money printed on a receipt that bought nothing.
+    """
+    r = sole_purchase_receipt()
+    r.line_items[2].is_template_row = True
+    r.totals = Totals(
+        subtotal=D("0.00"), tax=D("0.00"), discount=D("0.00"), total=D("0.00")
+    )
+
+    assert not fired(r, ctx, "R026")
+
+
+def test_R026_silent_when_a_purchase_survives(ctx):
+    """Two filled rows, one mis-flagged: R020's case, not R026's.
+
+    R026 is about the arithmetic going *offline*, not about it being wrong.
+    Without this, widening R026 to fire whenever any row is flagged would pass
+    every other test in this section.
+    """
+    r = sole_purchase_receipt()
+    r.line_items[0].is_template_row = False
+    r.line_items[0].qty = D("1")
+    r.line_items[0].unit_price = D("20.00")
+    r.line_items[0].line_total = D("20.00")
+    r.totals.subtotal = D("1000.00")
+    r.totals.total = D("1000.00")
+    r.line_items[2].is_template_row = True
+
+    assert not fired(r, ctx, "R026")
+    assert fired(r, ctx, "R020"), "the two-row case must still be R020's"
+
+
+def test_R026_silent_when_no_rows_were_transcribed(ctx):
+    """An empty body is R013's, and two rules must not report one problem."""
+    r = sole_purchase_receipt()
+    r.line_items = []
+
+    assert not fired(r, ctx, "R026")
+
+
+# --------------------------------------------------------------------------- #
 # Tax-inclusive line pricing (R020 / R024)
 #
 # On a Philippine BIR "SALES INVOICE" the Amount column is VAT-INCLUSIVE, so
@@ -1270,10 +1402,16 @@ def test_R071_leaves_the_zero_row_case_to_R013(ctx):
 # --------------------------------------------------------------------------- #
 
 
-def test_all_31_rules_registered():
+def test_all_32_rules_registered():
+    """31 until 2026-08-25, when R026 closed ISSUE-006's silent residual.
+
+    The number is in the name on purpose: it is what a reader checks the
+    registry against, so adding a rule without touching this line is not
+    possible by accident.
+    """
     ids = [r.id for r in RULES]
-    assert len(ids) == 31
-    assert len(set(ids)) == 31
+    assert len(ids) == 32
+    assert len(set(ids)) == 32
 
 
 def test_validate_never_mutates_input(ctx):
