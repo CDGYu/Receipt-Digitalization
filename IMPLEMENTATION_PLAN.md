@@ -538,15 +538,30 @@ and the two that never did were indistinguishable from outside.)*
 
 ### Task P7.T1 — Enable consistency in the pipeline for handwritten/low-legibility
 
-> **STATUS 2026-08-23 — NOT DONE.** `run_consistency` lives in
-> `extract/extractor.py` with **zero callers**. Gate on `triage.is_handwritten`,
-> never `document_type`. **Close ISSUE-023 first** — wiring this in now would put
-> two known defects onto a live path.
+> **STATUS 2026-08-25 — WIRED, default OFF. Acceptance NOT met.** `b3bc14e`.
+> ISSUE-023 closed at `aa65a2b`, so the "two known defects on a live path"
+> blocker is discharged: `_vote` now compares money through `within_tolerance`
+> and line items through `align_line_items`.
+>
+> **The gate is `consistency_enabled` AND the receipt**, and neither half is
+> sufficient — flag alone makes every printed receipt pay for a pass aimed at
+> handwriting; receipt alone starts spending on every deployment that upgrades.
+> Both proven red by mutation.
+>
+> **Two corrections to the boxes below, kept rather than silently satisfied.**
+> The first box spells the trigger `document_type == "handwritten_receipt"`; the
+> STATUS note it replaced said `is_handwritten`, **never** `document_type`. Those
+> are not in conflict — `is_handwritten` is a property covering `document_type is
+> HANDWRITTEN_RECEIPT` **or** `print_type in (HANDWRITTEN, MIXED)` — so the
+> checkbox was strictly narrower and missed a hand-annotated thermal receipt.
+> And the note dropped the *legibility* half that this task's own title carries;
+> both are implemented, with `UNREADABLE` excluded deliberately.
 
-- [ ] Gate `run_consistency` on `triage.document_type == "handwritten_receipt"` or `legibility in {poor, fair}`; feed disputed fields into scoring (§12). Ensure the cache still refuses non-zero temperature.
-- [ ] **Review fix option:** allow `n=5` for critical fields via config.
-- [ ] Re-run `calibrate`; commit results.
-**Acceptance:** handwritten auto-approval rate/precision recorded before and after.
+- [x] Gate `run_consistency` on the receipt — `is_handwritten` **or** `legibility in {poor, fair}`, `UNREADABLE` excluded — and feed disputed fields into scoring (§12). `b3bc14e`. **The cache clause was already true and already pinned** (`test_cache_only_stores_deterministic_calls`); the layer above it was not, and `run_consistency`'s "never cache these calls" promise is now pinned on the argument, proven red by threading a `ResponseCache` in.
+- [ ] **Review fix option:** allow `n=5` for critical fields via config. **Not built, and `consistency_runs` is not it.** That setting takes the whole pass to `n=5`; this box asks for a *different* `n` on critical fields, which is a per-field policy nothing here expresses.
+- [ ] Re-run `calibrate`; commit results. **Cannot be done on this box.** It needs a real model run, and ADR-0039 measures ~1896s/receipt CPU-only against a three-receipt golden set.
+
+**Acceptance:** handwritten auto-approval rate/precision recorded before and after. **NOT MET, and it is the reason the flag defaults OFF.** Nobody has measured whether this improves precision. ISSUE-034's hermetic ruling means the eval path measures a different prompt than production sends, so the before/after would need that settled first, and ISSUE-001 step 7 needs the golden set to be more than three handwritten receipts before the number would mean anything.
 
 ---
 
