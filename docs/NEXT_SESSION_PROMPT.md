@@ -329,6 +329,18 @@ worktrees. Nothing was lost, and four things were learned the hard way:
   durable ref here.** The reassurance was true by coincidence and unsound as
   reasoning, which is the worst combination — nobody had done anything wrong,
   and the sentence would still have misled.
+- **This repository already had that rule, in `docs/adr/0042`, and none of us
+  queried it.** Its census counts "reachable only from a branch, not from
+  `main`" as its **own row**, separate from "reachable from `main`", because it
+  treats the two as materially different. That is exactly the state all three
+  sessions called "backed up". Worse: the gate enforcing ADR-0042 lives in
+  `tests/test_freshness_check.py`, which was run repeatedly today — **the rule
+  was applied diligently in the domain it was written for (SHAs cited in
+  documents) and never carried across to the neighbouring question of whether
+  the work itself was safe.** Having a rule in one domain does not make you
+  reach for it in another, and the failure hides behind the diligence: in the
+  domain where you *do* apply it, you look careful. Check yourself against
+  ADR-0042 rather than against a maxim.
 - **Ancestor: inseparable. Tip: separable.** If your commit is an *ancestor* of
   someone else's, their push carries it and they cannot split it without
   rewriting your commit. If it is the *tip*, it can be left behind —
