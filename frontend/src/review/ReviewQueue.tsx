@@ -270,9 +270,13 @@ function QueueTable({
             </th>
             <th scope="col">Why</th>
             <th scope="col">Opened</th>
-            <th scope="col">
-              <span className="sr-only">Action</span>
-            </th>
+            {/* A visible word, not `className="sr-only"` -- **this app defines
+                no such class**, so that span rendered in full while claiming to
+                be hidden. Seen in a browser; `grep -rn "sr-only" src
+                --include=*.css` returns nothing, which is the proof. A visible
+                header is the better answer anyway: the column holds buttons,
+                and an empty `th` gives a screen reader nothing to announce. */}
+            <th scope="col">Action</th>
           </tr>
         </thead>
         <tbody>

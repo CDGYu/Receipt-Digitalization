@@ -3,6 +3,17 @@ import styles from './MoneyInput.module.css'
 
 export interface MoneyInputProps {
   readonly label: string
+  /** Render the label to assistive technology only.
+   *
+   *  For a money cell inside a table whose column header ALREADY says "Unit
+   *  price": painting it again in every row repeats the header once per line
+   *  item. Left visible in a form, where the label is the only thing naming the
+   *  field.
+   *
+   *  Clipped rather than `display: none` or `visibility: hidden`. Both of those
+   *  take the text out of the accessibility tree, which would leave the input
+   *  with NO accessible name -- the opposite of the intent. */
+  readonly labelHidden?: boolean
   readonly value: string | null
   readonly onChange: (next: string | null) => void
   /** The server's words for this field, verbatim, when the last submit was
@@ -71,14 +82,14 @@ export interface MoneyInputProps {
  * name, and the message would then be read twice, once as the name and once as
  * the description.
  */
-export function MoneyInput({ label, value, onChange, error }: MoneyInputProps) {
+export function MoneyInput({ label, labelHidden, value, onChange, error }: MoneyInputProps) {
   const id = useId()
   const errorId = useId()
   const active = error != null
   return (
     <>
       <label className={styles.field} htmlFor={id}>
-        {label}
+        <span className={labelHidden === true ? styles.labelHidden : undefined}>{label}</span>
         <input
           id={id}
           className={active ? `${styles.input} ${styles.invalid}` : styles.input}

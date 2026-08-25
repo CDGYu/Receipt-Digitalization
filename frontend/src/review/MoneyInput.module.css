@@ -47,7 +47,12 @@
  * that grid's tracks are `minmax(11rem, 1fr)` -- a *fixed* min track sizing
  * function switches the automatic minimum size off -- and is what keeps this rule
  * true if a track ever becomes `auto`. */
+/* `position: relative` is not decoration: `.labelHidden` below is absolutely
+ * positioned, and without a positioned ancestor it resolves against the
+ * viewport and scrolls away from its own field. The same trap
+ * `upload/UploadScreen.module.css` records for its clipped file input. */
 .field {
+  position: relative;
   display: flex;
   flex-direction: column;
   min-width: 0;
@@ -122,4 +127,28 @@
   color: var(--color-severity-error);
   font-family: var(--font-sans);
   font-size: var(--text-sm);
+}
+
+/* Visually hidden, still in the accessibility tree.
+ *
+ * `clip-path` with a 1px box, NOT `display: none` and NOT `visibility: hidden`
+ * -- both of those remove the text from the accessibility tree, and this text
+ * IS the input's accessible name, so hiding it that way would leave the control
+ * nameless. The same technique, for the same reason, as the clipped file input
+ * in `upload/UploadScreen.module.css`.
+ *
+ * What it fixes: `LineItemsTable` reuses this component in a table whose header
+ * row already says QTY, UNIT PRICE and LINE TOTAL, so every row repeated all
+ * three -- "Unit price 1", "Unit price 2" -- while the Description and SKU
+ * cells beside them showed none, because `TextCell` names itself with
+ * `aria-label`. Seen in Chromium; nothing in the five gates can see it. */
+.labelHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }

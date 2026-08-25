@@ -521,13 +521,20 @@ const CENSUS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
     // input's intrinsic `size="20"` width -- measured 246px against 92-119px
     // cells -- and the right-aligned em dash is pushed outside the clipped
     // scroller. The rule's own docblock carries the measurement.
-    '.field': 'display: flex, flex-direction: column, min-width, gap, font-family, font-size, color',
+    // `position: relative` anchors `.labelHidden`, which is absolutely
+    // positioned; without it the clipped label resolves against the viewport.
+    '.field':
+      'position: relative, display: flex, flex-direction: column, min-width, gap, font-family, font-size, color',
     '.input':
       'box-sizing: border-box, font-family, font-variant-numeric: tabular-nums, text-align: right, min-height, padding, border, border-radius, background, color, font-size',
     '.input::placeholder': 'color, opacity',
     '.input:placeholder-shown': 'border-left',
     '.invalid': 'border-color',
     '.error': 'margin, color, font-family, font-size',
+    // Visually hidden, still named for assistive technology. `clip-path`, not
+    // `display: none` -- this text IS the input's accessible name.
+    '.labelHidden':
+      'position: absolute, width, height, margin, padding, overflow: hidden, clip-path, white-space: nowrap',
   },
   'review/ReceiptForm.module.css': {
     '.form':

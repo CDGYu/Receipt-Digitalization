@@ -199,6 +199,7 @@ export function LineItemsTable({ items, fields, onChange, errors }: LineItemsTab
                       "9.800" is a real quantity here. */}
                   <MoneyInput
                     label={`Qty ${item.position}`}
+                    labelHidden
                     value={fields[`${at}.qty`]}
                     error={errors?.[`${at}.qty`]}
                     onChange={(value) => onChange(`${at}.qty`, value)}
@@ -215,6 +216,7 @@ export function LineItemsTable({ items, fields, onChange, errors }: LineItemsTab
                 <td className={styles.money}>
                   <MoneyInput
                     label={`Unit price ${item.position}`}
+                    labelHidden
                     value={fields[`${at}.unit_price`]}
                     error={errors?.[`${at}.unit_price`]}
                     onChange={(value) => onChange(`${at}.unit_price`, value)}
@@ -223,6 +225,7 @@ export function LineItemsTable({ items, fields, onChange, errors }: LineItemsTab
                 <td className={styles.money}>
                   <MoneyInput
                     label={`Line total ${item.position}`}
+                    labelHidden
                     value={fields[`${at}.line_total`]}
                     error={errors?.[`${at}.line_total`]}
                     onChange={(value) => onChange(`${at}.line_total`, value)}
