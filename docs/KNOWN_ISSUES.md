@@ -819,12 +819,31 @@ exactly as the extract branch does, pinned by a repair twin of
 `test_the_recorded_hash_describes_the_prompt_that_was_actually_sent`. Everything
 below describes the defect as it stood until then.
 **The migration decision this entry deferred was never taken, because it had no
-subject.** Measured 2026-08-25 against the local `receipts.db`: `extraction_runs`
-holds **0 rows**. Leave / backfill / version is a choice about historical repair
-rows and there were none, so the fix was free. That was only true because it was
-done before ISSUE-001 step 7 started writing runs. *Bound: that is the local dev
-SQLite file, which is gitignored; nobody has confirmed whether a deployed
-instance exists, and if one holds rows the decision comes back.*
+subject.** Leave / backfill / version is a choice about historical repair rows,
+and there are none.
+
+**Measured twice, and the second measurement is the one that counts.** The first
+was against the local `receipts.db` — `extraction_runs` 0 rows — and it carried
+a bound: *"that is the local dev SQLite file; nobody has confirmed whether a
+deployed instance exists, and if one holds rows the decision comes back."*
+
+**A deployed instance does exist, and it was found the same day.** The compose
+stack — `receipts-postgres`, `receipts-api`, `receipts-worker`, `receipts-redis`
+— was brought up by another session, migrated to `c7f1a9e4d208`, and given a
+real receipt to process. Measured against **that** database:
+
+    merchants                              -> 0
+    merchants with non-empty hints         -> 0
+    extraction_runs                        -> 3
+    extraction_runs where pass_name=repair -> 0
+    receipts                               -> 6
+
+So the deployed instance **does** hold `extraction_runs` rows — the bound's
+trigger — and **none of them are repair rows**, which is the only class this
+decision was ever about. The conclusion survives; the evidence behind it was the
+wrong database, and would have stayed wrong had a fourth session not started the
+stack. *`receipts.db` is not the runtime: the compose deployment reads Postgres,
+and ADR-0039's local path is a liveness check.*
 **The other half of this entry is NOT resolved and is now ISSUE-034** — the eval
 path extracting unhinted while `process_receipt` sends hints.
 **Owner action required:** no, for the hash. See ISSUE-034 for the rest.
