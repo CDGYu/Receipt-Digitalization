@@ -3653,13 +3653,33 @@ made a reviewer's line-items table misread at every width.
 | 8th column, before | 0 | 0 | 0 | 0.1 | 55.4 |
 | 8th column, after | 57.5 | 62.1 | 68.5 | 105.5 | 167.9 |
 
-No cell in the table overflows its control at any width. **`e2e/visual.spec.ts`
-itself was not re-run**, and this is a gap rather than a claim: that suite
-rebuilds `dist`, reseeds a shared SQLite database and binds port 8100, and two
-other sessions were live in this worktree at the time. The numbers above come
+No cell in the table overflows its control at any width. The numbers above come
 from an isolated probe that loads `LineItemsTable.module.css` and `tokens.css`
 verbatim from disk — which is the one thing the refuted reproduction below did
 not do.
+
+**~~`e2e/visual.spec.ts` itself was not re-run.~~ IT HAS NOW BEEN RUN, and it
+passes: 2026-08-25, `npx playwright test visual` at `70dd971`.** 15 of 15 tests,
+**113 screenshots, 76 measurement records, 560 table cells checked for
+overflow**, exit 0. The gap this paragraph recorded is closed. Coordination was
+the whole obstacle and it cost two messages: project-31 and project-54 were both
+asked before the run and both confirmed they were touching neither
+`frontend/dist`, port 8100, nor `var/e2e/`.
+
+**Why this is new evidence and not a re-run of the probe.** `443fa86` added
+`box-sizing: border-box` to `.head th`. jsdom has no layout engine, so
+`frontend/tests/stylesheets.test.ts` can prove that declaration is *present* and
+can never prove the columns *line up*. Only a real engine can. The probe above is
+closer but still synthetic; the suite drives the actual application.
+
+**One engine, and that is a choice rather than a limit.** `playwright.config.ts`
+declares no `projects` block, so it runs Playwright's default — **Chromium
+only** — while Chromium, Firefox and WebKit are all installed on this box.
+**WebKit is specifically worth running here**, because `box-sizing` on table
+headers is where it has historically differed, and it remains **untested**: a
+`--browser=webkit` run was killed seconds in, before Playwright emitted a single
+line. **A killed job is not a failing result and must not be read as one** — it
+left an orphaned `serve_review_e2e.py` holding port 8100, since released.
 
 ### The symptom, measured
 
