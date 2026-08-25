@@ -30,6 +30,7 @@ from __future__ import annotations
 import glob
 import io
 import logging
+import mimetypes
 import os
 import tempfile
 import uuid
@@ -62,7 +63,11 @@ from receipts.persist.repository import (  # noqa: E402
 )
 from receipts.persist.session import make_engine, make_session_factory  # noqa: E402
 from receipts.persist.users import ROLE_ADMIN, ROLE_REVIEWER, create_user  # noqa: E402
-from receipts.review.api import create_app  # noqa: E402
+from receipts.review.api import (  # noqa: E402
+    _sniff_media_type,
+    _web_safe_image,
+    create_app,
+)
 from receipts.review.queue import enqueue_review, next_task  # noqa: E402
 from receipts.review.schemas import CorrectionPatch  # noqa: E402
 from receipts.score.confidence import ReceiptStatus  # noqa: E402
@@ -71,6 +76,26 @@ from receipts.score.confidence import ReceiptStatus  # noqa: E402
 #: ``receipts.ingest.ingest._sniff_content_type``): the ``\xff\xd8`` header
 #: is all the validator inspects.
 JPEG_BYTES = b"\xff\xd8\xff\xe0" + b"\x00" * 128 + b"\xff\xd9"
+
+
+def _heic_bytes() -> bytes:
+    """A genuine HEIC, built rather than checked in.
+
+    Built with the same ``pillow_heif`` the service decodes with, so the fixture
+    cannot drift from what the code can read. A hand-rolled byte string with an
+    ``ftyp`` header would sniff as HEIC and fail to decode, which would make the
+    transcode fall through its own error path and the test pass for the wrong
+    reason.
+    """
+    import io
+
+    import pillow_heif
+    from PIL import Image
+
+    pillow_heif.register_heif_opener()
+    buffer = io.BytesIO()
+    Image.new("RGB", (16, 16), (10, 200, 30)).save(buffer, format="HEIF")
+    return buffer.getvalue()
 
 MAIN_RECEIPT = uuid.uuid4()  # receipt_id -- needs_review, image = JPEG_BYTES
 OTHER_RECEIPT = uuid.uuid4()  # other_receipt_id -- auto_approved
@@ -580,6 +605,85 @@ def test_patch_with_an_unmappable_path_changes_nothing(
 def test_image_url_is_signed_and_the_blob_streams(reviewer_client, receipt_id):
     url = reviewer_client.get(f"/receipts/{receipt_id}/image").json()["url"]
     assert reviewer_client.get(url).content == JPEG_BYTES
+
+
+def test_a_heic_blob_reaches_the_browser_as_a_real_jpeg(
+    reviewer_client, session_factory, receipt_id, storage
+):
+    """The review screen could never show an iPhone photo, and said so wrongly.
+
+    **This is a regression test for a defect the owner hit, not a hypothetical.**
+    Ingest accepts ``.heic``/``.heif`` on purpose and sniffs the ``ftyp`` box to
+    label them; the pipeline reads them, because ``preprocess.image_ops``
+    registers ``pillow_heif``. But **every blob is stored under the key
+    ``original.jpg`` whatever was uploaded**, and the route used to name the
+    media type with ``mimetypes.guess_type`` over that key -- so HEIC bytes went
+    out as ``Content-Type: image/jpeg``. Chrome and Firefox decode nothing, the
+    ``<img>`` fires ``onError``, ``ImagePane`` re-signs the link and fails again,
+    and the reviewer is told "Could not load the receipt image, even with a
+    freshly signed link" -- **blaming the link, which was always fine.**
+
+    Measured on the running deployment 2026-08-25: the route answered
+    ``HTTP 200 image/jpeg``, 2,615,999 bytes beginning ``ftypheic``, and 4 of
+    the 10 stored blobs were HEIC.
+
+    The assertion is on the **magic bytes**, not the header. A route that set
+    ``image/jpeg`` and streamed the HEIC unchanged is exactly the bug, and would
+    pass a header-only check.
+    """
+    heic = _heic_bytes()
+    assert heic[4:8] == b"ftyp", "fixture is not HEIC; the test would prove nothing"
+
+    with session_factory() as session:
+        key = session.get(Receipt, receipt_id).image_key
+    storage.put(key, heic, "image/jpeg")
+
+    url = reviewer_client.get(f"/receipts/{receipt_id}/image").json()["url"]
+    response = reviewer_client.get(url)
+
+    assert response.status_code == 200
+    assert response.content[:3] == b"\xff\xd8\xff", (
+        "the bytes on the wire are still not a JPEG, so a browser cannot paint "
+        "them however the Content-Type is labelled"
+    )
+    assert response.headers["content-type"].startswith("image/jpeg")
+
+
+def test_a_jpeg_blob_is_streamed_byte_for_byte(reviewer_client, receipt_id):
+    """The common case must not pay for the HEIC case.
+
+    A transcode that ran unconditionally would re-encode every JPEG on every
+    load -- generation loss on the exact pixels a reviewer is squinting at to
+    read a total. Identity here is the pin that says "already web-safe" is a
+    real short-circuit and not a coincidence of the fixture round-tripping.
+    """
+    url = reviewer_client.get(f"/receipts/{receipt_id}/image").json()["url"]
+    assert reviewer_client.get(url).content == JPEG_BYTES
+
+
+def test_the_stored_key_never_decides_the_media_type(session_factory, receipt_id):
+    """The filename lies for every blob in this system, so it cannot be trusted.
+
+    ``mimetypes.guess_type`` on ``original.jpg`` answers ``image/jpeg`` for HEIC,
+    PNG and a truncated stub alike. This asserts the sniffer disagrees with the
+    key -- which is the whole reason the fix is at the bytes and not the name.
+    """
+    with session_factory() as session:
+        key = session.get(Receipt, receipt_id).image_key
+    assert key.endswith(".jpg"), "fixture changed; this test is about a lying key"
+    assert mimetypes.guess_type(key)[0] == "image/jpeg"
+    assert _sniff_media_type(_heic_bytes()) == "image/heic"
+
+
+def test_an_undecodable_blob_is_passed_through_rather_than_failing(reviewer_client):
+    """Widening what works must never become a new way to fail.
+
+    Bytes nothing recognises are returned untouched. A transcode that raised on
+    junk would turn a broken image into a broken screen -- and the 70-byte stub
+    sitting in this deployment's storage is exactly that shape.
+    """
+    junk = b"not an image at all"
+    assert _web_safe_image(junk) == (junk, "application/octet-stream")
 
 
 def test_a_valid_signature_for_a_missing_blob_is_404_not_500(reviewer_client, other_receipt_id):

@@ -603,6 +603,94 @@ def _image_key_for(receipt: Receipt, variant: ImageVariant) -> str:
     return receipt.image_key
 
 
+#: Formats a browser will paint from an ``<img>`` tag without help. HEIC is
+#: deliberately absent: Safari renders it, Chrome and Firefox do not, and a
+#: reviewer's browser is not something this service gets to choose.
+_WEB_SAFE_MEDIA_TYPES = frozenset({"image/jpeg", "image/png", "image/webp", "image/gif"})
+
+#: Leading bytes are enough to name every format that reaches storage here.
+#: Keyed by (offset, marker) because the ISO-BMFF ``ftyp`` box sits at 4.
+_MAGIC: tuple[tuple[int, bytes, str], ...] = (
+    (0, b"\xff\xd8\xff", "image/jpeg"),
+    (0, b"\x89PNG\r\n\x1a\n", "image/png"),
+    (0, b"GIF8", "image/gif"),
+    (8, b"WEBP", "image/webp"),
+    (4, b"ftyp", "image/heic"),
+)
+
+
+def _sniff_media_type(data: bytes) -> str | None:
+    """Name the format from the bytes, or ``None`` if nothing matches.
+
+    **The filename cannot be trusted here and never could.** Every blob this
+    service stores is keyed ``original.jpg`` whatever was uploaded, so
+    ``mimetypes.guess_type`` on the key answers ``image/jpeg`` for a HEIC, a
+    PNG and a truncated stub alike.
+    """
+    for offset, marker, media_type in _MAGIC:
+        if data[offset : offset + len(marker)] == marker:
+            return media_type
+    return None
+
+
+def _web_safe_image(data: bytes) -> tuple[bytes, str]:
+    """Return ``(bytes, media_type)`` a browser can actually paint.
+
+    **This exists because ingest accepts HEIC on purpose and the review screen
+    could never show it.** ``ingest.py`` lists ``.heic``/``.heif`` among its
+    accepted suffixes and sniffs the ``ftyp`` box to label them ``image/heic``;
+    the pipeline reads them happily, because ``preprocess.image_ops`` registers
+    ``pillow_heif`` at import. But the blob is stored under ``original.jpg`` and
+    was served with a media type guessed from that name, so an iPhone photo went
+    to the browser as ``Content-Type: image/jpeg`` carrying HEIC bytes. Chrome
+    and Firefox decode nothing, the ``<img>`` fires ``onError``, and
+    ``ImagePane`` re-signs the link and fails again -- producing "Could not load
+    the receipt image, even with a freshly signed link", **which blames the link
+    when the link was always fine.** Measured 2026-08-25 on this deployment:
+    the route answered ``HTTP 200 image/jpeg`` with 2,615,999 bytes beginning
+    ``ftypheic``, and 4 of the 10 stored blobs were HEIC.
+
+    Transcoding here rather than at ingest is deliberate: it repairs the
+    receipts already in storage, which an ingest-side fix cannot reach without a
+    backfill.
+
+    A format that is already web-safe is returned **untouched** -- no decode, no
+    re-encode, no generation loss on the JPEGs that are the common case. Bytes
+    nothing recognises are returned untouched too, with the caller's fallback
+    media type; this function's job is to widen what works, never to become a
+    new way for an image to fail.
+
+    ``exif_transpose`` is applied because HEIC from a phone routinely carries an
+    orientation tag; without it the image loads and is sideways, which is the
+    next bug report rather than a fix.
+    """
+    sniffed = _sniff_media_type(data)
+    if sniffed is None or sniffed in _WEB_SAFE_MEDIA_TYPES:
+        return data, sniffed or "application/octet-stream"
+
+    # Imported here, not at module top: ADR-0014. `preprocess` pulls in Pillow,
+    # `pillow_heif` and cv2, and a module-top import would make every installed
+    # `receipts` command depend on them to start.
+    import io
+
+    from PIL import Image, ImageOps
+
+    from ..preprocess import image_ops  # noqa: F401  (registers the HEIF opener)
+
+    try:
+        with Image.open(io.BytesIO(data)) as opened:
+            upright = ImageOps.exif_transpose(opened) or opened
+            rendered = upright.convert("RGB")
+            buffer = io.BytesIO()
+            rendered.save(buffer, format="JPEG", quality=90)
+    except Exception:
+        # A blob that will not decode is still the reviewer's to see fail, and a
+        # 500 here would replace a broken image with a broken screen.
+        logger.exception("could not transcode a %s blob for the browser", sniffed)
+        return data, sniffed
+    return buffer.getvalue(), "image/jpeg"
+
+
 def _install_write_routes(app: FastAPI) -> None:
     @app.post("/upload", status_code=202)
     async def upload(
@@ -819,8 +907,14 @@ def _install_write_routes(app: FastAPI) -> None:
             raise HTTPException(
                 status_code=404, detail=f"no image stored for receipt {receipt_id}"
             ) from None
-        media_type = mimetypes.guess_type(key)[0] or "application/octet-stream"
-        return Response(content=data, media_type=media_type)
+        # The key is `original.jpg` whatever was uploaded, so guessing from it
+        # is how HEIC bytes went out labelled `image/jpeg`. Sniff the bytes and
+        # transcode anything a browser cannot paint; `mimetypes` stays as the
+        # fallback for a blob nothing recognises.
+        body, media_type = _web_safe_image(data)
+        if media_type == "application/octet-stream":
+            media_type = mimetypes.guess_type(key)[0] or media_type
+        return Response(content=body, media_type=media_type)
 
     @app.get("/review/next")
     def review_next(
