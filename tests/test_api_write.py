@@ -56,7 +56,12 @@ from receipts.persist.models import (  # noqa: E402
     ReviewState,
     ReviewTask,
 )
+from receipts.persist.repository import (  # noqa: E402
+    _LINE_ITEM_FIELDS,
+    _RECEIPT_FIELDS,
+)
 from receipts.persist.session import make_engine, make_session_factory  # noqa: E402
+from receipts.review.schemas import CorrectionPatch  # noqa: E402
 from receipts.persist.users import ROLE_ADMIN, ROLE_REVIEWER, create_user  # noqa: E402
 from receipts.review.api import create_app  # noqa: E402
 from receipts.review.queue import enqueue_review, next_task  # noqa: E402
@@ -329,19 +334,100 @@ def test_patch_writes_a_correction_attributed_to_the_session_user(
     assert correction.value_after == "1234.56"
 
 
+def _published_patch_paths() -> tuple[set[str], set[str]]:
+    """`CorrectionPatch`'s OpenAPI schema, as the set of paths a client can send.
+
+    Returns `(receipt_paths, line_item_fields)` — dotted `block.field` for the
+    nested blocks, and bare field names for `line_items[i].*`. Derived from
+    `model_json_schema()` rather than from the class attributes, because the
+    published schema is the artefact FastAPI serves and the thing a generated
+    client is built from.
+    """
+
+    def _first_ref(node: object) -> str | None:
+        """The `$defs` name this property points at, however it is wrapped.
+
+        Walks rather than pattern-matches: `merchant` is `anyOf[$ref, null]`
+        and `line_items` is `anyOf[array-of-$ref, null]`, and a third wrapper
+        would otherwise need a third branch here.
+        """
+        if isinstance(node, dict):
+            ref = node.get("$ref")
+            if isinstance(ref, str):
+                return ref.rsplit("/", 1)[-1]
+            for value in node.values():
+                found = _first_ref(value)
+                if found:
+                    return found
+        elif isinstance(node, list):
+            for value in node:
+                found = _first_ref(value)
+                if found:
+                    return found
+        return None
+
+    schema = CorrectionPatch.model_json_schema()
+    defs = schema["$defs"]
+    receipt_paths: set[str] = set()
+    line_item_fields: set[str] = set()
+    for block, prop in schema["properties"].items():
+        target = _first_ref(prop)
+        assert target is not None, f"{block} points at no $def this test can follow"
+        fields = set(defs[target]["properties"])
+        if block == "line_items":
+            line_item_fields = fields
+        else:
+            receipt_paths |= {f"{block}.{field}" for field in fields}
+    return receipt_paths, line_item_fields
+
+
+def test_the_patch_model_publishes_exactly_the_correctable_paths():
+    """ISSUE-009: the published schema is a second copy of the correctable set.
+
+    `apply_corrections` decides what is correctable, from `_RECEIPT_FIELDS` and
+    `_LINE_ITEM_FIELDS`. `CorrectionPatch` declares the same set again for
+    OpenAPI, by hand — and had already fallen behind it: `buyer.name`,
+    `buyer.tax_id` and `line_items[i].is_template_row` were correctable through
+    the route and absent from the schema FastAPI publishes, so a generated
+    client could not send fields the route accepts.
+
+    **This asserts equality, not containment, and both directions earn their
+    keep.** A path the maps hold and the schema omits is the defect above. A
+    path the schema declares and the maps do not is the opposite lie: a client
+    generated from it would send a field `apply_corrections` rejects with 400.
+
+    Derived by difference rather than by a named list, deliberately. A list
+    would need editing on every schema change — which is precisely the
+    maintenance step that was missed and produced this issue.
+    """
+    receipt_paths, line_item_fields = _published_patch_paths()
+
+    assert receipt_paths == set(_RECEIPT_FIELDS), (
+        "the published patch schema and the correctable receipt paths disagree; "
+        f"only in the maps: {sorted(set(_RECEIPT_FIELDS) - receipt_paths)}; "
+        f"only in the schema: {sorted(receipt_paths - set(_RECEIPT_FIELDS))}"
+    )
+    assert line_item_fields == set(_LINE_ITEM_FIELDS), (
+        "the published patch schema and the correctable line-item fields "
+        f"disagree; only in the maps: "
+        f"{sorted(set(_LINE_ITEM_FIELDS) - line_item_fields)}; "
+        f"only in the schema: {sorted(line_item_fields - set(_LINE_ITEM_FIELDS))}"
+    )
+
+
 def test_a_buyer_correction_survives_the_route_and_comes_back_redacted(
     reviewer_client, session_factory, receipt_id
 ):
     """The buyer is correctable *through the API*, not only in the repository.
 
-    ``CorrectionPatch`` names ``merchant``/``receipt``/``totals``/``payment``/
-    ``meta``/``line_items`` and does **not** name ``buyer``; it reaches
-    ``apply_corrections`` only because every level of that model is
-    ``extra="allow"`` and the route dumps with ``exclude_unset=True``. That is
-    a deliberate design (one error currency for "unknown field"), but it is
-    also exactly the kind of pass-through that a later tightening of the patch
-    model would silently break -- with the repository tests still green,
-    because they never cross this layer. This is that binding.
+    **``CorrectionPatch`` names ``buyer`` as of 2026-08-25 (ISSUE-009); it did
+    not when this test was written**, and reached ``apply_corrections`` only
+    because every level of that model is ``extra="allow"`` and the route dumps
+    with ``exclude_unset=True``. That pass-through is still the design -- one
+    error currency for "unknown field" -- and this test still earns its place:
+    it binds the route to the repository across a layer the repository tests
+    never cross, which is what a later tightening of the patch model would
+    break. What changed is that the field is now published as well as accepted.
 
     The PAN is here for the same reason the ``payment_method`` test above
     carries one: ``buyer_name_raw`` is a new free-text column served over the

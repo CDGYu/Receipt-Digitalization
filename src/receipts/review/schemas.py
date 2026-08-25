@@ -200,6 +200,20 @@ class _MerchantPatch(BaseModel):
     name: str | None = None
 
 
+class _BuyerPatch(BaseModel):
+    """The "Sold To" block. Declared here so OpenAPI publishes it (ISSUE-009).
+
+    ``extra="allow"`` meant a client *could* already send `buyer.*` and the
+    route applied it -- but a client generated from the published schema could
+    not know that, because neither field appeared in it.
+    """
+
+    model_config = _PATCH_MODEL_CONFIG
+
+    name: str | None = None
+    tax_id: str | None = None
+
+
 class _ReceiptMetaPatch(BaseModel):
     model_config = _PATCH_MODEL_CONFIG
 
@@ -246,6 +260,9 @@ class _LineItemPatch(BaseModel):
     unit: str | None = None
     unit_price: MoneyPatch = None
     line_total: MoneyPatch = None
+    #: ISSUE-009: correctable through the route since `is_template_row` shipped,
+    #: and absent from the published schema until 2026-08-25.
+    is_template_row: bool | None = None
 
 
 class CorrectionPatch(BaseModel):
@@ -253,9 +270,17 @@ class CorrectionPatch(BaseModel):
 
     Mirrors the shape :func:`receipts.persist.repository.flatten` already
     understands (nested dicts and lists, or dotted paths) and the closed set
-    of correctable paths in ``_RECEIPT_FIELDS``/``_LINE_ITEM_FIELDS`` --
-    ``merchant.name``, ``receipt.*``, ``totals.*``, ``payment.*``,
-    ``meta.*``, and ``line_items[i].*``. A field this model does not name
+    of correctable paths in ``_RECEIPT_FIELDS``/``_LINE_ITEM_FIELDS``.
+
+    **The set is not enumerated here on purpose.** It used to be, as
+    "``merchant.name``, ``receipt.*``, ``totals.*``, ``payment.*``, ``meta.*``,
+    and ``line_items[i].*``" -- and it went out of date the moment ``buyer.*``
+    and ``is_template_row`` were added to those maps, which is ISSUE-009. A
+    prose copy of a set that lives in another module rots silently; the pin
+    ``test_the_patch_model_publishes_exactly_the_correctable_paths`` compares
+    the two for real, in both directions, and names what diverged.
+
+    A field this model does not name
     (an unmapped one, or a dotted top-level key like
     ``"totals.total"``) is not rejected here: ``extra="allow"`` at every
     level lets it through unchanged, and
@@ -275,6 +300,7 @@ class CorrectionPatch(BaseModel):
     model_config = _PATCH_MODEL_CONFIG
 
     merchant: _MerchantPatch | None = None
+    buyer: _BuyerPatch | None = None
     receipt: _ReceiptMetaPatch | None = None
     totals: _TotalsPatch | None = None
     payment: _PaymentPatch | None = None
