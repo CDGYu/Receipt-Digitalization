@@ -300,21 +300,41 @@ again for a day.)*
 **On `IMPLEMENTATION_PLAN.md`: this paragraph said "93 unticked out of 93" and
 that Current state "still lists fourteen things as Specified but not built that
 all shipped". Both were false when the pair was refreshed.** Measured
-2026-08-25: **71 ticked, 26 unticked**, and Current state records both
-corrections — project-35 fixed it at `b3fc5ea` that morning, *before* the
-refresh that repeated the stale claim.
+2026-08-25: ~~**71 ticked, 26 unticked**~~ — **now 79 ticked, 20 unticked**,
+re-counted 2026-08-25 with `grep -c '^\s*- \[ \]' IMPLEMENTATION_PLAN.md`
+(**the file is at the repository root, not under `docs/`**). Current state
+records both of the earlier corrections — project-35 fixed it at `b3fc5ea` that
+morning, *before* the refresh that repeated the stale claim. **A count in this
+file is stale within a day; re-run the command rather than quoting the number.**
 
-**At least 3 of the 26 remaining boxes are for work that is built**, spot-checked
-rather than assumed: P3.T6's `receipts calibrate` (`cmd_calibrate` exists,
-`calibration_curve` used nine times in `cli.py`), and two of P5.T1's — the
-confidence explanation (`frontend/src/review/ConfidenceRail.tsx`) and the
-corrections write path (`apply_corrections` in `review/api.py`). **The other 23
-are not claimed either way**; those three were checked because they named things
-someone had seen ship.
+~~**At least 3 of the 26 remaining boxes are for work that is built**~~ — **all
+20 have now been audited against the code, not spot-checked, and the answer is
+five, with a sixth that the earlier spot-check got wrong.** Annotated in place
+at `9e31bbf`; **nothing was ticked**, per your 2026-08-23 ruling.
 
-**You ruled 2026-08-23 that the boxes stay unticked for now**; whether the file
-is corrected or retired is still open — but decide it knowing the count is 71/26
-and that some unticked boxes describe shipped work.
+- **Built:** the confidence explanation (`ConfidenceRail`, mounted in
+  `ReviewScreen`), the corrections write path
+  (`@app.patch("/receipts/{receipt_id}")`), the e2e correction test, its
+  commit box, and three of the four clauses of P5.T1's image-pane box.
+- **NOT built, and the earlier spot-check said it was:** P3.T6's `receipts
+  calibrate`. `cmd_calibrate` exists and prints the curve, but it
+  **recommends** a threshold rather than setting one, and the box's other half
+  — over the held-out set, commit results — needs a real eval run that P8.T1
+  already records as impossible here. **Checking that a symbol exists is not
+  checking that a box is met**, and that is the entire distance between the two
+  claims.
+- **The e2e box beat its own specification**: it asserts under **10s** where the
+  box says 60, because a scripted run takes about two seconds and 60s would pass
+  on an unusably slow screen. The acceptance line still says 60 s and is right
+  to — that number is about a *human*, and no human trial has ever been run.
+- **P5.T1's keyboard clause deliberately deviates**: approve is **Ctrl/Cmd+Enter**,
+  not Enter, so a bare Enter can still move focus through a form. Reasoned at the
+  call site. Do not "fix" it back.
+
+**You ruled 2026-08-23 that the boxes stay unticked**; whether the file is
+corrected or retired is still open — decide it knowing the count is **79/20**,
+that five unticked boxes describe shipped work, and that the file now says so
+next to each of them without ticking anything.
 
 ### 2h. ISSUE-034 QUALIFIES EVERY ACCURACY NUMBER THIS PROJECT HAS
 

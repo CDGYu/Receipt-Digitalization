@@ -61,6 +61,23 @@ a word box onto a line item, and that mapping is in no spec and no checkbox; and
 same as unblocking what it gated** — and a wrong claim that reads as a green
 light is worse than one that reads as a blocker.
 
+**`IMPLEMENTATION_PLAN.md` LIVES AT THE REPOSITORY ROOT, not under
+`docs/`** — and its boxes were re-counted and then audited on 2026-08-25:
+**79 ticked, 20 unticked**, where this pair had said 71/26 the same day. Of the
+20, **five describe work that is built**, annotated in place at `9e31bbf` with
+**nothing ticked** (2026-08-23 ruling).
+
+**The audit's own finding is about how the previous claim was made.** This pair
+had spot-checked three boxes and called them built. One does not survive: P3.T6's
+`receipts calibrate` was counted because `cmd_calibrate` exists and
+`calibration_curve` is used nine times. The box asks for a command **and** for a
+threshold chosen from data and committed. The command recommends rather than
+sets, and the data half needs an eval run P8.T1 already records as impossible
+here. **Checking that a symbol exists is not checking that a box is met** — the
+symbol is the cheap half, which is why it gets substituted for the expensive one.
+Same shape as the bbox error above: a dependency being satisfied read as a thing
+being done.
+
 **The theme chooser is gone**, removed end to end on an owner ruling at
 `824bf46` — control, stylesheet, `src/theme.ts`, the `index.html` pre-paint
 script and both test files. **ADR-0027's dark theme survives entire**; nothing
@@ -100,7 +117,7 @@ moves, and this file has carried a wrong issue count before.
 **No count of refreshes is written here** — it is a number that moves without its
 sentence changing, which is review standard 5.
 
-**Freshness anchor `49e49ec`** — the last commit that is not this handoff pair.
+**Freshness anchor `9e31bbf`** — the last commit that is not this handoff pair.
 **It is written twice below — here and inside the command.** Moving one and not
 the other is what happened on an earlier refresh, and the gate caught it because
 it parses the anchor out of the *command*.
@@ -121,7 +138,7 @@ nothing else: a stamp cannot name the commit that writes it. The test is a
 command, not a commit and not a count:
 
 ```
-git log --oneline 49e49ec..main -- ":(top,exclude)docs/MEMORY.md" ":(top,exclude)docs/NEXT_SESSION_PROMPT.md"
+git log --oneline 9e31bbf..main -- ":(top,exclude)docs/MEMORY.md" ":(top,exclude)docs/NEXT_SESSION_PROMPT.md"
 git log --oneline refs/remotes/origin/main..main   # what a push would send
 git ls-remote --heads origin main                  # authoritative on what is pushed
 git branch --no-merged main                        # named FOUR on 2026-08-25
