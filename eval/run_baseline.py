@@ -288,9 +288,11 @@ def format_report(report: EvalReport) -> str:
 def latest_results_file(results_dir: Path) -> Path | None:
     """Most recently written results JSON in ``results_dir`` (or ``None``).
 
-    The harness names the file ``{date}-{prompt_version}.json`` and does not
-    return its path; picking the newest file back out avoids duplicating (and
-    drifting from) that private naming logic.
+    The harness names the file
+    ``{date}-{prompt_version}-{prompt_bundle_hash}.json`` and does not return
+    its path; picking the newest file back out avoids duplicating (and drifting
+    from) that private naming logic -- which is why the third component could be
+    added for ISSUE-007 without touching this function at all.
 
     Not private: this module's own ``main`` uses it to report where a run's
     results landed, and ``receipts calibrate`` (``receipts.cli.cmd_calibrate``)

@@ -1322,11 +1322,22 @@ to see it.
 
 ## ISSUE-007 — `PROMPT_VERSION` is unenforced, and no test that fires for the right reason is available
 
-**Status:** OPEN — deliberately not pinned. The reasoning is the point of this
-entry; the alternative was a test that reads as a guard and is not one.
-**Owner action required:** yes — whether `eval/harness.py` should key results
-on `prompt_bundle_hash()` instead of on `PROMPT_VERSION`. That is a change to
-the committed-results contract (spec §16), not a bug fix.
+**Status:** **RESOLVED 2026-08-25** on `fix/prompt-hash-and-template-unit`,
+taking step 2's additive option. `_report_to_dict` emits `prompt_bundle_hash`
+beside `prompt_version`, and `_write_report` names the file
+`{date}-{prompt_version}-{prompt_bundle_hash}.json`. The hash is in the **name**
+because the name is where the collision was: `write_text` truncates, and both
+old components are constant within a day.
+
+**Additive, not a replacement.** `prompt_version` keeps its place and its
+meaning, so the two committed runs are not orphaned and nothing reading the
+payload changes. The spec §16 contract gains a field rather than swapping its
+key, which is why this could be done without re-deciding that contract.
+
+**Two of this entry's own resume steps were already false when it was closed,
+and are corrected below rather than in place** — the body is the record of what
+was believed.
+**Owner action required:** no. The ruling was given 2026-08-25: fix it.
 **Discovered:** 2026-08-19, in the whole-branch review of
 `feat/buyer-and-blank-rows`. **Pre-existing:** yes, since `PROMPT_VERSION`
 existed. **Blocks:** nothing today; it means one module rule is honour-system.
@@ -1396,6 +1407,23 @@ This entry is that gap, written down.
    artefact constrains the naming choice yet. That will not stay true.
 4. Only after the harness reads the hash is a pin worth writing, and then it
    pins the harness rather than the constant.
+
+*(Corrected 2026-08-25, closing this issue. **Step 2's "first production
+caller" was already wrong**: `eval/run_repeats.py:128` has called
+`prompt_bundle_hash()` since step 7's machinery merged, and both committed
+aggregates carry `"prompt_bundle_hash": "528cd19c6e5b0f2d"` in `config` —
+so ADR-0044's open item had already closed. **Step 3 was wrong too**:
+`eval/results/` is not empty and holds 8 files across two run directories,
+which is what made the additive form matter more than when it was written —
+renaming would have orphaned the baseline everything compares against. Step 4
+was followed: the pins are on the harness, not on the constant.)*
+
+*(Also settled 2026-08-25, by reading rather than assuming: the direct
+`run_baseline` path is real, so the collision was live. `receipts eval` is a
+shipped CLI command and `cli.py:58` describes it as "a thin wrapper over
+`eval.run_baseline.run_baseline`". Had that path not existed, `run_repeats`'
+per-repeat directories would already have removed the collision and the honest
+close would have been to narrow this entry instead of writing code.)*
 
 ### Related
 

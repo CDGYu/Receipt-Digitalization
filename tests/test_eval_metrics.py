@@ -468,6 +468,118 @@ def test_run_eval_counts_and_writes_results_file(tmp_path):
     assert len(written) == 1
 
 
+# --------------------------------------------------------------------------- #
+# The results file identifies the prompt it measured (ISSUE-007)
+#
+# `prompts.py` rule 1 requires PROMPT_VERSION to be bumped on any prompt change
+# and rule 5 extends that to a reworded schema `description=`, because the
+# harness names its output file from PROMPT_VERSION. Nothing enforced it:
+# measured 2026-08-19, reverting PROMPT_VERSION 1.1.0 -> 1.0.0 passed the whole
+# suite. An un-bumped change made the same day as an earlier run OVERWROTE that
+# run's artefact.
+#
+# `prompt_bundle_hash()` already moves on its own -- it covers every prompt
+# constant and the tool-schema JSON -- so the fix is to put it where the
+# collision happens rather than to add a discipline test nobody can enforce.
+# --------------------------------------------------------------------------- #
+
+
+def _one_label_golden(tmp_path):
+    golden = tmp_path / "golden"
+    labels = golden / "labels"
+    labels.mkdir(parents=True)
+    (labels / "r1.json").write_text(
+        _extraction(total="224.00").model_dump_json(), encoding="utf-8"
+    )
+    return golden
+
+
+def _reworded_prompt():
+    """Change what the model is shown WITHOUT touching PROMPT_VERSION.
+
+    Rule 5's exact case, and the real mechanism rather than a patched hash:
+    `_bundle_text` hashes the tool schema, so rewording a live `description=`
+    moves `prompt_bundle_hash()`. Mirrors
+    `test_the_bundle_hash_moves_when_a_description_the_model_sees_changes`.
+    """
+    import contextlib
+
+    @contextlib.contextmanager
+    def _ctx():
+        field = LineItem.model_fields["is_template_row"]
+        original = field.description
+        try:
+            field.description = "SENTINEL: a materially different instruction"
+            LineItem.model_rebuild(force=True)
+            ReceiptExtraction.model_rebuild(force=True)
+            yield
+        finally:
+            field.description = original
+            LineItem.model_rebuild(force=True)
+            ReceiptExtraction.model_rebuild(force=True)
+
+    return _ctx()
+
+
+def test_an_unbumped_prompt_change_cannot_overwrite_the_previous_run(tmp_path):
+    """ISSUE-007's concrete consequence, as a property of the artefact.
+
+    Two runs on one day, PROMPT_VERSION untouched, the prompt text different.
+    Before the fix both named the same file and the second silently replaced
+    the first, so the committed results said one prompt had been measured when
+    two had. `PROMPT_VERSION` staying put is the *premise* here, not an
+    oversight -- it is precisely the honour-system failure the issue records.
+    """
+    golden = _one_label_golden(tmp_path)
+    results_dir = tmp_path / "results"
+
+    def pipeline_fn(path):
+        return _extraction(total="224.00"), D("0.95")
+
+    from receipts.extract.prompts import PROMPT_VERSION
+
+    run_eval(golden, pipeline_fn, results_dir=results_dir)
+    assert len(list(results_dir.glob("*.json"))) == 1
+
+    with _reworded_prompt():
+        run_eval(golden, pipeline_fn, results_dir=results_dir)
+
+    written = sorted(p.name for p in results_dir.glob("*.json"))
+    assert len(written) == 2, (
+        "the second run overwrote the first: two different prompts, one "
+        f"artefact. Files: {written}"
+    )
+    # And the version really did stay put, so the distinguishing part is the
+    # prompt identity rather than a bump that quietly happened.
+    assert all(PROMPT_VERSION in name for name in written), written
+
+
+def test_the_results_payload_names_the_prompt_bundle_it_measured(tmp_path):
+    """A figure has to carry what produced it, not just when it ran.
+
+    `prompt_version` alone is honour-system; the bundle hash is derived from
+    the text actually shipped to the model, so it cannot be forgotten.
+    """
+    from receipts.extract.prompts import prompt_bundle_hash
+
+    golden = _one_label_golden(tmp_path)
+    results_dir = tmp_path / "results"
+    run_eval(
+        golden,
+        lambda path: (_extraction(total="224.00"), D("0.95")),
+        results_dir=results_dir,
+    )
+
+    written = list(results_dir.glob("*.json"))
+    assert len(written) == 1
+    payload = json.loads(written[0].read_text(encoding="utf-8"))
+
+    assert payload["prompt_bundle_hash"] == prompt_bundle_hash()
+    # The old key stays: this is additive, and two committed runs already
+    # carry `prompt_version`.
+    assert "prompt_version" in payload
+
+
 def test_an_all_failed_run_reports_no_precision_rather_than_a_perfect_one(tmp_path):
     """A run where every receipt failed must not claim perfect precision.
 

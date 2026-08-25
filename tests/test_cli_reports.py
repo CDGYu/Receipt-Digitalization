@@ -363,6 +363,11 @@ def _write_results(results_dir: Path, *, receipts: int, results: list[dict]) -> 
     path = results_dir / "2026-07-29-1.0.0.json"
     path.write_text(json.dumps({
         "prompt_version": "1.0.0",
+        # Added 2026-08-25 with ISSUE-007. `test_the_producer_writes_the_shape
+        # _this_module_hand_writes` binds this dict to `_report_to_dict`, so a
+        # new key there reddens here rather than letting the fixture drift --
+        # which is what it did, and this line is that guard being paid.
+        "prompt_bundle_hash": "0000000000000000",
         "auto_approve_threshold": "0.85",
         "counts": {"receipts": receipts, "auto_approved": 0,
                    "critical_correct": 0, "failed": 0},

@@ -1,8 +1,11 @@
 """Repeat a baseline run N times and write one aggregate artifact.
 
 ``eval.run_baseline`` runs the golden set **once** and writes
-``{date}-{prompt_version}.json``. Both components are constant within a day, so
-two runs on one day overwrite each other -- measured, with a control. ISSUE-001
+``{date}-{prompt_version}-{prompt_bundle_hash}.json``. All three components are
+constant within a day for a given prompt, so two runs on one day overwrite each
+other -- measured, with a control. (The hash joined that name for ISSUE-007 on
+2026-08-25. It separates runs of *different* prompts and does nothing for the
+repeats of one prompt this module makes, so the collision below is unchanged.) ISSUE-001
 step 6 requires repeats, because cloud inference is not deterministic at
 ``temperature=0``.
 
@@ -298,7 +301,9 @@ def run_repeats(
     """Run the baseline ``repeats`` times and write one aggregate artifact.
 
     Each repeat gets its own ``results_dir`` under ``<run_dir>/repeat-NN``,
-    which is what stops ``{date}-{prompt_version}.json`` from colliding. The
+    which is what stops ``{date}-{prompt_version}-{prompt_bundle_hash}.json`` from
+    colliding -- every repeat here runs one prompt, so all three components
+    match and only the directory differs. The
     aggregate is rewritten after **every** repeat, not once at the end: the
     per-rung counts and five of the config block's six keys are in no results
     file, so a sequence killed part way through would otherwise lose exactly

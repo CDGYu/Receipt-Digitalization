@@ -51,6 +51,32 @@ def _prompt_version() -> str:
         return "dev"
 
 
+def _prompt_bundle_hash() -> str:
+    """Digest of the prompt text actually shipped, or ``"nohash"`` if absent.
+
+    `PROMPT_VERSION` is honour-system: `prompts.py` rule 1 requires a bump on
+    any prompt change and rule 5 extends that to a reworded schema
+    `description=`, and **nothing enforces either** -- measured 2026-08-19,
+    reverting the constant from `1.1.0` to `1.0.0` passed the whole suite
+    (ISSUE-007). This does not need remembering: `_bundle_text` covers every
+    prompt constant and the tool-schema JSON, so the digest moves on its own.
+
+    It is recorded *beside* `prompt_version` rather than instead of it. Two
+    committed runs already carry the version, and `run_repeats` already writes
+    this same hash into its aggregate `config`, so the two artefacts now agree
+    on how a prompt is identified.
+
+    Mirrors :func:`_prompt_version`'s tolerance of an absent prompts module,
+    which is what lets the harness be exercised without the extractor.
+    """
+    try:
+        from receipts.extract.prompts import prompt_bundle_hash
+
+        return prompt_bundle_hash()
+    except Exception:
+        return "nohash"
+
+
 @dataclass
 class _Accumulator:
     """Running totals folded over the golden set as it is scored."""
@@ -134,6 +160,7 @@ def _report_to_dict(report: EvalReport) -> dict[str, Any]:
     """
     return {
         "prompt_version": _prompt_version(),
+        "prompt_bundle_hash": _prompt_bundle_hash(),
         "auto_approve_threshold": str(report.auto_approve_threshold),
         "counts": {
             "receipts": report.n_receipts,
@@ -206,8 +233,26 @@ def _report_to_dict(report: EvalReport) -> dict[str, Any]:
 
 
 def _write_report(report: EvalReport, results_dir: Path) -> Path:
+    """Persist the report as ``{date}-{prompt_version}-{prompt_bundle_hash}.json``.
+
+    The hash is in the **name**, not only the payload, because the name is
+    where the collision was. `write_text` truncates, and both `date` and
+    `prompt_version` are constant within a day, so an un-bumped prompt change
+    made after an earlier run that day **overwrote that run's artefact** --
+    leaving one file claiming to describe two different prompts (ISSUE-007).
+    A digest that moves on its own cannot be forgotten, so two prompts can no
+    longer share a filename.
+
+    Additive: `prompt_version` keeps its place, so the two already-committed
+    runs are not orphaned and nothing that reads the payload has to change.
+    Nothing parses this name -- `run_baseline.latest_results_file` globs and
+    sorts by mtime precisely so it does not duplicate this private convention.
+    """
     results_dir.mkdir(parents=True, exist_ok=True)
-    out_path = results_dir / f"{date.today().isoformat()}-{_prompt_version()}.json"
+    out_path = (
+        results_dir
+        / f"{date.today().isoformat()}-{_prompt_version()}-{_prompt_bundle_hash()}.json"
+    )
     out_path.write_text(
         json.dumps(_report_to_dict(report), indent=2), encoding="utf-8"
     )
@@ -227,7 +272,10 @@ def run_eval(
     the critical-field gate, and line-item F1, and fold them into an
     :class:`~eval.metrics.EvalReport`. The report is persisted to
     ``results_dir`` (default ``eval/results/``) as
-    ``{date}-{prompt_version}.json`` and returned.
+    ``{date}-{prompt_version}-{prompt_bundle_hash}.json`` and returned. The hash
+    joined the name on 2026-08-25 (ISSUE-007): the first two components are
+    constant within a day, so without it a second run that day overwrote the
+    first even when the prompt had changed.
 
     ``pipeline_fn`` is injected, so no images or network are required.
 

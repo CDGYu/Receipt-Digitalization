@@ -58,8 +58,10 @@ def test_prepare_run_dir_refuses_an_existing_run_id(tmp_path):
     """An explicit reuse is refused, never silently overwritten.
 
     This is the run-id half of the collision the milestone exists to remove:
-    ``_write_report`` names its file ``{date}-{prompt_version}.json``, so a
-    second run into one directory destroys the first. Auto-suffixing would
+    ``_write_report`` names its file
+    ``{date}-{prompt_version}-{prompt_bundle_hash}.json``, so a second run into
+    one directory destroys the first -- the hash added for ISSUE-007 separates
+    different prompts, not repeats of one. Auto-suffixing would
     produce a second artifact nobody can tell from the first, so the answer is
     a refusal.
     """
@@ -513,8 +515,10 @@ def _one_repeat_fails_factory():
 def test_n_repeats_produce_n_directories_and_one_aggregate(tmp_path, monkeypatch):
     """The collision, closed by construction.
 
-    ``_write_report`` names its file ``{date}-{prompt_version}.json``, both
-    constant within a day, so repeats sharing a directory overwrite each other.
+    ``_write_report`` names its file
+    ``{date}-{prompt_version}-{prompt_bundle_hash}.json``, all three constant
+    within a day for one prompt, so repeats sharing a directory overwrite each
+    other.
     Measured by making ``repeat_dir`` return the run directory itself: three
     repeats, one surviving file. Giving each repeat its own directory removes
     that -- and this test is the pin, proven red against exactly that mutation.
