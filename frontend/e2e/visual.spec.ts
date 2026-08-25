@@ -133,8 +133,19 @@ const ALL_WIDTHS: readonly Viewport[] = [NARROW, TABLET, MID, WIDE]
  *  than the column count are captured at the two ends only. */
 const ENDS: readonly Viewport[] = [NARROW, WIDE]
 
-const THEMES = ['light', 'dark'] as const
-type Theme = (typeof THEMES)[number]
+/** **One theme since the owner's 2026-08-25 ruling.**
+ *
+ *  This was `['light', 'dark']` and drove fourteen loops below, capturing every
+ *  screen twice. `tokens.css` no longer ships a dark palette by either route,
+ *  so a `colorScheme: 'dark'` context now renders **exactly the light page** --
+ *  every one of those pairs would have been two identical screenshots, one of
+ *  them labelled `-dark`, which is worse than not taking it: a reviewer
+ *  comparing them would conclude dark mode was fine.
+ *
+ *  Left as an array rather than collapsed to a scalar so that restoring a theme
+ *  is a one-line change here and not a re-write of fourteen call sites. */
+const THEMES = ['light'] as const
+type Theme = 'light' | 'dark'
 
 interface Fixture {
   readonly db_url: string
@@ -1117,7 +1128,7 @@ test.afterAll(() => {
   ).toBeGreaterThan(0)
 })
 
-test('login, at three widths in both themes', async ({ browser }, testInfo) => {
+test('login, at three widths', async ({ browser }, testInfo) => {
   test.setTimeout(120_000)
   const baseURL = baseURLOf(testInfo.project.use)
   for (const viewport of ALL_WIDTHS) {
@@ -1486,32 +1497,20 @@ test('the admin surface empty, as a reviewer', async ({ browser }, testInfo) => 
   }
 })
 
-test('the theme switch: an explicit choice must beat the OS preference', async ({
-  browser,
-}, testInfo) => {
-  test.setTimeout(120_000)
-  const baseURL = baseURLOf(testInfo.project.use)
-
-  // `:root:not([data-theme='light'])` inside the `prefers-color-scheme: dark`
-  // block is what makes this work, and `tokens.css` calls it load-bearing. The
-  // app ships no toggle, so the attribute is set by hand -- which is also what
-  // any future toggle would do.
-  await withPage(browser, baseURL, MID, 'dark', async (page) => {
-    await page.goto('/app/login')
-    await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'light'))
-    await expect(page.getByRole('button', { name: 'Sign in' })).toBeVisible()
-    await shot(page, 'theme-explicit-light-under-os-dark', MID, 'dark')
-    record('theme-explicit-light-under-os-dark', MID, 'dark', await measure(page))
-  })
-
-  await withPage(browser, baseURL, MID, 'light', async (page) => {
-    await page.goto('/app/login')
-    await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark'))
-    await expect(page.getByRole('button', { name: 'Sign in' })).toBeVisible()
-    await shot(page, 'theme-explicit-dark-under-os-light', MID, 'light')
-    record('theme-explicit-dark-under-os-light', MID, 'light', await measure(page))
-  })
-})
+// **Deleted 2026-08-25: 'the theme switch: an explicit choice must beat the OS
+// preference'.**
+//
+// It drove `data-theme` by hand and asserted the precedence rule
+// `:root:not([data-theme='light'])` implemented. That selector, the
+// `prefers-color-scheme: dark` block around it and the `data-theme` opt-in were
+// all removed from `tokens.css` when the owner ruled the app light-only, so
+// there is no precedence left to beat.
+//
+// **It would have kept passing, and that is why it is deleted rather than
+// left.** Its assertions were `Sign in` is visible plus two screenshots -- both
+// still true against a light page under either OS preference. It would have
+// gone on reporting green while measuring nothing, and its name would have gone
+// on telling the next reader this app has a theme switch.
 
 test('focus rings, as the browser actually paints them', async ({ browser }, testInfo) => {
   test.setTimeout(120_000)

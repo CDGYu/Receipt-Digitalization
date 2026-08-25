@@ -221,11 +221,6 @@ export function ReviewQueue({ navigate }: ReviewQueueProps = {}) {
         )}
       </section>
 
-      <div>
-        <button type="button" onClick={() => void load()} disabled={busyTaskId !== null}>
-          Refresh
-        </button>
-      </div>
     </div>
   )
 }
