@@ -269,21 +269,34 @@ const CENSUS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
     '.heading': 'margin, font-family, font-size, font-weight, line-height',
     '.counts': 'display: flex, flex-wrap: wrap, gap',
     '.waiting': 'margin, color, font-size, line-height',
-    '.count':
-      'display: flex, flex-direction: column, gap, min-width, margin, padding, border, border-radius, background',
-    '.countLabel': 'color, font-size, font-weight, letter-spacing, text-transform: uppercase',
-    '.countValue': 'font-family, font-size, line-height',
-    '.ways': 'display: flex, flex-direction: column, gap',
+    // The dashboard's panels. `.count`, `.countLabel` and `.countValue` were
+    // here and are gone: `StatTiles` owns the figures now, and this screen was
+    // restating three of its four tiles without the auto-approval rate.
+    '.panel':
+      'display: flex, flex-direction: column, gap, padding, border, border-radius, background, box-shadow',
+    '.panelHeading':
+      'margin, color, font-size, font-weight, letter-spacing, text-transform: uppercase',
+    '.thresholds': 'margin, font-size, line-height',
+    '.figure': 'font-family, font-variant-numeric: tabular-nums, font-weight',
+    '.statuses': 'display: flex, flex-direction: column, gap, margin, padding, list-style: none',
+    '.status':
+      'display: flex, align-items: baseline, justify-content: space-between, gap, padding-bottom, border-bottom',
+    // Immediately after `.status`, and the ORDER is the rule: at equal
+    // specificity the later rule wins, so hoisting this above `.status` would
+    // put the rule back on the last row and the census would not see it.
+    '.status:last-child': 'padding-bottom, border-bottom: none',
+    '.statusLabel': 'color, font-size, text-transform: capitalize',
+    '.statusCount': 'font-family, font-variant-numeric: tabular-nums, font-size, line-height',
+    // Was `display: flex, flex-direction: column`. A grid with an `auto-fit`
+    // `minmax` floor makes the three destinations a row of cards that stacks
+    // itself, with no media query to disagree with another stylesheet's.
+    '.ways': 'display: grid, grid-template-columns, gap',
     '.way':
       'display: flex, flex-direction: column, gap, padding, border, border-radius, background, box-shadow, text-decoration: none, transition',
     '.way:hover': 'border-color',
     '.wayLabel': 'color, font-size, font-weight, line-height',
     '.wayHint': 'color, font-size, line-height',
   },
-  // Derived the same mechanical way as its neighbours: `censusFor` was run
-  // against the file and its output transcribed, not read off the stylesheet by
-  // eye. `.bar` is worn by `main.tsx`'s `<header>` and the rest by the `<nav>`
-  // inside it -- one bar, so one stylesheet.
   'Nav.module.css': {
     '.bar':
       'display: flex, flex-wrap: wrap, align-items: center, gap, padding, border-bottom, background',
