@@ -723,7 +723,7 @@ describe('the session holds an identity, hydrated from GET /auth/me', () => {
 
 describe('every class the admin components reference exists in its stylesheet', () => {
   // Under Vitest's `css: false` a `.module.css` import is a proxy whose keys echo
-  // back as strings, so `styles.tille` renders `class="undefined"` and every
+  // back as strings, so `styles.tille` ships unpainted and every
   // rendering test above still passes. Anything about the CSS itself therefore
   // has to be read off the file, exactly as `tests/review-null-rule.test.tsx` and
   // `tests/value.test.tsx` read theirs.

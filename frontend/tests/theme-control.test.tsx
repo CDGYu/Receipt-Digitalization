@@ -8,7 +8,7 @@ import { THEME_STORAGE_KEY } from '../src/theme'
  *
  * Nothing here asserts a class name. Vitest runs with `css: false`, so a
  * `.module.css` import returns a proxy whose keys echo back -- a renamed class
- * would ship as `class="undefined"` with every one of these green. What the
+ * would ship unpainted with every one of these green. What the
  * stylesheet contains is guarded by `stylesheets.test.ts` reading it as text.
  */
 

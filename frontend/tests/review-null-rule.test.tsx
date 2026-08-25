@@ -289,7 +289,7 @@ describe("the confidence score goes through the primitive that owns section 4's 
  *
  * Under Vitest's `css: false` a `.module.css` import is a proxy whose keys echo
  * back as strings, so a rendering test cannot tell `styles.scroller` from
- * `styles.scrolller` -- the misspelling ships as `class="undefined"` with every
+ * `styles.scrolller` -- the misspelling ships unpainted with every
  * gate green. Anything about the CSS itself therefore has to be read off the
  * file, exactly as `tests/value.test.tsx` reads the primitives'.
  *
@@ -337,8 +337,8 @@ describe('every class these three components reference exists in its stylesheet'
   // `MoneyInput`, and it cannot be extended to cover the three components below
   // without editing it. So the same property is stated again here, for the
   // stylesheets §5.2/§5.3/§5.4 just grew: under `css: false` a `.module.css`
-  // import is a proxy whose keys echo back, so `styles.scrolller` renders
-  // `class="undefined"` and every rendering test in this file still passes.
+  // import is a proxy whose keys echo back, so `styles.scrolller` ships
+  // unpainted and every rendering test in this file still passes.
   // Nothing here paints anything; a missing class is invisible to the DOM.
   const GUARDED = [
     { tsx: 'ConfidenceRail.tsx', css: 'ConfidenceRail.module.css' },
