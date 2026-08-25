@@ -92,6 +92,13 @@ receipt-adjacent text is written to disk by the browser.
 > precisely what the ruling exists to keep off disk — and nothing else in this
 > application may write to storage. A later feature wanting persistence does
 > **not** inherit permission from this one; it needs its own narrowing.
+>
+> *(2026-08-25: the narrowing is now unexercised. The theme chooser was removed
+> on an owner ruling — ADR-0038 is superseded — so nothing writes `receipts.theme`
+> and nothing reads it. The permission above is not withdrawn and the reasoning
+> stands if a chooser ever returns; but as of today **this application writes
+> nothing to browser storage at all**, which is what a reader checking that
+> question needs to know.)*
 
 The stash is cleared **exactly where a write landed or the session ended** —
 approve success (clean and held), skip success, close-task success, entering

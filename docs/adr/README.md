@@ -43,7 +43,7 @@ Accepted; supersede it with a new ADR rather than editing history.
 | [0035](0035-the-asgi-entry-point.md) | The ASGI entry point, and what it refuses to start on | Accepted |
 | [0036](0036-one-image-two-commands.md) | One image, two commands | Accepted |
 | [0037](0037-ci-runs-the-gate-runner.md) | CI runs, and it runs the gate runner | Accepted |
-| [0038](0038-the-theme-control.md) | The theme control, and one key in browser storage | Accepted |
+| [0038](0038-the-theme-control.md) | The theme control, and one key in browser storage | **Superseded 2026-08-25** — the chooser was removed on an owner ruling; ADR-0027's dark theme survives, driven by the OS |
 | [0039](0039-the-local-path-is-a-liveness-check.md) | The local path is a liveness check, not a measurement | Accepted |
 | [0040](0040-what-field-accuracy-counts.md) | What eval field accuracy counts, and the three things it used to average | Accepted |
 | [0041](0041-the-review-outcome-takes-focus.md) | The review outcome takes focus, so a 403 is not invisible | Accepted |
@@ -124,7 +124,7 @@ because merges here are local fast-forwards, and it guards against the false
 green that `pytest.importorskip` makes possible. It reverses the 2026-07-29
 decision to untrack `.github/workflows/` and corrects ADR-0017's Context, and it
 is candid that the workflow itself was unverified when written.
-**0038** is the one to read before touching the theme, the header, or anything
+**0038** is superseded — the chooser was removed 2026-08-25 — but is still the one to read before touching the theme, the header, or anything
 that wants browser storage: three states (`system` removes the attribute rather
 than setting a third value, so ADR-0027's precedence rule stays reachable in
 both directions), a pre-paint script in `index.html` whose duplicated storage

@@ -9,8 +9,8 @@
  * (docs/superpowers/plans/2026-08-24-editorial-visual-refresh.md) owns
  * `tokens.css` and is being implemented alongside this; adding a token name
  * here would collide with Task 1 and, worse, a token that does not exist
- * renders as *nothing at all*, silently -- the trap `ThemeControl.module.css`
- * records paying for. So this bar inherits the Editorial ramp instead of
+ * renders as *nothing at all*, silently -- a trap this project has paid for
+ * before. So this bar inherits the Editorial ramp instead of
  * restating it, and moves with it when Tasks 3-6 land.
  *
  * **No `outline` anywhere.** `tokens.css` carries

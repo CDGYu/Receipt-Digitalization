@@ -3,7 +3,7 @@
  * **Existing tokens only.** The Editorial refresh owns `tokens.css` and Tasks
  * 3-6 were running alongside this; a token added here would collide with Task
  * 1, and a token that does not exist renders as *nothing at all*, silently --
- * the trap `ThemeControl.module.css` records paying for. So this screen
+ * a trap this project has paid for before. So this screen
  * inherits the ramp rather than restating it.
  *
  * `.screen` mirrors `ReceiptsScreen`'s and `AdminScreen`'s container to the

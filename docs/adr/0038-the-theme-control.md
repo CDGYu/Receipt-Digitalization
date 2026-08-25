@@ -1,6 +1,32 @@
 # ADR 0038 — The theme control, and one key in browser storage
 
-**Status:** Accepted (2026-08-11)
+**Status:** **SUPERSEDED 2026-08-25** by an owner ruling: the chooser is not
+wanted. Everything below describes a control that shipped, worked, and has been
+removed — it is kept because the reasoning is still the reasoning, and because
+the next person who wants a theme switcher should read why this one was built
+the way it was rather than rediscover it.
+
+**What was removed:** `ThemeControl.tsx` and its stylesheet, `src/theme.ts`, the
+pre-paint script in `index.html`, and both test files. **What survives is
+ADR-0027's dark theme, entire.** Nothing now writes `data-theme`, so `tokens.css`
+falls back to `prefers-color-scheme` and a reviewer on a dark-set OS still gets
+the dark palette. The three-state design this ADR argues for — `system` as a
+real third state so an explicit *light* choice can beat an OS dark preference —
+is what is gone; a two-state world where the OS decides is what is left.
+
+**The removal could not stop at the control**, and that is worth recording
+because the obvious minimal change was a trap. Deleting only the button would
+have left the pre-paint script reading `localStorage['receipts.theme']` on every
+load, so a reviewer who had ever chosen dark would keep it **permanently, with
+nothing left in the UI able to change it**. A feature removed halfway is worse
+than either keeping or removing it.
+
+**ADR-0024's narrowing is now moot rather than reversed.** This ADR is what
+permitted one key in browser storage; with the key no longer written or read,
+ADR-0024's original "nothing enters browser storage" holds again in practice,
+and `review/stash.ts` still keeps its edits in memory as it always did.
+
+**Status before this note:** Accepted (2026-08-11)
 **Closes:** ADR-0027's "one decision this ADR made that the pass showed is
 incomplete" — dark shipped as a full second theme with no way for a user to
 choose it

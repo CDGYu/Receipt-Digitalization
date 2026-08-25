@@ -290,13 +290,6 @@ const CENSUS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
   // Derived by applying `censusOf`'s own rule to the file, not transcribed by
   // eye -- the header above calls this mechanical, and doing it by hand is how
   // a census drifts from the stylesheet it is supposed to guard.
-  'ThemeControl.module.css': {
-    '.control': 'display: inline-flex, align-items: center, gap, font-family, font-size',
-    '.label': 'color, font-weight',
-    '.select':
-      'min-height, padding, border, border-radius, background, color, font-family, font-size, line-height, cursor: pointer, transition',
-    '.select:hover': 'border-color',
-  },
   'SignOutControl.module.css': {
     '.control': 'display: inline-flex, align-items: center, gap, font-family, font-size',
     '.confirm':
@@ -709,7 +702,7 @@ describe('the census reads what is there, not what it hopes for', () => {
 
   it('is reading the real tree, not an empty one', () => {
     const files = stylesheets()
-    expect(files.length, 'no stylesheets found -- the whole census is vacuous').toBe(22)
+    expect(files.length, 'no stylesheets found -- the whole census is vacuous').toBe(21)
     let rules = 0
     let declarations = 0
     for (const file of files) {

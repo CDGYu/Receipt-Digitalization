@@ -43,7 +43,6 @@ import navStyles from './Nav.module.css'
 import { ReceiptsScreen } from './receipts/ReceiptsScreen'
 import { ReviewScreen } from './review/ReviewScreen'
 import { SignOutControl } from './SignOutControl'
-import { ThemeControl } from './ThemeControl'
 import { UploadScreen } from './upload/UploadScreen'
 
 /** No routing library: these paths do not need one.
@@ -127,7 +126,6 @@ function App() {
     <>
       <header className={navStyles.bar}>
         <Nav identity={identity} route={route} />
-        <ThemeControl />
         <SignOutControl />
       </header>
       {route === 'admin' ? (
