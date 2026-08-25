@@ -1583,11 +1583,48 @@ set it names is no longer the set `_RECEIPT_FIELDS` holds.
 
 ## ISSUE-010 - The results list, opened in a browser
 
-**Status:** OPEN, and narrowed to one item nobody has decided. The browser pass
-ran on 2026-08-20 across Chromium, Firefox and WebKit. Of the four things this
-issue was opened for, one was **refuted**, one was **confirmed correct**, one was
-**a real finding and is fixed**, and one is **confirmed and is a repository-wide
-question**. What is left is item 4 and the surfaces nobody has still looked at.
+**Status:** **RESOLVED 2026-08-25 — item 4 is ruled and fixed.** The browser
+pass ran on 2026-08-20 across Chromium, Firefox and WebKit. Of the four things
+this issue was opened for, one was **refuted**, one was **confirmed correct**,
+one was **a real finding and is fixed**, and the fourth — the `border-radius` a
+collapsed table discards — was **confirmed and left as a repository-wide
+question**. That question is now answered.
+
+**The ruling: honour the intent, do not delete the declaration.** `--radius-lg`
+is a design token (`tokens.css`, 12px) and seven other surfaces round with it —
+StatTiles, LoginPage, ConfidenceRail, FindingsPanel and ImagePane among them —
+so rounded surfaces are this system's norm and the three tables were meant to be
+rounded. The radius and the border move from `.table` to `.scroller`, which
+already wrapped every one of them (`<section className={styles.scroller}>` is
+the immediate parent of `<table>` in all three components, checked per file) and
+already sets `overflow-x: auto`, making it a clipping context. `border-collapse`
+is untouched. The border moves with the radius, because left on the table it
+would be a square outline cut off by a rounded clip.
+
+**Seen, not merely green.** Rendered before/after in all three engines and
+looked at: square corners before, rounded after, with the header fill clipped to
+the curve. Chromium, Firefox and WebKit agree. That sentence is here because
+`stylesheets.test.ts`'s own census assertion demands it — *"say in the commit
+what a browser showed you, because nothing in the five gates can see what it
+looks like"* — and it remains true that no gate here can see a corner.
+
+**Pinned as a class, not as three instances.**
+`stylesheets.test.ts` now fails any rule that sets `border-radius` and
+`border-collapse: collapse` together, anywhere in the tree. It was proven red
+against all three `.table` rules before the fix, so a fourth table cannot
+reintroduce this quietly.
+
+**That pin is also why three CSS files land in one commit, and it is not a
+bundle.** A class-level property has to be true of the whole tree at once: fix
+two tables and the pin still fails on the third, so the smallest change that
+leaves the gate green is all three plus the census. A later reader seeing three
+stylesheets in one diff should read it as one property, not three fixes.
+
+**What this does NOT close**, and it is the reason the entry is worth reading
+rather than skipping: **768 at every surface, and dark theme everywhere except
+this screen**, are still unlooked-at. Both are coverage gaps rather than
+undecided questions, which is why they do not hold the issue open — but nothing
+has looked, and no gate can.
 
 **Opened 2026-08-20** at the close of the results-list milestone (`b563242` ->
 `f0dc7b6`) as a stated gap in what this repository can check, and answered the

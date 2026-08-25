@@ -338,9 +338,9 @@ const CENSUS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
       'color, font-family, font-size, font-variant-numeric: tabular-nums, font-weight, line-height',
   },
   'admin/TaskTable.module.css': {
-    '.scroller': 'max-width, overflow-x: auto',
+    '.scroller': 'max-width, overflow-x: auto, border, border-radius',
     '.table':
-      'width, min-width, border-collapse: collapse, border, border-radius, background, font-family, font-size, line-height',
+      'width, min-width, border-collapse: collapse, background, font-family, font-size, line-height',
     '.head th':
       'padding, border-bottom, color, font-size, font-weight, letter-spacing, text-align: left, text-transform: uppercase, white-space: nowrap',
     '.row > td': 'padding, border-top, vertical-align: top',
@@ -382,9 +382,9 @@ const CENSUS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
     '.note': 'margin, align-self: flex-end, color, font-size, line-height',
     '.empty':
       'margin, padding, border, border-radius, background, color, font-size, text-align: center',
-    '.scroller': 'max-width, overflow-x: auto',
+    '.scroller': 'max-width, overflow-x: auto, border, border-radius',
     '.table':
-      'width, min-width, border-collapse: collapse, border, border-radius, background, font-family, font-size, line-height',
+      'width, min-width, border-collapse: collapse, background, font-family, font-size, line-height',
     '.head th':
       'padding, border-bottom, color, font-size, font-weight, letter-spacing, text-align: left, text-transform: uppercase, white-space: nowrap',
     '.row > td': 'padding, border-top, vertical-align: top',
@@ -450,9 +450,9 @@ const CENSUS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
     '.loading': 'margin, padding, color, font-size, text-align: center',
   },
   'review/LineItemsTable.module.css': {
-    '.scroller': 'max-width, overflow-x: auto',
+    '.scroller': 'max-width, overflow-x: auto, border, border-radius',
     '.table':
-      'width, min-width, table-layout: fixed, border-collapse: collapse, border, border-radius, background, font-family, font-size, line-height',
+      'width, min-width, table-layout: fixed, border-collapse: collapse, background, font-family, font-size, line-height',
     '.head th':
       'box-sizing: border-box, padding, border-bottom, color, font-size, font-weight, letter-spacing, text-align: left, text-transform: uppercase',
     '.head th:nth-child(1)': 'width, text-align: right',
@@ -1121,5 +1121,46 @@ describe('a colour token is readable on what it is painted on', () => {
     // ...and the value the dark lift replaced, which is what these checks exist
     // to keep out: below the floor on the dark panel, fine on white.
     expect(contrastRatio('#64748B', '#0E1223')).toBe(3.91)
+  })
+})
+
+describe('a rounded corner is declared where a browser can honour it', () => {
+  /** ISSUE-010 item 4, as a property over the tree rather than three instances.
+   *
+   * `border-collapse: collapse` and `border-radius` on one rule is not a
+   * near-miss: the corners render square in all three engines, so the radius
+   * declares an intent the browser discards. Three `.table` rules did it --
+   * admin, receipts and review -- which is why the issue called it a
+   * repository-wide question and not one screen's.
+   *
+   * The fix is not to delete the radius. `--radius-lg` is a design token
+   * (`tokens.css`) and seven other surfaces round with it -- StatTiles,
+   * LoginPage, ConfidenceRail, FindingsPanel, ImagePane among them -- so
+   * rounded surfaces are the system's norm and the tables were meant to be
+   * rounded. The radius moves to `.scroller`, which already exists on all
+   * three, already sets `overflow-x: auto`, and is therefore already a
+   * clipping context. The border moves with it so it is not cut mid-corner.
+   *
+   * **Bound, stated because green here is not the same as seen.** This checks
+   * that no rule declares the contradiction. It cannot check that the corners
+   * look right; jsdom lays nothing out and this file reads text. What a
+   * browser showed is in the commit message, per the census assertion's own
+   * instruction. */
+  it('never sets border-radius on the same rule that collapses its borders', () => {
+    const offenders: string[] = []
+    for (const file of stylesheets()) {
+      for (const rule of rulesIn(read(file))) {
+        const declared = new Map(rule.declarations)
+        if (declared.get('border-collapse') === 'collapse' && declared.has('border-radius')) {
+          offenders.push(`${file} ${rule.selector}`)
+        }
+      }
+    }
+    expect(
+      offenders,
+      'a rule sets border-radius and border-collapse: collapse together. The ' +
+        'browser discards the radius, so the declaration states an intent that ' +
+        'never renders. Put the radius on the scrolling wrapper, which clips.',
+    ).toEqual([])
   })
 })

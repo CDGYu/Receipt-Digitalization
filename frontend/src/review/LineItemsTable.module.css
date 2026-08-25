@@ -62,6 +62,15 @@
 .scroller {
   max-width: 100%;
   overflow-x: auto;
+  /* The surface treatment lives here, not on the table. A table with
+   * `border-collapse: collapse` discards `border-radius` -- confirmed square in
+   * all three engines (ISSUE-010 item 4) -- so the radius stated an intent the
+   * browser threw away. This element already sets `overflow-x`, which makes it a
+   * clipping context, so the corners round here and clip what scrolls inside.
+   * The border moves with the radius: left on the table it would be a square
+   * outline cut off by a rounded clip. */
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
 }
 
 .table {
@@ -76,8 +85,6 @@
   min-width: 44rem;
   table-layout: fixed;
   border-collapse: collapse;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
   background: var(--color-surface);
   font-family: var(--font-sans);
   font-size: var(--text-sm);
