@@ -194,6 +194,12 @@ describe('tokens.css', () => {
     // they are gone. Without the stripping this test and that comment could not
     // both exist.
     expect(css, 'a data-theme rule is still in the stylesheet').not.toContain('data-theme')
+    // Both dead selectors named by their constants rather than as loose
+    // strings. `DARK_ATTR` was left declared and unused when the three dark
+    // tests went, which is a `tsc -b` failure (TS6133) and NOT one any Vitest
+    // run reports -- `vitest` type-checks nothing. It shipped green through a
+    // full `npm test` and was caught by the typecheck gate afterwards.
+    expect(css, `${DARK_ATTR} is still in the stylesheet`).not.toContain(DARK_ATTR)
     expect(css, `${DARK_MEDIA} is still in the stylesheet`).not.toContain(DARK_MEDIA)
     expect(css, 'a prefers-color-scheme: dark rule is still in the stylesheet').not.toMatch(
       /@media\s*\(\s*prefers-color-scheme:\s*dark\s*\)/,
