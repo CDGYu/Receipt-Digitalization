@@ -3632,6 +3632,33 @@ accuracy figure means.
 **Blocks:** the meaning of ISSUE-001's baseline, and of the re-baseline in step
 7 Task 3 step 4.
 
+**Step 2 of "How to resume" is DONE (2026-08-25);** the ruling is not, and this
+entry stays open for it. `config_identity` now emits
+`"prompt_conditioning": {"merchant_hints": false, "few_shots": false}` into
+every aggregate, so a figure carries what conditioned it. No hash covered this:
+`prompt_bundle_hash` digests the static templates and the tool schema, and hints
+are injected into the *user* turn, so two runs could share a bundle hash and
+still have measured different prompts.
+
+**The `false` is derived, not asserted.**
+`tests/test_eval_prompt_conditioning.py` checks the real signatures of
+`run_receipt` and `build_eval_pipeline` for any parameter that could condition a
+prompt, and reddens the moment one appears — verified by mutation, adding
+`hints=` to `build_eval_pipeline` fails it. So implementing the ruling forces
+whoever does it to correct the record rather than leave it lying.
+
+**And the ruling is larger than this entry made it sound.** "Mirror production"
+is not adding an argument. Measured 2026-08-25:
+`run_receipt(image_path, client, ctx, max_attempts, default_currency,
+triage_client, extract_fallback_client)` and `build_eval_pipeline(client, ctx,
+images_dir, image_suffixes, default_currency, triage_client,
+extract_fallback_client, attribution_sink)` — **neither takes a session.** The
+eval path cannot reach the merchant registry at all, by construction and not by
+omission. So the real choice is *give the eval path a database* versus *keep it
+hermetic and label the number honestly*. Step 3 below, which says only that the
+hints must be the same objects `_attempt_prompt_hash` is handed, describes the
+smaller problem.
+
 ### What is wrong, measured
 
 `run_receipt` — the `build_eval_pipeline` path — calls `extract_with_repair`

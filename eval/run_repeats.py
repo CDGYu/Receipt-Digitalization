@@ -123,12 +123,29 @@ def config_identity(tiers: Any, settings: Any) -> dict[str, Any]:
 
     Prompt identity is imported, never restated: a second copy of
     ``PROMPT_VERSION`` here is a copy that can drift.
+
+    ``prompt_conditioning`` records what the run injected into the *user* turn,
+    which no hash above covers. ``prompt_bundle_hash`` digests the static
+    templates and the tool schema, so two runs can share it and still have
+    measured different prompts -- and on this path they measured the **unhinted**
+    one while ``process_receipt`` sends hints at three call sites (ISSUE-034).
+    Both values are ``False`` because ``run_receipt`` and ``build_eval_pipeline``
+    accept nothing that could condition a prompt and take no session, so the
+    merchant registry is unreachable rather than merely unused. That is asserted
+    against the real signatures by
+    ``tests/test_eval_prompt_conditioning.py``, which reddens the moment anyone
+    threads hints through -- so this block cannot quietly keep claiming False.
+
+    It is deliberately **not** a decision about which prompt eval *should*
+    measure. That ruling is the owner's and is open; this only stops a figure
+    from travelling without saying what produced it.
     """
     from receipts.extract.prompts import PROMPT_VERSION, prompt_bundle_hash
 
     return {
         "prompt_version": PROMPT_VERSION,
         "prompt_bundle_hash": prompt_bundle_hash(),
+        "prompt_conditioning": {"merchant_hints": False, "few_shots": False},
         "default_currency": settings.default_currency,
         "vlm_timeout_s": settings.vlm_timeout_s,
         "triage": rung_identity(tiers.triage),
