@@ -462,6 +462,14 @@ The screen where the ongoing cost of the system lives. Optimise for time-per-rec
 
 ### Task P5.T2 — Upload, list, queue, export pages `[frontend]`
 
+> **STATUS 2026-08-25 (later) — DONE. All four.** The two below marked NOT built
+> were built at `dc31af7`, and **neither of the "deliberately" notes forbade it**
+> once read rather than summarised: the drop-zone note refused a box that *looks*
+> droppable **and is not**, which handlers satisfy rather than overrule, and the
+> filters note said "ruled out of **v1**" — a scope call whose load-bearing
+> clause is *rows are not clickable*, which filters do not touch. The table below
+> is kept as the record of how the gap was found.
+>
 > **STATUS 2026-08-25 — two of four, and NOT the two this row used to name.**
 > Each item derived against the tree rather than inferred from ISSUE-026 being
 > closed:
@@ -487,13 +495,21 @@ The screen where the ongoing cost of the system lives. Optimise for time-per-rec
 > overturning a recorded refusal to make the chooser look droppable, and it
 > needs the drop handler, not just the styling that was withheld.
 
-- [ ] Upload **drag-drop** — not built, and deliberately so; see the note above.
+- [x] Upload **drag-drop** — `dc31af7`. Handlers on the `<label>` that already
+      wraps the input, feeding the **same `offer`** the picker uses.
+      `onDragOver` calls `preventDefault`, without which the browser navigates
+      to the dragged file and the drop handler never runs.
 - [x] Upload **progress** — `ProcessingView`, replacing the chooser in place.
-- [ ] Receipts list with **status/confidence filters** — not built; the screen
-      has no filter control at all.
+- [x] Receipts list with **status/confidence filters** — `dc31af7`. Server-side,
+      through `GET /export/receipts`' existing `status` and `min_confidence`
+      params; no backend change was needed. An unchosen filter is omitted, not
+      sent empty.
 - [x] Review queue **ordered by priority** — `review/queue.py:92`, `:466`.
 - [x] Export trigger hitting `GET /export/xlsx` — `api/receipts.ts:40`.
-- [ ] Tests + commit — outstanding for the two unbuilt items only.
+- [x] Tests + commit — `dc31af7`. Ten tests: six on the filters (including that
+      "Load more" keeps them, and that clearing one drops it from the query
+      rather than sending it empty) and four on the drop (including that
+      `dragover` is prevented, which nothing else on the screen can show).
 
 *(One checkbox held all four items until 2026-08-25. It could not be ticked
 while any item was missing and could not show which, so the two that shipped
