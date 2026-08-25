@@ -521,6 +521,31 @@ const CENSUS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
       'display: flex, align-items: center, gap, min-height, color, font-family, font-size, cursor: pointer',
     '.checkbox': 'flex: none, width, height, margin, accent-color, cursor: pointer',
   },
+  'review/ReviewQueue.module.css': {
+    '.queue': 'display: flex, flex-direction: column, gap',
+    '.section': 'display: flex, flex-direction: column, gap',
+    '.heading': 'font-size, font-weight, margin',
+    // Wide content scrolls inside its own box; the page body must not.
+    '.scroller': 'overflow-x: auto',
+    '.table': 'border-collapse: collapse, width',
+    // `box-sizing: border-box` first, and it is ISSUE-032's lesson applied
+    // rather than repeated: a header cell that sizes its content box and then
+    // adds padding and a border computes a different width from a body cell
+    // that does not. This table declares no column widths at all, so there is
+    // no percentage arithmetic here to drift -- which is the other half of that
+    // issue and the reason it cannot recur in this file.
+    '.table th, .table td':
+      'box-sizing: border-box, border-bottom, padding, text-align: left, vertical-align: top',
+    '.table th': 'font-weight, white-space: nowrap',
+    '.numeric': 'text-align: right, font-variant-numeric: tabular-nums, white-space: nowrap',
+    '.reason': 'color',
+    '.opened': 'white-space: nowrap, font-variant-numeric: tabular-nums',
+    '.mine': 'background',
+    '.action': 'white-space: nowrap',
+    '.empty': 'color, margin',
+    '.error': 'color, margin',
+    '.unknown': 'color',
+  },
   'review/ReviewScreen.module.css': {
     '.screen':
       'box-sizing: border-box, display: grid, grid-template-columns, align-content: start, gap, max-width, margin, padding, font-family, color',
@@ -767,7 +792,13 @@ describe('the census reads what is there, not what it hopes for', () => {
 
   it('is reading the real tree, not an empty one', () => {
     const files = stylesheets()
-    expect(files.length, 'no stylesheets found -- the whole census is vacuous').toBe(22)
+    // 23 since `review/ReviewQueue.module.css` was added on 2026-08-25. The
+    // number is deliberate here, unlike in the parser's docblock next door: the
+    // point is that the walk found the real tree rather than an empty one, and
+    // an exact count is what makes "found nothing" and "found one" both fail.
+    // It is expected to move whenever a stylesheet is added, and the census
+    // entry that must accompany it is the other half of the same step.
+    expect(files.length, 'no stylesheets found -- the whole census is vacuous').toBe(23)
     let rules = 0
     let declarations = 0
     for (const file of files) {

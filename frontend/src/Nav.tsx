@@ -11,6 +11,15 @@ interface Destination {
   readonly label: string
   readonly href: string
   readonly route: Route
+  /** Other routes this destination is still "the current page" for.
+   *
+   *  One destination can span two screens when the second is somewhere the
+   *  first sends you: Review links to the queue, and picking a receipt there
+   *  claims it and moves to `/app/review`. A reviewer who has arrived at the
+   *  receipt has not left Review, so the link stays marked -- without this the
+   *  highlight would vanish at exactly the moment the reviewer started working.
+   */
+  readonly alsoCurrentFor?: readonly Route[]
 }
 
 /** The screens every signed-in person can reach, in the order the work runs: a
@@ -34,7 +43,7 @@ const DESTINATIONS: readonly Destination[] = [
   // `/app/` lands here too, and this is the screen that offers every way on.
   { label: 'Home', href: '/app/', route: 'home' },
   { label: 'Upload', href: '/app/upload', route: 'upload' },
-  { label: 'Review', href: '/app/review', route: 'review' },
+  { label: 'Review', href: '/app/queue', route: 'queue', alsoCurrentFor: ['review'] },
   { label: 'Results', href: '/app/receipts', route: 'receipts' },
 ]
 
@@ -68,7 +77,8 @@ export function Nav({ identity, route }: NavProps) {
   return (
     <nav aria-label="Screens" className={styles.nav}>
       {destinations.map((destination) => {
-        const current = route === destination.route
+        const current =
+          route === destination.route || (destination.alsoCurrentFor?.includes(route) ?? false)
         return (
           <a
             key={destination.href}

@@ -24,7 +24,7 @@
  * the destination moved, because `/app/` became a landing screen that offers
  * every way forward rather than a queue that is usually empty.
  */
-export type Route = 'login' | 'home' | 'review' | 'admin' | 'receipts' | 'upload'
+export type Route = 'login' | 'home' | 'review' | 'queue' | 'admin' | 'receipts' | 'upload'
 
 export function currentRoute(pathname: string = window.location.pathname): Route {
   if (pathname === '/app/login') {
@@ -59,6 +59,15 @@ export function currentRoute(pathname: string = window.location.pathname): Route
   // with no branch here at all.
   if (pathname.startsWith('/app/upload')) {
     return 'upload'
+  }
+  // `/app/queue`, NOT `/app/review/queue`, and the reason is the invariant the
+  // comment below rests on: no two of these prefixes overlap. A `/app/review`
+  // prefix already returns `review`, so a nested queue path would resolve to
+  // the reviewer unless this branch were ordered above it -- an ordering
+  // dependency that is invisible at the call site and silent when broken.
+  // A disjoint prefix keeps the branches independent of their order.
+  if (pathname.startsWith('/app/queue')) {
+    return 'queue'
   }
   // Explicit since `/app/` became a landing screen. This branch used to not
   // exist: `/app/review` resolved only by falling through the default, which

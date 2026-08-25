@@ -32,7 +32,11 @@ describe('Nav', () => {
     render(<Nav identity={{ username: 'alice', role: 'reviewer' }} route="review" />)
 
     expect(screen.getByRole('link', { name: 'Upload' }).getAttribute('href')).toBe('/app/upload')
-    expect(screen.getByRole('link', { name: 'Review' }).getAttribute('href')).toBe('/app/review')
+    // `/app/queue`, not `/app/review`: Review leads to the LIST now. A
+    // reviewer picks a receipt there, which claims it and moves them to
+    // `/app/review` -- so the review screen is still reachable, one click
+    // deeper, and is no longer where arriving costs you a claimed task.
+    expect(screen.getByRole('link', { name: 'Review' }).getAttribute('href')).toBe('/app/queue')
     expect(screen.getByRole('link', { name: 'Results' }).getAttribute('href')).toBe('/app/receipts')
   })
 })
@@ -67,7 +71,18 @@ describe('the current page', () => {
     expect(screen.getByRole('link', { name: 'Results' }).getAttribute('aria-current')).toBeNull()
   })
 
+  it('marks Review when the QUEUE route is the one in hand', () => {
+    render(<Nav identity={{ username: 'alice', role: 'reviewer' }} route="queue" />)
+
+    expect(screen.getByRole('link', { name: 'Review' }).getAttribute('aria-current')).toBe('page')
+  })
+
   it('marks Review when the review route is the one in hand', () => {
+    // Review links to `/app/queue` now, so this is no longer the link's own
+    // route: it is `alsoCurrentFor`. The case is worth keeping precisely
+    // because it is the one a reader would expect to be automatic and is not
+    // -- a reviewer who picked a receipt off the queue is ON `/app/review`,
+    // and the link that took them there must stay marked while they work.
     // This comment used to read "the landing path, which routes there by
     // default" -- true until `/app/` became the home screen and `route.ts`'s
     // default moved to `home`. `/app/review` is an explicit branch now, so

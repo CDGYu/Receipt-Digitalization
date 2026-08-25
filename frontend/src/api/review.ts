@@ -16,6 +16,28 @@ export function fetchNext(): Promise<ReviewNextResponse> {
   return request('/review/next')
 }
 
+/** Claim one **named** task -- the row a reviewer picked off the queue list.
+ *
+ * The companion to `fetchNext`, which takes whatever is at the head of the
+ * queue. The reply is the **same shape** (`{task, receipt}`), which is what lets
+ * both entry points feed one loader; `test_review_claim_answers_in_the_same_shape_as_review_next`
+ * pins that against key drift rather than trusting it.
+ *
+ * **Idempotent for the holder**, unlike `fetchNext`: re-claiming a task you
+ * already hold returns it unchanged and writes nothing, so a double-click on a
+ * row is not an error and `[Resume]` on your own in-progress row is the same
+ * call as `[Review]` on an open one.
+ *
+ * Rejects with an `ApiError` carrying the API's own words:
+ *   * **404** -- no such task. The list is stale; reload it.
+ *   * **409** -- the row is real and the queue's state is in the way: someone
+ *     else holds it, it is closed, or **this caller already holds another
+ *     task**, which the message names.
+ */
+export function claimTask(taskId: string): Promise<ReviewNextResponse> {
+  return request(`/review/${encodeURIComponent(taskId)}/claim`, { method: 'POST' })
+}
+
 /** The full receipt: `totals`, `line_items`, `findings`, and the confidence
  *  breakdown that `receipt_summary` leaves out.
  *

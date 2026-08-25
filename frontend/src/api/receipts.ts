@@ -46,6 +46,36 @@ export function fetchExportReceipts(params?: {
   return request<ExportReceiptPage>(`/export/receipts${suffix}`)
 }
 
+export interface ReceiptPage {
+  items: ReceiptSummary[]
+  has_more: boolean
+}
+
+/** One page of `GET /receipts`.
+ *
+ *  The plain list, deliberately, and NOT `fetchExportReceipts`: the export
+ *  route applies a status exclusion so its page omits rows the review queue
+ *  cares about. Here the caller wants whatever the queue points at, so the
+ *  exclusion would silently drop columns for exactly the receipts under
+ *  review.
+ *
+ *  `require_user` at the route, not `require_role` -- a reviewer may call this,
+ *  which is what makes it usable as the display half of the review queue.
+ */
+export function fetchReceipts(params?: {
+  limit?: number
+  offset?: number
+  /** A `ReceiptStatus` value, or `undefined` for every status. */
+  status?: string
+}): Promise<ReceiptPage> {
+  const query = new URLSearchParams()
+  if (params?.limit !== undefined) query.set('limit', String(params.limit))
+  if (params?.offset !== undefined) query.set('offset', String(params.offset))
+  if (params?.status !== undefined) query.set('status', params.status)
+  const suffix = query.toString() === '' ? '' : `?${query.toString()}`
+  return request<ReceiptPage>(`/receipts${suffix}`)
+}
+
 /** Download the workbook. **Admin-only at the route**, which is the gate:
  *  `export_xlsx` takes `Depends(require_role(ROLE_ADMIN))`, so a reviewer
  *  reaching it gets 403 `insufficient role` and this rejects with an

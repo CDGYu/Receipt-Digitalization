@@ -1,0 +1,95 @@
+/* The review queue list.
+ *
+ * Column widths are NOT declared here and the table is deliberately
+ * automatic-layout: the content is merchant names and decimal strings of
+ * unknown width, and ISSUE-032 is what a fixed layout with hand-computed
+ * percentages costs when one of them is wrong. Nothing here declares
+ * `nth-child` widths, so that arithmetic has no counterpart to drift from.
+ */
+
+.queue {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.heading {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+/* Wide content scrolls inside its own box rather than pushing the page
+ * sideways. */
+.scroller {
+  overflow-x: auto;
+}
+
+.table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.table th,
+.table td {
+  /* Border-box, for the reason ISSUE-032 records: a cell that sizes its
+   * content box and then adds padding and a border computes a different width
+   * from its neighbour that does not. */
+  box-sizing: border-box;
+  border-bottom: 1px solid var(--rule, #d9d9de);
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+.table th {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* Decimal strings read as columns of digits, so they align right. They are
+ * rendered as the strings the API sent -- never parsed into a number and
+ * re-formatted (ADR-0001). */
+.numeric {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.reason {
+  color: var(--muted, #5b5b66);
+}
+
+.opened {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The row for the task this reviewer already holds. */
+.mine {
+  background: var(--surface-accent, #eef2ff);
+}
+
+.action {
+  white-space: nowrap;
+}
+
+.empty {
+  color: var(--muted, #5b5b66);
+  margin: 0;
+}
+
+.error {
+  color: var(--danger, #b3261e);
+  margin: 0;
+}
+
+.unknown {
+  color: var(--muted, #5b5b66);
+}

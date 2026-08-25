@@ -114,6 +114,10 @@ import type { Route } from '../src/route'
  * The mocks are file-scoped, which is why this is its own file -- the same
  * reason `app-root.test.tsx` and `app-header.test.tsx` are theirs.
  */
+vi.mock('../src/review/ReviewQueue', () => ({
+  ReviewQueue: () => <p>the review queue</p>,
+}))
+
 vi.mock('../src/review/ReviewScreen', () => ({
   ReviewScreen: () => <p>the review screen</p>,
 }))
@@ -140,13 +144,17 @@ vi.mock('../src/home/HomeScreen', () => ({
 
 /** What each route must put on the page, one entry per `Route` member.
  *
- * `Record<Route, string>` and not a partial: a sixth member on the union is a
+ * `Record<Route, string>` and not a partial: a NEW member on the union is a
  * `tsc -b` failure here until it is given a screen, which is the half of this
- * property a test run cannot enforce on its own. */
+ * property a test run cannot enforce on its own. (This said "a sixth member"
+ * while the union had six; the count was true when written and stopped being
+ * true the moment the property it describes did its job. The rule does not
+ * depend on how many there are, so it no longer says.) */
 const SCREEN: Record<Route, string> = {
   login: 'the login page',
   home: 'the home screen',
   review: 'the review screen',
+  queue: 'the review queue',
   admin: 'the admin screen',
   receipts: 'the receipts screen',
   upload: 'the upload screen',

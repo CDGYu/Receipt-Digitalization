@@ -41,6 +41,7 @@ import { LoginPage } from './login/LoginPage'
 import { Nav } from './Nav'
 import navStyles from './Nav.module.css'
 import { ReceiptsScreen } from './receipts/ReceiptsScreen'
+import { ReviewQueue } from './review/ReviewQueue'
 import { ReviewScreen } from './review/ReviewScreen'
 import { SignOutControl } from './SignOutControl'
 import { UploadScreen } from './upload/UploadScreen'
@@ -140,6 +141,12 @@ function App() {
         // gets the same three destinations. The admin link is the nav's job and
         // is gated there.
         <HomeScreen />
+      ) : route === 'queue' ? (
+        // No `identity`: the rows a reviewer may see are decided by the API.
+        // `list_tasks` scopes a reviewer to open tasks plus their own (ADR-0026)
+        // and an admin to everything, so a role check drawn here would be a
+        // second, weaker copy of a rule the server already enforces.
+        <ReviewQueue />
       ) : route === 'upload' ? (
         // No `identity`: nothing on this screen is decided by who is asking.
         // `POST /upload` takes `require_upload`, which is the API key or ANY
