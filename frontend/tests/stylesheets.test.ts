@@ -547,22 +547,29 @@ const CENSUS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
     '.checkbox': 'flex: none, width, height, margin, accent-color, cursor: pointer',
   },
   'review/ReviewQueue.module.css': {
+    // The page container this screen shipped WITHOUT: it rendered a bare `div`
+    // into the document and its tables ran flush to both viewport edges while
+    // every neighbouring screen was inset. Matched to `HomeScreen`,
+    // `ReceiptsScreen` and `AdminScreen` to the declaration.
+    '.screen':
+      'box-sizing: border-box, display: flex, flex-direction: column, gap, max-width, margin, padding, color, font-family',
+    '.heading': 'margin, font-family, font-size, font-weight, line-height',
     '.queue': 'display: flex, flex-direction: column, gap',
     '.section': 'display: flex, flex-direction: column, gap',
-    '.heading': 'font-size, font-weight, margin',
-    // Wide content scrolls inside its own box; the page body must not.
+    // Was `.heading`, renamed when the h1 took that name.
+    '.sectionHeading': 'font-size, font-weight, margin',
     '.scroller': 'overflow-x: auto',
     '.table': 'border-collapse: collapse, width',
-    // `box-sizing: border-box` first, and it is ISSUE-032's lesson applied
-    // rather than repeated: a header cell that sizes its content box and then
-    // adds padding and a border computes a different width from a body cell
-    // that does not. This table declares no column widths at all, so there is
-    // no percentage arithmetic here to drift -- which is the other half of that
-    // issue and the reason it cannot recur in this file.
     '.table th, .table td':
       'box-sizing: border-box, border-bottom, padding, text-align: left, vertical-align: top',
     '.table th': 'font-weight, white-space: nowrap',
-    '.numeric': 'text-align: right, font-variant-numeric: tabular-nums, white-space: nowrap',
+    // **Was a bare `.numeric`, which LOST to `.table th, .table td` above.**
+    // (0,1,0) against (0,1,1): the money and confidence columns rendered
+    // left-aligned under their own headers while every gate stayed green. The
+    // census could not see it -- the declaration was present the whole time --
+    // and jsdom has no layout. A browser could, at a glance.
+    '.table th.numeric, .table td.numeric':
+      'text-align: right, font-variant-numeric: tabular-nums, white-space: nowrap',
     '.reason': 'color',
     '.opened': 'white-space: nowrap, font-variant-numeric: tabular-nums',
     '.mine': 'background',

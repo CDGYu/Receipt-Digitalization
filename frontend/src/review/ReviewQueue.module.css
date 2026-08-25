@@ -1,5 +1,14 @@
 /* The review queue list.
  *
+ * **Every colour is a real token.** This file shipped with `var(--rule,
+ * #d9d9de)`, `var(--muted, #5b5b66)`, `var(--surface-accent, #eef2ff)` and
+ * `var(--danger, #b3261e)` -- four names that DO NOT EXIST in `tokens.css`, so
+ * every one of them fell through to its hardcoded fallback and this screen
+ * painted from hex rather than from the design system, against design section
+ * 3.2. Nothing catches that: a `var()` with a fallback is valid CSS, the census
+ * records the declaration either way, and jsdom paints nothing. The names it
+ * uses now are the ones the token file actually declares.
+ *
  * Column widths are NOT declared here and the table is deliberately
  * automatic-layout: the content is merchant names and decimal strings of
  * unknown width, and ISSUE-032 is what a fixed layout with hand-computed
@@ -7,20 +16,49 @@
  * `nth-child` widths, so that arithmetic has no counterpart to drift from.
  */
 
+/* The page container, matched to `HomeScreen`, `ReceiptsScreen` and
+ * `AdminScreen` to the declaration -- the same `max-width` and the same
+ * `var(--space-4xl) var(--space-2xl)` padding, so the full-width screens sit on
+ * one rhythm rather than four near-misses.
+ *
+ * **This screen shipped with no container at all.** It rendered a bare `<div>`
+ * straight into the document, so its tables ran flush to both viewport edges
+ * with zero padding while every neighbouring screen was inset. Invisible to the
+ * five gates and obvious in a browser at a glance. */
+.screen {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2xl);
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: var(--space-4xl) var(--space-2xl);
+  color: var(--color-foreground);
+  font-family: var(--font-sans);
+}
+
+.heading {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--text-3xl);
+  font-weight: 600;
+  line-height: 1.3;
+}
+
 .queue {
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: var(--space-2xl);
 }
 
 .section {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: var(--space-md);
 }
 
-.heading {
-  font-size: 1rem;
+.sectionHeading {
+  font-size: var(--text-base);
   font-weight: 600;
   margin: 0;
 }
@@ -42,7 +80,7 @@
    * content box and then adds padding and a border computes a different width
    * from its neighbour that does not. */
   box-sizing: border-box;
-  border-bottom: 1px solid var(--rule, #d9d9de);
+  border-bottom: 1px solid var(--color-border);
   padding: 0.5rem 0.75rem;
   text-align: left;
   vertical-align: top;
@@ -55,15 +93,28 @@
 
 /* Decimal strings read as columns of digits, so they align right. They are
  * rendered as the strings the API sent -- never parsed into a number and
- * re-formatted (ADR-0001). */
-.numeric {
+ * re-formatted (ADR-0001).
+ *
+ * **`.table th.numeric, .table td.numeric` and NOT a bare `.numeric`, and that
+ * is the whole rule.** `.table th, .table td` above sets `text-align: left` at
+ * specificity (0,1,1); a bare `.numeric` is (0,1,0) and LOSES, so the money and
+ * confidence columns silently rendered left-aligned under their own headers.
+ * Every gate was green on it -- the declaration is present, so the census sees
+ * it; jsdom has no layout engine, so no render test can. **Found by opening the
+ * page in Chromium**, where Total and Confidence started at the same x as their
+ * headers instead of ending at the same x.
+ *
+ * This is the same defect ISSUE-032 records one screen over, reproduced here
+ * within the hour by the person who had just been warned about it. */
+.table th.numeric,
+.table td.numeric {
   text-align: right;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
 .reason {
-  color: var(--muted, #5b5b66);
+  color: var(--color-muted-foreground);
 }
 
 .opened {
@@ -73,7 +124,7 @@
 
 /* The row for the task this reviewer already holds. */
 .mine {
-  background: var(--surface-accent, #eef2ff);
+  background: var(--color-surface-active);
 }
 
 .action {
@@ -81,15 +132,15 @@
 }
 
 .empty {
-  color: var(--muted, #5b5b66);
+  color: var(--color-muted-foreground);
   margin: 0;
 }
 
 .error {
-  color: var(--danger, #b3261e);
+  color: var(--color-severity-error);
   margin: 0;
 }
 
 .unknown {
-  color: var(--muted, #5b5b66);
+  color: var(--color-muted-foreground);
 }

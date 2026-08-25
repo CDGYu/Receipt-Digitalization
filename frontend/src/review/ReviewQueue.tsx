@@ -159,27 +159,37 @@ export function ReviewQueue({ navigate }: ReviewQueueProps = {}) {
 
   if (error !== null) {
     return (
-      <div className={styles.queue}>
-        <p className={styles.error} role="alert">
-          {error}
-        </p>
-        <button type="button" onClick={() => void load()}>
-          Try again
-        </button>
-      </div>
+      <main className={styles.screen}>
+        <h1 className={styles.heading}>Review queue</h1>
+        <div className={styles.queue}>
+          <p className={styles.error} role="alert">
+            {error}
+          </p>
+          <button type="button" onClick={() => void load()}>
+            Try again
+          </button>
+        </div>
+      </main>
     )
   }
 
   if (rows === null) {
-    return <p className={styles.empty}>Loading the review queue...</p>
+    return (
+      <main className={styles.screen}>
+        <h1 className={styles.heading}>Review queue</h1>
+        <p className={styles.empty}>Loading the review queue...</p>
+      </main>
+    )
   }
 
   const mine = rows.filter((row) => row.task.state === 'in_progress')
   const backlog = rows.filter((row) => row.task.state === 'open')
 
   return (
-    <div className={styles.queue}>
-      {claimError !== null ? (
+    <main className={styles.screen}>
+      <h1 className={styles.heading}>Review queue</h1>
+      <div className={styles.queue}>
+        {claimError !== null ? (
         <p className={styles.error} role="alert">
           {claimError}
         </p>
@@ -187,7 +197,7 @@ export function ReviewQueue({ navigate }: ReviewQueueProps = {}) {
 
       {mine.length > 0 ? (
         <section className={styles.section} aria-labelledby="review-queue-mine">
-          <h2 className={styles.heading} id="review-queue-mine">
+          <h2 className={styles.sectionHeading} id="review-queue-mine">
             Already in your hands
           </h2>
           <QueueTable
@@ -201,7 +211,7 @@ export function ReviewQueue({ navigate }: ReviewQueueProps = {}) {
       ) : null}
 
       <section className={styles.section} aria-labelledby="review-queue-backlog">
-        <h2 className={styles.heading} id="review-queue-backlog">
+        <h2 className={styles.sectionHeading} id="review-queue-backlog">
           Receipts waiting for review
         </h2>
         {backlog.length === 0 ? (
@@ -219,9 +229,9 @@ export function ReviewQueue({ navigate }: ReviewQueueProps = {}) {
             highlight={false}
           />
         )}
-      </section>
-
-    </div>
+        </section>
+      </div>
+    </main>
   )
 }
 
