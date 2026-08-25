@@ -80,6 +80,32 @@ services:
       SESSION_COOKIE_SECURE: "false"
       ALLOW_INSECURE_SESSION_COOKIE: "true"
       STORAGE_ROOT: /var/receipts/blobs
+      # **The API makes no model calls and still needs this.** The progress route
+      # sweeps the single row it is asked about (ADR-0054), and the "too long"
+      # it compares against is derived from `VLM_TIMEOUT_S` -- so a service that
+      # never calls a model still has to know what one costs, or it decides a
+      # receipt is dead on a budget nobody is spending.
+      #
+      # **It was unset here until 2026-08-25 and that was a live defect**,
+      # measured in this running stack rather than reasoned about: the worker had
+      # 3600 and the API defaulted to 120, giving `started_cutoff` values of
+      # 21600s and 720s. So the API called a receipt stranded after twelve
+      # minutes while the worker was legitimately three hours into it. On this
+      # box a real receipt takes ~30 minutes, so opening the processing screen
+      # stranded the receipt it was showing, every time. Receipt `9a21e64d`
+      # was marked `needs_review` that way, carrying `strand_receipt`'s own
+      # reason -- "processing was interrupted at extract and never resumed" --
+      # which no other writer emits, so the sweep is what marked it. Its
+      # heartbeat age at that moment was **1206s**, read as
+      # `review_tasks.opened_at - receipts.progress_at` in this database: past
+      # the API's 720s and nowhere near the worker's 21600s.
+      #
+      # **Keep this equal to the worker's.** Two services deriving one bound from
+      # two environments is the defect; the fix is the same input, not a second
+      # opinion. No test can see a disagreement across a container boundary --
+      # both halves are individually correct -- so the guard here is that the two
+      # values sit ten lines apart in one file.
+      VLM_TIMEOUT_S: "3600"
     volumes:
       - receipts_blobs:/var/receipts/blobs
     depends_on:
