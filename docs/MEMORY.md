@@ -117,7 +117,7 @@ moves, and this file has carried a wrong issue count before.
 **No count of refreshes is written here** — it is a number that moves without its
 sentence changing, which is review standard 5.
 
-**Freshness anchor `9e31bbf`** — the last commit that is not this handoff pair.
+**Freshness anchor `7b74402`** — the last commit that is not this handoff pair.
 **It is written twice below — here and inside the command.** Moving one and not
 the other is what happened on an earlier refresh, and the gate caught it because
 it parses the anchor out of the *command*.
@@ -138,7 +138,7 @@ nothing else: a stamp cannot name the commit that writes it. The test is a
 command, not a commit and not a count:
 
 ```
-git log --oneline 9e31bbf..main -- ":(top,exclude)docs/MEMORY.md" ":(top,exclude)docs/NEXT_SESSION_PROMPT.md"
+git log --oneline 7b74402..main -- ":(top,exclude)docs/MEMORY.md" ":(top,exclude)docs/NEXT_SESSION_PROMPT.md"
 git log --oneline refs/remotes/origin/main..main   # what a push would send
 git ls-remote --heads origin main                  # authoritative on what is pushed
 git branch --no-merged main                        # named FOUR on 2026-08-25
@@ -293,7 +293,32 @@ stays reachable — ADR-0042. `git log --oneline -- docs/MEMORY.md` is the list.
   The second is **ISSUE-032**, **RESOLVED 2026-08-25** at `443fa86` — candidate
   1, `box-sizing: border-box` on `.head th`, plus a pin in `stylesheets.test.ts`
   that reddens at "758.4px of a 704px table", the original defect state.
-  **`e2e/visual.spec.ts` was never re-run**, so `main`'s standing on that second
+  ~~**`e2e/visual.spec.ts` was never re-run**~~ — **IT RAN 2026-08-25 AND
+  PASSED** (15/15, 113 screenshots, 76 measurement records, **560 table cells
+  checked for overflow**, at `70dd971`, closed at `7b74402`). Only coordination
+  was ever in the way: two live sessions were asked and both cleared it.
+  **Chromium only, and that is a default rather than a decision** — the config
+  declares no `projects` block while all three engines are installed. **WebKit
+  is untested**, and it is the engine where `box-sizing` on `th` historically
+  differs. A `--browser=webkit` run was **killed** seconds in: not a failure, and
+  it left an orphaned `serve_review_e2e.py` on port 8100, since released.
+
+  **A VITEST FILE COUNT IS `ran + errored`, AND QUOTING ONLY "ran" MANUFACTURES A
+  REGRESSION.** `npx vitest run` during a concurrent Playwright build reported
+  **28 files / 376 tests / 3 errors**; the clean run reports **31 / 481 / 0**.
+  **28 + 3 = 31** — the same files were always discovered, three merely failed at
+  *collection* while `vite build` rewrote `dist` underneath them, so their ~105
+  tests were never registered. Read as "28 files, 376 tests" it looks exactly like
+  a missing suite. **It also survived a second wrong explanation**: it was blamed
+  on the working directory, and that was checked and refuted —
+  `frontend/` **is** the right cwd, `frontend/package.json` is the **only**
+  `package.json` in the repo, there is no root one, and `verify.py` pins all three
+  Node gates to `FRONTEND`. **Name the gate as `python scripts/verify.py`**, which
+  fixes cwd for all five and is what CI runs; then the question cannot arise.
+  *(And do not pipe a failing run through `tail`: the three filenames were in the
+  output and were discarded before anyone could read them.)*
+
+  The old claim, for context: `main`'s standing on that second
   guard is inferred from an isolated probe of the real stylesheets, not observed.
 - **The first pipeline run that ever reached a real model exposed a chain of
   four, each hidden by the one before it.** **ISSUE-028** (the image lacked the
