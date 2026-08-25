@@ -2976,7 +2976,17 @@ warning was deleted rather than softened — ADR-0048.)*
 
 ### Related
 
-- P7.T1 — `run_consistency` is unwired, which is the only reason this is latent.
+- P7.T1 — ~~`run_consistency` is unwired, which is the only reason this is
+  latent.~~ **Corrected 2026-08-25: it is wired**, at `b3bc14e`, where
+  `pipeline.py` calls it under `settings.consistency_enabled` and
+  `_wants_consistency(triage_result)`. **The defect above never reached that
+  path**, and not by luck: `aa65a2b` is an ancestor of `b3bc14e`
+  (`git merge-base --is-ancestor`), so the "do it before P7.T1" instruction three
+  paragraphs up was followed in that order. The bullet is corrected rather than
+  left to the section disclaimer because it is a *forward* pointer — a reader
+  asking "is P7.T1 wired?" would have read the old wording as current, and this
+  document has already sent someone to build a screen that had shipped a day
+  earlier (ISSUE-026).
 - `IMPLEMENTATION_PLAN.md` P0.T3 (acceptance met in substance since `aa65a2b`;
   the `consistency.diff_extractions` it names still does not exist) and P2.T1.
 
