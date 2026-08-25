@@ -131,46 +131,66 @@ def run_baseline(
         ),
         attribution_sink=attribution,
     )
-    report = run_eval(golden_dir, pipeline_fn, results_dir=results_dir)
+    def _fold_rung_provenance(report: EvalReport) -> None:
+        """Attach which rung produced what, **before the report is written**.
 
-    # Only the extract rung whose extraction was *kept* is counted. The triage
-    # pass is a different question, and a rung that ran and was discarded did
-    # not produce the extraction this report scored -- counting either would
-    # turn the answer to "did everything escalate?" into a call tally.
-    counts: dict[str, int] = {}
-    # ...and the discarded ones, by the clause that discarded them. Without
-    # this the ladder's own record answers "which rung won" and not "why the
-    # others lost", which is the question a ladder run is asked (ISSUE-018).
-    discards: dict[str, dict[str, int]] = {}
-    rungs = tiers.extract_rungs
-    for entry in attribution:
-        if entry.pass_name != "extract":
-            continue
-        # **`entry.rung` is the reader ISSUE-015 asked for, and it is load
-        # bearing rather than decorative.** `entry.model_id` cannot identify
-        # the tier when two rungs share a model and differ only in their tools
-        # answer -- the ladder ISSUE-013 measured. `rung` is the index into
-        # `extract_rungs`, so it is the only thing that resolves which of them
-        # ran. Guarded because an out-of-range index would key every count to
-        # one rung silently, which is the failure this replaces.
-        if not 0 <= entry.rung < len(rungs):
-            raise RuntimeError(
-                f"attribution names extract rung {entry.rung}, and this run "
-                f"built {len(rungs)}. The ladder and its record disagree, so "
-                f"no count keyed from it would mean anything."
-            )
-        key = tier_key(rungs[entry.rung])
-        if entry.kept:
-            counts[key] = counts.get(key, 0) + 1
-        else:
-            by_reason = discards.setdefault(key, {})
-            reason = entry.discarded.value
-            by_reason[reason] = by_reason.get(reason, 0) + 1
-    # ``None``, not ``{}``: an empty dict would read as "measured, and no rung
-    # ran". Only a run that scored no receipt at all leaves this empty.
-    report.extract_rung_counts = counts or None
-    report.extract_discard_counts = discards or None
-    return report
+        Passed to `run_eval` as `finalize` rather than applied to its return
+        value, and that is the whole of ISSUE-012: `run_eval` writes the
+        committed results file and then returns, so anything folded in
+        afterwards reached the printed report and the caller's copy and never
+        the artefact. Probed 2026-08-21 -- a run whose report carried
+        `{'cloud': 1}` wrote `null`.
+
+        Closes over `attribution`, which `build_eval_pipeline` fills *during*
+        `run_eval`; by the time this runs it holds the whole run.
+        """
+        # Only the extract rung whose extraction was *kept* is counted. The
+        # triage pass is a different question, and a rung that ran and was
+        # discarded did not produce the extraction this report scored --
+        # counting either would turn the answer to "did everything escalate?"
+        # into a call tally.
+        counts: dict[str, int] = {}
+        # ...and the discarded ones, by the clause that discarded them. Without
+        # this the ladder's own record answers "which rung won" and not "why
+        # the others lost", which is the question a ladder run is asked
+        # (ISSUE-018).
+        discards: dict[str, dict[str, int]] = {}
+        rungs = tiers.extract_rungs
+        for entry in attribution:
+            if entry.pass_name != "extract":
+                continue
+            # **`entry.rung` is the reader ISSUE-015 asked for, and it is load
+            # bearing rather than decorative.** `entry.model_id` cannot
+            # identify the tier when two rungs share a model and differ only in
+            # their tools answer -- the ladder ISSUE-013 measured. `rung` is
+            # the index into `extract_rungs`, so it is the only thing that
+            # resolves which of them ran. Guarded because an out-of-range index
+            # would key every count to one rung silently, which is the failure
+            # this replaces.
+            if not 0 <= entry.rung < len(rungs):
+                raise RuntimeError(
+                    f"attribution names extract rung {entry.rung}, and this run "
+                    f"built {len(rungs)}. The ladder and its record disagree, "
+                    f"so no count keyed from it would mean anything."
+                )
+            key = tier_key(rungs[entry.rung])
+            if entry.kept:
+                counts[key] = counts.get(key, 0) + 1
+            else:
+                by_reason = discards.setdefault(key, {})
+                reason = entry.discarded.value
+                by_reason[reason] = by_reason.get(reason, 0) + 1
+        # ``None``, not ``{}``: an empty dict would read as "measured, and no
+        # rung ran". Only a run that scored no receipt at all leaves this empty.
+        report.extract_rung_counts = counts or None
+        report.extract_discard_counts = discards or None
+
+    return run_eval(
+        golden_dir,
+        pipeline_fn,
+        results_dir=results_dir,
+        finalize=_fold_rung_provenance,
+    )
 
 
 def _pct(value: float | None) -> str:

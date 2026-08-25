@@ -10,6 +10,7 @@ ever reaches the pipeline.
 
 from __future__ import annotations
 
+import json
 from datetime import date
 from decimal import Decimal as D
 from pathlib import Path
@@ -251,6 +252,50 @@ def test_run_baseline_wires_the_ladder_and_reports_the_rung_that_was_kept(
     # rung that was discarded. Both ran, and neither produced the extraction
     # this report scored.
     assert report.extract_rung_counts == {"cloud": 1}
+
+
+def test_the_committed_results_file_records_which_rung_produced_it(
+    monkeypatch, tmp_path
+):
+    """ISSUE-012: the counts reached the printed report and never the artefact.
+
+    `run_eval`'s last two statements were `_write_report(...)` then
+    `return report`, and `run_baseline` folded the rung counts in *after* it
+    returned — so a key added to `_report_to_dict` would have been `null` in
+    every file that function ever produced, whatever the run measured. Probed
+    2026-08-21: a run whose report carried `{'cloud': 1}` wrote `null`.
+
+    **Spec §16 commits the results file so regressions show in a diff, and
+    ISSUE-001's stated fear is a good accuracy number hiding the fact that
+    everything escalated.** An artefact that omits which model produced what
+    does not record the thing that step exists to record.
+
+    This asserts against the file on disk, not the returned report. The
+    returned report was always right; the file was the defect.
+    """
+    monkeypatch.setenv("VLM_PROVIDER", "ollama")
+    golden = tmp_path / "golden"
+    _write_golden(golden)
+
+    triage_client = FakeVLMClient([_triage()], model_id="triage-model")
+    local = FakeVLMClient([_unparseable(), _unparseable()], model_id="local")
+    cloud = FakeVLMClient([_good()], model_id="cloud")
+    monkeypatch.setattr(
+        "eval.run_baseline.make_pass_clients",
+        lambda settings: PassClients(
+            triage=triage_client, extract_rungs=(local, cloud)
+        ),
+    )
+
+    results = tmp_path / "results"
+    report = run_baseline(golden_dir=golden, ctx=CTX, results_dir=results)
+    assert report.n_failed == 0, report.failures
+
+    written = json.loads(
+        next(iter(sorted(results.glob("*.json")))).read_text(encoding="utf-8")
+    )
+    assert written["extract_rung_counts"] == {"cloud": 1}
+    assert written["extract_discard_counts"] == {"local": {"read_nothing": 1}}
 
 
 def test_two_rungs_of_one_model_are_counted_as_two_tiers(monkeypatch, tmp_path):

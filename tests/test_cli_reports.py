@@ -376,6 +376,12 @@ def _write_results(results_dir: Path, *, receipts: int, results: list[dict]) -> 
                     "line_item_precision": 0.0, "line_item_recall": 0.0,
                     "line_item_f1": 0.0, "cost_per_receipt": None,
                     "p50_latency_s": None, "p95_latency_s": None},
+        # ISSUE-012: the artefact records which rung produced the extraction and
+        # why the others lost. `None` here rather than a dict because this
+        # fixture is a one-rung run with no ladder to attribute -- which is what
+        # `run_eval` writes when no caller folds provenance in.
+        "extract_rung_counts": None,
+        "extract_discard_counts": None,
         "failures": [],
         "calibration": [],
         "results": results,
