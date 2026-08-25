@@ -8,6 +8,7 @@ from decimal import Decimal as D
 
 import pytest
 
+from receipts.extract import extractor as extractor_module
 from receipts.extract.clients.base import ResponseCache, RetryPolicy, VLMTransientError, with_retry
 from receipts.extract.clients.fake import FakeVLMClient
 from receipts.extract.extractor import (
@@ -563,3 +564,37 @@ def test_evaluate_carries_every_context_field_through_to_the_rules(monkeypatch):
     assert carried.parse_error == "this response did not parse"
     # ...and the caller's context is not written through in the process.
     assert probe_ctx.parse_error == "the caller's parse error"
+
+
+def test_consistency_never_consults_a_cache(monkeypatch):
+    """`run_consistency`'s central guarantee, which nothing pinned (P7.T1).
+
+    Its docstring says "Never cache these calls: a cache hit would return the
+    same answer n times and manufacture perfect agreement." That is the one
+    failure that makes this pass **worse than not running it** -- disagreement
+    is the whole signal, and a cache drives it to zero while every run still
+    looks like a run.
+
+    Seven `run_consistency` tests existed and none passed a cache, so the
+    guarantee was a sentence. It is enforced by `extract(..., cache=None)`
+    hard-coded at the call site, so this asserts on the argument rather than on
+    an outcome: a cache threaded in later would still return three answers here
+    and the disagreement assertions above would not notice.
+    """
+    seen: list[object] = []
+    real = extractor_module.extract
+
+    def spy(image, client, **kwargs):
+        seen.append(kwargs.get("cache", "ABSENT"))
+        return real(image, client, **kwargs)
+
+    monkeypatch.setattr(extractor_module, "extract", spy)
+
+    a, b, c = good(), good(), good()
+    b.totals.total = D("274.00")
+    run_consistency(IMG, FakeVLMClient([a, b, c]), n=3)
+
+    assert seen == [None, None, None], (
+        "run_consistency passed something other than cache=None; a cache hit "
+        "would return one answer three times and report perfect agreement"
+    )

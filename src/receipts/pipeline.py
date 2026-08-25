@@ -54,10 +54,11 @@ from .extract.extractor import (
     ExtractionOutcome,
     PreparedImage,
     extract_with_repair,
+    run_consistency,
     triage,
 )
 from .extract.paths import read_nothing
-from .extract.schema import ReceiptExtraction, TriageResult
+from .extract.schema import Legibility, ReceiptExtraction, TriageResult
 from .ingest.dedupe import compute_phash
 from .ingest.ingest import ReceiptJob, ingest_file
 from .ingest.storage import StorageBackend
@@ -118,6 +119,37 @@ STAGES: tuple[str, ...] = (
 #: How much of a failure's text reaches ``review_tasks.reason``. Long enough to
 #: identify the fault, short enough that the review UI stays readable.
 _MAX_REASON_CHARS = 400
+
+#: Legibility answers where independent re-reads are worth paying for.
+#:
+#: ``UNREADABLE`` is deliberately absent. It is triage saying there is nothing
+#: to read, not that reading is hard -- three more attempts at nothing costs
+#: ``consistency_runs`` extract calls to learn what triage already said, and the
+#: receipt is routed by confidence regardless.
+_DISPUTED_LEGIBILITY = frozenset({Legibility.POOR, Legibility.FAIR})
+
+
+def _wants_consistency(triage_result: TriageResult) -> bool:
+    """P7.T1's trigger: handwriting **or** low legibility.
+
+    Both halves come from the task's own title, "handwritten/low-legibility".
+    Its checkbox spells the first half ``document_type == "handwritten_receipt"``
+    and the STATUS note above it corrects that to ``is_handwritten`` -- a
+    property covering ``document_type is HANDWRITTEN_RECEIPT`` **or**
+    ``print_type in (HANDWRITTEN, MIXED)``, so a hand-annotated thermal receipt
+    is caught where the narrower spelling would miss it. The note says nothing
+    about legibility, and the checkbox and the title both do, so it stays.
+
+    A badly photographed thermal receipt is printed -- ``is_handwritten`` is
+    false -- and is exactly where independent extractions disagree. Gating on
+    handwriting alone would spend the pass on the receipts most likely to be
+    read correctly and skip the ones least likely.
+    """
+    return (
+        triage_result.is_handwritten
+        or triage_result.legibility in _DISPUTED_LEGIBILITY
+    )
+
 
 #: Priority for a receipt that failed a stage. **Not** ``0``: ``0`` is the §12
 #: "errors *and* no total" case, and :func:`~receipts.review.queue.enqueue_review`
@@ -859,15 +891,50 @@ def process_receipt(
                 progress=progress,
             )
 
+        # **Self-consistency, gated twice (P7.T1).** Extract n more times at a
+        # non-zero temperature and score the disagreement -- an honest
+        # uncertainty estimate, unlike a model's self-report.
+        #
+        # BOTH conditions are required and neither is sufficient. The flag alone
+        # would make every printed receipt pay for a pass aimed at handwriting;
+        # `is_handwritten` alone would spend `consistency_runs` extra extract
+        # calls -- minutes each on this box, ADR-0039 -- on every deployment
+        # that upgraded, which is not a cost anyone consented to.
+        #
+        # `is_handwritten`, never `document_type`. It is a property covering
+        # `document_type is HANDWRITTEN_RECEIPT` **or** `print_type in
+        # (HANDWRITTEN, MIXED)`, so it catches a hand-annotated thermal receipt
+        # that the narrower spelling in P7.T1's own checkbox would miss.
+        #
+        # No `cache=` is passed and none may be: `run_consistency` calls
+        # `extract` with `cache=None` itself, because a cache hit would return
+        # the same answer n times and manufacture perfect agreement -- the one
+        # failure that would make this pass worse than not running it.
+        consistency = None
+        if settings.consistency_enabled and _wants_consistency(triage_result):
+            with _stage("consistency", progress):
+                consistency, _ = run_consistency(
+                    image,
+                    guarded,
+                    triage_result=triage_result,
+                    hints=hints,
+                    n=settings.consistency_runs,
+                )
+
         with _stage("score", progress):
-            # consistency stays None until self-consistency lands (M6).
             confidence = score_confidence(
-                outcome.extraction, outcome.report, triage_result, consistency=None
+                outcome.extraction,
+                outcome.report,
+                triage_result,
+                consistency=consistency,
             )
             # Same inputs, same order: the stored breakdown provably sums to the
             # stored score, which is what the review UI shows a human.
             reasons = explain_confidence(
-                outcome.extraction, outcome.report, triage_result, consistency=None
+                outcome.extraction,
+                outcome.report,
+                triage_result,
+                consistency=consistency,
             )
             status, priority, reason = route(
                 confidence,

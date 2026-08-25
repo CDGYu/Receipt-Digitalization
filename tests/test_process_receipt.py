@@ -42,9 +42,11 @@ from receipts import pipeline as pipeline_module  # noqa: E402
 from receipts.extract.clients.base import VLMClient, VLMResponse  # noqa: E402
 from receipts.extract.clients.limits import CostGuard, VLMGate, reset_vlm_gate  # noqa: E402
 from receipts.extract.schema import (  # noqa: E402
+    ConsistencyResult,
     DocumentType,
     Legibility,
     Merchant,
+    PrintType,
     ReceiptExtraction,
     ReceiptMeta,
     Totals,
@@ -1644,3 +1646,166 @@ def test_the_beat_writes_the_event_stage_not_a_constant(
 
     with session_factory() as session:
         assert get_receipt(session, job.id).progress_stage == "persist"
+
+
+# --------------------------------------------------------------------------- #
+# P7.T1 -- self-consistency, gated
+# --------------------------------------------------------------------------- #
+
+
+def _handwritten() -> TriageResult:
+    """Triage that satisfies `is_handwritten` through `print_type`, not
+    `document_type`.
+
+    Deliberately the *narrower* spelling's blind spot: P7.T1's checkbox says
+    gate on `document_type == "handwritten_receipt"`, and the STATUS note above
+    it says gate on `is_handwritten`, **never** `document_type`. They are not in
+    conflict -- `is_handwritten` is a property, `document_type is
+    HANDWRITTEN_RECEIPT or print_type in (HANDWRITTEN, MIXED)` -- so the note is
+    a correction the checkbox never absorbed. A hand-annotated thermal receipt
+    is exactly what the checkbox would miss, so that is what this fixture is.
+    """
+    return TriageResult(
+        document_type=DocumentType.POS_RECEIPT,
+        print_type=PrintType.HANDWRITTEN,
+        legibility=Legibility.GOOD,
+        estimated_line_item_count=2,
+    )
+
+
+def _spy_consistency(monkeypatch):
+    """Replace `run_consistency` and record whether it ran.
+
+    A spy rather than an injected seam, and that is the point project-35 made
+    while wiring the OCR flag: if the dependency is injectable and an injected
+    one runs regardless, the flag becomes untestable -- "off" and "on but
+    working" produce identical output and nothing can tell them apart. The gate
+    is the flag, so the spy must be reachable only through it.
+    """
+    calls: list[dict] = []
+    result = ConsistencyResult(runs=3, disputed=["totals.total"])
+
+    def fake(image, client, **kwargs):
+        calls.append(kwargs)
+        return result, []
+
+    monkeypatch.setattr("receipts.pipeline.run_consistency", fake)
+    return calls, result
+
+
+def _spy_score(monkeypatch):
+    """Capture the `consistency` argument scoring was given."""
+    seen: list[object] = []
+    real = pipeline_module.score_confidence
+
+    def fake(extraction, report, triage, *, consistency=None):
+        seen.append(consistency)
+        return real(extraction, report, triage, consistency=consistency)
+
+    monkeypatch.setattr("receipts.pipeline.score_confidence", fake)
+    return seen
+
+
+def test_consistency_does_not_run_while_the_flag_is_off(
+    monkeypatch, session_factory, storage, settings
+):
+    """OFF is the default, and a handwritten receipt does not override it.
+
+    The cost is the reason: `run_consistency` is n extra extract calls, and on
+    this box ADR-0039 measures a single extract in minutes. A flag that starts
+    spending on every deployment that upgrades is not a flag anyone consented to.
+    """
+    calls, _ = _spy_consistency(monkeypatch)
+    seen = _spy_score(monkeypatch)
+    job = _job(storage)
+
+    _run(job, _Client([_handwritten(), _good()]), session_factory, storage, settings)
+
+    assert calls == []
+    assert seen == [None]
+
+
+def test_consistency_runs_for_a_handwritten_receipt_when_enabled(
+    monkeypatch, session_factory, storage, settings
+):
+    """Both conditions, and the result reaches scoring rather than the floor."""
+    calls, result = _spy_consistency(monkeypatch)
+    seen = _spy_score(monkeypatch)
+    enabled = settings.model_copy(update={"consistency_enabled": True})
+    job = _job(storage)
+
+    _run(job, _Client([_handwritten(), _good()]), session_factory, storage, enabled)
+
+    assert len(calls) == 1
+    # The disputed fields are the whole point (§12): a consistency run whose
+    # result never reached `score_confidence` would be n extract calls spent on
+    # nothing, and every gate would stay green.
+    assert seen == [result]
+
+
+def test_consistency_does_not_run_for_a_printed_receipt(
+    monkeypatch, session_factory, storage, settings
+):
+    """The flag is necessary, not sufficient.
+
+    Without this the gate could be the flag alone and every receipt would pay
+    for a pass aimed at handwriting.
+    """
+    calls, _ = _spy_consistency(monkeypatch)
+    enabled = settings.model_copy(update={"consistency_enabled": True})
+    job = _job(storage)
+
+    _run(job, _Client([_triage(), _good()]), session_factory, storage, enabled)
+
+    assert calls == []
+
+
+def test_consistency_runs_for_a_poorly_legible_printed_receipt(
+    monkeypatch, session_factory, storage, settings
+):
+    """The other half of the trigger, which the task's TITLE carries and its
+    STATUS note does not: "handwritten **/low-legibility**".
+
+    A thermal receipt that photographed badly is printed, so `is_handwritten` is
+    false, and it is exactly the case where independent extractions disagree.
+    Gating on handwriting alone would spend the pass on the receipts most likely
+    to be read correctly and skip the ones most likely not to be.
+
+    `UNREADABLE` is deliberately **not** included: triage saying it cannot read
+    the page at all is not a case where three more reads help, and it is already
+    routed by confidence.
+    """
+    calls, _ = _spy_consistency(monkeypatch)
+    enabled = settings.model_copy(update={"consistency_enabled": True})
+    smudged = TriageResult(
+        document_type=DocumentType.POS_RECEIPT,
+        print_type=PrintType.THERMAL,
+        legibility=Legibility.POOR,
+        estimated_line_item_count=2,
+    )
+    job = _job(storage)
+
+    _run(job, _Client([smudged, _good()]), session_factory, storage, enabled)
+
+    assert len(calls) == 1
+
+
+def test_consistency_does_not_run_for_an_unreadable_receipt(
+    monkeypatch, session_factory, storage, settings
+):
+    """The bound on the clause above. `UNREADABLE` is not "low legibility"; it
+    is triage saying there is nothing to read, and three more attempts at
+    nothing is `consistency_runs` extract calls spent to learn that."""
+    calls, _ = _spy_consistency(monkeypatch)
+    enabled = settings.model_copy(update={"consistency_enabled": True})
+    blank = TriageResult(
+        document_type=DocumentType.POS_RECEIPT,
+        print_type=PrintType.THERMAL,
+        legibility=Legibility.UNREADABLE,
+        estimated_line_item_count=0,
+    )
+    job = _job(storage)
+
+    _run(job, _Client([blank, _good()]), session_factory, storage, enabled)
+
+    assert calls == []

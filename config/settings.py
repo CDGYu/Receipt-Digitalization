@@ -130,6 +130,33 @@ class Settings(BaseSettings):
     # deployment that upgrades is not a flag anyone consented to.
     ocr_grounding_enabled: bool = False
 
+    # Self-consistency (P7.T1): extract n times at a non-zero temperature and
+    # score the disagreement, for receipts triage calls handwritten. Disagreement
+    # across runs is an honest uncertainty estimate; a model's self-reported
+    # confidence is not -- asked directly it will tell you it is confident about
+    # a handwritten 1 that is actually a 7.
+    #
+    # **Default OFF, and this one is the most expensive flag in the file.** It
+    # costs `consistency_runs` EXTRA extract calls on every handwritten receipt,
+    # and ADR-0039 measures a single extract on this box in minutes -- so `n=3`
+    # is roughly a fourfold cost on exactly the receipts that are already
+    # slowest. Same reasoning as `ocr_grounding_enabled` above, one order of
+    # magnitude up.
+    #
+    # **Its acceptance has never been met.** P7.T1 asks for handwritten
+    # auto-approval rate and precision recorded before and after; that needs a
+    # real model run over a golden set of three handwritten receipts, and
+    # ISSUE-034 -- now ruled hermetic -- means the eval path measures a
+    # different prompt than production sends anyway. Nobody has measured whether
+    # turning this on improves precision. Turn it on deliberately, on a box that
+    # can afford it, and measure.
+    consistency_enabled: bool = False
+
+    # How many independent extractions a consistency pass makes. Three is
+    # `run_consistency`'s own default and the smallest number that can produce a
+    # majority; two can only ever agree or disagree.
+    consistency_runs: int = 3
+
     # --- Plausibility (§17: Plausibility) -------------------------------- #
     max_plausible_total: Decimal = Decimal("1000000")
     max_receipt_age_years: int = 10
