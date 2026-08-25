@@ -1361,8 +1361,24 @@ This entry is that gap, written down.
 
 ## ISSUE-008 — Two copies of "which rows are purchases", with nothing binding them
 
-**Status:** OPEN — recorded, not fixed. Neither copy is wrong today; the risk is
-drift.
+**Status:** **RESOLVED 2026-08-25** at `07d96ef`, by the binding this entry asks
+for and not by merging the copies — `tests/test_purchase_predicate_agreement.py`,
+in neither module's suite. The two copies stand, because ADR-0010 is why the
+second one exists. Everything after this block describes the gap as it stood
+until then.
+
+**The gap was measured before it was closed, and it was real.** With a second
+condition added to `_purchases` alone — `and item.line_total is not None`,
+exactly the shape this entry predicts — `tests/test_xlsx.py` and
+`tests/test_rules.py` together report **152 passed**. The concept splits, the
+workbook and the arithmetic stop agreeing about what was bought, and both
+module suites are silent. The new file fails and names the diverging rows.
+
+**What it cannot catch, stated in the test itself:** its fixture varies every
+field a purchase predicate could plausibly key on *today*. A condition on a
+field nobody reads yet needs a row shape that does not exist, and no fixture
+anticipates that. The property is "these two agree over the shapes we can
+build", not "these two are the same function".
 **Owner action required:** no.
 **Discovered:** 2026-08-19, in the whole-branch review of
 `feat/buyer-and-blank-rows`. **Pre-existing:** no — both arrived with
@@ -1622,8 +1638,24 @@ everywhere** -- this screen was looked at in it, at 1440, and renders correctly
 
 ## ISSUE-011 - A measured-false spelling survives in three test files
 
-**Status:** OPEN. Pre-existing and cosmetic; the guards it sits beside are all
-correct.
+**Status:** **RESOLVED 2026-08-25** at `07d96ef`. Every site now says the class
+**ships unpainted**, which is the true and mechanism-free half, and
+`value.test.tsx`'s corrective mentions are left as the record. Everything after
+this block describes the defect as it stood until then.
+
+**This entry's own count was stale by the time it was cleared, for the second
+time.** It says four sentences in three files. Measured 2026-08-25: **ten
+sentences in five files** — `nav.test.tsx` and `home-screen.test.tsx` were
+written after this entry was, and arrived carrying the same wrong mechanism.
+**Two of the ten were assertion messages**, so the false spelling was being
+printed to whoever broke the guard, not merely sitting in a comment.
+
+**No corrected list replaces it.** A list of sites is precisely what rotted —
+once in this entry's heading (corrected 2026-08-20) and once inside
+`value.test.tsx`'s record, which named three files that were the wrong three by
+the time anyone acted. Both lists are gone; what stands in their place is the
+anchor this entry already carried, `grep -rn 'class="undefined"'
+frontend/tests/`, which now returns only `value.test.tsx` itself.
 
 **Opened 2026-08-20.** Recorded then because the results-list milestone removed
 one instance and deliberately did not touch the rest.
