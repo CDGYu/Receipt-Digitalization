@@ -415,9 +415,9 @@ export function ReceiptsScreen({ identity }: ReceiptsScreenProps) {
               <tr>
                 <th scope="col">Date</th>
                 <th scope="col">Merchant</th>
-                <th scope="col">Total</th>
+                <th scope="col" className={styles.number}>Total</th>
                 <th scope="col">Status</th>
-                <th scope="col">Confidence</th>
+                <th scope="col" className={styles.number}>Confidence</th>
                 {/* A real header rather than an empty cell: a column with no
                     name is a column a screen reader announces as nothing, and
                     the row's action needs saying once here instead of being
@@ -425,7 +425,7 @@ export function ReceiptsScreen({ identity }: ReceiptsScreenProps) {
                     table is automatic-layout by design (see the docstring) --
                     the fixed-width arithmetic that collapsed a column in
                     ISSUE-032 has no counterpart here. */}
-                <th scope="col">Detail</th>
+                <th scope="col" className={styles.detail}>Detail</th>
               </tr>
             </thead>
             <tbody>

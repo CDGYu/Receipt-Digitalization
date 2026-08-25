@@ -304,3 +304,24 @@
   font-size: var(--text-sm);
   cursor: pointer;
 }
+
+/* A header over a right-aligned column follows its cells to the same edge.
+ *
+ * `.head th` above sets `text-align: left` for the whole header row, which is
+ * right for the three columns carrying text and wrong for the three that do
+ * not: measured in Chromium on 2026-08-25, CONFIDENCE sat against the left edge
+ * of a column whose figures ended 115px further right, and DETAIL did the same
+ * over its buttons. A label at one edge of a column and its values at the other
+ * read as two columns.
+ *
+ * The two class names are not decoration -- `.number` and `.detail` are the
+ * classes the CELLS already carry, so the header and its column ask for
+ * alignment by the same name, and `receipts-screen.test.tsx` pins that
+ * agreement from the markup end. The compound selector is what makes it apply
+ * at all: `.number` alone is one class against `.head th`'s class-plus-element,
+ * so it loses on specificity and the header stays left however the cell is set.
+ */
+.head th.number,
+.head th.detail {
+  text-align: right;
+}

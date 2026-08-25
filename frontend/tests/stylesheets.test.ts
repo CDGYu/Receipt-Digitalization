@@ -122,9 +122,15 @@ interface Rule {
  *  A single left-to-right walk. On `{` the accumulated prelude is the selector;
  *  the block is scanned to its matching `}`, and a block that contains another
  *  `{` is an at-rule whose prelude is pushed onto the context stack and prefixed
- *  onto the rules inside it -- so the `prefers-color-scheme` copy of the dark
- *  tokens is a different census key from the `data-theme` one, which is the
- *  whole point of `tokens.css` carrying both.
+ *  onto the rules inside it -- so `tokens.css`'s reduced-motion rule is keyed
+ *  `@media (prefers-reduced-motion: reduce) *, *::before, *::after` rather than
+ *  colliding with a bare `*` selector elsewhere.
+ *
+ *  *(This paragraph used to make the same point with the dark theme's two
+ *  copies -- the `prefers-color-scheme` one versus the `data-theme` one. The
+ *  dark theme was removed on the owner's ruling 2026-08-25, so the example was
+ *  repointed at the at-rule that survives rather than deleted: the nesting
+ *  behaviour it documents is still exactly how this parser works.)*
  *
  *  **Comments are stripped first, and that is not optional.** `tokens.test.ts`
  *  records the round where `indexOf` matched the comment above a rule and left
@@ -411,6 +417,12 @@ const CENSUS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
     '.detail': 'padding, text-align: right, white-space: nowrap',
     '.view':
       'min-height, padding, border, border-radius, background, color, font-family, font-size, cursor: pointer',
+    // Last in the file on purpose. It overrides `.head th`'s `text-align: left`
+    // for the two columns whose cells are right-aligned, and it can only do that
+    // by out-specifying it -- `.number` alone loses. Appended rather than filed
+    // beside `.head th` so the rule-order check below sees an addition instead
+    // of every later rule shifting.
+    '.head th.number, .head th.detail': 'text-align: right',
   },
   'review/ConfidenceRail.module.css': {
     '.rail': 'border, border-radius, background, padding',
@@ -579,10 +591,6 @@ const CENSUS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
   'styles/tokens.css': {
     ':root':
       'color-scheme: light, --font-sans, --font-display, --font-mono, --text-xs, --text-sm, --text-base, --text-lg, --text-xl, --text-2xl, --text-3xl, --space-xs, --space-sm, --space-md, --space-lg, --space-xl, --space-2xl, --space-3xl, --space-4xl, --space-5xl, --radius-sm, --radius-md, --radius-lg, --shadow-sm, --shadow-md, --color-background, --color-surface, --color-surface-raised, --color-surface-active, --color-surface-sunken, --color-foreground, --color-muted-foreground, --color-border, --color-primary, --color-ring, --color-severity-error, --color-severity-warn, --color-severity-info, --color-positive, --color-null',
-    ":root[data-theme='dark']":
-      'color-scheme: dark, --color-background, --color-surface, --color-surface-raised, --color-surface-active, --color-surface-sunken, --color-foreground, --color-muted-foreground, --color-border, --color-primary, --color-ring, --color-severity-error, --color-severity-warn, --color-severity-info, --color-positive, --color-null',
-    "@media (prefers-color-scheme: dark) :root:not([data-theme='light'])":
-      'color-scheme: dark, --color-background, --color-surface, --color-surface-raised, --color-surface-active, --color-surface-sunken, --color-foreground, --color-muted-foreground, --color-border, --color-primary, --color-ring, --color-severity-error, --color-severity-warn, --color-severity-info, --color-positive, --color-null',
     body: 'margin, background, color, font-family, font-size, line-height',
     ':where(a, button, input, select, textarea):focus-visible': 'outline, outline-offset',
     '@media (prefers-reduced-motion: reduce) *, *::before, *::after': 'transition, animation',
@@ -1092,16 +1100,18 @@ const INHERITABLE_SURFACES = [
 ] as const
 
 describe('a colour token is readable on what it is painted on', () => {
-  it('reads three theme blocks with hex values, or says so', () => {
+  it('reads the one theme block with hex values, or says so', () => {
     const blocks = themeBlocks()
+    // **Was three, is one, since the owner's 2026-08-25 ruling that this app is
+    // light only.** The dark theme's two blocks -- the `data-theme` opt-in and
+    // its `prefers-color-scheme` copy -- were removed from `tokens.css`, so
+    // every contrast ratio below is now computed against light alone. The
+    // equality is kept rather than relaxed to a count: it is what turns a dark
+    // theme quietly reappearing into a red test instead of a silent extra pass.
     expect(
       [...blocks.keys()],
-      'tokens.css no longer has exactly the three theme blocks this check walks',
-    ).toEqual([
-      LIGHT,
-      ":root[data-theme='dark']",
-      "@media (prefers-color-scheme: dark) :root:not([data-theme='light'])",
-    ])
+      'tokens.css no longer has exactly the one theme block this check walks',
+    ).toEqual([LIGHT])
     // Every colour is a plain six-digit hex. Anything else -- `rgb()`,
     // `color-mix()`, a `var()` alias -- would make `luminance` return NaN, and
     // `NaN >= 4.5` is false, so the check would red for a reason its message did

@@ -246,6 +246,42 @@ describe('the table renders the row shape the serializer sends', () => {
     ])
   })
 
+  it('gives every right-aligned column a header aligned with its cells', async () => {
+    // The defect this pins, measured in Chromium on the deployed app on
+    // 2026-08-25: `.head th` sets `text-align: left` for the whole header row
+    // while `.number` and `.detail` set `text-align: right` on the cells. So
+    // CONFIDENCE sat hard against the left edge of a column whose figures sat
+    // against the right, and DETAIL did the same over its buttons -- a label at
+    // one edge and its values at the other read as two columns.
+    //
+    // Pinned as CLASS AGREEMENT rather than as computed alignment because
+    // `vite.config.ts` leaves Vitest's `css: false` default in place: jsdom here
+    // has class names and no stylesheet at all, so `getComputedStyle` would
+    // report the jsdom default for every cell and pass whatever the CSS said.
+    // The rule itself is pinned by the census in `stylesheets.test.ts`; this end
+    // pins that the header and the cell ask for the same one.
+    stubPage({ items: [rowFixture()], has_more: false })
+
+    render(<ReceiptsScreen identity={REVIEWER} />)
+    await screen.findByText('Summit Fuel')
+
+    const table = screen.getByRole('table')
+    const headers = [...table.querySelectorAll('thead th')]
+    const cells = [...table.querySelectorAll('tbody tr:first-child > td')]
+    const labels = headers.map((th) => th.textContent?.trim())
+
+    for (const column of ['Total', 'Confidence', 'Detail']) {
+      const at = labels.indexOf(column)
+      const cellClass = cells[at].className
+      // Non-vacuity, and it is the whole risk here: an unresolved `styles.x`
+      // renders no class attribute at all, so `className` is `''` on BOTH sides
+      // and a bare equality would pass on two nothings while the rendered table
+      // stayed ragged.
+      expect(cellClass).toBeTruthy()
+      expect(headers[at].className).toBe(cellClass)
+    }
+  })
+
   it('puts each value under its own column', async () => {
     stubPage({ items: [rowFixture()], has_more: false })
 
