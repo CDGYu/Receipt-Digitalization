@@ -563,7 +563,11 @@ export function ReviewScreen() {
       {/* Keyed on the receipt id so the pane starts clean for a new receipt
           rather than carrying over a stale link, a spent retry, or a failure. */}
       <ImagePane key={receipt.id} receiptId={receipt.id} fetchUrl={fetchImageUrl} />
-      <FindingsPanel findings={receipt.findings} />
+      <FindingsPanel
+        findings={receipt.findings}
+        currentFindings={receipt.current_findings}
+        notRechecked={receipt.not_rechecked}
+      />
       <ConfidenceRail confidence={receipt.confidence} reasons={receipt.confidence_reasons} />
       <ReceiptForm fields={fields} onChange={edit} errors={fieldErrors} />
       <LineItemsTable

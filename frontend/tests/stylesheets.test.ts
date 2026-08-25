@@ -479,6 +479,9 @@ const CENSUS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
     '.warn': 'color',
     '.info': 'color',
     '.resolved': 'flex: none, color, font-size',
+    '.historyHeading': 'margin-top, padding-top, border-top',
+    '.notRechecked': 'margin, color, font-size, line-height',
+    '.notRecheckedIds': 'font-family, font-weight',
   },
   'review/ImagePane.module.css': {
     '.pane': 'border, border-radius, background, overflow: hidden',

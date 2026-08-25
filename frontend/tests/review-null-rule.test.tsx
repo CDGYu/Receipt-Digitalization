@@ -446,7 +446,7 @@ describe("the review screen's image slot stays the only direct <div>", () => {
     // the invariant is "exactly one", and a rule that matched *nothing* would
     // leave the pane unplaced just as silently.
     const panels = [
-      ['FindingsPanel', <FindingsPanel key="f" findings={[]} />],
+      ['FindingsPanel', <FindingsPanel key="f" findings={[]} currentFindings={[]} notRechecked={[]} />],
       ['ConfidenceRail', <ConfidenceRail key="c" confidence={null} reasons={null} />],
       ['ReceiptForm', <ReceiptForm key="r" fields={NOTHING_EXTRACTED} onChange={() => {}} />],
       [
@@ -558,7 +558,7 @@ describe('design section 5.4 -- the findings are a disclosure list', () => {
   ]
 
   it('collapses each finding to a summary a reviewer can open', () => {
-    const { container } = render(<FindingsPanel findings={FINDINGS} />)
+    const { container } = render(<FindingsPanel findings={FINDINGS} currentFindings={[]} notRechecked={[]} />)
 
     const disclosures = [...container.querySelectorAll('details')]
     expect(disclosures).toHaveLength(FINDINGS.length)
@@ -573,7 +573,7 @@ describe('design section 5.4 -- the findings are a disclosure list', () => {
   it('keeps the rule id, the severity word and the message in the collapsed row', () => {
     // What the reviewer scans without opening anything. `review-screen.test.tsx`
     // finds `R020` by text on the loaded screen, and it must go on finding it.
-    const { container } = render(<FindingsPanel findings={FINDINGS} />)
+    const { container } = render(<FindingsPanel findings={FINDINGS} currentFindings={[]} notRechecked={[]} />)
 
     const summaries = [...container.querySelectorAll('summary')].map((s) => s.textContent ?? '')
     expect(summaries[0]).toContain('R020')
@@ -583,7 +583,7 @@ describe('design section 5.4 -- the findings are a disclosure list', () => {
   })
 
   it('discloses the context payload, which nothing rendered before', () => {
-    const { container } = render(<FindingsPanel findings={FINDINGS} />)
+    const { container } = render(<FindingsPanel findings={FINDINGS} currentFindings={[]} notRechecked={[]} />)
 
     const [withContext, withoutContext] = [...container.querySelectorAll('details')]
     expect(withContext.textContent).toContain('97.43')
@@ -594,9 +594,10 @@ describe('design section 5.4 -- the findings are a disclosure list', () => {
   })
 
   it('says so, once, when there is nothing to disclose', () => {
-    const { container } = render(<FindingsPanel findings={[]} />)
+    const { container } = render(<FindingsPanel findings={[]} currentFindings={[]} notRechecked={[]} />)
 
     expect(container.querySelectorAll('details')).toHaveLength(0)
-    expect(screen.getByText('No findings.')).toBeDefined()
+    // Both sections say "No findings." when empty.
+    expect(screen.getAllByText('No findings.')).toHaveLength(2)
   })
 })

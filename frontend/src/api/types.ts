@@ -171,6 +171,14 @@ export interface ReceiptDetail {
   prices_include_tax: boolean | null
   line_items: LineItem[]
   findings: Finding[]
+  /** Findings re-computed from the receipt as it stands now, after any
+   *  corrections. Only rules whose subject is the receipt's content (not the
+   *  extraction run) are included. Same shape as `findings`. */
+  current_findings: Finding[]
+  /** Rule IDs that could not be re-checked because they depend on extraction-run
+   *  context (model response, triage result, OCR layer) that a review route
+   *  cannot reconstruct. Sorted, stable across requests. */
+  not_rechecked: string[]
 }
 
 /** One row of `GET /receipts` and of `GET /export/receipts`, and the `receipt`

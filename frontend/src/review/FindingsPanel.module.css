@@ -189,3 +189,25 @@
   color: var(--color-muted-foreground);
   font-size: var(--text-xs);
 }
+
+
+/* Separation between the two groups: current state and extraction-time history. */
+.historyHeading {
+  margin-top: var(--space-xl);
+  padding-top: var(--space-lg);
+  border-top: 1px solid var(--color-border);
+}
+
+/* The caveat listing rules that could not be re-checked. Reads as metadata, not
+ * as a finding: smaller, muted, between the current findings and the history. */
+.notRechecked {
+  margin: var(--space-md) 0 0;
+  color: var(--color-muted-foreground);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+}
+
+.notRecheckedIds {
+  font-family: var(--font-mono);
+  font-weight: 500;
+}

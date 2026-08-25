@@ -73,6 +73,8 @@ const RECEIPT: ReceiptDetail = {
     },
   ],
   findings: [],
+  current_findings: [],
+  not_rechecked: [],
 }
 
 describe('buildPatch', () => {

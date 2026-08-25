@@ -155,6 +155,8 @@ const RECEIPT: ReceiptDetail = {
       resolved_by_repair: false,
     },
   ],
+  current_findings: [],
+  not_rechecked: ['R001', 'R013', 'R060', 'R061', 'R070', 'R071'],
 }
 
 const CLAIMED_ROUTES = {

@@ -78,6 +78,8 @@ const RECEIPT: ReceiptDetail = {
       resolved_by_repair: false,
     },
   ],
+  current_findings: [],
+  not_rechecked: [],
 }
 
 function mount(overrides: Partial<Parameters<typeof ReceiptDetailPanel>[0]> = {}) {

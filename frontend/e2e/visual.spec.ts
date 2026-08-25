@@ -271,6 +271,11 @@ function fullReceipt(overrides: Partial<ReceiptDetail> = {}): ReceiptDetail {
       finding('R020', 'error', 'totals do not reconcile: 925.00 + 80.00 - 5.00 != 1000.00'),
       finding('R011', 'warn', 'date looks implausible'),
     ],
+    current_findings: [
+      finding('R020', 'error', 'totals do not reconcile: 925.00 + 80.00 - 5.00 != 1000.00'),
+      finding('R011', 'warn', 'date looks implausible'),
+    ],
+    not_rechecked: ['R001', 'R013', 'R060', 'R061', 'R070', 'R071'],
     ...overrides,
   }
 }

@@ -151,7 +151,11 @@ export function ReceiptDetailPanel({
               confidence={detail.confidence}
               reasons={detail.confidence_reasons}
             />
-            <FindingsPanel findings={detail.findings} />
+            <FindingsPanel
+              findings={detail.findings}
+              currentFindings={detail.current_findings}
+              notRechecked={detail.not_rechecked}
+            />
             <ReceiptForm fields={fields} onChange={onChange} />
             <LineItemsTable items={detail.line_items} fields={fields} onChange={onChange} />
           </div>

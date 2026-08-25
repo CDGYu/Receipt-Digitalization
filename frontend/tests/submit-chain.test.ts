@@ -214,6 +214,8 @@ function detail(over: Partial<ReceiptDetail> = {}): ReceiptDetail {
     },
     line_items: [],
     findings: [],
+    current_findings: [],
+    not_rechecked: [],
     ...over,
   }
 }

@@ -62,6 +62,8 @@ function receiptWith(bands: TaxBand[]): ReceiptDetail {
     },
     line_items: [],
     findings: [],
+    current_findings: [],
+    not_rechecked: [],
   }
 }
 
