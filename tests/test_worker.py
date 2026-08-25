@@ -33,6 +33,7 @@ from PIL import Image  # noqa: E402
 from config.settings import Settings  # noqa: E402
 from receipts import worker  # noqa: E402
 from receipts import worker as worker_module  # noqa: E402
+from receipts.extract.clients.factory import PassClients  # noqa: E402
 from receipts.extract.clients.fake import FakeVLMClient  # noqa: E402
 from receipts.extract.schema import (  # noqa: E402
     DocumentType,
@@ -203,6 +204,81 @@ def test_the_job_function_calls_process_receipt_and_nothing_else(monkeypatch, de
     assert seen["kwargs"]["session_factory"] is deps.session_factory
     assert summary["receipt_id"] == str(job.id)
     assert summary["status"] == "auto_approved"
+
+
+def test_the_job_function_forwards_the_fallback_rung(monkeypatch, deps):
+    """**The wiring that did not exist, pinned at the seam that was missing.**
+
+    `VLM_MODEL_EXTRACT_FALLBACK` was a setting that validated, set cleanly, and
+    changed nothing for an uploaded receipt: `make_pass_clients` had no code
+    caller anywhere, and `build_deps` built one client with `make_client`. The
+    ladder existed only inside `run_passes`, which the worker never calls.
+
+    Asserted on identity, not on presence: forwarding `None`, or forwarding the
+    primary twice, both give a non-empty kwarg.
+    """
+    seen: dict = {}
+
+    def fake_process_receipt(job, **kwargs):
+        seen.update(kwargs)
+        return worker_module.ProcessResult(
+            receipt_id=job.id,
+            status=ReceiptStatus.AUTO_APPROVED,
+            confidence=D("0.950"),
+            reason="auto-approved",
+        )
+
+    monkeypatch.setattr(worker_module, "process_receipt", fake_process_receipt)
+    fallback = FakeVLMClient([_good()], model_id="cloud")
+    deps = WorkerDeps(
+        client=deps.client,
+        extract_fallback_client=fallback,
+        storage=deps.storage,
+        session_factory=deps.session_factory,
+        settings=deps.settings,
+        ctx=deps.ctx,
+    )
+
+    process_receipt_job(job_to_payload(_job(deps.storage)), deps=deps)
+
+    assert seen["extract_fallback_client"] is fallback
+    assert seen["client"] is deps.client
+
+
+def test_build_deps_builds_a_second_rung_when_one_is_configured(monkeypatch, tmp_path):
+    """`build_deps` reads the ladder from settings rather than ignoring it."""
+    primary, cloud = object(), object()
+    monkeypatch.setattr(
+        worker_module,
+        "make_pass_clients",
+        lambda _settings: PassClients(triage=object(), extract_rungs=(primary, cloud)),
+    )
+    monkeypatch.setattr(worker_module, "make_engine", lambda _url: make_engine("sqlite://"))
+
+    built = worker_module.build_deps(
+        Settings(_env_file=None, storage_root=str(tmp_path / "blobs"))
+    )
+
+    assert built.client is primary
+    assert built.extract_fallback_client is cloud
+
+
+def test_build_deps_leaves_the_fallback_unset_when_there_is_one_rung(monkeypatch, tmp_path):
+    """The unconfigured deployment keeps its single rung and no fallback."""
+    only = object()
+    monkeypatch.setattr(
+        worker_module,
+        "make_pass_clients",
+        lambda _settings: PassClients(triage=object(), extract_rungs=(only,)),
+    )
+    monkeypatch.setattr(worker_module, "make_engine", lambda _url: make_engine("sqlite://"))
+
+    built = worker_module.build_deps(
+        Settings(_env_file=None, storage_root=str(tmp_path / "blobs"))
+    )
+
+    assert built.client is only
+    assert built.extract_fallback_client is None
 
 
 def test_the_job_function_runs_the_real_pipeline_offline(deps):
@@ -527,7 +603,14 @@ def test_build_deps_wires_a_progress_factory_that_writes_where_the_reader_looks(
     # in-memory, so `make_session_factory` still gets something it can bind to.
     # (The module-level `make_engine` this lambda calls is the unpatched one --
     # `monkeypatch.setattr` rebinds the name in `worker_module`, not here.)
-    monkeypatch.setattr(worker_module, "make_client", lambda _settings: object())
+    # `make_pass_clients`, not `make_client`: `build_deps` builds the extract
+    # ladder as of 2026-08-25, so that is the seam a provider-free test has to
+    # cut. A one-rung result is what an unconfigured deployment gets.
+    monkeypatch.setattr(
+        worker_module,
+        "make_pass_clients",
+        lambda _settings: PassClients(triage=object(), extract_rungs=(object(),)),
+    )
     monkeypatch.setattr(worker_module, "make_engine", lambda _url: make_engine("sqlite://"))
 
     deps = worker_module.build_deps(settings)

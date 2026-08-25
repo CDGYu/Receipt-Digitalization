@@ -235,6 +235,69 @@ def test_a_fallback_model_adds_a_second_rung() -> None:
     assert [rung.use_tools for rung in tiers.extract_rungs] == [False, True]
 
 
+def test_the_probe_rung_gets_the_deadline_and_no_retries() -> None:
+    """Owner ruling 2026-08-25: five minutes on local, then the cloud.
+
+    **Both halves are asserted because either alone is a lie.** The SDK defaults
+    to ``max_retries=2``, so a 300s timeout with retries left on is a 900s
+    deadline -- a "five minute" escalation that fires at fifteen. Asserting the
+    timeout without the retries would pass on exactly that bug.
+    """
+    tiers = _pass_clients(
+        vlm_provider="ollama",
+        vlm_api_key="k",
+        vlm_model_extract="local-a",
+        vlm_model_extract_fallback="cloud-b",
+        vlm_timeout_s=3600,
+        vlm_primary_timeout_s=300,
+    )
+    probe, final = tiers.extract_rungs
+
+    assert float(probe._client.timeout) == 300.0
+    assert probe._client.max_retries == 0
+
+    # The rung it escalates TO keeps the full budget and the SDK's resilience:
+    # it is the last rung, and its failure is the run's failure.
+    assert float(final._client.timeout) == 3600.0
+    assert final._client.max_retries == 2
+
+
+def test_the_deadline_does_nothing_without_somewhere_to_escalate_to() -> None:
+    """A single rung must never be cut short.
+
+    With no fallback the first rung is also the last, so a deadline would turn a
+    slow success into a hard failure with nothing to fall back on. The setting is
+    therefore conditional on `vlm_model_extract_fallback`, and this is the pin --
+    without it, setting VLM_PRIMARY_TIMEOUT_S on a single-rung deployment would
+    silently start failing every slow receipt.
+    """
+    tiers = _pass_clients(
+        vlm_provider="ollama",
+        vlm_api_key="k",
+        vlm_model_extract="local-a",
+        vlm_timeout_s=3600,
+        vlm_primary_timeout_s=300,
+    )
+    assert len(tiers.extract_rungs) == 1
+    only = tiers.extract_rungs[0]
+    assert float(only._client.timeout) == 3600.0
+    assert only._client.max_retries == 2
+
+
+def test_a_ladder_with_no_deadline_is_unchanged() -> None:
+    """The setting is opt-in: a fallback without a deadline behaves as before."""
+    tiers = _pass_clients(
+        vlm_provider="ollama",
+        vlm_api_key="k",
+        vlm_model_extract="local-a",
+        vlm_model_extract_fallback="cloud-b",
+        vlm_timeout_s=3600,
+    )
+    probe = tiers.extract_rungs[0]
+    assert float(probe._client.timeout) == 3600.0
+    assert probe._client.max_retries == 2
+
+
 def test_the_triage_rung_can_name_its_own_model() -> None:
     # Asserted on `model_id` rather than on `tiers.triage is not
     # tiers.extract_rungs[0]`: `make_client` hands back a fresh FakeVLMClient on

@@ -717,6 +717,13 @@ def process_receipt(
     gate: VLMGate | None = None,
     cost_guard: CostGuard | None = None,
     progress: "ProgressSink | None" = None,
+    #: The second extract rung, or ``None`` for the single-rung behaviour this
+    #: function had until 2026-08-25. **The eval path had a ladder and the
+    #: production path did not**: `run_passes` has escalated since ADR-0047, but
+    #: `make_pass_clients` had no code caller at all and the worker built one
+    #: client with `make_client`, so `VLM_MODEL_EXTRACT_FALLBACK` was a setting
+    #: that changed nothing for an uploaded receipt.
+    extract_fallback_client: VLMClient | None = None,
     #: Injected so the offline suite drives the grounding wiring without an
     #: OCR engine installed -- the same seam `progress` and `submit` are.
     #: `None` means "use the real reader, if settings enable it".
@@ -816,6 +823,13 @@ def process_receipt(
     gate = gate if gate is not None else get_vlm_gate(settings)
     cost_guard = cost_guard if cost_guard is not None else CostGuard.from_settings(settings)
     guarded = GuardedVLMClient(client, gate=gate, guard=cost_guard)
+    # The fallback shares the gate and the cost guard, deliberately: escalating
+    # must not be a way to spend past a budget the first rung was held to.
+    guarded_fallback = (
+        None
+        if extract_fallback_client is None
+        else GuardedVLMClient(extract_fallback_client, gate=gate, guard=cost_guard)
+    )
 
     # The heartbeat is built here rather than accepted from the caller: it
     # carries the terminal-state guarantee, and a guarantee a call site can
@@ -879,17 +893,74 @@ def process_receipt(
             few_shots: list[P.FewShot] = []
 
         with _stage("extract", progress):
-            outcome = extract_with_repair(
-                image,
-                guarded,
-                triage_result=triage_result,
-                ctx=ctx,
-                hints=hints,
-                few_shots=few_shots,
-                max_repairs=max(0, settings.max_repair_attempts),
-                normalize_fn=_normalizer(settings.default_currency, merchant_currency),
-                progress=progress,
-            )
+            normalize_fn = _normalizer(settings.default_currency, merchant_currency)
+
+            def _run(rung: VLMClient, *, repairs: int) -> ExtractionOutcome:
+                return extract_with_repair(
+                    image,
+                    rung,
+                    triage_result=triage_result,
+                    ctx=ctx,
+                    hints=hints,
+                    few_shots=few_shots,
+                    max_repairs=repairs,
+                    normalize_fn=normalize_fn,
+                    progress=progress,
+                )
+
+            budget = max(0, settings.max_repair_attempts)
+            if guarded_fallback is None:
+                # One rung, and it is final: today's behaviour, untouched.
+                outcome = _run(guarded, repairs=budget)
+            else:
+                # **Two escalation triggers, and they are not the same thing.**
+                #
+                #  * The first rung RAISED -- which is what a
+                #    `vlm_primary_timeout_s` deadline produces, since the SDK
+                #    surfaces a timeout as an error. This is the owner's
+                #    2026-08-25 ruling: five minutes on local, then cloud.
+                #  * The first rung answered but `read_nothing` -- ADR-0047's
+                #    original trigger, kept. A model that transcribed nothing is
+                #    not a result however fast it was.
+                #
+                # A non-final rung gets `repairs=0` for the reason `run_passes`
+                # already gives: repairing a rung that may be discarded spends
+                # calls re-asking a model that already failed.
+                try:
+                    probe = _run(guarded, repairs=0)
+                except VLMError:
+                    log.info(
+                        "Receipt %s: the primary extract rung failed or timed out; "
+                        "escalating to %s",
+                        job.id,
+                        getattr(extract_fallback_client, "model_id", "the fallback"),
+                    )
+                    outcome = _run(guarded_fallback, repairs=budget)
+                else:
+                    if read_nothing(probe.extraction):
+                        log.info(
+                            "Receipt %s: the primary extract rung transcribed nothing; "
+                            "escalating to %s",
+                            job.id,
+                            getattr(extract_fallback_client, "model_id", "the fallback"),
+                        )
+                        outcome = _run(guarded_fallback, repairs=budget)
+                    else:
+                        # **Kept as-is, WITHOUT a repair round, and that is a
+                        # real trade rather than an oversight.** `repairs` is
+                        # not a cheap post-pass: `extract_with_repair` bundles
+                        # the extract and its repairs into one call, so there is
+                        # no way to repair `probe` without extracting again --
+                        # measured at ~17 minutes a call on this box. Paying
+                        # that to recover one repair round would defeat the
+                        # deadline the probe exists to enforce.
+                        #
+                        # So: configuring a fallback costs the local rung its
+                        # repair round, and buys a bounded wait. The fallback
+                        # rung gets the full `budget` above, so a receipt that
+                        # escalates is still repaired. `run_passes` makes
+                        # exactly this trade for exactly this reason.
+                        outcome = probe
 
         # **Self-consistency, gated twice (P7.T1).** Extract n more times at a
         # non-zero temperature and score the disagreement -- an honest

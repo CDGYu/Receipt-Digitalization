@@ -39,7 +39,11 @@ from sqlalchemy import select  # noqa: E402
 
 from config.settings import Settings  # noqa: E402
 from receipts import pipeline as pipeline_module  # noqa: E402
-from receipts.extract.clients.base import VLMClient, VLMResponse  # noqa: E402
+from receipts.extract.clients.base import (  # noqa: E402
+    VLMClient,
+    VLMResponse,
+    VLMTransientError,
+)
 from receipts.extract.clients.limits import CostGuard, VLMGate, reset_vlm_gate  # noqa: E402
 from receipts.extract.schema import (  # noqa: E402
     ConsistencyResult,
@@ -278,6 +282,111 @@ def _run(job, client, session_factory, storage, settings, **kwargs) -> ProcessRe
         settings=settings,
         **kwargs,
     )
+
+
+# --------------------------------------------------------------------------- #
+# The extract ladder, on the path an uploaded receipt actually takes
+#
+# **This is new surface, not a re-test.** `run_passes` has escalated since
+# ADR-0047, but `process_receipt` -- the only function the queue worker calls --
+# took a single `client` and called `extract_with_repair` directly. Nothing
+# built a second rung for it: `make_pass_clients` had no code caller at all, so
+# `VLM_MODEL_EXTRACT_FALLBACK` validated, set cleanly, and did nothing to an
+# uploaded receipt.
+# --------------------------------------------------------------------------- #
+
+
+def test_a_timed_out_primary_hands_the_receipt_to_the_fallback(
+    session_factory, storage, settings
+):
+    """Owner ruling 2026-08-25: five minutes on local, then the cloud.
+
+    The deadline is enforced by the *client* -- `VLM_PRIMARY_TIMEOUT_S` builds
+    the probe rung with that timeout and `max_retries=0` -- so what reaches this
+    layer is an exception. `VLMTransientError` is what `OpenAICompatClient`
+    raises for `APITimeoutError`, which is the real shape.
+    """
+    job = _job(storage)
+    primary = _Client([_triage(), VLMTransientError("connection: timed out")])
+    fallback = _Client([_good()])
+
+    result = _run(
+        job, primary, session_factory, storage, settings,
+        extract_fallback_client=fallback,
+    )
+
+    # The fallback's extraction is the one that got persisted...
+    assert result.failed_stage is None
+    assert result.status is ReceiptStatus.AUTO_APPROVED
+    # ...and it was actually asked, rather than the run merely surviving.
+    assert fallback.calls == ["ReceiptExtraction"]
+
+
+def test_a_primary_that_transcribed_nothing_escalates_too(
+    session_factory, storage, settings
+):
+    """ADR-0047's original trigger, kept alongside the new one.
+
+    A model that answered *fast* and read *nothing* is not a result. Asserted
+    separately from the timeout case because they are different conditions and a
+    single `except` would satisfy only one of them.
+    """
+    job = _job(storage)
+    primary = _Client([_triage(), ReceiptExtraction()])
+    fallback = _Client([_good()])
+
+    _run(
+        job, primary, session_factory, storage, settings,
+        extract_fallback_client=fallback,
+    )
+
+    assert fallback.calls == ["ReceiptExtraction"]
+
+
+def test_a_primary_that_read_something_is_kept_and_the_fallback_is_never_asked(
+    session_factory, storage, settings
+):
+    """**The expensive half of the contract, and the easy one to get wrong.**
+
+    Escalating whenever the local model is imperfect would send every receipt to
+    the cloud and make the local rung pure cost. The triggers are "raised" and
+    "read nothing" -- *not* "read something wrong". Measured consequence, stated
+    so nobody is surprised by it: granite returned `2.0000` for a receipt whose
+    printed total is 2,000, inside the deadline, and that answer IS KEPT.
+    """
+    job = _job(storage)
+    primary = _Client([_triage(), _good()])
+    fallback = _Client([_good()])
+
+    result = _run(
+        job, primary, session_factory, storage, settings,
+        extract_fallback_client=fallback,
+    )
+
+    assert result.failed_stage is None
+    assert result.status is ReceiptStatus.AUTO_APPROVED
+    assert fallback.calls == [], "the fallback was asked for a receipt the primary read"
+
+
+def test_with_no_fallback_the_single_rung_keeps_its_repair_budget(
+    session_factory, storage, settings
+):
+    """The unconfigured deployment is untouched by any of this.
+
+    `settings.max_repair_attempts` is 1 by default, so a first extract that
+    fails to parse gets one repair. That is the behaviour before the ladder
+    existed, and this asserts the no-fallback branch still takes it -- the
+    escalating branch deliberately gives the probe `repairs=0`, and it would be
+    easy to apply that to everyone.
+    """
+    job = _job(storage)
+    primary = _Client([_triage(), "not json at all", _good()])
+
+    result = _run(job, primary, session_factory, storage, settings)
+
+    assert result.failed_stage is None
+    # Three calls: triage, the extract that failed to parse, and its repair.
+    assert len(primary.calls) == 3
 
 
 # --------------------------------------------------------------------------- #

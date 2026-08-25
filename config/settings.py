@@ -63,6 +63,33 @@ class Settings(BaseSettings):
     vlm_use_tools_triage: bool | None = None
     # Maps VLM_USE_TOOLS_FALLBACK. Tool use for the fallback rung.
     vlm_use_tools_fallback: bool | None = None
+    # Maps VLM_PRIMARY_TIMEOUT_S. **The deadline on the first extract rung, and
+    # the only escalation trigger that is about time.**
+    #
+    # Owner ruling 2026-08-25: "if the local didn't respond within 10 mins, the
+    # cloud will process it" -- revised the same day, before anything ran with
+    # it, to **five**. Without this the ladder escalates on exactly one
+    # condition -- `read_nothing`, meaning the model transcribed *nothing* -- so
+    # a local model that is merely SLOW is waited on for the full
+    # ``vlm_timeout_s``. Measured on this box: 16m54s for one extract call, and
+    # 32m12s end to end.
+    #
+    # ``None`` means "no separate deadline": the first rung gets
+    # ``vlm_timeout_s`` like every other call, which is the behaviour before
+    # this setting existed. It has no effect at all unless
+    # ``vlm_model_extract_fallback`` is set, because with one rung there is
+    # nothing to escalate *to* and cutting the only attempt short would turn a
+    # slow success into a failure.
+    vlm_primary_timeout_s: int | None = None
+    # Maps VLM_MAX_RETRIES. How many times the SDK retries one call.
+    #
+    # **Exists because a timeout alone does not bound the wait.** The OpenAI SDK
+    # defaults to 2 retries -- 3 attempts -- so a 300s timeout is a 900s
+    # deadline, and a "5 minute" escalation would fire at 15. The probe rung is
+    # built with this at 0 (see ``make_pass_clients``), which is the same
+    # reasoning that already gives a non-final rung ``max_repairs=0``: a rung
+    # whose answer may be thrown away should not be paid for three times.
+    vlm_max_retries: int = 2
     # Maps VLM_MAX_CONCURRENCY. The ceiling on model calls in flight at once
     # *for this process*, shared by every receipt it is working — not a cap per
     # receipt, which would be no cap at all once a batch or a worker pool is

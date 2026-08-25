@@ -127,6 +127,7 @@ def make_client(settings: Settings) -> VLMClient:
             api_key=key,
             use_tools=use_tools,
             timeout_s=float(settings.vlm_timeout_s),
+            max_retries=settings.vlm_max_retries,
         )
 
     raise ValueError(
@@ -154,9 +155,15 @@ def _require(value: str | None, provider: str, env_var: str) -> str:
 class PassClients:
     """One client per pass, with the extract pass carrying a rung ladder.
 
-    Built **only** by the eval path. ``make_client`` still returns exactly one
-    client and is what every production entry point uses, which is what keeps
-    the ladder off that path (design §5).
+    **Built by the worker as well as the eval path, since 2026-08-25.** This
+    docstring used to say "built **only** by the eval path", and that was the
+    problem rather than the design: ``make_pass_clients`` had *no code caller
+    anywhere* -- it appeared in one ``pipeline.py`` docstring and nothing else --
+    while ``receipts.worker`` built a single client with ``make_client``. So
+    ``VLM_MODEL_EXTRACT_FALLBACK`` was a setting an operator could set, that
+    validated, and that changed nothing whatsoever for an uploaded receipt.
+    ``build_deps`` now constructs the ladder here and hands both rungs to
+    ``process_receipt``.
 
     ``extract_rungs`` is a tuple so the shape generalises, but this milestone
     builds **at most two** rungs. A third is a new decision and is not earned by
@@ -167,7 +174,16 @@ class PassClients:
     extract_rungs: tuple[VLMClient, ...]
 
 
-def _client_for(settings: Settings, *, model: str | None, use_tools: bool) -> VLMClient:
+def _client_for(
+    settings: Settings,
+    *,
+    model: str | None,
+    use_tools: bool,
+    #: Override the rung's deadline. ``None`` keeps ``settings.vlm_timeout_s``.
+    timeout_s: int | None = None,
+    #: Override the rung's SDK retries. ``None`` keeps ``settings.vlm_max_retries``.
+    max_retries: int | None = None,
+) -> VLMClient:
     """One rung, built through ``make_client`` rather than beside it.
 
     Reusing the factory means the provider dispatch, the lazy SDK imports and
@@ -180,11 +196,15 @@ def _client_for(settings: Settings, *, model: str | None, use_tools: bool) -> VL
     ``explicit=None``, and a non-``None`` ``global_default`` short-circuits the
     provider default — so the value set here is the value the client gets.
     """
-    return make_client(
-        settings.model_copy(
-            update={"vlm_model_extract": model, "vlm_use_tools": use_tools}
-        )
-    )
+    update: dict[str, object] = {"vlm_model_extract": model, "vlm_use_tools": use_tools}
+    # Only override what the caller actually named. Writing the current value
+    # back would look identical here and stop a future default from reaching
+    # this path.
+    if timeout_s is not None:
+        update["vlm_timeout_s"] = timeout_s
+    if max_retries is not None:
+        update["vlm_max_retries"] = max_retries
+    return make_client(settings.model_copy(update=update))
 
 
 def make_pass_clients(settings: Settings) -> PassClients:
@@ -208,6 +228,14 @@ def make_pass_clients(settings: Settings) -> PassClients:
         ),
     )
 
+    # **The first rung's deadline is conditional on there being a second one.**
+    # `vlm_primary_timeout_s` turns the first rung into a probe that gives up at
+    # a known time so the ladder can escalate (owner ruling 2026-08-25: ten
+    # minutes on local, then cloud). With no fallback configured there is
+    # nowhere to escalate to, and cutting the only attempt short would convert a
+    # slow success into a hard failure -- so the deadline is simply not applied.
+    escalates = bool(settings.vlm_model_extract_fallback)
+    probe_timeout = settings.vlm_primary_timeout_s if escalates else None
     rungs = [
         _client_for(
             settings,
@@ -215,6 +243,12 @@ def make_pass_clients(settings: Settings) -> PassClients:
             use_tools=resolve_use_tools(
                 provider, explicit=None, global_default=settings.vlm_use_tools
             ),
+            timeout_s=probe_timeout,
+            # Retries would multiply the deadline by three and make a "ten
+            # minute" escalation fire at thirty. Only when a deadline is
+            # actually in force -- otherwise this rung keeps the SDK's own
+            # resilience, which is what it has today.
+            max_retries=0 if probe_timeout is not None else None,
         )
     ]
     if settings.vlm_model_extract_fallback:

@@ -100,12 +100,12 @@ services:
       # `review_tasks.opened_at - receipts.progress_at` in this database: past
       # the API's 720s and nowhere near the worker's 21600s.
       #
-      # **Keep this equal to the worker's.** Two services deriving one bound from
-      # two environments is the defect; the fix is the same input, not a second
-      # opinion. No test can see a disagreement across a container boundary --
-      # both halves are individually correct -- so the guard here is that the two
-      # values sit ten lines apart in one file.
-      VLM_TIMEOUT_S: "3600"
+      # **Keep this equal to the worker's -- and since 2026-08-25 it is, by
+      # construction rather than by care.** Both services now read the same
+      # `${VLM_TIMEOUT_S}`, so there is one input and they cannot disagree. The
+      # earlier fix put the two literals ten lines apart and asked a reader to
+      # keep them in step; this removes the second literal instead.
+      VLM_TIMEOUT_S: ${VLM_TIMEOUT_S:-3600}
     volumes:
       - receipts_blobs:/var/receipts/blobs
     depends_on:
@@ -140,18 +140,43 @@ services:
       # and the container port, `ollama:11434`. The published 11435 exists only
       # to leave 11434 free for the Windows-native Ollama, which this project
       # does not read.
-      VLM_PROVIDER: ollama
-      VLM_BASE_URL: http://ollama:11434/v1
+      # **Every VLM_* value below reads `.env` first.** Until 2026-08-25 these
+      # were hard-coded here, and because neither service declares an
+      # `env_file:`, `.env` reached compose only for `${...}` substitution --
+      # so `.env` said `gemma4:cloud` while the running worker reported
+      # `granite3.2-vision:2b` and had done for as long as anyone had looked.
+      # Editing `.env` was a no-op that looked like a configuration change.
+      # The literals kept as `:-` defaults are exactly what was hard-coded, so
+      # a stack with no `.env` behaves as it did before.
+      VLM_PROVIDER: ${VLM_PROVIDER:-ollama}
+      # **Default is the CONTAINER view.** `ollama:11434` is the service name and
+      # the container port. A `.env` written for running on the host says
+      # `localhost:11435` -- correct there, and wrong inside a container, where
+      # `localhost` is the container itself.
+      VLM_BASE_URL: ${VLM_BASE_URL:-http://ollama:11434/v1}
       # Ollama ignores the key; the factory's `_require` does not, and refuses
       # to build a client without one.
-      VLM_API_KEY: ollama-local-unused
+      VLM_API_KEY: ${VLM_API_KEY:-ollama-local-unused}
       # Local and CPU-only. ADR-0039 records ~1896s per receipt on this box and
-      # rules local inference a liveness check, never a measurement. The
-      # `:cloud` models Ollama also lists are NOT used here: cloud egress is
-      # authorised for the golden set alone, and routing an uploaded receipt to
-      # a hosted model is a decision nobody has taken.
-      VLM_MODEL_EXTRACT: granite3.2-vision:2b
-      VLM_MODEL_TRIAGE: granite3.2-vision:2b
+      # rules local inference a liveness check, never a measurement. Measured
+      # again 2026-08-25 on a real upload: triage 10m45s, extract 16m54s,
+      # repair 4m33s, 32m12s end to end -- and the total came out `2.0000` for a
+      # receipt whose printed TOTAL AMOUNT DUE is 2,000.
+      VLM_MODEL_EXTRACT: ${VLM_MODEL_EXTRACT:-granite3.2-vision:2b}
+      VLM_MODEL_TRIAGE: ${VLM_MODEL_TRIAGE:-granite3.2-vision:2b}
+      # **Cloud egress for an uploaded receipt is now a decision that HAS been
+      # taken** -- owner ruling 2026-08-25 -- where the comment here previously
+      # said it had not. The same receipt above read correctly through
+      # `gemma4:cloud` in 17.2s.
+      #
+      # Empty by default, which the factory treats as "no fallback" (a plain
+      # truthiness check), so this changes nothing until `.env` names a model.
+      VLM_MODEL_EXTRACT_FALLBACK: ${VLM_MODEL_EXTRACT_FALLBACK:-}
+      # The deadline on the local rung before the fallback takes over. Has no
+      # effect unless a fallback is configured -- with one rung there is nowhere
+      # to escalate to, and cutting the only attempt short would turn a slow
+      # success into a failure.
+      VLM_PRIMARY_TIMEOUT_S: ${VLM_PRIMARY_TIMEOUT_S:-}
       # The default is 120s and would abort this model mid-call: triage alone
       # measured 590s at max_edge=2048.
       #
@@ -182,7 +207,7 @@ services:
       #     UNSTARTED_MARGIN states outright: marking a healthy queued receipt
       #     is worse than noticing a dropped one late. Lower `VLM_TIMEOUT_S`
       #     and all four numbers come down together.
-      VLM_TIMEOUT_S: "3600"
+      VLM_TIMEOUT_S: ${VLM_TIMEOUT_S:-3600}
     volumes:
       - receipts_blobs:/var/receipts/blobs
     depends_on:

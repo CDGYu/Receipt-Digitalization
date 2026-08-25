@@ -24,6 +24,7 @@ pytest.importorskip("pillow_heif")
 
 from PIL import Image  # noqa: E402
 
+from config.settings import Settings  # noqa: E402
 from eval.harness import run_eval  # noqa: E402
 from eval.metrics import EvalReport  # noqa: E402
 from receipts import cli, pipeline, worker  # noqa: E402
@@ -620,71 +621,104 @@ def test_build_eval_pipeline_forwards_both_rung_clients(tmp_path):
 # --------------------------------------------------------------------------- #
 
 
-def test_process_receipt_has_no_ladder_parameter() -> None:
-    """The egress boundary, stated over the built signature.
+# --------------------------------------------------------------------------- #
+# THE 2026-08-20 EGRESS RULING WAS REVERSED BY THE OWNER ON 2026-08-25.
+#
+# The ruling was: "a production upload must not be able to reach the cloud
+# through the escalation", and two tests here enforced it -- one over
+# `process_receipt`'s signature, one over the source text of `cli` and `worker`.
+# Both are replaced below rather than deleted, because the reversal is a
+# decision and a deleted test looks like an oversight.
+#
+# **What changed the owner's mind is measured, and it is in the tree.** On this
+# deployment `granite3.2-vision:2b` took 32m12s on one receipt and read its
+# printed total of 2,000 as `2.0000`, with a null currency; `gemma4:cloud` read
+# the same image correctly in 17.2s. The owner's instruction on 2026-08-25 was
+# to keep granite as the first rung and escalate to the cloud when it has not
+# answered in five minutes.
+#
+# **The boundary did not disappear; it moved.** It used to be "the mechanism is
+# unreachable". It is now "the mechanism is inert unless a fallback model is
+# named in configuration". The tests below pin the new one, and the difference
+# matters: a deployment that names no fallback must still be provably incapable
+# of a cloud call, which is what `test_no_fallback_configured_means_no_second_rung`
+# holds.
+# --------------------------------------------------------------------------- #
 
-    The user's 2026-08-20 ruling is that a production upload must not be able to
-    reach the cloud through the escalation. A universal claim is answered by an
-    enumeration, not an argument, and this is the enumeration -- re-derived
-    2026-08-21 by walking the AST of every module under ``src/``, ``eval/``,
-    ``scripts/`` and ``config/``, not by reading the design doc:
 
-      * the non-test callers of ``process_receipt`` are
-        ``worker.process_receipt_job``, ``cli.cmd_process``,
-        ``cli.cmd_reprocess`` and ``pipeline.process_batch``;
-      * the only non-test caller of ``run_receipt`` is ``build_eval_pipeline``.
+def test_process_receipt_keeps_a_closed_signature() -> None:
+    """The half of the old guard that survives its own ruling.
 
-    So the boundary is that ``process_receipt`` has no parameter to pass a rung
-    through.
-
-    This does NOT claim production cannot reach a cloud model at all: pointing
-    the single client at one by configuration was possible before this milestone
-    and still is. The claim is only that *this mechanism* is unreachable --
-    design §5.1 states that limit deliberately, and claiming more would be the
-    kind of false claim ADR-0032 is about.
+    ``process_receipt`` now HAS ``extract_fallback_client`` -- that is the
+    reversal. What must not come back is ``**kwargs``: with a variadic keyword
+    parameter, any rung, client or knob can be passed by name without appearing
+    in the signature at all, and every signature-level statement anyone makes
+    about this function stops meaning anything. That was true under the old
+    ruling and is true under the new one, for different reasons.
     """
     signature = inspect.signature(pipeline.process_receipt)
-    params = set(signature.parameters)
-    for forbidden in ("extract_fallback_client", "triage_client", "extract_rungs"):
-        assert forbidden not in params, (
-            f"process_receipt grew {forbidden!r}: the escalation is reachable "
-            f"from the production path, which the 2026-08-20 ruling forbids"
-        )
-    # A list of forbidden names is defeated by ``**kwargs``, which accepts every
-    # one of them without spelling any. Demonstrated rather than assumed: with
-    # ``**kwargs`` added to the signature the three assertions above still pass.
-    # The bound is that the signature stays closed -- one property, not a longer
-    # list of names.
+    assert "extract_fallback_client" in signature.parameters, (
+        "process_receipt lost its fallback rung: the owner's 2026-08-25 ruling "
+        "is that a slow local model escalates to the cloud"
+    )
     kinds = {parameter.kind for parameter in signature.parameters.values()}
     assert inspect.Parameter.VAR_KEYWORD not in kinds, (
-        "process_receipt grew **kwargs: a rung can be passed by name again and "
-        "the forbidden-name check above stops meaning anything"
+        "process_receipt grew **kwargs: anything can be passed by name and no "
+        "statement about this signature means anything"
     )
 
 
-def test_the_production_modules_do_not_build_a_ladder() -> None:
-    """No production module may name ``make_pass_clients``.
+def test_no_fallback_configured_means_no_second_rung() -> None:
+    """**The boundary as it now stands, and the one that still protects a
+    deployment that wants no cloud egress at all.**
 
-    This reads the module source as **text**, so a mere comment naming the
-    builder trips it too. That bound is real (demonstrated by mutation) and is
-    accepted rather than tightened: an AST walk would be a new component that
-    can be wrong in new ways, while the cost of this one being wrong is a line
-    of prose somebody has to reword.
+    Escalation is opt-in through `VLM_MODEL_EXTRACT_FALLBACK`. A deployment that
+    does not name a fallback model gets exactly one rung, so there is nothing
+    for `process_receipt` to escalate *to* and no cloud call it can make through
+    this mechanism -- which is what the 2026-08-20 ruling was really protecting,
+    and it is preserved for anyone who leaves the setting empty.
 
-    It reads for **one name**, and two routes past it were reached by mutation
-    on 2026-08-21 with both guards still green: ``worker.py`` constructing
-    ``PassClients(...)`` itself, and ``worker.py`` calling ``run_receipt`` with
-    ``extract_fallback_client=``. Adding those two spellings here is the
-    enumerated defence that never converges (review standard 19) -- closing
-    them wants one bounded property over the ladder's whole surface, which is a
-    decision for the whole-branch review rather than one more name checked
-    below.
+    `_env_file=None` is load-bearing: this repository's own `.env` now names a
+    fallback, so a Settings built without it would be testing this machine's
+    deployment rather than the unconfigured default.
     """
-    for module in (cli, worker):
-        source = inspect.getsource(module)
-        assert "make_pass_clients" not in source, (
-            f"{module.__name__} constructs a tier ladder"
-        )
+    from receipts.extract.clients.factory import make_pass_clients
+
+    unconfigured = Settings(
+        _env_file=None, vlm_provider="ollama", vlm_api_key="k", vlm_model_extract="local"
+    )
+    assert len(make_pass_clients(unconfigured).extract_rungs) == 1
+
+    configured = unconfigured.model_copy(
+        update={"vlm_model_extract_fallback": "cloud-b"}
+    )
+    assert len(make_pass_clients(configured).extract_rungs) == 2
+
+
+def test_the_ladder_is_built_in_one_place() -> None:
+    """`make_pass_clients` is the only builder, so there is one thing to audit.
+
+    The old guard read `cli` and `worker` as text and forbade the name outright.
+    `worker` now names it deliberately. What replaces the ban is a narrower
+    claim that is still worth holding: `cli` does NOT build a ladder, so the
+    escalation has exactly one construction site in production code and an
+    auditor has one place to look.
+
+    Its own 2026-08-21 note applies unchanged and is worth repeating: this reads
+    source as text, so a comment naming the builder trips it, and it checks one
+    spelling rather than every route to a second rung. That was called an
+    enumerated defence then and it still is -- it is kept because one bounded
+    place to look is worth something, not because it is airtight.
+    """
+    assert "make_pass_clients" not in inspect.getsource(cli), (
+        "cli.py builds a tier ladder: the escalation should have one "
+        "construction site in production code, and it is worker.build_deps"
+    )
+    assert "make_pass_clients" in inspect.getsource(worker), (
+        "worker.py stopped building the ladder, so VLM_MODEL_EXTRACT_FALLBACK "
+        "is a setting that changes nothing again -- which is the exact defect "
+        "the 2026-08-25 wiring fixed"
+    )
 
 
 # --------------------------------------------------------------------------- #

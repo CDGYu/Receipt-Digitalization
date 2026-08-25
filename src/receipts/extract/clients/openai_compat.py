@@ -52,6 +52,15 @@ class OpenAICompatClient(VLMClient):
         price: PricePer1M | None = None,
         timeout_s: float = 180.0,
         use_tools: bool = True,
+        #: How many times the SDK retries one call. **The default is the SDK's
+        #: own 2, kept so this parameter changes nothing unless asked for.**
+        #:
+        #: It exists because ``timeout_s`` alone does not bound how long a
+        #: caller waits: the SDK retries, so the real deadline is
+        #: ``timeout_s * (max_retries + 1)``. A 300s timeout with the default
+        #: retries is a 15-minute wait, which is why a probe rung that must
+        #: escalate at a known time is built with this at 0.
+        max_retries: int = 2,
     ) -> None:
         try:
             import openai  # noqa: PLC0415
@@ -59,7 +68,9 @@ class OpenAICompatClient(VLMClient):
             raise RuntimeError("pip install openai to use OpenAICompatClient") from exc
 
         self._sdk = openai
-        self._client = openai.OpenAI(base_url=base_url, api_key=api_key, timeout=timeout_s)
+        self._client = openai.OpenAI(
+            base_url=base_url, api_key=api_key, timeout=timeout_s, max_retries=max_retries
+        )
         self.model_id = model_id
         self.use_tools = use_tools
         # Self-hosted inference is not free, but it is not per-token either.

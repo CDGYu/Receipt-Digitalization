@@ -35,7 +35,7 @@ from sqlalchemy.orm import Session
 from config.settings import Settings, get_settings
 
 from .extract.clients.base import VLMClient
-from .extract.clients.factory import make_client
+from .extract.clients.factory import make_pass_clients
 from .ingest.ingest import ReceiptJob
 from .ingest.storage import LocalStorage, S3Storage, StorageBackend
 from .persist.session import make_engine, make_session_factory
@@ -66,14 +66,27 @@ __all__ = [
 DEFAULT_QUEUE_NAME = "receipts"
 
 #: HTTP attempts the OpenAI SDK makes per call: the initial one plus its default
-#: ``max_retries`` of 2, which ``OpenAICompatClient`` never overrides (ADR-0047
-#: decision 8). The retries are silent, so one ``complete_json`` can take three
-#: times ``VLM_TIMEOUT_S``.
+#: ``max_retries`` of 2. The retries are silent, so one ``complete_json`` can
+#: take three times ``VLM_TIMEOUT_S``.
+#:
+#: **ADR-0047's open question -- whether to set ``max_retries`` rather than
+#: derive from its default -- was taken on 2026-08-25, and only for the probe
+#: rung.** ``OpenAICompatClient`` now accepts ``max_retries`` and
+#: ``make_pass_clients`` passes 0 to a first rung that has an escalation
+#: deadline, because three silent retries turn a five-minute deadline into a
+#: fifteen-minute one. So the sentence this comment used to carry -- "which
+#: ``OpenAICompatClient`` never overrides" -- is no longer true and has been
+#: deleted rather than softened.
+#:
+#: **This constant stays 3, and stays correct, for what it is used for.**
+#: :func:`job_timeout_for` bounds a worker slot, and every rung that is *not* a
+#: bounded probe still runs at the SDK default -- ``vlm_max_retries``, which
+#: defaults to 2. A probe rung makes the ceiling generous rather than wrong,
+#: which is the safe direction for a resource guard.
 #:
 #: Pinned by ``test_the_sdk_retry_default_this_derivation_rests_on`` rather than
 #: trusted: without that test a change to the SDK default would make this
-#: derivation wrong and nothing would fail. Whether to *set* ``max_retries``
-#: instead is ADR-0047's open question and is not taken here.
+#: derivation wrong and nothing would fail.
 _SDK_ATTEMPTS = 3
 
 #: Everything in a receipt that is not a model call -- reading the original
@@ -202,6 +215,10 @@ class WorkerDeps:
     storage: StorageBackend
     session_factory: Callable[[], Session]
     settings: Settings
+    #: The second extract rung, or ``None`` for one rung. Defaulted so every
+    #: existing construction of this object -- the offline suite builds it with
+    #: a fake client and no fallback -- keeps working unchanged.
+    extract_fallback_client: VLMClient | None = None
     ctx: ValidationContext | None = None
     #: Builds the progress sink for one receipt, the way ``session_factory``
     #: builds one session -- per job, because the key is the receipt's. ``None``
@@ -236,8 +253,18 @@ def build_deps(settings: Settings | None = None) -> WorkerDeps:
         )
 
     engine = make_engine(settings.database_url)
+    # **The ladder is built here now, not just in the eval path.**
+    # `make_pass_clients` had no code caller anywhere -- it was named in one
+    # `pipeline.py` docstring and nothing else -- so `VLM_MODEL_EXTRACT_FALLBACK`
+    # was a setting that could be set and would change nothing for an uploaded
+    # receipt. `extract_rungs[0]` is the primary; a second entry exists only
+    # when a fallback model is configured.
+    rungs = make_pass_clients(settings)
     return WorkerDeps(
-        client=make_client(settings),
+        client=rungs.extract_rungs[0],
+        extract_fallback_client=(
+            rungs.extract_rungs[1] if len(rungs.extract_rungs) > 1 else None
+        ),
         storage=storage,
         session_factory=make_session_factory(engine),
         settings=settings,
@@ -305,6 +332,7 @@ def process_receipt_job(
     result = process_receipt(
         job,
         client=deps.client,
+        extract_fallback_client=deps.extract_fallback_client,
         storage=deps.storage,
         session_factory=deps.session_factory,
         ctx=deps.ctx,
