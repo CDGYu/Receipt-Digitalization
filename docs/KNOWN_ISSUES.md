@@ -1837,6 +1837,12 @@ reason for blocking is discharged. Who owns `run_eval`'s write is still open.)*
 
 ### What is wrong
 
+*(This section describes the defect as it stood. **Two of its sentences are now
+false by design**: the counts do reach the results file, which is what `1637058`
+fixed, and that file gained a third name component with ISSUE-007 —
+`{date}-{PROMPT_VERSION}-{prompt_bundle_hash}.json`. Kept as written because it
+is the record of what was measured, not a description of today.)*
+
 `EvalReport.extract_rung_counts` records how many receipts each extract rung
 produced the kept extraction for. It reaches the printed report and
 `run_baseline`'s return value. It does **not** reach
