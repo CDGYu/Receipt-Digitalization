@@ -396,10 +396,10 @@ Three things follow, and the order matters:
   **And it should not have been able to reach that conclusion**, which is the
   next bullet.
 
-* **The API and the worker disagree about what "too long" means, by a factor
-  of 30.** `docker-compose.yml` sets the `VLM_*` block on the **`worker`
-  service only**, so the API container runs the 120s default. Measured by
-  calling `_cutoffs` inside each running container, not by arithmetic:
+* **The API and the worker disagreed about what "too long" means, by a factor
+  of 30.** `docker-compose.yml` set the `VLM_*` block on the **`worker` service
+  only**, so the API container fell to the 120s default. Measured by calling
+  `_cutoffs` inside each running container, not by arithmetic:
 
   | container | `vlm_timeout_s` | `started_cutoff` |
   |---|---|---|
@@ -407,8 +407,20 @@ Three things follow, and the order matters:
   | `api` | 120 (unset → default) | **720s** (12 min) |
 
   The worker will spend hours on one model call. The API's progress route
-  sweeps its own row and gives up after **twelve minutes**. A receipt well
-  inside the worker's budget is far outside the API's.
+  sweeps its own row and gave up after **twelve minutes**. A receipt well
+  inside the worker's budget was far outside the API's.
+
+  **Past tense, and deliberately so: the file was fixed on 2026-08-25** —
+  `VLM_TIMEOUT_S: "3600"` now appears on **both** services, and the comment
+  beside the API's says to keep them equal. **An earlier version of this bullet
+  said the block was on the worker only and stayed that way after the fix
+  landed**, which made it true of the running container and false of the
+  repository — a claim honest when written and wrong by the time anyone read
+  it. That is the same failure this whole section documents, one level up.
+
+  **Check the container, not the file, and expect them to disagree.** A fixed
+  compose file and a still-broken container is the *normal* state between the
+  edit and the recreate, which is the next bullet.
 
 * **So this is the default outcome on this box, not bad luck.** The heartbeat
   (`receipts.progress_at`) updates per stage, not during a model call —
