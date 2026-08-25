@@ -29,6 +29,12 @@ pipeline = [
     "pypdfium2>=4",
     "openpyxl>=3.1",
 ]
+# The independent text layer R060 and R061 check an extraction against
+# (P2.T2). Optional, and imported inside the function that uses it
+# (`receipts/preprocess/ocr.py`), so a base install and the offline suite need
+# neither the package nor the models it ships. `OCR_GROUNDING_ENABLED` is off
+# by default, so installing this changes nothing until a deployment asks.
+ocr = ["rapidocr-onnxruntime>=1.2"]
 anthropic = ["anthropic>=0.40"]
 openai = ["openai>=1.50"]
 postgres = ["psycopg[binary]>=3"]

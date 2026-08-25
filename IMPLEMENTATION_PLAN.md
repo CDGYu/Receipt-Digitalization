@@ -279,19 +279,48 @@ The rules and the repair loop exist. This phase wires them into the pipeline and
 
 ### Task P2.T2 — Resolve R060/R061 OCR-grounding gap (review fix — decision required)
 
-> **STATUS 2026-08-23 — DECIDED, not yet built.** The user chose **(b), a cheap
-> OCR pass, sequenced after Task 3** grows the golden set: option (a) was refused
-> because a model's own transcription is not independent of its own misread, and
-> R060's whole value is independence. Today `ctx.ocr_text` is written in two test
-> files and nowhere else, so both rules are silently skipped on every real run —
-> and `validator.py` makes a skipped rule indistinguishable from a passing one.
-> The pass also yields the word-level boxes P5.T1's bbox highlighting needs.
+> **STATUS 2026-08-25 — DONE.** `OCR_GROUNDING_ENABLED` runs a second reader over
+> the same pixels the model was shown and puts what it read on
+> `ctx.ocr_text`, which is the source R060 and R061 were written against.
+> Built ahead of the recorded sequencing on the owner's instruction: waiting on
+> Task 3 gates *validating* the benefit, not building the plumbing.
+>
+> *(This block read "DECIDED, not yet built" from 2026-08-23, above a first
+> checkbox that still said "needs user input" — a box contradicting the status
+> directly above it, which is how the task read as undecided for two days when
+> it was not. The box is ticked below with what was decided.)*
 
 **Problem:** grounding rules check the "raw OCR text layer," but the stack is VLM-only and nothing produces that layer.
-- [ ] **Decision (needs user input):** (a) have the extraction model also return the verbatim text it read (add `meta.ocr_text`), (b) add a cheap OCR pass to populate `ctx.ocr_text`, or (c) drop R060/R061.
-- [ ] Implement the chosen option with tests (if kept: total/merchant string found -> silent; absent -> WARN/INFO).
-- [ ] Commit.
+- [x] **Decision — taken 2026-08-23:** **(b), a cheap OCR pass.** (a) was refused
+      because a model's own transcription is not independent of its own misread,
+      and R060's whole value is that a *second* reader disagrees. (c) was not taken.
+- [x] Implement the chosen option with tests. `rapidocr-onnxruntime` behind a new
+      optional `ocr` extra, imported inside the function that uses it;
+      `OCR_GROUNDING_ENABLED` defaults **off**, and the flag gates an injected
+      reader too, so "off" is observable rather than indistinguishable from
+      "grounded". Both directions pinned: a layer without the total makes R060
+      fire, a layer with it leaves R060 silent.
+- [x] Commit.
 **Acceptance:** R060/R061 either have a real text source and tests, or are removed with their tests.
+
+> **Measured while building, and worth more than the feature.** The engine reads
+> `SUPERMART INC.` as `SUPERMARTTNC` on a clean rendered fixture — so R060
+> grounds the total correctly and **R061 fires a false INFO on the merchant**,
+> because its token-overlap comparison has no tolerance for a character error.
+> That is R061's existing design meeting a real reader for the first time, and it
+> is why the tests assert on digits rather than on a string.
+>
+> **The eval path is NOT grounded, and that is stated rather than left to be
+> found.** `run_receipt` takes no settings, so `build_eval_pipeline` cannot turn
+> the pass on; only `process_receipt` grounds. It is the same shape as ISSUE-034
+> — a capability production has and eval does not — and adding an unread seam to
+> `run_receipt` to pretend otherwise would be the unread-prop mistake this repo
+> has already paid for once.
+>
+> **Word-level boxes are produced and nothing reads them yet.** `OcrLayer.words`
+> carries normalised 0-1 boxes matching `LineItem.bbox`'s declared convention,
+> which is what P5.T1's highlighting needs. Running OCR twice to get them
+> separately would be the expensive mistake; they cost nothing here.
 
 ### Task P2.T3 — Tall-receipt line-count cross-check (spec §18 trap)
 

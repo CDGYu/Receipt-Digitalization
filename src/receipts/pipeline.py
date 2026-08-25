@@ -83,6 +83,7 @@ from .preprocess.image_ops import (
     to_base64,
     to_rgb,
 )
+from .preprocess.ocr import read_prepared
 from .progress import ProgressEvent
 from .review.queue import close_review_for_receipt, enqueue_review
 from .score.confidence import ReceiptStatus, explain_confidence, route, score_confidence
@@ -629,6 +630,50 @@ def fan_out(*sinks: "ProgressSink | None") -> ProgressSink:
     return sink
 
 
+def _ground_in_ocr(
+    ctx: ValidationContext,
+    image: PreparedImage,
+    *,
+    settings: Settings,
+    reader: "Callable[[str], object] | None" = None,
+) -> ValidationContext:
+    """Return ``ctx`` carrying an independent text layer, or unchanged.
+
+    **Returns a new context rather than assigning to the caller's.** A
+    :class:`ValidationContext` handed in by a caller may be reused across
+    receipts -- ``run_receipt``'s is -- and writing a text layer onto a shared
+    one would ground receipt two against receipt one's image. `replace` makes
+    that impossible rather than merely unlikely.
+
+    **A failed pass costs the grounding rules, not the receipt.** OCR runs on a
+    photograph somebody uploaded; a decoder that raises on a malformed image, a
+    missing optional extra, or a recogniser that dies must not lose a receipt
+    that the model could still read perfectly well. The exception is logged with
+    its traceback so a pass that never works is findable, and the run continues
+    with the two rules skipping -- which is precisely what they did before this
+    existed, so the failure mode degrades to the status quo rather than to
+    something new.
+    """
+    # **The flag gates everything, including an injected reader.** The obvious
+    # alternative -- let an injected reader run regardless, since a test that
+    # supplies one clearly wants it -- makes the flag itself untestable: with no
+    # way to observe a reader that was asked not to run, "off" and "on but
+    # grounded" produce identical findings, which is the very confusion R060 and
+    # R061 have been living in. A test turns the flag on.
+    if not settings.ocr_grounding_enabled:
+        return ctx
+    reader = reader or read_prepared
+    try:
+        layer = reader(image.b64)
+    except Exception:
+        log.warning(
+            "the OCR grounding pass failed; R060/R061 will skip for this receipt",
+            exc_info=True,
+        )
+        return ctx
+    return replace(ctx, ocr_text=layer.text)
+
+
 def process_receipt(
     job: ReceiptJob,
     *,
@@ -640,6 +685,10 @@ def process_receipt(
     gate: VLMGate | None = None,
     cost_guard: CostGuard | None = None,
     progress: "ProgressSink | None" = None,
+    #: Injected so the offline suite drives the grounding wiring without an
+    #: OCR engine installed -- the same seam `progress` and `submit` are.
+    #: `None` means "use the real reader, if settings enable it".
+    ocr_reader: "Callable[[str], object] | None" = None,
 ) -> ProcessResult:
     """The whole thing, end to end. The only function the queue worker calls.
 
@@ -752,6 +801,18 @@ def process_receipt(
             image, phash = prepare_image_bytes(
                 data, max_edge=settings.max_image_edge_px
             )
+            # An independent reader over the same pixels, when the
+            # deployment asks for one. This is the source R060 and R061 were
+            # written against and which nothing produced until now: both gate
+            # on `bool(ctx.ocr_text)`, so with grounding off they skip exactly
+            # as they always have (P2.T2).
+            #
+            # Inside `preprocess` rather than as a stage of its own: reading
+            # the image IS preprocessing, and `STAGES` is a closed tuple that
+            # `receipts.progress` binds a narration contract to. A new member
+            # would be a change to what every screen can be told, to narrate a
+            # step that is off by default.
+            ctx = _ground_in_ocr(ctx, image, settings=settings, reader=ocr_reader)
 
         with _stage("dedupe", progress):
             duplicate_id = _find_duplicate_image(session_factory, job, phash)

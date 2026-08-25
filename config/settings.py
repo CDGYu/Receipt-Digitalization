@@ -114,6 +114,22 @@ class Settings(BaseSettings):
     tall_receipt_aspect: float = 3.0
     strip_overlap_px: int = 120
 
+    # Maps OCR_GROUNDING_ENABLED. Runs a second, independent reader over the same
+    # pixels the model was shown, and puts what it read on
+    # ``ValidationContext.ocr_text`` — which is the source R060 and R061 were
+    # written against and which nothing produced until 2026-08-25 (P2.T2). Both
+    # rules gate on ``bool(ctx.ocr_text)``, so with this OFF they skip exactly as
+    # they always have.
+    #
+    # **Default OFF, and it is a cost decision rather than a correctness one.**
+    # The pass needs the optional ``ocr`` extra, which is not installed by
+    # default, and it adds a CPU pass per receipt — measured on this box at about
+    # a second per small image plus a one-off ~1.2s to build the recogniser. On
+    # hardware where a single receipt already costs minutes that is cheap; the
+    # default stays OFF because a flag that silently starts spending on every
+    # deployment that upgrades is not a flag anyone consented to.
+    ocr_grounding_enabled: bool = False
+
     # --- Plausibility (§17: Plausibility) -------------------------------- #
     max_plausible_total: Decimal = Decimal("1000000")
     max_receipt_age_years: int = 10

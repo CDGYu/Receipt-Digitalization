@@ -44,6 +44,7 @@ from receipts.export.xlsx import ReceiptExportRow
 from receipts.extract.clients.factory import PassClients
 from receipts.persist.repository import _PlannedChange
 from receipts.pipeline import BatchResult, PassAttempt, ProcessResult, RunOutcome
+from receipts.preprocess.ocr import OcrLayer, OcrWord
 from receipts.progress import ProgressEvent
 from receipts.review.auth import SessionUser
 from receipts.review.queue import QueueStats
@@ -67,6 +68,8 @@ FROZEN_RESULT_TYPES = (
     ProgressEvent,
     SessionUser,
     QueueStats,
+    OcrWord,
+    OcrLayer,
 )
 
 _ROOT = Path(__file__).resolve().parents[1]

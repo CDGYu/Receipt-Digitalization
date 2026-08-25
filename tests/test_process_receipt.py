@@ -590,6 +590,150 @@ def test_the_pipeline_keeps_the_best_attempt_when_the_repair_is_worse(
         assert by_position[0].qty == D("1")
 
 
+# --------------------------------------------------------------------------- #
+# OCR grounding (P2.T2) -- R060/R061 finally have a text source
+# --------------------------------------------------------------------------- #
+
+
+class _Layer:
+    """What a reader returns. Only `.text` is read by the grounding helper."""
+
+    def __init__(self, text: str) -> None:
+        self.text = text
+
+
+def _grounded(settings):
+    """`settings` with the pass switched on. Off is the shipped default."""
+    return settings.model_copy(update={"ocr_grounding_enabled": True})
+
+
+def _fired(session_factory, receipt_id) -> set[str]:
+    with session_factory() as session:
+        return {
+            finding.rule_id
+            for finding in session.scalars(
+                select(ValidationFinding).where(
+                    ValidationFinding.receipt_id == receipt_id
+                )
+            ).all()
+        }
+
+
+def test_a_text_layer_without_the_total_makes_R060_fire(
+    session_factory, storage, settings
+):
+    """The discriminating direction, and the only one that proves the wiring.
+
+    R060 SKIPS when `ctx.ocr_text` is empty and PASSES when the total is found,
+    and `validator.py` renders those identically -- no finding either way. So a
+    test that grounds successfully cannot tell a wired pipeline from an unwired
+    one. This supplies a layer that does NOT contain the total: the rule can
+    only fire if something actually put text on the context.
+    """
+    job = _job(storage)
+    client = _Client([_triage(), _good()])
+
+    _run(
+        job, client, session_factory, storage, _grounded(settings),
+        ocr_reader=lambda b64: _Layer("nothing resembling a receipt"),
+    )
+
+    assert "R060" in _fired(session_factory, job.id)
+
+
+def test_a_text_layer_containing_the_total_leaves_R060_silent(
+    session_factory, storage, settings
+):
+    """The other end. Read WITH the test above: alone it proves nothing."""
+    job = _job(storage)
+    client = _Client([_triage(), _good()])
+
+    _run(
+        job, client, session_factory, storage, _grounded(settings),
+        ocr_reader=lambda b64: _Layer("SUPERMART INC.\nTOTAL 224.00"),
+    )
+
+    assert "R060" not in _fired(session_factory, job.id)
+
+
+def test_grounding_is_off_by_default_and_the_reader_is_never_asked(
+    session_factory, storage, settings
+):
+    """Off means the pass does not run, not that it runs and finds nothing.
+
+    Asserted on the READER rather than on the findings: with grounding off R060
+    skips and produces no finding, which is indistinguishable from grounding
+    successfully. The call count is the only thing that separates them -- the
+    same confusion this whole task exists to end.
+    """
+    calls: list[str] = []
+
+    def _recording(b64: str) -> _Layer:
+        calls.append(b64)
+        return _Layer("nothing resembling a receipt")
+
+    job = _job(storage)
+    client = _Client([_triage(), _good()])
+
+    # `settings` unmodified: `ocr_grounding_enabled` defaults False.
+    _run(job, client, session_factory, storage, settings, ocr_reader=_recording)
+
+    assert calls == []
+    assert "R060" not in _fired(session_factory, job.id)
+
+
+def test_a_reader_that_raises_costs_the_grounding_and_not_the_receipt(
+    session_factory, storage, settings
+):
+    """OCR runs on a photograph somebody uploaded; it must not lose the receipt.
+
+    A malformed image, a missing optional extra or a recogniser that dies leaves
+    the run to finish with the two rules skipping -- exactly what they did before
+    this pass existed. The failure degrades to the status quo.
+    """
+
+    def _explodes(b64: str):
+        raise RuntimeError("no recogniser here")
+
+    job = _job(storage)
+    client = _Client([_triage(), _good()])
+
+    result = _run(
+        job, client, session_factory, storage, _grounded(settings),
+        ocr_reader=_explodes,
+    )
+
+    assert result.status is ReceiptStatus.AUTO_APPROVED
+    assert "R060" not in _fired(session_factory, job.id)
+
+
+def test_the_layer_never_reaches_the_callers_context(
+    session_factory, storage, settings
+):
+    """A context handed in is not written to.
+
+    `run_receipt` reuses one context across receipts, so a pass that assigned
+    `ocr_text` onto the caller's object would ground receipt two against receipt
+    one's image. The helper returns a replacement; this pins that the object
+    passed in is untouched. Calls `process_receipt` directly because `_run`
+    supplies its own `ctx`.
+    """
+    job = _job(storage)
+    caller_ctx = ValidationContext(today=date(2026, 7, 26))
+
+    process_receipt(
+        job,
+        client=_Client([_triage(), _good()]),
+        storage=storage,
+        session_factory=session_factory,
+        ctx=caller_ctx,
+        settings=_grounded(settings),
+        ocr_reader=lambda b64: _Layer("SUPERMART INC. TOTAL 224.00"),
+    )
+
+    assert caller_ctx.ocr_text is None
+
+
 def test_reprocessing_a_persisted_job_updates_the_row_in_place(
     session_factory, storage, settings
 ):
