@@ -469,6 +469,13 @@ The screen where the ongoing cost of the system lives. Optimise for time-per-rec
 > than it asks — `review.spec.ts` rejects 60s as non-discriminating (a scripted
 > run takes about two seconds) and pins 10s, while saying plainly that it claims
 > nothing about a human reviewer. **No human trial has ever been run.**
+>
+> **Four of the five boxes ticked 2026-08-25**, re-derived rather than taken
+> from the notes below them: `serializers.py:287` -> `ReviewScreen.tsx:567`
+> for the rail, `repository.py:1540` plus `test_api_write.py:348` for the
+> `corrections` write, and `review.spec.ts`'s own assertions for the test box.
+> The bbox box stays open, and a presence-grep is why it is not a close call:
+> the only `bbox` in `src/review/` is a comment saying it is **absent**.
 
 - [ ] Image pane on the left with **bounding-box highlighting** from `line_items[].bbox`; editable fields on the right; keyboard-first (Tab between fields, Enter to approve).
   > **THREE OF FOUR CLAUSES ARE BUILT; the highlighting is the only one that is
@@ -487,15 +494,15 @@ The screen where the ongoing cost of the system lives. Optimise for time-per-rec
   > are also **0 rows in `line_items`** to build against, and the model that
   > runs here does not ground. Whoever takes this: it is a design step and then
   > a feature, not the one-task green light the handoff called it.
-- [ ] Show the confidence explanation from `explain_confidence` so the reviewer sees *why* it was flagged.
+- [x] Show the confidence explanation from `explain_confidence` so the reviewer sees *why* it was flagged.
   > **BUILT — audited 2026-08-25.** `ConfidenceRail` renders `confidence` and
   > `confidence_reasons`, mounted in `ReviewScreen`.
-- [ ] On approve/edit, `PATCH /receipts/{id}` -> writes to `corrections`.
+- [x] On approve/edit, `PATCH /receipts/{id}` -> writes to `corrections`.
   > **BUILT — audited 2026-08-25.** `@app.patch("/receipts/{receipt_id}")` in
   > `review/api.py`. *(Note the standing tension: **`corrections` is empty**,
   > which P8.T1 and P9.T1 are blocked on. The route exists; nobody has used
   > it.)*
-- [ ] Test (component + e2e via Playwright): editing a field and approving persists and advances to the next task; measure a scripted correction completes under 60s.
+- [x] Test (component + e2e via Playwright): editing a field and approving persists and advances to the next task; measure a scripted correction completes under 60s.
   > **BUILT, and it tightened this box rather than meeting it — audited
   > 2026-08-25.** `frontend/e2e/review.spec.ts`: "a reviewer corrects a receipt
   > and the correction is persisted". It asserts **under 10s, not 60**, with
@@ -503,7 +510,7 @@ The screen where the ongoing cost of the system lives. Optimise for time-per-rec
   > **60s would pass even if the screen had become unusably slow**. The
   > acceptance line below still says 60 seconds; that is the number for a
   > *human*, and the two should not be conflated.
-- [ ] Commit.
+- [x] Commit.
   > **Done for everything above that is built.**
 **Acceptance:** a full correction in under 60 seconds; every edit lands in `corrections`.
   > **Unmet, and not for want of code — audited 2026-08-25.** "A full correction
