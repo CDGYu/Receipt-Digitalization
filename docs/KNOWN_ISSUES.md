@@ -2203,7 +2203,14 @@ than the model choice does.
 
 **This entry framed the corpus as *the* explanation for what that number hides.
 It is now one of two, and they are independent.** The other is ISSUE-034: the
-eval path measures a prompt production does not send.
+eval path can never send merchant hints, while `process_receipt` can.
+
+*(Corrected 2026-08-25. This read "measures a prompt production does not send",
+which was handed over by another session and is **false today**: the `merchants`
+table is empty, `registry.lookup` returns `None` for every input on an empty
+registry — proven by execution — so production sends the same unhinted prompt.
+ISSUE-034's divergence is latent, not active. The composition below still holds
+and becomes load-bearing the moment any merchant is registered with hints.)*
 
 Verified here rather than relayed, by reading the signatures:
 
@@ -3814,13 +3821,32 @@ answer is what certifies the tests.
 
 ## ISSUE-034 — Eval measures a different prompt than production sends
 
-**Status:** OPEN — split out of ISSUE-002 on 2026-08-25, where it had been
-recorded since 2026-08-15 as "the related divergence" under a heading about
-`prompt_hash`. It is not a hash defect and nobody reading about accuracy would
-have found it there.
-**Owner action required:** yes — whether the eval path should send the prompt
-production sends. Both answers are defensible and the choice changes what every
-accuracy figure means.
+**Status:** **RESOLVED 2026-08-25 — the ruling is HERMETIC EVAL.** The eval path
+does not send merchant hints and is not going to. Split out of ISSUE-002 the
+same day, where it had been recorded since 2026-08-15 as "the related
+divergence" under a heading about `prompt_hash` — not a hash defect, and nobody
+reading about accuracy would have found it there.
+
+**The ruling, and why this way.** A baseline must be reproducible from the
+golden set alone. Mirroring production would make two runs over identical images
+differ because a merchant gained a hint in between, which destroys the one
+property the corpus exists to provide. It would also cost an architectural
+change: `run_receipt` and `build_eval_pipeline` take **no session**, so the
+registry is unreachable by construction and mirroring means giving the eval path
+a database. That is a large change bought to track a divergence measured at
+**zero** — the `merchants` table is empty, so production currently sends the
+same unhinted prompt.
+
+**The residual, stated rather than hidden.** Once merchants are registered with
+hints, a hermetic baseline **under-describes** production, and no re-run will
+say so on its own. Two things carry it: every aggregate records
+`"prompt_conditioning": {"merchant_hints": false, "few_shots": false}`, and
+`tests/test_eval_prompt_conditioning.py` reddens if anyone threads `hints`,
+`few_shots`, `session` or `registry` into either entry point — so reversing this
+ruling is possible but cannot happen quietly. **P6.T1 is the task that activates
+the residual**; whoever runs it should read this entry first.
+
+**Owner action required:** no, as of 2026-08-25.
 **Discovered:** 2026-08-15. **Pre-existing:** yes.
 **Blocks:** the meaning of ISSUE-001's baseline, and of the re-baseline in step
 7 Task 3 step 4.
@@ -3864,17 +3890,37 @@ Verified 2026-08-25 by reading the call in `run_receipt` (the argument list is
 `process_receipt`'s three `hints=` sites, and the chain
 `run_repeats -> run_baseline -> build_eval_pipeline -> run_receipt`.
 
-### ISSUE-002 predicted this would matter, and the condition has fired
+### ISSUE-002 predicted this, and the condition has NOT fired — corrected 2026-08-25
 
 Its words: *"It will matter the moment ISSUE-001's baseline runs: the accuracy
 figure will describe the unhinted prompt while `process_receipt` sends the
 hinted one, and nothing in the results file says so."*
 
-**The baseline ran on 2026-08-22** (`eval/results/2026-08-22-cloud-only/`, five
-repeats, ADR-0049). Nothing updated the entry. So ADR-0049's 60.00-61.43%
-already describes a prompt the product does not send, and the results file does
-not record that. This is a claim that was true when written, became false by
-events, and was read as still-pending for three days.
+**This entry said that condition had fired. It has not, and the difference
+matters.** The prediction has two halves and only the first is true. Measured
+2026-08-25:
+
+    merchants table                              -> 0 rows
+    registry.lookup(session, "METRO OIL SUBIC")  -> None      (empty registry)
+    registry.lookup(session, "GREENFIELD GROCERY") -> None
+    registry.lookup(session, None)               -> None
+
+Proven by execution against an empty in-memory database, not by reading.
+`process_receipt` sets `hints` from `registry.lookup`, so with no registered
+merchant it sends `hints=None` — **the same unhinted prompt the eval path
+sends.**
+
+**So ADR-0049's 60.00-61.43% describes what the product currently does.** The
+divergence is **latent, not active**: it is real in the code and zero in effect,
+and it switches on the first time a merchant is registered with hints. `P6.T1`
+("measure top-10-merchant accuracy before/after few-shot") is precisely the task
+that would switch it on.
+
+*(This section claimed the opposite for several hours on 2026-08-25, written by
+the session that filed this issue and repeated to the owner twice before being
+measured. It also reached ISSUE-017, which was corrected with it. The original
+error was reasoning from the presence of hint-passing code to the presence of
+hints — the code is there, the data is not.)*
 
 ### Why it is a decision rather than a fix
 
