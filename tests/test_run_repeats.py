@@ -576,15 +576,26 @@ def test_the_aggregate_points_at_each_repeats_own_results_file(tmp_path, monkeyp
         assert (run_dir / rel).is_file()
 
 
-def test_the_aggregate_carries_the_rung_counts_the_results_file_does_not(
+def test_the_aggregate_and_the_results_file_both_carry_the_rung_counts(
     tmp_path, monkeypatch
 ):
-    """ISSUE-012, discharged for this artifact.
+    """The ladder's provenance, in both artefacts.
 
     The ladder escalates: rung 0 returns an unparseable body, so it reads
     nothing and is discarded, and ``cloud`` produces the kept extraction. The
     count must therefore be ``{"cloud": 1}`` and not ``{"local": 1}`` -- an
     assertion that a single key exists would pass either way.
+
+    **This test used to be named ``..._the_results_file_does_not`` and asserted
+    the counts were ABSENT from the per-run file.** That was ISSUE-012: the
+    aggregate `run_repeats` writes carried them and the committed results file
+    did not, because `run_eval` wrote before `run_baseline` folded them in. The
+    absence was recorded here as a deliberate scope boundary -- "this milestone
+    took no position on who owns that write" -- which is how a defect ends up
+    with a passing test asserting it holds. `run_eval` now takes a `finalize`
+    hook and the fold happens before the write, so the assertion is inverted
+    rather than deleted: the file that was the point of §16 committing results
+    now records which rung produced them.
     """
     monkeypatch.setenv("VLM_PROVIDER", "ollama")
     golden = tmp_path / "golden"
@@ -601,13 +612,13 @@ def test_the_aggregate_carries_the_rung_counts_the_results_file_does_not(
         assert entry["extract_rung_counts"] == {"cloud": 1}
         assert entry["failures"] == []
 
-    # And the per-run results file still does not carry them: this milestone
-    # took no position on who owns that write.
+    # ...and so does the per-run results file, which is the artefact §16
+    # commits so a regression shows in a diff (ISSUE-012).
     run_dir = tmp_path / "results" / "run-c"
     one = json.loads(
         (run_dir / aggregate["repeats"][0]["results_file"]).read_text(encoding="utf-8")
     )
-    assert "extract_rung_counts" not in one
+    assert one["extract_rung_counts"] == {"cloud": 1}
 
 
 def test_each_repeats_rung_counts_are_that_repeats_own(tmp_path, monkeypatch):

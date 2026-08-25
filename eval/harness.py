@@ -192,17 +192,25 @@ def _report_to_dict(report: EvalReport) -> dict[str, Any]:
             "p50_latency_s": report.p50_latency_s,
             "p95_latency_s": report.p95_latency_s,
         },
-        # ``EvalReport.extract_rung_counts`` is deliberately NOT written here.
-        # ``run_baseline`` folds it in *after* ``run_eval`` returns, and this
-        # file is written before that returns -- so the key would be ``null`` in
-        # every file this function has ever produced, whatever the run measured
-        # (probed 2026-08-21: a run whose report carried ``{'cloud': 1}`` wrote
-        # ``null``). A permanently-null key is not a record of provenance, and
-        # ``tests/test_cli_reports.py::test_the_producer_writes_the_shape_this_module_hand_writes``
-        # pins this shape against a hand-written fixture, so adding one is not
-        # free either. The counts reach the printed report and the return value;
-        # putting them in the artifact needs the write to happen after the fold,
-        # which is a change to who owns the results file.
+        # Which rung produced the kept extraction, and why the others lost.
+        #
+        # **These were deliberately absent until 2026-08-25 (ISSUE-012), and the
+        # reason is worth keeping**: ``run_baseline`` folded them in *after*
+        # ``run_eval`` returned, and this file is written before it returns, so
+        # the keys would have been ``null`` in every file this function ever
+        # produced whatever the run measured -- probed 2026-08-21, a run whose
+        # report carried ``{'cloud': 1}`` wrote ``null``. A permanently-null key
+        # is not a record of provenance.
+        #
+        # What changed is the ordering, not the key: ``run_eval`` now takes a
+        # ``finalize`` hook and calls it *before* writing, so a caller holding
+        # provenance this module cannot see folds it in while the report is
+        # still unwritten. Spec section 16 commits this file so regressions show
+        # in a diff, and ISSUE-001's stated fear is a good accuracy number
+        # hiding the fact that everything escalated -- which is precisely what
+        # an artefact missing these two keys cannot rule out.
+        "extract_rung_counts": report.extract_rung_counts,
+        "extract_discard_counts": report.extract_discard_counts,
         # Verbatim error text, not just a count: a run that silently reports
         # "2 failed" is not debuggable four minutes per receipt later.
         "failures": [[receipt_id, detail] for receipt_id, detail in report.failures],
@@ -264,6 +272,7 @@ def run_eval(
     pipeline_fn: PipelineFn,
     *,
     results_dir: Path | None = None,
+    finalize: Callable[[EvalReport], None] | None = None,
 ) -> EvalReport:
     """Score every label under ``golden_dir/labels`` and write a results file.
 
@@ -334,5 +343,13 @@ def run_eval(
         )
 
     report = _build_report(results, acc)
+    # **Before the write, not after it** -- that ordering is the whole of
+    # ISSUE-012. A caller that knows something this module cannot (which rung
+    # produced the extraction; only the caller built the ladder) folds it in
+    # here, while the report is still unwritten. Folding after `run_eval`
+    # returns is what put those counts in the printed report and never in the
+    # committed artefact.
+    if finalize is not None:
+        finalize(report)
     _write_report(report, results_dir if results_dir is not None else DEFAULT_RESULTS_DIR)
     return report
