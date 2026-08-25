@@ -114,29 +114,44 @@ describe('the guard is not passing vacuously', () => {
   })
 
   it('bounds a block at its own closing brace', () => {
-    // If `block` ran to EOF this would contain the dark values too, and every
-    // "the light theme says X" assertion would be meaningless.
+    // If `block` ran to EOF, every "the `:root` block says X" assertion below
+    // would be answerable by any *later* rule in the file.
     //
-    // `#FAFAF9` is the light `--color-background`, and the anchor moved here
-    // from `#F8FAFC` when the Editorial ramp landed. It has to be a value only
-    // the light block carries: `#F8FAFC` is still in the file, as the dark
-    // `--color-foreground`, so leaving it would have turned this assertion from
-    // a bound on `block` into one satisfied by the very leak it looks for.
-    expect(block(LIGHT)).toContain('#FAFAF9')
-    expect(block(LIGHT), 'the light block leaked into the dark one').not.toContain('#020617')
-    expect(block(DARK_ATTR)).toContain('#020617')
-    expect(block(DARK_ATTR), 'the dark block leaked into the media copy').not.toContain(
-      'prefers-color-scheme',
-    )
+    // **Re-anchored when the dark theme was removed.** This used to bound
+    // `:root` against the dark block that followed it; with no second token
+    // block, `body` is the neighbour that proves the bound. `margin` is
+    // declared only there -- if it leaks into `block(LIGHT)`, the helper is
+    // running past its own closing brace.
+    //
+    // The positive canary is the token's NAME, not a hex. It read `#FAFAF9`,
+    // the current `--color-background`, which pins the palette to a value and
+    // reports a bounding bug the moment anyone re-themes -- measured: a palette
+    // edit broke this test while nothing about the bound had changed.
+    expect(block(LIGHT)).toContain('--color-background')
+    expect(block(LIGHT), 'the `:root` block leaked into `body`').not.toContain('margin')
+    expect(block('body')).toContain('margin')
+    expect(block('body'), '`body` leaked into a later rule').not.toContain('outline')
   })
 
   it('ignores prose, so a comment cannot satisfy a structural assertion', () => {
     // The exact hole round 1 found: this file's own comments name the dark
-    // selector, and the un-stripped source therefore "contains" it even with
-    // every rule deleted.
-    expect(raw).toContain(`${DARK_ATTR} {`)
-    expect(css.indexOf(DARK_ATTR), 'comments were not stripped').toBeGreaterThan(-1)
-    expect(css, 'a comment survived stripping').not.toContain('load-bearing')
+    // selector, so the un-stripped source "contains" it even with every dark
+    // rule deleted.
+    //
+    // **Re-anchored when the dark theme was removed, and the removal turned
+    // this test into a sharper version of itself.** It used to assert that
+    // `raw` and `css` BOTH contained `data-theme` -- true while the rule
+    // existed, and it only proved stripping left the rule alone. Now the
+    // selector appears in the prose and nowhere else, so the two sources
+    // genuinely disagree, which is the property being tested: `raw` has it,
+    // `css` must not. That disagreement is also exactly what
+    // `ships NO dark theme` depends on -- without stripping, that test could
+    // never pass while `tokens.css` explains why the theme is gone.
+    expect(raw, 'the prose no longer names the selector, so this proves nothing').toContain(
+      'data-theme',
+    )
+    expect(css, 'comments were not stripped').not.toContain('data-theme')
+    expect(css, 'a comment survived stripping').not.toContain('on purpose')
   })
 })
 
@@ -162,38 +177,40 @@ describe('tokens.css', () => {
     expect(raised).not.toBe(surface)
   })
 
-  it('ships a dark theme for every colour the light theme defines', () => {
-    const light = customProperties(block(LIGHT)).filter((t) => t.startsWith('--color-'))
-    const dark = customProperties(block(DARK_ATTR))
-    expect(light.length, 'no light colours found -- the guard is vacuous').toBeGreaterThan(10)
-    for (const token of light) {
-      expect(dark, `${token} has no value in the ${DARK_ATTR} block`).toContain(token)
-    }
-  })
-
-  it('resolves dark from the OS preference with the same values, never different ones', () => {
-    // Two routes to one theme. A drift is invisible on any single machine --
-    // you would have to toggle the OS setting *and* the attribute to see it.
-    expect([...declarations(block(DARK_MEDIA))].sort()).toEqual(
-      [...declarations(block(DARK_ATTR))].sort(),
+  it('ships NO dark theme, by either route', () => {
+    // Owner ruling: light only. Three tests used to live here asserting the
+    // dark theme was complete, agreed with its media copy, and could be beaten
+    // by an explicit light choice. They are replaced by one asserting it is
+    // gone.
+    //
+    // **Both routes, because deleting one changes nothing a viewer sees.** The
+    // theme chooser went at `824bf46`, so nothing writes `data-theme`; that
+    // left `prefers-color-scheme` as the only *live* route to dark, silently
+    // following the OS with no way off. An attribute-only removal would have
+    // been invisible.
+    //
+    // `css` is comment-stripped (see its definition), which is what lets
+    // `tokens.css` go on NAMING both selectors in the prose that explains why
+    // they are gone. Without the stripping this test and that comment could not
+    // both exist.
+    expect(css, 'a data-theme rule is still in the stylesheet').not.toContain('data-theme')
+    expect(css, `${DARK_MEDIA} is still in the stylesheet`).not.toContain(DARK_MEDIA)
+    expect(css, 'a prefers-color-scheme: dark rule is still in the stylesheet').not.toMatch(
+      /@media\s*\(\s*prefers-color-scheme:\s*dark\s*\)/,
     )
-  })
-
-  it('lets an explicit light choice beat an OS dark preference', () => {
-    // `:root:not([data-theme='light'])` is the whole mechanism: a bare `:root`
-    // makes the OS setting unbeatable, and a bare attribute selector makes it
-    // unreachable. Pin the selector text, not just the presence of a block.
-    const media = css.match(/@media\s*\(\s*prefers-color-scheme:\s*dark\s*\)\s*\{\s*([^{]+?)\s*\{/)
-    expect(media, 'no prefers-color-scheme: dark rule at all').not.toBeNull()
-    expect(media?.[1]).toBe(DARK_MEDIA)
+    // Not vacuous: the file is real, has rules, and still has the OTHER media
+    // query. An empty or unreadable file would satisfy both assertions above.
+    expect(customProperties(block(LIGHT)).length).toBeGreaterThan(30)
+    expect(css, 'the whole file went missing').toContain('prefers-reduced-motion')
   })
 
   it('tells the user agent which palette its own widgets should use', () => {
-    // Without `color-scheme` the UA paints scrollbars, form controls and
-    // autofill from the light palette however dark the page is.
+    // Without `color-scheme` the UA paints scrollbars, form controls, autofill
+    // and spellcheck underlines from the OS preference -- so on a dark-set
+    // machine a light-only page still gets dark widgets, which reads as a bug
+    // rather than a preference. This declaration is what makes "light only"
+    // true for the parts of the page this stylesheet does not paint.
     expect(declarations(block(LIGHT)).get('color-scheme')).toBe('light')
-    expect(declarations(block(DARK_ATTR)).get('color-scheme')).toBe('dark')
-    expect(declarations(block(DARK_MEDIA)).get('color-scheme')).toBe('dark')
   })
 
   it('never reaches the network for a font', () => {

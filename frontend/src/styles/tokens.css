@@ -14,22 +14,33 @@
  * runtime either; the packages only add lockfile-pinned provenance that a
  * hand-vendored binary could not prove.
  *
- * ## The three blocks, and why they must stay in step
+ * ## One theme, on purpose
  *
- * `:root` is light and is the default (design §2.2). `:root[data-theme='dark']`
- * is the explicit opt-in; the `prefers-color-scheme: dark` block is the OS one.
- * The last two carry identical declarations on purpose -- two routes to one
- * theme, not two themes -- and `tokens.test.ts` pins that they parse to the
- * same (property, value) set, because a drift between them is invisible on any
- * one machine.
+ * **`:root` is light and is the only palette this stylesheet ships.** There was
+ * a dark theme -- an explicit `:root[data-theme='dark']` opt-in and a
+ * `prefers-color-scheme: dark` copy carrying identical declarations -- and it
+ * is removed on the owner's ruling: light only, regardless of what the
+ * operating system prefers.
+ *
+ * `color-scheme: light` below is what makes that stick for the parts of the
+ * page this stylesheet does not paint. Without it a viewer on a dark-set OS
+ * still gets dark scrollbars, dark form controls and dark autofill against a
+ * light page, which looks like a bug rather than a preference.
+ *
+ * **The removal has to reach the media query, not just the attribute.** The
+ * theme chooser was deleted at `824bf46`, so nothing writes `data-theme` any
+ * more -- which leaves the `prefers-color-scheme` block as the *only* live
+ * route to dark, silently following the OS with no way to turn it off.
+ * Deleting the attribute block alone would change nothing a viewer could see.
+ * `tokens.test.ts` pins the absence of both.
  */
 
 :root {
   /* `color-scheme` is not decoration. Without it the user agent paints its own
    * widgets -- form controls, scrollbars, spellcheck underlines, autofill --
    * from the light palette whatever the page does, so a dark theme would ship
-   * with light scrollbars against a #020617 page. Declared in all three blocks
-   * for that reason. */
+   * with light scrollbars against a light page. It is the whole of what makes
+   * "light only" true for the widgets this stylesheet cannot reach. */
   color-scheme: light;
 
   --font-sans: 'Fira Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
@@ -86,90 +97,6 @@
   --color-null: #78716C;
 }
 
-:root[data-theme='dark'] {
-  color-scheme: dark;
-
-  --color-background: #020617;
-  --color-surface: #0E1223;
-  --color-surface-raised: #161925;
-  --color-surface-active: #1E293B;
-  --color-surface-sunken: #020617;
-  --color-foreground: #F8FAFC;
-  --color-muted-foreground: #94A3B8;
-  --color-border: #334155;
-  --color-primary: #F8FAFC;
-  --color-ring: #60A5FA;
-  --color-severity-error: #EF4444;
-  --color-severity-warn: #F59E0B;
-  --color-severity-info: #60A5FA;
-  --color-positive: #22C55E;
-  /* **The one token whose dark value is not the light one, and the reason is a
-   * measurement.** `#64748B` was spelled identically in all three blocks, which
-   * is why it passes on white (4.76:1) and fails on `--color-surface` `#0E1223`
-   * (**3.91:1**, measured in the browser pass, the only sub-4.5 record in 64).
-   * That is design §6's body-text floor broken on the single glyph carrying the
-   * prime directive -- the em dash and every `::placeholder` that says "never
-   * extracted".
-   *
-   * `#7C8CA2` is the midpoint of slate-500 and slate-400 in sRGB and measures
-   * **5.43:1** on `#0E1223` -- margin over the floor, and still clearly quieter
-   * than `--color-muted-foreground` `#94A3B8` (7.25:1), so an absent value does
-   * not start reading as a label. Off the Tailwind ramp on purpose, exactly as
-   * `--color-muted-foreground` is in light (ADR-0027 §2): contrast decides these
-   * two, not the palette.
-   *
-   * Measured, not assumed, for every surface the mark can land on. That
-   * sentence read "It never reaches `--color-surface-raised` or
-   * `--color-surface-active`" until 2026-08-24, when **this refresh falsified
-   * it**: `ReceiptForm.module.css`'s `.form` now paints
-   * `--color-surface-raised`, and its `:125` sets `color: var(--color-null)`,
-   * so the mark lands there. Re-measured rather than re-asserted -- **5.11:1 on
-   * dark `#161925`, 4.72:1 on light `#FFFDF9`** -- so the move is safe and the
-   * old sentence was not. `--color-surface-active` is still never reached.
-   *
-   * `--color-surface-raised` is now inside `INHERITABLE_SURFACES`, so this pair
-   * is gated rather than argued about; see that constant for what a browser
-   * found while it was outside.
-   *
-   * This value must stay identical in the `prefers-color-scheme` copy below;
-   * `tokens.test.ts` pins the two blocks equal, so a half-applied change is
-   * red. */
-  --color-null: #7C8CA2;
-}
-
-/* `:root:not([data-theme='light'])` is load-bearing, not a flourish: it lets an
- * explicit light choice win over an OS dark preference, while an unset
- * preference still follows the OS. A bare `:root` here would make the OS
- * setting unbeatable; a bare attribute selector would make it unreachable.
- * `tokens.test.ts` pins this selector's exact text for that reason.
- *
- * Specificity is (0,2,0) for both this block and the one above -- `:not()`
- * takes its argument's specificity -- so source order decides and this one
- * wins. That is only safe because the two carry identical declarations. */
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) {
-    color-scheme: dark;
-
-    --color-background: #020617;
-    --color-surface: #0E1223;
-    --color-surface-raised: #161925;
-    --color-surface-active: #1E293B;
-    --color-surface-sunken: #020617;
-    --color-foreground: #F8FAFC;
-    --color-muted-foreground: #94A3B8;
-    --color-border: #334155;
-    --color-primary: #F8FAFC;
-    --color-ring: #60A5FA;
-    --color-severity-error: #EF4444;
-    --color-severity-warn: #F59E0B;
-    --color-severity-info: #60A5FA;
-    --color-positive: #22C55E;
-    /* The dark lift, spelled identically to the block above -- see the note
-     * there for the measurement. 5.43:1 on `--color-surface`, against 3.91:1
-     * for the `#64748B` this replaces. */
-    --color-null: #7C8CA2;
-  }
-}
 
 body {
   margin: 0;
