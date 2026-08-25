@@ -21,10 +21,27 @@ export interface ExportReceiptPage {
 export function fetchExportReceipts(params?: {
   limit?: number
   offset?: number
+  /** A `ReceiptStatus` value, or `undefined` for every status. */
+  status?: string
+  /** A decimal as a **string**, never a `number`: confidence is money-adjacent
+   *  and `0.1 + 0.2` is the reason this codebase keeps decimals out of floats
+   *  (ADR-0001). The route parses it into a `Decimal`. */
+  minConfidence?: string
 }): Promise<ExportReceiptPage> {
   const query = new URLSearchParams()
   if (params?.limit !== undefined) query.set('limit', String(params.limit))
   if (params?.offset !== undefined) query.set('offset', String(params.offset))
+  // The wire names are the route's, not this signature's: `min_confidence`,
+  // not `minConfidence`. FastAPI ignores an unrecognised query parameter in
+  // silence, so a misspelling here returns an unfiltered page that is
+  // indistinguishable from a filter that matched everything.
+  //
+  // A filter nobody chose is OMITTED, not sent empty. `status=` is not "no
+  // status" to `ReceiptStatus | None` -- it fails validation and the page 422s.
+  if (params?.status !== undefined) query.set('status', params.status)
+  if (params?.minConfidence !== undefined) {
+    query.set('min_confidence', params.minConfidence)
+  }
   const suffix = query.toString() === '' ? '' : `?${query.toString()}`
   return request<ExportReceiptPage>(`/export/receipts${suffix}`)
 }

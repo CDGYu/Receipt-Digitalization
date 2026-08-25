@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { ChangeEvent } from 'react'
+import type { ChangeEvent, DragEvent } from 'react'
 import { ApiError } from '../api/client'
 import { ACCEPTED_SUFFIXES, MAX_UPLOAD_MB, rejectionReason, uploadReceipt } from '../api/upload'
 import type { ProgressReport, UploadAccepted } from '../api/upload'
@@ -97,9 +97,33 @@ export interface UploadScreenProps {
  *
  * It is derived from `ACCEPTED_SUFFIXES` rather than retyped, so the list the
  * picker offers cannot drift from the list the screen enforces. It is not
- * trusted: `accept` filters the picker's default view and a person can switch it
- * to "all files", and a drag-and-drop ignores it outright, so a `.pdf` really
- * does arrive here. `rejectionReason` is what refuses it.
+ * trusted: `accept` filters the picker's default view, a person can switch it to
+ * "all files", and **a drop ignores it outright** -- so a file `accept` would
+ * have hidden really does arrive here, and `rejectionReason` is what refuses it.
+ *
+ * *(This paragraph used to end "so a `.pdf` really does arrive here" and named
+ * the PDF as the thing refused. `55f9847` -- ISSUE-027, the same day -- added
+ * `.pdf` to `ACCEPTED_SUFFIXES` because ingest now expands one into a receipt
+ * per page, so the example became the opposite of true while the sentence
+ * around it stayed right. The claim is now about `accept` rather than about a
+ * suffix, which is the part that does not move.)*
+ *
+ * ## The drop target is the label, and `preventDefault` is the feature
+ *
+ * P5.T2's drag-and-drop. The handlers sit on the `<label>` that already wraps
+ * the input, so the thing a person aims at and the thing that accepts a drop are
+ * one element rather than two that can drift apart.
+ *
+ * **`onDragOver` must call `preventDefault`, and that is not cosmetic:** a
+ * browser's default for a dragged file is to navigate to it, replacing the page
+ * with the raw image, and the drop handler never runs at all. The symptom is
+ * "drag-and-drop does nothing", which points at the drop handler rather than at
+ * the missing line, so it has its own test.
+ *
+ * A drop goes through **the same `offer`** the picker uses. A second
+ * accept-then-upload path is how a refusal ends up enforced on one route and not
+ * the other -- and since `accept` does not apply to a drop at all, the drop is
+ * the route where `rejectionReason` matters most.
  *
  * ## One receipt, and then this screen becomes the other one
  *
@@ -129,6 +153,7 @@ export function UploadScreen({ upload = uploadReceipt, progress }: UploadScreenP
   const [error, setError] = useState<string | null>(null)
   const [accepted, setAccepted] = useState<Accepted | null>(null)
   const [sending, setSending] = useState(false)
+  const [dragging, setDragging] = useState(false)
 
   async function offer(file: File): Promise<void> {
     const refusal = rejectionReason(file)
@@ -145,6 +170,44 @@ export function UploadScreen({ upload = uploadReceipt, progress }: UploadScreenP
     } finally {
       setSending(false)
     }
+  }
+
+  /** **`preventDefault` here is not styling — it is the whole feature.**
+   *
+   *  A browser's default for a dragged file is to navigate to it: without this
+   *  the page is replaced by the raw image and `onDropped` never runs. The
+   *  failure then reads as "drag-and-drop does nothing", which is why it is
+   *  pinned by its own test rather than left to the drop test to imply.
+   */
+  function onDragOver(event: DragEvent<HTMLLabelElement>): void {
+    event.preventDefault()
+    setDragging(true)
+  }
+
+  function onDragLeave(): void {
+    setDragging(false)
+  }
+
+  function onDropped(event: DragEvent<HTMLLabelElement>): void {
+    event.preventDefault()
+    setDragging(false)
+    // The input carries `disabled` while sending; a drop target has no such
+    // attribute, so the guard lives here or a second file overtakes the first.
+    if (sending) {
+      return
+    }
+    const file = event.dataTransfer.files[0]
+    if (file === undefined) {
+      // A drag carrying text, not files. `dataTransfer.files` is empty and
+      // there is nothing to refuse -- silence is right, because nothing was
+      // offered.
+      return
+    }
+    // **The same `offer` the picker uses.** `accept` filters the picker's
+    // default view and a drop ignores it outright, so this path MUST go
+    // through `rejectionReason` -- a second accept-then-upload path is how a
+    // refusal ends up enforced on one route and not the other.
+    void offer(file)
   }
 
   function onChosen(event: ChangeEvent<HTMLInputElement>): void {
@@ -192,7 +255,12 @@ export function UploadScreen({ upload = uploadReceipt, progress }: UploadScreenP
         </p>
       )}
 
-      <label className={styles.field}>
+      <label
+        className={dragging ? `${styles.field} ${styles.dragging}` : styles.field}
+        onDragOver={onDragOver}
+        onDragLeave={onDragLeave}
+        onDrop={onDropped}
+      >
         <span className={styles.label}>Receipt photograph</span>
         <input
           className={styles.input}
@@ -204,9 +272,11 @@ export function UploadScreen({ upload = uploadReceipt, progress }: UploadScreenP
       </label>
 
       {/* Both facts come from the module that enforces them, so the sentence
-          cannot outlive what it describes. `.pdf` is absent from the list for
-          the reason `ACCEPTED_SUFFIXES` records, and the refusal says the rest
-          when somebody chooses one anyway. */}
+          cannot outlive what it describes -- which is exactly what saved it:
+          `.pdf` joined `ACCEPTED_SUFFIXES` at `55f9847` (ISSUE-027) and this
+          line started listing it the same day, with nothing to edit. The
+          comment that sat here said `.pdf` was absent and did NOT self-update;
+          it has been corrected. */}
       <p className={styles.limits}>
         {ACCEPTED_SUFFIXES.join(', ')} -- up to {MAX_UPLOAD_MB} MB.
       </p>

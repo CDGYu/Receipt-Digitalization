@@ -238,3 +238,49 @@
 .more {
   align-self: center;
 }
+
+/* The status and confidence filters (P5.T2).
+ *
+ * A row that wraps rather than a grid: two controls today, and a `grid` with a
+ * column count would be a number to maintain the moment a third arrives.
+ * `align-items: end` keeps the two selects on one baseline while their labels
+ * sit above them at whatever height the text takes. */
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: var(--space-lg);
+  margin: 0 0 var(--space-lg);
+}
+
+/* The label wraps its control, so the whole thing is one hit target and the
+ * text is the accessible name -- no `aria-label` restating what is on screen. */
+.filterLabel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  color: var(--color-muted-foreground);
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* `--text-base` is §3.1's floor for a control a reader acts on, and the value
+ * shown here decides what the table below contains. `min-height` is the 44px
+ * target `LoginPage.module.css` argues for; `box-sizing` is what makes that
+ * number mean the painted box (ISSUE-032's lesson, one file over). */
+.filterControl {
+  box-sizing: border-box;
+  min-height: 44px;
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-foreground);
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  letter-spacing: normal;
+  text-transform: none;
+}

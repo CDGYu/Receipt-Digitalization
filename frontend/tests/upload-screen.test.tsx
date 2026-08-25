@@ -772,3 +772,90 @@ describe('every component in src/upload is actually painted', () => {
     }
   })
 })
+
+/** The label that wraps the input, which is the drop target.
+ *
+ *  Found through the input rather than by a test id: the target has to be the
+ *  thing a person sees and aims at, and the input's own label is that box. If
+ *  the drop handlers ever move off it, this throws rather than silently
+ *  testing a `<main>` that accepts everything.
+ */
+function dropZone(): HTMLElement {
+  const label = field().closest('label')
+  if (label === null) {
+    throw new Error('the file input is not inside a label -- the drop target moved')
+  }
+  return label
+}
+
+/** A drop, the way a browser delivers one.
+ *
+ *  `types: ['Files']` is part of the shape: a drag carrying text sets
+ *  `types: ['text/plain']` and no `files`, and a handler that reads `files`
+ *  without looking would treat it as an empty drop.
+ */
+function drop(zone: HTMLElement, file: File): void {
+  fireEvent.drop(zone, { dataTransfer: { files: [file], types: ['Files'] } })
+}
+
+describe('UploadScreen drag-and-drop (P5.T2)', () => {
+  it('sends a dropped photograph down the same path a chosen one takes', async () => {
+    const upload = vi.fn().mockResolvedValue({
+      receipts: [{ receipt_id: 'r-1', image_key: 'k' }],
+      status: 'pending',
+    })
+    const progress = vi.fn().mockResolvedValue({ status: 'pending', stage: null, detail: null })
+    render(<UploadScreen upload={upload} progress={progress} />)
+
+    drop(dropZone(), jpeg())
+
+    // The SAME `offer`, not a second copy of the accept-then-upload logic. A
+    // parallel path is how a refusal ends up enforced on one route and not the
+    // other.
+    await waitFor(() => expect(upload).toHaveBeenCalledTimes(1))
+    expect((upload.mock.calls[0][0] as File).name).toBe('receipt.jpg')
+  })
+
+  it('refuses a dropped file the client refuses from the picker, and uploads nothing', async () => {
+    const upload = vi.fn()
+    render(<UploadScreen upload={upload} />)
+
+    drop(dropZone(), new File([new Uint8Array(3)], 'notes.txt', { type: 'text/plain' }))
+
+    // **This is the case `accept` cannot cover.** A drag-and-drop ignores the
+    // input's `accept` outright, so the refusal has to live in
+    // `rejectionReason` and the drop has to go through it. A drop that
+    // bypassed it would upload a file the picker would have refused.
+    const alert = await screen.findByRole('alert')
+    expect(alert.textContent).toContain('Accepted types are')
+    expect(upload).not.toHaveBeenCalled()
+  })
+
+  it('prevents the default on dragover, or the browser leaves the app', async () => {
+    render(<UploadScreen upload={vi.fn()} />)
+
+    const dragover = new Event('dragover', { bubbles: true, cancelable: true })
+    dropZone().dispatchEvent(dragover)
+
+    // Without this the browser treats the drag as a navigation and OPENS the
+    // file, replacing the page. The drop handler never runs and the failure
+    // looks like "drag-and-drop does nothing" rather than like a missing
+    // `preventDefault`. Nothing else on the screen can show this.
+    expect(dragover.defaultPrevented).toBe(true)
+  })
+
+  it('ignores a drop while a send is already in flight', async () => {
+    // The input is `disabled` while sending; a drop target has no such
+    // attribute, so the guard has to be in the handler or a second file
+    // overtakes the first.
+    const upload = vi.fn().mockReturnValue(new Promise<UploadAccepted>(() => {}))
+    render(<UploadScreen upload={upload} />)
+
+    choose(field(), jpeg('first.jpg'))
+    await waitFor(() => expect(upload).toHaveBeenCalledTimes(1))
+    drop(dropZone(), jpeg('second.jpg'))
+
+    await waitFor(() => expect(upload).toHaveBeenCalledTimes(1))
+    expect((upload.mock.calls[0][0] as File).name).toBe('first.jpg')
+  })
+})

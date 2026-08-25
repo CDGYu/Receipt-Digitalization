@@ -5,7 +5,7 @@ import { cleanup, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../src/api/client'
-import { ReceiptsScreen } from '../src/receipts/ReceiptsScreen'
+import { PAGE_SIZE, ReceiptsScreen } from '../src/receipts/ReceiptsScreen'
 import type { Identity } from '../src/api/admin'
 import type { ExportReceiptPage } from '../src/api/receipts'
 import type { Money, ReceiptSummary } from '../src/api/types'
@@ -586,5 +586,111 @@ describe('every class this screen references exists in its stylesheet', () => {
     // not care what the value is.
     const css = readReceiptsFile('ReceiptsScreen.module.css').replace(/\/\*[\s\S]*?\*\//g, '')
     expect(css.match(/#[0-9A-Fa-f]{3,8}\b/g) ?? []).toEqual([])
+  })
+})
+
+describe('the status and confidence filters (P5.T2)', () => {
+  it('lists everything until a filter is chosen', async () => {
+    // The screen must not invent a default filter. A list that quietly starts
+    // filtered shows fewer rows than the workbook it claims to preview, which
+    // is the exact mismatch `fetchExportReceipts` exists to avoid.
+    const fetchMock = stubPage({ items: [rowFixture()], has_more: false })
+
+    render(<ReceiptsScreen identity={ADMIN} />)
+    await screen.findByRole('table')
+
+    expect(fetchMock.mock.calls[0]?.[0]).toEqual({ limit: PAGE_SIZE, offset: 0 })
+  })
+
+  it('re-queries with the chosen status, from the first page', async () => {
+    const fetchMock = stubPage({ items: [rowFixture()], has_more: false })
+    render(<ReceiptsScreen identity={ADMIN} />)
+    await screen.findByRole('table')
+
+    await userEvent.selectOptions(
+      screen.getByLabelText(/status/i),
+      'needs_review',
+    )
+
+    // `offset: 0`, not the row count. Filtering is a new result set, and
+    // carrying the old offset would page into the middle of it -- the same
+    // hazard this screen's docblock names for "Load more".
+    expect(fetchMock.mock.lastCall?.[0]).toEqual({
+      limit: PAGE_SIZE,
+      offset: 0,
+      status: 'needs_review',
+    })
+  })
+
+  it('re-queries with the chosen confidence floor, as a string', async () => {
+    const fetchMock = stubPage({ items: [rowFixture()], has_more: false })
+    render(<ReceiptsScreen identity={ADMIN} />)
+    await screen.findByRole('table')
+
+    await userEvent.selectOptions(
+      screen.getByLabelText(/confidence/i),
+      '0.90',
+    )
+
+    // A **string**, never a number: confidence is decimal and this codebase
+    // keeps decimals out of floats (ADR-0001). `0.9` would also be a different
+    // wire value than the option's label says.
+    expect(fetchMock.mock.lastCall?.[0]).toEqual({
+      limit: PAGE_SIZE,
+      offset: 0,
+      minConfidence: '0.90',
+    })
+  })
+
+  it('composes the two filters rather than replacing one with the other', async () => {
+    const fetchMock = stubPage({ items: [rowFixture()], has_more: false })
+    render(<ReceiptsScreen identity={ADMIN} />)
+    await screen.findByRole('table')
+
+    await userEvent.selectOptions(screen.getByLabelText(/status/i), 'needs_review')
+    await userEvent.selectOptions(screen.getByLabelText(/confidence/i), '0.90')
+
+    // The route ANDs its filters, so both must arrive together. Sending only
+    // the most recent one is a screen that silently widens the result set the
+    // moment a second filter is chosen.
+    expect(fetchMock.mock.lastCall?.[0]).toEqual({
+      limit: PAGE_SIZE,
+      offset: 0,
+      status: 'needs_review',
+      minConfidence: '0.90',
+    })
+  })
+
+  it('clearing a filter drops it from the query rather than sending it empty', async () => {
+    const fetchMock = stubPage({ items: [rowFixture()], has_more: false })
+    render(<ReceiptsScreen identity={ADMIN} />)
+    await screen.findByRole('table')
+
+    await userEvent.selectOptions(screen.getByLabelText(/status/i), 'needs_review')
+    await userEvent.selectOptions(screen.getByLabelText(/status/i), '')
+
+    // `status: ''` is not "every status" on the wire -- it fails validation
+    // against `ReceiptStatus | None` and the page 422s.
+    expect(fetchMock.mock.lastCall?.[0]).toEqual({ limit: PAGE_SIZE, offset: 0 })
+  })
+
+  it('load more keeps the active filters', async () => {
+    const first = { items: [rowFixture()], has_more: true }
+    const second = { items: [rowFixture()], has_more: false }
+    const fetchMock = stubPages([first, first, second])
+    render(<ReceiptsScreen identity={ADMIN} />)
+    await screen.findByRole('table')
+
+    await userEvent.selectOptions(screen.getByLabelText(/status/i), 'needs_review')
+    await userEvent.click(await screen.findByRole('button', { name: /load more/i }))
+
+    // Paging inside a filtered set must stay inside it. Dropping the filter
+    // here appends rows the filter excluded, and the table then shows a mix
+    // with nothing saying so.
+    expect(fetchMock.mock.lastCall?.[0]).toEqual({
+      limit: PAGE_SIZE,
+      offset: 1,
+      status: 'needs_review',
+    })
   })
 })

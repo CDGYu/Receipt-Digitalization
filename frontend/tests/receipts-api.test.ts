@@ -78,6 +78,35 @@ describe('fetchExportReceipts', () => {
     expect(fetchMock.mock.calls[0]?.[0]).toBe('/export/receipts?limit=25&offset=50')
   })
 
+  it('forwards the status and confidence filters under the names the route reads', async () => {
+    // **The wire names, not the caller's.** `GET /export/receipts` declares
+    // `status` and `min_confidence`; TypeScript spells the second one
+    // `minConfidence`, and a filter sent as `minconfidence` or `min_conf` is
+    // ignored in silence by FastAPI — the page comes back unfiltered and looks
+    // exactly like a page that had nothing to filter.
+    //
+    // Distinct values and the whole URL, for the reason the test above gives.
+    const fetchMock = stub(jsonResponse(200, { items: [], has_more: false }))
+    await fetchExportReceipts({
+      limit: 25,
+      offset: 50,
+      status: 'needs_review',
+      minConfidence: '0.75',
+    })
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      '/export/receipts?limit=25&offset=50&status=needs_review&min_confidence=0.75',
+    )
+  })
+
+  it('omits a filter that was not chosen rather than sending it empty', async () => {
+    // `status=` with no value is not "no filter" to FastAPI: it fails
+    // validation against `ReceiptStatus | None` and the page 422s. Leaving the
+    // key out entirely is what "all receipts" means on the wire.
+    const fetchMock = stub(jsonResponse(200, { items: [], has_more: false }))
+    await fetchExportReceipts({ limit: 25, offset: 0 })
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('/export/receipts?limit=25&offset=0')
+  })
+
   it('asks for the export scope, not the unfiltered receipts list', async () => {
     // The whole design rests on this path. `/receipts` would silently widen it.
     // A non-empty page with `has_more: true`, so that a body invented by this

@@ -394,6 +394,11 @@ const CENSUS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
     '.currency': 'margin-right, color, font-family',
     '.status': 'white-space: nowrap',
     '.more': 'align-self: center',
+    '.filters': 'display: flex, flex-wrap: wrap, align-items: end, gap, margin',
+    '.filterLabel':
+      'display: flex, flex-direction: column, gap, color, font-family, font-size, font-weight, letter-spacing, text-transform: uppercase',
+    '.filterControl':
+      'box-sizing: border-box, min-height, padding, border, border-radius, background, color, font-family, font-size, letter-spacing: normal, text-transform: none',
   },
   'review/ConfidenceRail.module.css': {
     '.rail': 'border, border-radius, background, padding',
@@ -603,6 +608,7 @@ const CENSUS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
     '.field:focus-within': 'outline, outline-offset',
     '.limits': 'margin, color, font-size, line-height, text-align: center',
     '.sending': 'margin, color, font-size, line-height, text-align: center',
+    '.dragging': 'border-color, background',
   },
   // The processing view. Two columns placed by class rather than by position --
   // `grid-column` on `.receipt` and `.steps` -- so there is no `>` selector here

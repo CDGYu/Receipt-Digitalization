@@ -33,8 +33,52 @@ const FAILURE_ORDER = ['listing', 'export'] as const
  * what makes the offset arithmetic below self-consistent: "Load more" asks from
  * the count of rows already on screen, and a page size decided at the other end
  * of the wire would make that count and the request disagree the day the
- * server's default moves. */
-const PAGE_SIZE = 50
+ * server's default moves.
+ *
+ * Exported so `receipts-screen.test.tsx` asserts against THIS number rather
+ * than a second copy of it: a test that hard-coded 50 would keep passing the
+ * day this moved, and assert nothing about the screen. */
+export const PAGE_SIZE = 50
+
+/** The two filters P5.T2 asks for. `''` is "not chosen", never a wire value.
+ *
+ *  Both are strings because both go onto a query string. `minConfidence`
+ *  especially: confidence is a decimal, and a `number` here would put
+ *  `0.9` where the option says `0.90` and reintroduce the float the money path
+ *  is built to exclude (ADR-0001). The route parses it into a `Decimal`.
+ */
+interface Filters {
+  readonly status: string
+  readonly minConfidence: string
+}
+
+const NO_FILTERS: Filters = { status: '', minConfidence: '' }
+
+/** The statuses this screen offers, and **only** these.
+ *
+ *  `pending` and `rejected` are deliberately absent: this list previews the
+ *  export, and `GET /export/receipts` excludes both, so offering them would be
+ *  a control that can only ever return nothing.
+ */
+const STATUS_OPTIONS = ['auto_approved', 'needs_review', 'reviewed'] as const
+
+/** Confidence floors, as strings, coarse on purpose: this is a filter, not a
+ *  calibration instrument, and a free-text number would invite `0.9` / `.9` /
+ *  `90` and a 422 for two of the three. */
+const CONFIDENCE_OPTIONS = ['0.50', '0.70', '0.90'] as const
+
+/** The filters as the API takes them, with an unchosen one **omitted**.
+ *
+ *  `status: ''` is not "every status" on the wire: it fails validation against
+ *  `ReceiptStatus | None` and the page 422s. Absent is the only spelling of
+ *  "no filter" the route accepts.
+ */
+function queryFor(next: Filters): { status?: string; minConfidence?: string } {
+  return {
+    ...(next.status === '' ? {} : { status: next.status }),
+    ...(next.minConfidence === '' ? {} : { minConfidence: next.minConfidence }),
+  }
+}
 
 export interface ReceiptsScreenProps {
   readonly identity: Identity | null
@@ -101,12 +145,22 @@ export interface ReceiptsScreenProps {
  * reason in a smaller way: a second click at the same offset appends the same
  * page twice.
  *
- * ## What is deliberately not here
+ * ## Filters, and what is still deliberately not here
  *
- * No filters, no sorting, no column choice, and **rows are not clickable** --
- * all ruled out of v1. The last one is load-bearing beyond the UI: with no row
- * navigation nothing on this screen is built from receipt data, so no receipt id
- * ever enters a path segment and `route.ts`'s no-dot rule is never approached.
+ * **Status and confidence filters ship (P5.T2, 2026-08-25.)** This section used
+ * to read "No filters, no sorting, no column choice" -- all three ruled out of
+ * v1. The other two remain out.
+ *
+ * **`rows are not clickable` stays, and it is the load-bearing one.** With no
+ * row navigation nothing on this screen is built from receipt data, so no
+ * receipt id ever enters a path segment and `route.ts`'s no-dot rule is never
+ * approached. Filtering does not touch that: a filter puts a *status* and a
+ * *decimal* on a query string, never an id in a path.
+ *
+ * The filters are server-side, not a client-side `Array.filter`. The rows on
+ * screen are one page of a larger set, so filtering locally would filter the
+ * page and silently claim to have filtered the set -- and `has_more` would then
+ * describe a different query than the one the reader is looking at.
  *
  * There is no `Chip` on the status column either. `Chip` requires an `icon` per
  * tone and which icon each `ReceiptStatus` gets is a design decision nobody has
@@ -123,10 +177,19 @@ export function ReceiptsScreen({ identity }: ReceiptsScreenProps) {
   const [pageInFlight, setPageInFlight] = useState(false)
   const [exporting, setExporting] = useState(false)
 
-  const load = useCallback(async () => {
+  /** The active filters. Held together in one object so `loadMore` sends BOTH
+   *  -- the route ANDs them, and paging with only the most recently changed one
+   *  would silently widen the set mid-scroll. */
+  const [filters, setFilters] = useState<Filters>(NO_FILTERS)
+
+  const load = useCallback(async (next: Filters) => {
     setPageInFlight(true)
     try {
-      const page = await fetchExportReceipts({ limit: PAGE_SIZE, offset: 0 })
+      const page = await fetchExportReceipts({
+        limit: PAGE_SIZE,
+        offset: 0,
+        ...queryFor(next),
+      })
       setRows(page.items)
       setHasMore(page.has_more)
       setListFailure(null)
@@ -156,8 +219,28 @@ export function ReceiptsScreen({ identity }: ReceiptsScreenProps) {
       return
     }
     loadedFor.current = key
-    void load()
+    void load(filters)
+  // `filters` is deliberately NOT a dependency. This effect is the
+  // identity-keyed first load; a filter change re-lists through `applyFilters`
+  // below, which calls `load` directly with the new value. Adding it here would
+  // fight the `loadedFor` guard and re-list twice on every change.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [identity, load])
+
+  /** Re-list from the first page under a changed filter.
+   *
+   *  Takes the new value rather than reading `filters` back: `setFilters` is
+   *  asynchronous, so a `load` that read state here would send the PREVIOUS
+   *  filter and the table would lag one change behind.
+   *
+   *  `offset: 0` is not an optimisation. A filter change is a new result set,
+   *  and carrying the old offset pages into the middle of it -- the same hazard
+   *  this screen's docblock names for "Load more".
+   */
+  function applyFilters(next: Filters): void {
+    setFilters(next)
+    void load(next)
+  }
 
   async function loadMore(): Promise<void> {
     if (rows === null) {
@@ -171,7 +254,14 @@ export function ReceiptsScreen({ identity }: ReceiptsScreenProps) {
     setPageInFlight(true)
     setListFailure(null)
     try {
-      const page = await fetchExportReceipts({ limit: PAGE_SIZE, offset })
+      const page = await fetchExportReceipts({
+        limit: PAGE_SIZE,
+        offset,
+        // Paging inside a filtered set stays inside it. Dropping the filters
+        // here appends rows the filter excluded, and the table then shows a
+        // mix with nothing on screen saying so.
+        ...queryFor(filters),
+      })
       setRows((current) => (current === null ? page.items : [...current, ...page.items]))
       setHasMore(page.has_more)
     } catch (caught) {
@@ -224,6 +314,51 @@ export function ReceiptsScreen({ identity }: ReceiptsScreenProps) {
         Exactly the receipts the export workbook contains. A receipt that is still pending, or
         that was rejected, is out of scope for both.
       </p>
+
+      {/* Labelled with `<label htmlFor>` rather than an `aria-label`, so the
+          control is reachable by its visible text -- the same binding
+          `MoneyInput` uses. Both are plain `<select>`s: the option sets are
+          closed and short, and a combobox would be a new component for three
+          values. */}
+      <div className={styles.filters}>
+        <label className={styles.filterLabel} htmlFor="receipts-filter-status">
+          Status
+          <select
+            id="receipts-filter-status"
+            className={styles.filterControl}
+            value={filters.status}
+            onChange={(event) =>
+              applyFilters({ ...filters, status: event.target.value })
+            }
+          >
+            <option value="">All statuses</option>
+            {STATUS_OPTIONS.map((value) => (
+              <option key={value} value={value}>
+                {value}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className={styles.filterLabel} htmlFor="receipts-filter-confidence">
+          Confidence
+          <select
+            id="receipts-filter-confidence"
+            className={styles.filterControl}
+            value={filters.minConfidence}
+            onChange={(event) =>
+              applyFilters({ ...filters, minConfidence: event.target.value })
+            }
+          >
+            <option value="">Any confidence</option>
+            {CONFIDENCE_OPTIONS.map((value) => (
+              <option key={value} value={value}>
+                {value} and above
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
 
       {alerts.length === 0 ? null : (
         // One region, every message. See the docstring: a second `role="alert"`

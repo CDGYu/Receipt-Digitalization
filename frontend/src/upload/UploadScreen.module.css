@@ -158,3 +158,20 @@
   line-height: 1.5;
   text-align: center;
 }
+
+/* The drag-over state (P5.T2).
+ *
+ * The chooser is already the "something that is not here yet" box -- dashed
+ * border, `--radius-lg`, surface, centred. Dragging over it does not invent a
+ * second shape; it brightens the border it already has to `--color-ring`, the
+ * same token focus uses, because "this element will take what you are holding"
+ * and "this element has your keyboard" are the same statement to a reader.
+ *
+ * **This is the state the old comment said must not exist.** That comment was
+ * right: a box that looks droppable and is not is a worse lie than a plain one.
+ * The lie was the mismatch, not the styling -- the handlers now exist, so the
+ * box can say so. */
+.dragging {
+  border-color: var(--color-ring);
+  background: var(--color-surface-active);
+}
