@@ -734,9 +734,18 @@ offered and whether it accepts a `tools` payload are both unverified.
 4. Time a single call first, so a slow provider is caught in one call, not six:
    `triage(prepare_image(Path('eval/golden/images/r001.jpg')), client)`
 5. Then the full run: `python -m eval.run_baseline`
-   (writes `eval/results/{date}-{PROMPT_VERSION}.json` and prints the §16 table).
+   (writes `eval/results/{date}-{PROMPT_VERSION}-{prompt_bundle_hash}.json` and
+   prints the §16 table).
 6. Commit the results file — §16 requires results be committed so regressions show
    up in a diff, grouped by `prompt_bundle_hash()`.
+
+*(Steps 5 and 6 corrected 2026-08-25, by the change that falsified one of them.
+**Step 5's filename gained a third component** with ISSUE-007: it was
+`{date}-{PROMPT_VERSION}.json`, and an un-bumped prompt change made the same day
+as an earlier run overwrote that run's artefact. **Step 6's "grouped by
+`prompt_bundle_hash()`" was aspirational when written and is now literally
+true** — the hash is in the name, so two prompts can no longer share a file.
+Nothing else in these steps moved.)*
 
 ### What to expect, and what would be suspicious
 
