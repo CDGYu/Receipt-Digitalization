@@ -467,12 +467,39 @@ Three things follow, and the order matters:
 So: on this hardware the runbook above proves the **plumbing** end to end —
 auth, upload, blob, queue, worker, a real HTTP 200 from a real model, and a
 terminal state instead of an indefinite `pending`. It does **not** demonstrate
-a working extraction, and no run on this box has. It does **not** demonstrate
+a working extraction. **One later run did** — see the note below. It does **not** demonstrate
 the terminal-state guarantee behaving correctly either — the state was reached
 by a premature strand, and a reader who took it as the guarantee working would
 inherit a wrong model of it. ADR-0039 already rules local inference a liveness
 check and never a measurement; this is what that looks like from the operator's
 side.
+
+#### And then one succeeded
+
+**2026-08-25, receipt `d7799d54`, after the api rebuild.** The first extraction
+on this box to return data rather than nulls:
+
+```
+status needs_review   confidence 0.710   merchant_name_raw "SUMMIT FUEL OPC"
+subtotal 2.0000        total 2.0000       legibility good    line_items 1
+```
+
+**The repair loop ran, for the first time on a real receipt**, and it worked:
+
+```
+Repair round 1: 1 error(s), 3 warning(s), 0 info: R010, R011, R012, R013
+             -> 0 error(s), 2 warning(s), 0 info: R011, R053
+```
+
+`extraction_runs` is now `triage 2, extract 3, repair 1`. Roughly 35 minutes
+wall (`09:10:15` -> `09:42:25`), consistent with ADR-0039's figure.
+
+**Three cautions, because this is one receipt.** It is **not** a golden receipt,
+so nothing checks those values against the photograph — `SUMMIT FUEL OPC` being
+*present* is what is established, not that it is *right*. `txn_date` and
+`currency` are still null. And **2 of the 3 receipts uploaded this day were
+killed mid-run**, so a success is not yet the expected case: the kill remains
+unexplained and OOM remains a lead.
 
 **One more thing the operator cannot see.** `extraction_runs` was unchanged at
 3 across all of this — the killed horse wrote nothing on its way out. So a
