@@ -1421,8 +1421,23 @@ in neither module's suite, that fails when the concept splits.
 
 ## ISSUE-009 — `CorrectionPatch` no longer describes the contract it validates
 
-**Status:** OPEN — recorded, not fixed. Harmless today because `extra="allow"`
-makes the undeclared paths work anyway.
+**Status:** **RESOLVED 2026-08-25** at `ee4858d`. `CorrectionPatch` gains
+`_BuyerPatch` and `_LineItemPatch` gains `is_template_row`, so the published
+schema names every path the route accepts.
+
+**The fix is the pin, not the two fields.** The schema is a hand-kept second
+copy of `_RECEIPT_FIELDS`/`_LINE_ITEM_FIELDS`, and the maintenance step that was
+missed is the one that produced this — adding the fields alone leaves the next
+gap open. `test_the_patch_model_publishes_exactly_the_correctable_paths`
+compares the two for **equality**, deriving both sides rather than naming a
+list. Both directions were proven red by mutation: dropping `tax_id` reports
+"only in the maps: ['buyer.tax_id']", and publishing a field nothing can apply
+reports "only in the schema: ['buyer.nickname']" — the opposite lie, where a
+generated client sends what `apply_corrections` rejects with 400.
+
+The docstring's prose enumeration of the closed set is **deleted rather than
+corrected**: a prose copy of a set that lives in another module rots silently,
+and this one already had.
 **Owner action required:** no.
 **Discovered:** 2026-08-19, in the whole-branch review of
 `feat/buyer-and-blank-rows`. **Pre-existing:** no — both gaps arrived with this
@@ -1705,8 +1720,27 @@ Do not replace it with a more careful description of the proxy.
 
 ## ISSUE-012 — The escalation counts never reach the committed results file
 
-**Status:** OPEN — recorded, not fixed. Fixing it moves who owns the write,
-which is a decision rather than a patch.
+**Status:** **RESOLVED 2026-08-25** at `1637058`. `run_eval` takes a `finalize`
+hook, called after the report is built and **before** `_write_report`, so a
+caller holding provenance the harness cannot see folds it in while the report is
+still unwritten. Additive: `finalize` defaults to `None` and every existing
+caller is unchanged.
+
+**The alternative was considered and not taken.** Moving the write out of
+`run_eval` to its callers makes the ordering bug structurally impossible rather
+than merely fixed — but it changes the contract for every caller including
+`eval/run_repeats.py`, and the smaller change closes the defect without reaching
+into files another session held.
+
+**A test that pinned the defect was inverted rather than deleted.**
+`test_the_aggregate_carries_the_rung_counts_the_results_file_does_not` asserted
+the counts were *absent* from the per-run file, recording that absence as a
+deliberate scope boundary — "this milestone took no position on who owns that
+write". That is how a defect acquires a passing test asserting it holds. It is
+now
+`test_the_aggregate_and_the_results_file_both_carry_the_rung_counts`
+in `tests/test_run_repeats.py` — **the old name will not grep**, and the
+docstring carries the history.
 **Owner action required:** no.
 **Discovered:** 2026-08-20, during the local→Cloud escalation milestone;
 promoted here 2026-08-21 by that branch's whole-branch review.
@@ -1756,9 +1790,31 @@ moves with it.
 
 ## ISSUE-013 — `extract_rung_counts` is keyed by `model_id`, and a tier is not a model
 
-**Status:** OPEN — recorded, not fixed. The key is specified in the milestone
-plan and in `EvalReport.extract_rung_counts`' own field comment, and it is in
-the field's committed type, so changing it is a decision rather than a patch.
+**Status:** **RESOLVED 2026-08-25** at `b51fb1d`, together with ISSUE-015 —
+**one change closes both, and that is the finding rather than a convenience.**
+`eval.metrics.tier_key` renders the `(model, use_tools)` pair and
+`extract_rung_counts`/`extract_discard_counts` are keyed by it.
+
+**Reading `rung` is not incidental to the fix; it is required by it.** When two
+rungs share a `model_id`, the attempt's own `model_id` cannot say which rung it
+was — `rung` is the index into `extract_rungs` and is the only thing that can.
+So `run_baseline` resolves the tier through `extract_rungs[entry.rung]`, and the
+write-only field ISSUE-015 reports acquires a reader that is load-bearing. Any
+fix that did not read `rung` would have had to invent a second way to identify a
+rung.
+
+**`tier_key` renders the same pair `run_repeats.rung_identity` records**, which
+writes the ladder into the aggregate's `config`, so a reader joins the counts to
+the ladder. Not shared code — `run_repeats` calls `run_baseline`, so importing
+back is a cycle — but a **bound** duplication:
+`test_the_tier_key_and_the_rung_identity_agree` asserts *injectivity*, that two
+rungs share a key if and only if they share an identity. Asserting a rendered
+format would re-implement `tier_key` in its own test and pass by construction.
+
+The type stays `dict[str, int] | None`, so the committed contract is unchanged;
+only the key's meaning widens. The printed rung line widens 32 → 40 columns to
+fit the suffix, which cannot collide with a model id: ids carry `:` and `/` and
+never a space.
 (Design §6 does *not* name the key — checked 2026-08-21; it says only that the
 report "gains per-rung counts".)
 **Owner action required:** no.
@@ -1805,8 +1861,29 @@ the sentence that makes the change necessary rather than optional.
 
 ## ISSUE-014 — `frozen=True` is a stated interface property that nothing pins
 
-**Status:** OPEN — recorded, not fixed. Whether to pin it, and where, is a
-decision about how much of a dataclass's declaration is worth a test.
+**Status:** **RESOLVED 2026-08-25** at `99f62d5`, in
+`tests/test_frozen_result_types.py`, as one property enforced at **both** ends:
+every type in `FROZEN_RESULT_TYPES` refuses mutation, and that set is exactly
+what `src/` and `eval/` declare frozen.
+
+**The second end is the non-obvious one, and it is why the set is stated by
+import rather than discovered.** A set built by scanning the source would look
+rigorous and catch nothing: delete `frozen=True` from a class and it simply
+drops out of the derived set, leaving the test green on the exact mutation it
+exists to fail. The scan audits the statement instead.
+
+Both proven red: dropping `frozen=True` from `PassAttempt` — the mutation this
+entry measured as invisible — reddens its parametrised case *and* the set
+comparison; appending a frozen dataclass nobody named reddens the comparison
+with "declared frozen but not named".
+
+`object.__new__` sidesteps `__init__`, so eleven types need no valid constructor
+arguments and no per-type fixture — the fixtures being the maintenance the
+enumerated version would have carried.
+
+**One number in this entry is already stale and is not restated in the test.**
+It says `git grep "dataclass(frozen=True)"` returns **10**; the tree declares
+eleven today. No count is written in the test's docstring for that reason.
 **Owner action required:** no.
 **Discovered:** 2026-08-20 (Task 4) and again at Task 5, during the local→Cloud
 escalation milestone; promoted here 2026-08-21 by that branch's whole-branch
@@ -1848,8 +1925,21 @@ belong in that set is the decision here.
 
 ## ISSUE-015 — `PassAttempt.rung` is written and never read
 
-**Status:** OPEN — recorded, not fixed. Deleting the field or pinning it are
-both defensible, and the choice belongs with the ADR.
+**Status:** **RESOLVED 2026-08-25** at `b51fb1d`, with ISSUE-013 — **option 1
+(pin it), and the field acquired a production reader in the same change.**
+`run_baseline` resolves each attempt's tier through `extract_rungs[entry.rung]`,
+because `model_id` cannot identify a rung when two rungs share a model. So
+`rung` is no longer written-and-never-read; it is what makes the tier
+resolvable. `test_the_ladder_numbers_its_extract_rungs` pins the extract
+entries' values, and a ladder numbering every rung `0` now reddens three tests.
+
+**Option 2 was rejected on a measurement, and this entry's argument for it is
+wrong as written.** It says "`attribution` is a tuple in ladder order, so the
+index is recoverable without storing it". It is not: `attribution` holds the
+triage entry first, so a tuple index is offset from the rung index by however
+many non-extract passes precede the ladder. Recovering it means knowing that
+count — exactly the coupling storing the number avoids. The test asserts the
+offset rather than describing it.
 **Owner action required:** no.
 **Discovered:** 2026-08-20 (Task 5), during the local→Cloud escalation
 milestone; promoted here 2026-08-21 by that branch's whole-branch review.
@@ -1893,8 +1983,34 @@ ISSUE-001 asked provenance to protect against.
 
 ## ISSUE-016 — `read_nothing` counts a vacuous value as something the model read
 
-**Status:** OPEN — recorded, not fixed, and deliberately so: the two obvious
-fixes are both worse than the gap.
+**Status:** **RESOLVED 2026-08-25** at `bf55102`, and by **neither** of the two
+fixes this entry ruled out. `is_filled` is untouched and no field is named.
+
+**The decision this entry left open — "whether vacuous is a third concept" —
+is answered yes.** A leaf can be *filled* and still carry no reading: `""`, `0`
+and `False` are each the nothing of their own type. `_is_vacuous` is defined
+against the value rather than a field list, so it covers a field nobody has
+added yet, and it is asked in exactly one place — `_content_paths`, which feeds
+only `read_nothing`. `is_filled` keeps its single definition of content, shared
+with `field_accuracy`, where a read zero is content and must score.
+
+The baseline comparison is unchanged, so the schema-derived property survives:
+`receipt.decimal_convention = 'point'` is a non-empty string, stays content on
+both sides, and a default extraction still reads as nothing.
+
+**A measurement changed the implementation mid-fix.** `flatten` renders
+`Decimal("0")` as the string `'0'` to keep the scale across the JSON round trip
+(ADR-0001), so the numeric branch never sees a money zero and a `str`-only check
+called `'0'` a reading — the "read zero" case stayed red after the first
+attempt. The string branch parses through `Decimal` for exactly that.
+
+**The over-eager direction is bounded, which is the cost this entry names.**
+Vacuity is a conjunction: one genuine reading anywhere in `core` or
+`line_items` keeps the rung, pinned by
+`test_one_real_reading_is_enough_to_keep_the_rung`, which sets a merchant name
+beside the very zeros the other test rules out. No range is quoted here, for
+the reason this entry already gives: there is no per-call measurement in this
+repository.
 **Owner action required:** no.
 **Discovered:** 2026-08-20 during the local→Cloud escalation milestone (M1 of
 its whole-branch review); promoted here 2026-08-21. **Pre-existing:** no.
