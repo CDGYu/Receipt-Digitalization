@@ -422,6 +422,28 @@ Three things follow, and the order matters:
   **Do not read a stranded receipt here as a dead worker.** Check
   `docker logs receipts-worker` for `killed horse` first; without it, the job
   is very likely still running and the row is simply wrong.
+
+* **Editing `docker-compose.yml` fixes nothing until the container is
+  recreated**, and this is the trap the above walked into twice. The `api`
+  service was given `VLM_TIMEOUT_S: "3600"` on 2026-08-25, and **the running
+  container kept `120` afterwards** — measured inside it, not read off the
+  file:
+
+  ```
+  docker compose exec api python -c "from config.settings import Settings; print(Settings().vlm_timeout_s)"
+  ```
+
+  Recreate just the one service, leaving the worker and anything it is
+  mid-receipt on untouched:
+
+  ```
+  docker compose up -d --no-deps api
+  ```
+
+  **Always ask the running container what it thinks, not the file.** The whole
+  defect above was two containers disagreeing about one value, and every
+  instrument that reads the repository rather than the runtime — including
+  `git show`, including this document — would have said they agreed.
 * **The cause of the kill is NOT established.** The leading hypothesis is the
   kernel OOM killer — 7.59 GiB total on this box, `ollama` already holding 3.94
   GiB, and the horse died 61s into a retry that would ask for a second
