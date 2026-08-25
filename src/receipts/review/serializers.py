@@ -39,7 +39,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from ..export.xlsx import ReceiptExportRow
 from ..extract.schema import Buyer as ExtractBuyer
-from ..extract.schema import ExtractionMeta, ReceiptExtraction, ReceiptMeta, Totals
+from ..extract.schema import ExtractionMeta, ReceiptExtraction, ReceiptMeta, TaxBand, Totals
 from ..extract.schema import LineItem as ExtractLineItem
 from ..extract.schema import Merchant as ExtractMerchant
 from ..extract.schema import Modifier as ExtractModifier
@@ -312,7 +312,24 @@ def receipt_detail(receipt: Receipt, findings: list[ValidationFinding]) -> dict[
             "total": money(receipt.total),
             "tender": money(receipt.tender_amount),
             "change": money(receipt.change_amount),
+            # The printed breakdown, in printed order. **A list, never null**:
+            # a receipt with no tax block and a receipt whose block was
+            # unreadable both arrive as `[]` here, because the extractor emits
+            # a list and this layer has no third value to send. The index is
+            # the correction path -- `totals.tax_breakdown[0].amount`.
+            "tax_breakdown": [
+                {
+                    "label": band.label,
+                    "base": money(band.base),
+                    "rate": money(band.rate),
+                    "amount": money(band.amount),
+                }
+                for band in receipt.tax_bands
+            ],
         },
+        # The document's stated convention, not a computed fact. `null` is the
+        # ordinary reading: most receipts do not say.
+        "prices_include_tax": receipt.prices_include_tax,
         "line_items": [_line_item(item) for item in receipt.line_items],
         "findings": [_finding(finding) for finding in findings],
     }
@@ -386,14 +403,25 @@ def _export_extraction(receipt: Receipt) -> ReceiptExtraction:
     persisted ``Receipt`` (plus its ``line_items``), for
     :func:`receipts.export.xlsx.export_workbook`.
 
-    **Lossy against the full extraction schema.** ``tax_breakdown``,
-    ``prices_include_tax``, ``meta.ambiguous_fields``,
+    **Lossy against the full extraction schema.** ``meta.ambiguous_fields``,
     ``meta.unreadable_regions``, ``meta.notes``, and the merchant's
     ``address``/``tax_id``/``phone``/``branch`` are not columns on
     ``receipts`` -- they were never persisted past the extraction run that
     produced them, so there is nothing here to rebuild them from. They are
     left at their schema defaults (``[]``/``None``/``False``), never
     invented.
+
+    **``tax_breakdown`` and ``prices_include_tax`` were on that list until
+    `d5b8c31e7a04` and are not any more.** They are rebuilt whole, from the
+    ``tax_bands`` child table and the ``receipts.prices_include_tax`` column.
+    Leaving them named above would have been the exact failure this codebase
+    keeps finding: prose that was true when written, trusted afterwards, and
+    never re-derived.
+
+    A receipt persisted BEFORE that revision still rebuilds with an empty
+    ``tax_breakdown`` and a null convention -- not because this function drops
+    them, but because no backfill was possible: the data never existed to
+    migrate.
 
     **The buyer is the counter-example, and is rebuilt whole.** Reading the
     paragraph above, a merchant whose ``tax_id`` cannot be rebuilt invites the
@@ -452,6 +480,11 @@ def _export_extraction(receipt: Receipt) -> ReceiptExtraction:
             total=receipt.total,
             tender=receipt.tender_amount,
             change=receipt.change_amount,
+            tax_breakdown=[
+                TaxBand(label=band.label, base=band.base, rate=band.rate, amount=band.amount)
+                for band in receipt.tax_bands
+            ],
+            prices_include_tax=receipt.prices_include_tax,
         ),
         payment=ExtractPayment(method=receipt.payment_method, card_last4=receipt.card_last4),
         meta=ExtractionMeta(

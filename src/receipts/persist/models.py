@@ -99,6 +99,18 @@ _MONEY = sa.Numeric(14, 4, asdecimal=True)
 _QTY = sa.Numeric(12, 4, asdecimal=True)
 _RATIO = sa.Numeric(4, 3, asdecimal=True)
 _COST = sa.Numeric(10, 6, asdecimal=True)
+#: A printed tax RATE, and deliberately wider than ``_RATIO``.
+#:
+#: **The upstream convention is unstated**, which is why this is its own type
+#: rather than a reuse. :class:`receipts.extract.schema.TaxBand` declares
+#: ``rate: Decimal | None`` with no description, and the prompt asks only for
+#: "rate bands" -- so a 12% band may arrive as ``12`` or as ``0.12`` depending on
+#: what the model reads off the paper, and nothing tells it which to send.
+#: ``_RATIO`` is ``Numeric(4, 3)`` and would OVERFLOW on ``12``; this holds both
+#: readings. Nothing computes from this column -- R-rules reconcile bands by
+#: ``amount`` -- so storing what was printed, unconverted, loses nothing and
+#: inventing a convention here would silently rewrite the document.
+_RATE = sa.Numeric(7, 4, asdecimal=True)
 
 
 class Base(DeclarativeBase):
@@ -171,6 +183,17 @@ class Receipt(Base):
     total: Mapped[Decimal | None] = mapped_column(_MONEY, nullable=True)
     tender_amount: Mapped[Decimal | None] = mapped_column(_MONEY, nullable=True)
     change_amount: Mapped[Decimal | None] = mapped_column(_MONEY, nullable=True)
+    #: Whether the line-item amounts already include tax, as the DOCUMENT states
+    #: it -- not a computed fact. ``true`` means the amounts sum to ``total``
+    #: (the usual case on a Philippine BIR sales invoice, where ``subtotal`` is
+    #: the net-of-VAT base); ``false`` means they sum to ``subtotal``; ``NULL``
+    #: means the receipt does not say, which is the ordinary reading.
+    #:
+    #: R020 and R024 read it to decide which figure the lines are expected to
+    #: sum to. Until this column existed it was extracted, used in memory by
+    #: those rules, and then dropped -- so a re-run of the rules against a
+    #: persisted receipt could not reach the convention the first run had.
+    prices_include_tax: Mapped[bool | None] = mapped_column(sa.Boolean, nullable=True)
 
     payment_method: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
     card_last4: Mapped[str | None] = mapped_column(sa.String(4), nullable=True)
@@ -236,6 +259,11 @@ class Receipt(Base):
         cascade="all, delete-orphan",
         order_by="LineItem.position",
     )
+    tax_bands: Mapped[list[TaxBand]] = relationship(
+        back_populates="receipt",
+        cascade="all, delete-orphan",
+        order_by="TaxBand.position",
+    )
 
     __table_args__ = (
         Index("ix_receipts_merchant_id_txn_date", "merchant_id", "txn_date"),
@@ -285,6 +313,65 @@ class LineItem(Base):
 
     __table_args__ = (
         UniqueConstraint("receipt_id", "position", name="uq_line_items_receipt_position"),
+    )
+
+
+# --------------------------------------------------------------------------- #
+# 6.3b tax_bands (the printed tax breakdown)
+# --------------------------------------------------------------------------- #
+
+
+class TaxBand(Base):
+    """One printed band of a receipt's tax breakdown.
+
+    The VATABLE SALES / VAT-EXEMPT SALES / zero-rated block a Philippine BIR
+    sales invoice prints beneath its items grid, one row per band.
+
+    **A child table rather than a JSONB column on ``receipts``, and the reason
+    is correctability.** ``line_items.modifiers`` and ``line_items.bbox`` are
+    JSONB and are deliberately absent from ``_LINE_ITEM_FIELDS`` -- "they are
+    documents, not scalars, and a reviewer edits them through the item they
+    belong to". A reviewer must be able to correct a misread band, and
+    ``extract/paths.py`` already documents ``totals.tax_breakdown[0].amount`` as
+    valid path grammar, so each figure has to be addressable on its own. JSONB
+    would put those paths out of reach by exactly the reasoning that keeps
+    ``modifiers`` out.
+
+    **And the bands are arithmetic, not decoration.** R-rules reconcile
+    ``sum(band.amount) == totals.tax``; a band is also the only independent
+    check on a misread total. Measured on this project's own data: a model read
+    ``total = 2.0000`` from a receipt printing 2,000, on a page that also
+    printed ``Amount: Net of VAT 1785.71`` and ``Add: VAT 214.29`` -- which sum
+    to exactly 2,000. A rule can only make that comparison if the bands are
+    scalars it can reach.
+
+    Every column is nullable but ``position``: a band may print a label and an
+    amount with no base, or a base with no rate. Nothing here is computed --
+    "Do not compute bands that are not printed" is the prompt's own rule.
+    """
+
+    __tablename__ = "tax_bands"
+
+    id: Mapped[uuid.UUID] = mapped_column(sa.Uuid, primary_key=True, default=uuid.uuid4)
+    receipt_id: Mapped[uuid.UUID] = mapped_column(
+        sa.Uuid, ForeignKey("receipts.id", ondelete="CASCADE"), nullable=False
+    )
+    #: Printed order, top to bottom. Also the index in the correction path
+    #: ``totals.tax_breakdown[i].<field>``, exactly as ``LineItem.position`` is
+    #: the index in ``line_items[i].<field>``.
+    position: Mapped[int] = mapped_column(sa.Integer, nullable=False, default=0)
+    #: The band's printed name -- "VATable Sales", "VAT-Exempt Sales",
+    #: "Zero-Rated". Text as printed; nothing maps it to an enum, because the
+    #: wording varies by printer and an unrecognised label must survive.
+    label: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
+    base: Mapped[Decimal | None] = mapped_column(_MONEY, nullable=True)
+    rate: Mapped[Decimal | None] = mapped_column(_RATE, nullable=True)
+    amount: Mapped[Decimal | None] = mapped_column(_MONEY, nullable=True)
+
+    receipt: Mapped[Receipt] = relationship(back_populates="tax_bands")
+
+    __table_args__ = (
+        UniqueConstraint("receipt_id", "position", name="uq_tax_bands_receipt_position"),
     )
 
 

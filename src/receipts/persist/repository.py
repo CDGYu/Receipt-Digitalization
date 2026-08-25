@@ -56,6 +56,7 @@ from .models import (
     LineItem,
     PassName,
     Receipt,
+    TaxBand,
     ValidationFinding,
 )
 
@@ -564,6 +565,11 @@ def save_extraction(
         total=extraction.totals.total,
         tender_amount=extraction.totals.tender,
         change_amount=extraction.totals.change,
+        # Extracted on every run since the schema had it, used in memory by R020
+        # and R024, and then dropped -- there was no column. A re-run of those
+        # rules against a persisted receipt could not reach the convention the
+        # first run had read off the paper.
+        prices_include_tax=extraction.totals.prices_include_tax,
         payment_method=extraction.payment.method,
         is_handwritten=extraction.meta.is_handwritten,
         legibility=extraction.meta.legibility,
@@ -647,6 +653,7 @@ def save_extraction(
 
     receipt.confidence_reasons = _reasons_json(confidence_reasons)
     receipt.line_items = _build_line_items(extraction)
+    receipt.tax_bands = _build_tax_bands(extraction)
 
     session.add(receipt)
     session.flush()
@@ -680,6 +687,37 @@ def create_pending_receipt(session: Session, job: ReceiptJob) -> Receipt:
     session.add(receipt)
     session.flush()
     return receipt
+
+
+def _build_tax_bands(extraction: ReceiptExtraction) -> list[TaxBand]:
+    """Child rows for the printed tax breakdown, in printed order.
+
+    **List order, always -- unlike :func:`_build_line_items`.**
+    :class:`~receipts.extract.schema.TaxBand` has no ``position`` field for the
+    model to emit, so there is nothing to collide and nothing to fall back
+    from: the index in the emitted list IS the printed order, and that index is
+    what ``totals.tax_breakdown[i].<field>`` addresses.
+
+    ``label`` goes through :func:`redact_pan` because it is model text off the
+    paper, the same treatment every other free-text column gets (section 18).
+    The three money-ish fields are ``Decimal`` and structurally out of reach of
+    a PAN.
+
+    Nothing is computed or defaulted. A band that printed an amount and no base
+    is stored with a null base -- "Do not compute bands that are not printed" is
+    the prompt's own instruction, and a zero here would be this layer inventing
+    a figure the document does not carry.
+    """
+    return [
+        TaxBand(
+            position=index,
+            label=redact_pan(band.label),
+            base=band.base,
+            rate=band.rate,
+            amount=band.amount,
+        )
+        for index, band in enumerate(extraction.totals.tax_breakdown)
+    ]
 
 
 def _build_line_items(extraction: ReceiptExtraction) -> list[LineItem]:
@@ -1337,6 +1375,25 @@ _LINE_ITEM_FIELDS: dict[str, tuple[str, Callable[[Any], Any]]] = {
 
 _LINE_ITEM_PATH = re.compile(r"^line_items\[(\d+)\]\.([A-Za-z_][A-Za-z0-9_]*)$")
 
+#: Field of ``totals.tax_breakdown[i].<field>`` -> (``tax_bands`` column,
+#: coercion). Every field the band carries is here: unlike ``line_items``, this
+#: table has no document-shaped column to leave out.
+#:
+#: ``rate`` takes ``_coerce_money`` rather than a ratio coercion on purpose. The
+#: upstream convention is unstated -- a 12% band may arrive as ``12`` or
+#: ``0.12`` -- so the coercion parses a decimal and stores it, and does not
+#: rescale a reviewer's typing into a convention the document never declared.
+_TAX_BAND_FIELDS: dict[str, tuple[str, Callable[[Any], Any]]] = {
+    "label": ("label", _coerce_optional_text),
+    "base": ("base", _coerce_money),
+    "rate": ("rate", _coerce_money),
+    "amount": ("amount", _coerce_money),
+}
+
+_TAX_BAND_PATH = re.compile(
+    r"^totals\.tax_breakdown\[(\d+)\]\.([A-Za-z_][A-Za-z0-9_]*)$"
+)
+
 
 @dataclass(frozen=True)
 class _PlannedChange:
@@ -1350,7 +1407,11 @@ class _PlannedChange:
 
 
 def _plan_change(
-    receipt: Receipt, items_by_position: dict[int, LineItem], field_path: str, raw_value: Any
+    receipt: Receipt,
+    items_by_position: dict[int, LineItem],
+    bands_by_position: dict[int, TaxBand],
+    field_path: str,
+    raw_value: Any,
 ) -> _PlannedChange | None:
     """Resolve one dotted path to a column and coerce its value.
 
@@ -1367,7 +1428,33 @@ def _plan_change(
     once, including any added later. Non-text values (money, dates, booleans,
     the legibility enum) are handed on untouched.
     """
-    target: Receipt | LineItem
+    target: Receipt | LineItem | TaxBand
+    band_match = _TAX_BAND_PATH.match(field_path)
+    if band_match:
+        position, field = int(band_match.group(1)), band_match.group(2)
+        if field not in _TAX_BAND_FIELDS:
+            raise ValueError(f"cannot apply a correction to unknown field path {field_path!r}")
+        band = bands_by_position.get(position)
+        if band is None:
+            # The same shape the line-item branch uses, and it carries real
+            # weight here: **a receipt persisted before `d5b8c31e7a04` has no
+            # bands at all**, because the column did not exist and there was
+            # nothing to backfill from. A patch aimed at one gets this sentence
+            # rather than a silent no-op.
+            raise ValueError(
+                f"cannot apply a correction to {field_path!r}: "
+                f"receipt {receipt.id} has no tax band at position {position}"
+            )
+        target = band
+        column, coerce = _TAX_BAND_FIELDS[field]
+        after = coerce(raw_value)
+        before = getattr(target, column)
+        if before == after:
+            return None
+        return _PlannedChange(
+            field_path=field_path, target=target, column=column, before=before, after=after
+        )
+
     match = _LINE_ITEM_PATH.match(field_path)
     if match:
         position, field = int(match.group(1)), match.group(2)
@@ -1431,12 +1518,15 @@ def apply_corrections(
             raise ValueError(f"no receipt with id {receipt_id}")
 
         items_by_position = {item.position: item for item in receipt.line_items}
+        bands_by_position = {band.position: band for band in receipt.tax_bands}
 
         # Phase 1 -- resolve and validate everything. No mutation yet, so a bad
         # path cannot leave a half-applied patch behind.
         planned: list[_PlannedChange] = []
         for field_path, raw_value in sorted(flatten(patch).items()):
-            change = _plan_change(receipt, items_by_position, field_path, raw_value)
+            change = _plan_change(
+                receipt, items_by_position, bands_by_position, field_path, raw_value
+            )
             if change is not None:
                 planned.append(change)
 

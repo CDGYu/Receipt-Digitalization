@@ -2729,3 +2729,119 @@ def test_engine_error_text_hides_statement_parameters() -> None:
     message = str(excinfo.value)
     assert "4111111111111111" not in message
     assert "hidden" in message.lower()
+
+
+# --------------------------------------------------------------------------- #
+# The printed tax breakdown (d5b8c31e7a04)
+# --------------------------------------------------------------------------- #
+
+
+def _with_bands(*bands: TaxBand, prices_include_tax: bool | None = None) -> ReceiptExtraction:
+    """An ordinary extraction carrying a printed tax breakdown."""
+    extraction = _extraction()
+    extraction.totals.tax_breakdown = list(bands)
+    extraction.totals.prices_include_tax = prices_include_tax
+    return extraction
+
+
+def test_save_extraction_persists_the_printed_tax_breakdown(engine: sa.Engine) -> None:
+    """Until `d5b8c31e7a04` this data was extracted and then dropped: the
+    prompt asked for it, the rules read it in memory, and no column held it.
+    """
+    with Session(engine) as session:
+        receipt = _save(
+            session,
+            extraction=_with_bands(
+                TaxBand(label="VATable Sales", base=Decimal("1785.71"), rate=Decimal("12"),
+                          amount=Decimal("214.29")),
+                TaxBand(label="VAT-Exempt Sales", base=Decimal("0"), amount=None),
+            ),
+        )
+
+        assert [band.label for band in receipt.tax_bands] == ["VATable Sales", "VAT-Exempt Sales"]
+        assert [band.position for band in receipt.tax_bands] == [0, 1]
+        assert receipt.tax_bands[0].amount == Decimal("214.29")
+        # Not computed, not defaulted to zero. "Do not compute bands that are not
+        # printed" is the prompt's own rule, and a 0 here would be this layer
+        # inventing a figure the paper does not carry.
+        assert receipt.tax_bands[1].amount is None
+
+
+def test_a_rate_of_twelve_survives_the_column(engine: sa.Engine) -> None:
+    """`_RATIO` is Numeric(4, 3) and would overflow on `12`; `_RATE` is
+    Numeric(7, 4). The upstream convention is unstated -- a 12% band may arrive
+    as `12` or as `0.12` -- so the column has to hold both readings, and
+    nothing rescales what the reviewer or the model sent.
+    """
+    with Session(engine) as session:
+        receipt = _save(session, extraction=_with_bands(TaxBand(label="V", rate=Decimal("12"))))
+        session.flush()
+
+        assert receipt.tax_bands[0].rate == Decimal("12")
+
+
+def test_prices_include_tax_round_trips(engine: sa.Engine) -> None:
+    with Session(engine) as session:
+        receipt = _save(session, extraction=_with_bands(prices_include_tax=True))
+        assert receipt.prices_include_tax is True
+
+        unstated = _save(session, extraction=_with_bands(prices_include_tax=None), job=_job())
+        # Null is the ordinary reading: most receipts do not state a convention,
+        # and a False here would be a claim about paper nobody read.
+        assert unstated.prices_include_tax is None
+
+
+def test_a_reviewer_can_correct_one_band_by_its_path(engine: sa.Engine) -> None:
+    """`extract/paths.py` documented `totals.tax_breakdown[0].amount` as valid
+    grammar long before anything could apply it. This is the path working.
+    """
+    with Session(engine) as session:
+        receipt = _save(
+            session,
+            extraction=_with_bands(TaxBand(label="VATable Sales", amount=Decimal("214.00"))),
+        )
+        session.commit()
+
+        apply_corrections(
+            session, receipt.id, {"totals.tax_breakdown[0].amount": "214.29"}, corrected_by="alice"
+        )
+
+        session.refresh(receipt)
+        assert receipt.tax_bands[0].amount == Decimal("214.29")
+        logged = session.scalars(
+            select(Correction).where(Correction.field_path == "totals.tax_breakdown[0].amount")
+        ).all()
+        assert len(logged) == 1
+        assert logged[0].value_after == "214.29"
+
+
+def test_correcting_a_band_that_is_not_there_says_so(engine: sa.Engine) -> None:
+    """The reachable case, not a hypothetical: **every receipt persisted before
+    `d5b8c31e7a04` has no bands at all**, because no backfill was possible. A
+    patch aimed at one has to say that rather than silently do nothing.
+    """
+    with Session(engine) as session:
+        receipt = _save(session, extraction=_with_bands())
+        session.commit()
+
+        with pytest.raises(ValueError, match="no tax band at position 0"):
+            apply_corrections(
+                session,
+                receipt.id,
+                {"totals.tax_breakdown[0].amount": "1.00"},
+                corrected_by="alice",
+            )
+
+
+def test_an_unknown_band_field_is_refused(engine: sa.Engine) -> None:
+    with Session(engine) as session:
+        receipt = _save(session, extraction=_with_bands(TaxBand(label="V")))
+        session.commit()
+
+        with pytest.raises(ValueError, match="unknown field path"):
+            apply_corrections(
+                session,
+                receipt.id,
+                {"totals.tax_breakdown[0].currency": "PHP"},
+                corrected_by="alice",
+            )

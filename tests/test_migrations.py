@@ -67,6 +67,10 @@ EXPECTED_TABLES = {
     "review_tasks",
     # Added with the review API (P4.T3); not part of the original seven.
     "users",
+    # Added with `d5b8c31e7a04`: the printed tax breakdown, one row per band.
+    # A child of `receipts` exactly as `line_items` is -- see that revision for
+    # why it is a table and not a JSONB column.
+    "tax_bands",
 }
 
 #: A URL that is never connected to. Alembic's ``--sql`` (offline) mode resolves
@@ -324,16 +328,22 @@ def _offline_ddl(url: str) -> str:
     return buffer.getvalue()
 
 
-def test_upgrade_head_creates_all_seven_tables(alembic_cfg: Config) -> None:
+def test_upgrade_head_creates_every_expected_table(alembic_cfg: Config) -> None:
     command.upgrade(alembic_cfg, "head")
 
     tables = _table_names(alembic_cfg)
     assert EXPECTED_TABLES <= tables
-    # Nothing beyond the seven tables plus Alembic's own bookkeeping table.
+    # Nothing beyond `EXPECTED_TABLES` plus Alembic's own bookkeeping table.
+    #
+    # These two tests were named "..._all_seven_tables" while the set held
+    # eight, and nine after `tax_bands`. The number was already wrong before
+    # this revision touched it -- `users` arrived with the review API and the
+    # names were never revisited. The SET is the assertion; the count in the
+    # name was decoration that rotted twice, so it is gone.
     assert tables - EXPECTED_TABLES == {"alembic_version"}
 
 
-def test_downgrade_base_drops_all_seven_tables(alembic_cfg: Config) -> None:
+def test_downgrade_base_drops_every_expected_table(alembic_cfg: Config) -> None:
     command.upgrade(alembic_cfg, "head")
     assert EXPECTED_TABLES <= _table_names(alembic_cfg)
 

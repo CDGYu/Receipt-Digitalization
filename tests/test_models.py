@@ -47,6 +47,9 @@ EXPECTED_TABLES = {
     "review_tasks",
     # Added with the review API (P4.T3); not part of the original seven.
     "users",
+    # Added with `d5b8c31e7a04`: the printed tax breakdown, one row per band,
+    # a positioned child of `receipts` exactly as `line_items` is.
+    "tax_bands",
 }
 
 
@@ -80,7 +83,12 @@ def _make_receipt(**overrides) -> Receipt:
     return Receipt(**fields)
 
 
-def test_create_all_builds_exactly_seven_tables(engine: sa.Engine) -> None:
+def test_create_all_builds_exactly_the_expected_tables(engine: sa.Engine) -> None:
+    # Named for the SET, not a count. This said "seven" while `EXPECTED_TABLES`
+    # held eight -- `users` arrived with the review API and the name was never
+    # revisited -- and nine after `tax_bands`. The assertion was always the set;
+    # the number in the name was decoration, and it had already rotted once
+    # before this change made it rot again.
     tables = set(sa.inspect(engine).get_table_names())
     assert tables == EXPECTED_TABLES
 
