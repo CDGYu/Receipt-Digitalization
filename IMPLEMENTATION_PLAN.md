@@ -617,7 +617,28 @@ and the two that never did were indistinguishable from outside.)*
 > both are implemented, with `UNREADABLE` excluded deliberately.
 
 - [x] Gate `run_consistency` on the receipt — `is_handwritten` **or** `legibility in {poor, fair}`, `UNREADABLE` excluded — and feed disputed fields into scoring (§12). `b3bc14e`. **The cache clause was already true and already pinned** (`test_cache_only_stores_deterministic_calls`); the layer above it was not, and `run_consistency`'s "never cache these calls" promise is now pinned on the argument, proven red by threading a `ResponseCache` in.
-- [ ] **Review fix option:** allow `n=5` for critical fields via config. **Not built, and `consistency_runs` is not it.** That setting takes the whole pass to `n=5`; this box asks for a *different* `n` on critical fields, which is a per-field policy nothing here expresses.
+- [x] **Review fix option:** allow `n=5` for critical fields via config. Built 2026-08-25. `consistency_critical_runs` (default **0**, off) and `consistency_critical_fields` (the §12 triple, in `extract.paths` grammar) reach `run_consistency` from the pipeline.
+  > **The extra runs are spent on demand, not always.** No field can be sampled
+  > on its own — every path comes out of the same whole-receipt call — so the
+  > extra evidence is whole extra passes. `run_consistency` runs the base `n`
+  > and goes to `critical_runs` only when a critical path came back with **no
+  > majority** and was nulled, then re-votes over all of them. A receipt whose
+  > total, date and merchant resolve still costs three passes, which is the
+  > point on a box where ADR-0039 measures one extract in minutes.
+  >
+  > **The trigger is deliberately not `disputed`.** That word means *not
+  > unanimous* in `_vote`, and these calls run at temperature 0.3 so the runs
+  > differ — triggering on it would escalate on nearly every handwritten
+  > receipt, which is the always-pay-five behaviour this box exists to avoid.
+  > `test_a_critical_field_that_merely_lacks_unanimity_buys_nothing` pins the
+  > distinction and was proven red against the other reading.
+  >
+  > Five mutations run. Four were caught; the fifth — dropping the outer
+  > `critical_fields and` guard — changed nothing, because that guard was
+  > **dead**: `any()` over an empty sequence is already false. It was deleted
+  > rather than kept, since a redundant guard makes the real one untestable.
+  > **The acceptance is still unmet and this does not touch it**: it needs a
+  > real model run, which ADR-0039 rules out here.
 - [ ] Re-run `calibrate`; commit results. **Cannot be done on this box.** It needs a real model run, and ADR-0039 measures ~1896s/receipt CPU-only against a three-receipt golden set.
 
 **Acceptance:** handwritten auto-approval rate/precision recorded before and after. **NOT MET, and it is the reason the flag defaults OFF.** Nobody has measured whether this improves precision. ISSUE-034's hermetic ruling means the eval path measures a different prompt than production sends, so the before/after would need that settled first, and ISSUE-001 step 7 needs the golden set to be more than three handwritten receipts before the number would mean anything.

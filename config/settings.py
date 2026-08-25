@@ -120,7 +120,6 @@ class Settings(BaseSettings):
 
     # --- Pipeline (§17: Pipeline) ---------------------------------------- #
     max_repair_attempts: int = 1
-    consistency_runs: int = 3
     consistency_temperature: float = 0.3
     auto_approve_threshold: Decimal = AUTO_APPROVE_THRESHOLD
     review_threshold: Decimal = REVIEW_THRESHOLD
@@ -182,7 +181,48 @@ class Settings(BaseSettings):
     # How many independent extractions a consistency pass makes. Three is
     # `run_consistency`'s own default and the smallest number that can produce a
     # majority; two can only ever agree or disagree.
+    #
+    # **This was declared twice in this class** -- here and again in the Pipeline
+    # block above -- until 2026-08-25. Both said 3, so nothing misbehaved, but
+    # the later declaration silently won and an edit to the earlier one would
+    # have done nothing at all. The undocumented copy is the one that went.
     consistency_runs: int = 3
+
+    # P7.T1's "n=5 for critical fields", and the reason it is not just a larger
+    # `consistency_runs`: raising that buys the extra evidence for
+    # `line_items[7].qty` at the same price as for the total.
+    #
+    # No field can be sampled on its own -- every path comes out of the same
+    # whole-receipt call -- so the extra evidence is whole extra passes, and the
+    # question is only when to pay. `run_consistency` spends them on demand: it
+    # runs `consistency_runs`, and goes to `consistency_critical_runs` only when
+    # one of `consistency_critical_fields` came back with **no majority** and was
+    # nulled. A receipt whose total, date and merchant all resolve still costs
+    # three passes.
+    #
+    # The trigger is deliberately NOT "the field was disputed". `disputed` in
+    # `extractor._vote` means *not unanimous*, and these calls run at
+    # temperature 0.3 so that the runs differ -- so a critical path is rarely
+    # unanimous, and triggering on it would spend five passes on nearly every
+    # handwritten receipt. `test_a_critical_field_that_merely_lacks_unanimity_
+    # buys_nothing` is the pin, and it was proven red against that reading.
+    #
+    # **Default OFF (0), same reasoning as `ocr_grounding_enabled` and
+    # `consistency_enabled` above:** a flag that silently starts spending on
+    # every deployment that upgrades is not a flag anyone consented to. Set it
+    # to 5 deliberately, on a box that can afford it. Below or equal to
+    # `consistency_runs` it is inert.
+    consistency_critical_runs: int = 0
+
+    # The §12 triple, spelled in `extract.paths` grammar. These are the same
+    # three fields `score.confidence` penalises for being missing and the eval
+    # harness scores as `critical_correct` -- one definition of "critical",
+    # named in three places rather than three definitions.
+    consistency_critical_fields: tuple[str, ...] = (
+        "totals.total",
+        "receipt.date",
+        "merchant.name",
+    )
 
     # --- Plausibility (§17: Plausibility) -------------------------------- #
     max_plausible_total: Decimal = Decimal("1000000")

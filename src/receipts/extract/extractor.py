@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 from decimal import Decimal, InvalidOperation
 from typing import Callable
@@ -343,6 +344,8 @@ def run_consistency(
     hints: P.MerchantHints | None = None,
     n: int = 3,
     temperature: float = 0.3,
+    critical_runs: int = 0,
+    critical_fields: Sequence[str] = (),
 ) -> tuple[ConsistencyResult, list[VLMResponse]]:
     """Extract n times independently and diff the results field by field.
 
@@ -352,23 +355,63 @@ def run_consistency(
 
     Never cache these calls: a cache hit would return the same answer n times
     and manufacture perfect agreement.
+
+    ``critical_fields`` buys a *second, larger* n for the paths that matter
+    (P7.T1). No field can be sampled on its own — every path comes out of the
+    same whole-receipt call — so the extra evidence is whole extra passes, and
+    the only real question is when to pay for it. It is spent on demand: run
+    ``n``, and go to ``critical_runs`` only when one of those paths came back
+    with no majority. A receipt whose total, date and merchant all agree still
+    costs ``n``, which matters on a box where ADR-0039 measures one extract in
+    minutes.
+
+    **This is not ``consistency_runs`` with a different name.** Raising that
+    takes every path to the larger n on every handwritten receipt, buying the
+    same expensive evidence for ``line_items[7].qty`` as for the total. Both
+    default to off here, so a caller that passes neither gets exactly the
+    behaviour this function has always had.
     """
     runs: list[ReceiptExtraction] = []
     responses: list[VLMResponse] = []
 
-    for _ in range(n):
-        response = extract(
-            image, client, triage_result=triage_result, hints=hints,
-            temperature=temperature, cache=None,
-        )
-        responses.append(response)
-        if response.ok:
-            runs.append(response.parsed)  # type: ignore[arg-type]
+    def sample(times: int) -> None:
+        for _ in range(times):
+            response = extract(
+                image, client, triage_result=triage_result, hints=hints,
+                temperature=temperature, cache=None,
+            )
+            responses.append(response)
+            if response.ok:
+                runs.append(response.parsed)  # type: ignore[arg-type]
+
+    sample(n)
+    attempted = n
+
+    # The escalation reads the *first* vote and then adds to the sample it
+    # already has, rather than re-extracting: those runs are evidence, and
+    # paying for them twice would make the critical path cost `n + critical_runs`
+    # instead of `critical_runs`. `_vote` is pure and works off values already
+    # in memory, so calling it twice costs nothing a model can measure.
+    #
+    # **The trigger is "failed to resolve", NOT `disputed`.** `disputed` in this
+    # module means *not unanimous* (see the `ratio < 1.0` branch in `_vote`), so
+    # a 3-2 or 2-1 majority is listed there alongside a genuine three-way split.
+    # Triggering on it would escalate on almost every handwritten receipt --
+    # these calls run at temperature 0.3 precisely so the runs differ -- and
+    # that is the always-pay-five behaviour this argument exists to avoid. A
+    # path is unresolved when the vote found no strict majority and nulled it:
+    # in `disputed` *and* null in the consensus. Unanimous null is neither.
+    if critical_runs > n and len(runs) > 1:
+        consensus, _, disputed, _ = _vote(runs)
+        flat = flatten(consensus)
+        if any(p in disputed and flat.get(p) is None for p in critical_fields):
+            sample(critical_runs - n)
+            attempted = critical_runs
 
     if not runs:
-        return ConsistencyResult(runs=n), responses
+        return ConsistencyResult(runs=attempted), responses
     if len(runs) == 1:
-        return ConsistencyResult(runs=n, consensus=runs[0], agreement={}), responses
+        return ConsistencyResult(runs=attempted, consensus=runs[0], agreement={}), responses
 
     consensus, agreement, disputed, values = _vote(runs)
     return (

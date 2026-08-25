@@ -1852,6 +1852,38 @@ def test_consistency_runs_for_a_handwritten_receipt_when_enabled(
     assert seen == [result]
 
 
+def test_the_critical_field_policy_reaches_run_consistency(
+    monkeypatch, session_factory, storage, settings
+):
+    """P7.T1's "n=5 for critical fields", wired rather than merely declared.
+
+    The kwargs the spy records are the only place this can be caught. Both
+    settings could be declared, documented, defaulted and never passed, and
+    every one of the five gates would stay green -- the shape that has shipped
+    whole unreachable features in this repo before. Proven by mutation: drop
+    the two arguments from `pipeline.run_consistency(...)` and this goes red
+    while nothing else moves.
+    """
+    calls, _ = _spy_consistency(monkeypatch)
+    enabled = settings.model_copy(
+        update={"consistency_enabled": True, "consistency_critical_runs": 5}
+    )
+    job = _job(storage)
+
+    _run(job, _Client([_handwritten(), _good()]), session_factory, storage, enabled)
+
+    assert calls[0]["critical_runs"] == 5
+    # The §12 triple, and asserted whole rather than by length: a policy that
+    # arrived with two of its three fields would escalate on a missing total
+    # and stay silent on a missing date, which is exactly the kind of partial
+    # wiring a count cannot see.
+    assert calls[0]["critical_fields"] == (
+        "totals.total",
+        "receipt.date",
+        "merchant.name",
+    )
+
+
 def test_consistency_does_not_run_for_a_printed_receipt(
     monkeypatch, session_factory, storage, settings
 ):

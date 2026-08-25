@@ -598,3 +598,108 @@ def test_consistency_never_consults_a_cache(monkeypatch):
         "run_consistency passed something other than cache=None; a cache hit "
         "would return one answer three times and report perfect agreement"
     )
+
+
+# --------------------------------------------------------------------------- #
+# Self-consistency: a second, larger n for the fields that matter (P7.T1)
+# --------------------------------------------------------------------------- #
+#
+# The box asks for "n=5 for critical fields via config". No field can be sampled
+# on its own -- every path comes out of the same whole-receipt call -- so the
+# extra runs are whole extra passes, and the only question is when to pay for
+# them. They are spent on demand: run the base `n`, and go to `critical_runs`
+# only when a path in `critical_fields` came back disputed. A clean receipt
+# still costs three passes on a box where ADR-0039 measures one extract in
+# minutes.
+#
+# `consistency_runs` alone is NOT this, which is why the plan says so: raising
+# it takes every field to five on every handwritten receipt, and buys the extra
+# evidence for `line_items[7].qty` at the same price as for the total.
+
+
+def test_consistency_escalates_when_a_critical_field_is_disputed():
+    a, b, c, d, e = good(), good(), good(), good(), good()
+    # Three-way split over the first three runs: no majority, so `totals.total`
+    # is disputed and nulled at n=3.
+    a.totals.total, b.totals.total, c.totals.total = D("1"), D("2"), D("3")
+    d.totals.total, e.totals.total = D("2"), D("2")
+    client = FakeVLMClient([a, b, c, d, e])
+
+    result, _ = run_consistency(
+        IMG, client, n=3, critical_runs=5, critical_fields=("totals.total",)
+    )
+
+    # Two more calls, not a fresh five: the first three runs are evidence and
+    # re-extracting them would pay twice for what is already in hand.
+    assert len(client.calls) == 5
+    assert result.runs == 5
+    # 2 now holds three of five, so the field resolves instead of going silent.
+    # That is the whole point: at n=3 this path was nulled and the receipt
+    # carried no total at all.
+    assert result.consensus.totals.total == D("2")
+    # It is STILL listed in `disputed`, and that is not a failure of the
+    # escalation. `disputed` in this module means *not unanimous* -- see the
+    # `ratio < 1.0` branch in `_vote` -- so a resolved 3-2 majority belongs
+    # there too. Asserted rather than glossed, because reading `disputed` as
+    # "no majority" is what made the first draft of this test wrong.
+    assert "totals.total" in result.disputed
+    assert result.agreement["totals.total"] == pytest.approx(3 / 5)
+
+
+def test_a_critical_field_that_merely_lacks_unanimity_buys_nothing():
+    """The trigger is "failed to resolve", not "disagreed at all".
+
+    This is the test that separates the two readings, and the cheap one is
+    deliberate: these calls run at temperature 0.3 so that the runs differ, so
+    a critical path is rarely unanimous. Escalating on `disputed` would spend
+    the extra passes on nearly every handwritten receipt, which is the
+    always-pay-five behaviour `critical_runs` exists to avoid.
+    """
+    a, b, c = good(), good(), good()
+    a.totals.total = D("274.00")  # 2-1: a majority, so the field resolves
+    client = FakeVLMClient([a, b, c, good(), good()])
+
+    result, _ = run_consistency(
+        IMG, client, n=3, critical_runs=5, critical_fields=("totals.total",)
+    )
+
+    assert result.consensus.totals.total == D("224.00")  # it resolved
+    assert "totals.total" in result.disputed  # and is still "disputed"
+    assert len(client.calls) == 3  # and bought nothing
+
+
+def test_a_disputed_NON_critical_field_does_not_buy_more_runs():
+    """The escalation is driven by *which* path is disputed, not by any dispute.
+
+    Without this, `critical_fields` would be decoration: any three-way split
+    anywhere in a long receipt would spend the extra passes, which is the
+    whole-pass `consistency_runs` behaviour the plan rules out.
+    """
+    a, b, c = good(), good(), good()
+    a.merchant.name, b.merchant.name, c.merchant.name = "P", "Q", "R"
+    client = FakeVLMClient([a, b, c])
+
+    result, _ = run_consistency(
+        IMG, client, n=3, critical_runs=5, critical_fields=("totals.total",)
+    )
+
+    assert "merchant.name" in result.disputed  # it really is in dispute
+    assert len(client.calls) == 3  # and it bought nothing
+    assert result.runs == 3
+
+
+def test_without_critical_fields_a_disputed_total_still_buys_nothing():
+    """The default is off, and that is what keeps the other seven tests honest.
+
+    Every existing `run_consistency` test passes `n=3` and no critical fields;
+    if escalation were the default they would each make five calls and the
+    scripted `FakeVLMClient` would run off the end of its list.
+    """
+    a, b, c = good(), good(), good()
+    a.totals.total, b.totals.total, c.totals.total = D("1"), D("2"), D("3")
+    client = FakeVLMClient([a, b, c])
+
+    result, _ = run_consistency(IMG, client, n=3)
+
+    assert "totals.total" in result.disputed
+    assert len(client.calls) == 3

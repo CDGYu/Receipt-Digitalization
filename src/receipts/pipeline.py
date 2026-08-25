@@ -990,6 +990,15 @@ def process_receipt(
                     triage_result=triage_result,
                     hints=hints,
                     n=settings.consistency_runs,
+                    # P7.T1's second, larger n for the §12 triple. Inert unless
+                    # a deployment raises `consistency_critical_runs` above
+                    # `consistency_runs`, and even then it is spent only on a
+                    # receipt whose total, date or merchant came back with no
+                    # majority. `guarded` is the same CostGuard-wrapped client,
+                    # so the extra passes are counted against the per-receipt
+                    # ceiling like every other call rather than escaping it.
+                    critical_runs=settings.consistency_critical_runs,
+                    critical_fields=settings.consistency_critical_fields,
                 )
 
         with _stage("score", progress):
