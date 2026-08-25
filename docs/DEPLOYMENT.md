@@ -372,10 +372,18 @@ PASS    vitest     npm test
 PASS    build      npm run build
 ```
 
-Verified 2026-08-25 at `3d0a979`: **all five PASS**. Needs `pip install -e
+Run twice on 2026-08-25, **all five PASS both times**: once at `3d0a979`, and
+again at `824bf46` after a frontend commit landed. Needs `pip install -e
 ".[dev]"` and an `npm install` in `frontend/`; the npm gates skip rather than
 fail if npm is absent, so read the summary line — "every gate that **ran**
 passed" is not the same claim as five PASS rows.
+
+**Always name the commit a gate run covered.** Three of those five gates read
+`frontend/`, so a green from before a frontend commit does not certify the tree
+after it — the second run above exists precisely because the first had gone
+stale that way. And the gates read the **working tree, not `HEAD`**: a run is
+only a statement about a commit if the tree was otherwise clean, which is worth
+checking with `git status --porcelain` before quoting the result.
 
 **`scripts/verify.py` does not run Playwright**, and green gates have twice
 shipped defects a person could see in a browser and no gate could — a contrast
