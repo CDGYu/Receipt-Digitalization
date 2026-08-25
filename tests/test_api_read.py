@@ -620,7 +620,7 @@ def test_the_detail_returns_current_findings_beside_the_extraction_run_ones(
     body = reviewer_client.get(f"/receipts/{receipt_id}").json()
     assert "current_findings" in body
     assert "not_rechecked" in body
-    assert body["not_rechecked"] == ["R001", "R013", "R060", "R061", "R070"]
+    assert body["not_rechecked"] == ["R001", "R013", "R060", "R061", "R070", "R071"]
     assert isinstance(body["findings"], list)
 
 

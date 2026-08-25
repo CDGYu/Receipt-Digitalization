@@ -371,4 +371,4 @@ def test_the_run_rules_are_exactly_those_reading_unreconstructible_context() -> 
     here.
     """
     declared = {rule.id for rule in RULES if rule.subject is Subject.RUN}
-    assert declared == {"R001", "R013", "R060", "R061", "R070"}
+    assert declared == {"R001", "R013", "R060", "R061", "R070", "R071"}

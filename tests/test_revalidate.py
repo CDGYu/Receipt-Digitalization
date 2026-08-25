@@ -140,24 +140,12 @@ def test_a_round_trip_preserves_the_fields_no_rule_happens_to_read_today(engine)
 
 
 def test_a_row_that_recorded_no_tax_breakdown_still_rebuilds(engine) -> None:
-    """``tax_breakdown`` is nullable, and NULL is not ``[]``.
+    """A pending receipt has no tax_bands rows.
 
     ``create_pending_receipt`` writes id/image_key/image_phash/status/confidence
-    and nothing else, so every ``pending`` row -- and every row written before
-    the column existed -- holds NULL here. That NULL arrives as ``None``, which
-    the comprehension in :func:`_export_extraction` cannot iterate (measured:
-    ``TypeError: 'NoneType' object is not iterable``), and passing it straight
-    to ``Totals`` instead would only move the raise into pydantic, since
-    ``tax_breakdown`` is ``list[TaxBand]`` and not optional. The coalesce folds
-    NULL into the schema default, which is what the rebuild did for every row
-    before the column existed.
-
-    **Reachable through the export, not only through re-validation.**
-    ``build_export_rows`` calls :func:`_export_extraction` too, and
-    ``query_export_receipts`` leaves ``pending`` out of an export *unless the
-    caller names* ``status=pending`` (``_EXPORT_EXCLUDED_BY_DEFAULT``) -- so an
-    export that asks for pending rows walks straight into this, as does any
-    pre-migration row in any export.
+    and nothing else, so ``tax_bands`` is an empty list (no child rows). The
+    rebuild in :func:`_export_extraction` must handle that gracefully and produce
+    an empty ``tax_breakdown`` in the schema rather than raising.
     """
     job = ReceiptJob(
         id=uuid.uuid4(),
@@ -169,9 +157,8 @@ def test_a_row_that_recorded_no_tax_breakdown_still_rebuilds(engine) -> None:
     with Session(engine) as session:
         receipt = create_pending_receipt(session, job)
         session.commit()
-        # Stated so the test cannot quietly stop exercising the NULL it is here
-        # for: a later default of ``[]`` on the column would make it vacuous.
-        assert receipt.tax_breakdown is None
+        # A pending receipt has zero tax_bands rows.
+        assert receipt.tax_bands == []
         assert _export_extraction(receipt).totals.tax_breakdown == []
 
 
@@ -214,8 +201,9 @@ def test_revalidate_never_runs_a_rule_whose_subject_is_the_extraction_run() -> N
     """
     from receipts.review.serializers import _CONTENT_RULES, not_rechecked
 
-    assert {r.id for r in _CONTENT_RULES} & {"R001", "R013", "R060", "R061", "R070"} == set()
-    assert not_rechecked() == ["R001", "R013", "R060", "R061", "R070"]
+    run_ids = {"R001", "R013", "R060", "R061", "R070", "R071"}
+    assert {r.id for r in _CONTENT_RULES} & run_ids == set()
+    assert not_rechecked() == ["R001", "R013", "R060", "R061", "R070", "R071"]
 
 
 def test_a_rule_that_crashes_is_contained_and_the_loop_carries_on(

@@ -241,24 +241,6 @@ class Receipt(Base):
     is_refund: Mapped[bool] = mapped_column(
         sa.Boolean, nullable=False, default=False, server_default=sa.false()
     )
-    #: The document's stated tax convention: ``True`` = the line amounts include
-    #: tax, ``False`` = they exclude it, ``NULL`` = the document does not say.
-    #: **R020/R024 read it** to choose what the line sum may equal; NULL accepts
-    #: either reading, so a lost ``True`` does not fail loudly -- it silently
-    #: LOOSENS the arithmetic check. Nullable because NULL is a real value here
-    #: and the common one, not a placeholder.
-    prices_include_tax: Mapped[bool | None] = mapped_column(sa.Boolean, nullable=True)
-    #: Per-band tax breakdown as the model emitted it, e.g.
-    #: ``[{"label": "VATable", "base": "500.00", "rate": "0.12", "amount": "60.00"}]``.
-    #: Amounts are strings so ``Decimal`` survives the round trip (ADR-0001).
-    #: **R025 reads it** and skips on an empty list, so a lost breakdown
-    #: disables that rule rather than failing it.
-    #:
-    #: Nullable on purpose, following ``confidence_reasons``: NULL means "not
-    #: recorded" (a row written before this column existed), ``[]`` means "the
-    #: model read no tax bands". Collapsing the two would claim a reading
-    #: nothing made.
-    tax_breakdown: Mapped[Any | None] = mapped_column(_jsonb(), nullable=True, default=None)
 
     #: What the run was doing when it was last known alive, and when that was.
     #: Written by the heartbeat sink on every stage entry and once per model

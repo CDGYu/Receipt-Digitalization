@@ -32,33 +32,26 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 import sqlalchemy as sa
-from sqlalchemy.dialects import postgresql
 
 from alembic import op
 
 revision: str = "43984a968688"
-down_revision: str | Sequence[str] | None = "f3ae0f86e0e6"
+down_revision: str | Sequence[str] | None = "d5b8c31e7a04"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
-_JSON = sa.JSON().with_variant(postgresql.JSONB(), "postgresql")
-
 
 def upgrade() -> None:
-    """Add the three ``receipts`` columns the review-time re-validation reads."""
+    """Add ``is_refund`` to ``receipts`` for review-time re-validation."""
     with op.batch_alter_table("receipts", schema=None) as batch_op:
         batch_op.add_column(
             sa.Column(
                 "is_refund", sa.Boolean(), nullable=False, server_default=sa.false()
             )
         )
-        batch_op.add_column(sa.Column("prices_include_tax", sa.Boolean(), nullable=True))
-        batch_op.add_column(sa.Column("tax_breakdown", _JSON, nullable=True))
 
 
 def downgrade() -> None:
-    """Drop the three columns."""
+    """Drop the column."""
     with op.batch_alter_table("receipts", schema=None) as batch_op:
-        batch_op.drop_column("tax_breakdown")
-        batch_op.drop_column("prices_include_tax")
         batch_op.drop_column("is_refund")

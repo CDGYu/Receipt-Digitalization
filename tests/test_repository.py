@@ -333,12 +333,12 @@ def test_save_extraction_carries_meta_flags(engine: sa.Engine) -> None:
 
 
 def test_save_extraction_persists_the_fields_validation_needs(engine: sa.Engine) -> None:
-    """Three fields that rules read and no column carried until 2026-08-24.
+    """Fields that rules read and no column carried until 2026-08-24.
 
     Without them a rehydrated receipt validates DIFFERENTLY from the one that
     was extracted, with no edit involved: R040 reads ``meta.is_refund`` and
     inverts, R020/R024 read ``prices_include_tax`` and silently loosen, R025
-    reads ``tax_breakdown`` and silently skips.
+    reads ``tax_breakdown`` (via ``tax_bands``) and silently skips.
     """
     extraction = _extraction()
     extraction.meta.is_refund = True
@@ -359,29 +359,17 @@ def test_save_extraction_persists_the_fields_validation_needs(engine: sa.Engine)
         session.commit()
         assert receipt.is_refund is True
         assert receipt.prices_include_tax is True
-        assert receipt.tax_breakdown == [
-            {"label": "VATable", "base": "500.00", "rate": "0.12", "amount": "60.00"}
-        ]
+        assert len(receipt.tax_bands) == 1
+        assert receipt.tax_bands[0].label == "VATable"
+        assert receipt.tax_bands[0].amount == Decimal("60.00")
 
 
 def test_save_extraction_redacts_a_pan_inside_tax_breakdown(engine: sa.Engine) -> None:
-    """``tax_breakdown`` is model text in a JSON column, so the blanket pass misses it.
+    """``tax_breakdown`` labels are model text, so PANs must be redacted.
 
-    ``save_extraction``'s redaction pass is ``type(value) is str`` over its
-    ``fields`` dict; a list value is skipped whole, and ``TaxBand.label`` is
-    model text. This is ``LineItem.modifiers``' hazard one column over.
-
-    **Kept deliberately once the class-level walk grew a ``receipt_json`` arm
-    on 2026-08-24 -- this is not a duplicate of it.** The two fail
-    independently, because this test carries its own seed:
-    ``test_every_text_column_save_extraction_writes_is_redacted`` only sees a
-    PAN in this column because its large shared fixture happens to seed
-    ``Totals.tax_breakdown[].label``, and that fixture has already been found
-    short twice (see its own docstring for both). Measured -- trim the
-    ``{pan}`` out of that fixture's tax band and drop ``redact_pan`` from
-    ``save_extraction``, and the walk PASSES while this test still fails. The
-    walk closes the class; this closes the instance against the walk's own
-    fixture rotting.
+    The ``tax_bands`` table stores each band's label as a text column, and
+    ``save_extraction`` redacts all string-typed columns. A PAN embedded in a
+    ``TaxBand.label`` must not survive to the database.
     """
     pan = "4111111111111111"
     extraction = _extraction()
@@ -392,7 +380,7 @@ def test_save_extraction_redacts_a_pan_inside_tax_breakdown(engine: sa.Engine) -
             Decimal("0.9"), ReceiptStatus.NEEDS_REVIEW,
         )
         session.commit()
-        assert pan not in str(receipt.tax_breakdown)
+        assert pan not in (receipt.tax_bands[0].label or "")
 
 
 def test_save_extraction_distinguishes_a_false_tax_convention_from_an_absent_one(
@@ -425,35 +413,6 @@ def test_save_extraction_distinguishes_a_false_tax_convention_from_an_absent_one
         assert recorded.prices_include_tax is False
         assert unrecorded.prices_include_tax is None
 
-
-def test_an_empty_tax_breakdown_and_a_missing_one_are_different(engine: sa.Engine) -> None:
-    """``[]`` means "the model read no tax bands"; NULL means "not recorded".
-
-    This is ``test_empty_reasons_and_missing_reasons_are_different`` one column
-    over, and it is the premise the nullable column rests on: ``models.py``
-    keeps ``tax_breakdown`` nullable *precisely* so the two stay distinct
-    (following ``confidence_reasons``), rather than NOT NULL DEFAULT '[]'.
-
-    So a receipt the model read no bands off must store ``[]``, and only a row
-    that never reached extraction may hold NULL. Nothing else in this file
-    pins that: a later tidy of ``save_extraction`` to ``redact_pan(...) or
-    None`` collapses the two meanings and is green against every other
-    assertion here.
-    """
-    no_bands = _extraction()
-    assert no_bands.totals.tax_breakdown == [], "the fixture must start with no bands"
-
-    never_extracted = _job()
-    with Session(engine) as session:
-        extracted = save_extraction(
-            session, _job(), no_bands, ValidationReport(),
-            Decimal("0.9"), ReceiptStatus.NEEDS_REVIEW,
-        )
-        pending = create_pending_receipt(session, never_extracted)
-        session.commit()
-        # [] = "the model read no tax bands"; NULL = "never recorded".
-        assert extracted.tax_breakdown == []
-        assert pending.tax_breakdown is None
 
 
 def test_save_extraction_falls_back_to_list_order_on_duplicate_positions(
@@ -992,7 +951,7 @@ def test_every_text_column_save_extraction_writes_is_redacted(engine: sa.Engine)
     # receipts -> merchant_name_raw, buyer_name_raw, buyer_tax_id,
     # receipt_number, date_raw, payment_method, image_key,
     # processed_image_key, image_phash;
-    # receipts JSON -> confidence_reasons, tax_breakdown;
+    # receipts JSON -> confidence_reasons;
     # line_items -> description_raw, sku, unit; JSON -> modifiers, bbox.
     assert {
         "receipt_number",
@@ -1003,11 +962,10 @@ def test_every_text_column_save_extraction_writes_is_redacted(engine: sa.Engine)
     } <= set(receipt_text)
     assert {"description_raw", "sku", "unit"} <= set(item_text)
     assert "modifiers" in item_json
-    # The anchor for the receipts-side JSON walk, for the same reason
-    # ``modifiers`` anchors the line_items one: ``tax_breakdown`` is the column
-    # whose absence from this walk let an unredacted PAN through, so a filter
-    # that stopped matching it must fail here rather than pass silently.
-    assert "tax_breakdown" in receipt_json
+    # The anchor for the receipts-side JSON walk: ``confidence_reasons`` is
+    # model-generated text in a JSON column. Tax bands moved to their own table
+    # (``tax_bands``) so their labels are text columns handled by ``receipt_text``.
+    assert "confidence_reasons" in receipt_json
 
     # Every str-typed field on Merchant, Buyer, ReceiptMeta, Payment,
     # ExtractionMeta, LineItem and Modifier that could plausibly feed a future

@@ -1489,6 +1489,7 @@ class LineItemCountMatchesTriage(Rule):
     """
 
     id = "R071"
+    subject = Subject.RUN
     severity = Severity.WARN
     description = "Far fewer line items were extracted than triage counted."
 
