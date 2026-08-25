@@ -36,6 +36,7 @@ from receipts.persist import Correction, Receipt, ReviewState, ReviewTask
 from receipts.persist.models import Base
 from receipts.review import (
     QueueStats,
+    claim_task,
     close_review_for_receipt,
     close_task,
     enqueue_review,
@@ -45,7 +46,12 @@ from receipts.review import (
     queue_stats,
     release_task,
 )
-from receipts.review.queue import _claim_stmt, _resume_stmt, _supports_skip_locked
+from receipts.review.queue import (
+    _claim_by_id_stmt,
+    _claim_stmt,
+    _resume_stmt,
+    _supports_skip_locked,
+)
 from receipts.score.confidence import ReceiptStatus
 
 PHASH = "0123456789abcdef"
@@ -1439,3 +1445,123 @@ def test_list_corrections_paginates_with_limit_and_offset(engine: sa.Engine):
         assert paths(limit=2, offset=2) == ["c", "d"]
         assert paths(offset=1) == ["b", "c", "d"]
         assert paths(limit=10, offset=4) == []
+
+
+# --------------------------------------------------------------------------- #
+# claim_task: taking a NAMED task, not the head of the queue
+# --------------------------------------------------------------------------- #
+
+
+def test_claim_task_claims_the_named_row_and_leaves_the_queue_head_alone(
+    engine: sa.Engine,
+) -> None:
+    """The whole reason this function exists.
+
+    ``next_task`` hands out the head of the queue; a reviewer picking a row off
+    a list wants *that* row. Priority 0 sorts ahead of priority 5, so if the
+    claim were still going through ``_claim_stmt`` the urgent one would come
+    back and this would fail on the id.
+    """
+    with Session(engine) as session:
+        urgent = _task(session, 0)
+        chosen = _task(session, 5)
+
+        claimed = claim_task(session, chosen.id, "ada")
+
+        assert claimed.id == chosen.id
+        assert claimed.state is ReviewState.IN_PROGRESS
+        assert claimed.assigned_to == "ada"
+        assert urgent.state is ReviewState.OPEN
+        assert urgent.assigned_to is None
+
+
+def test_claim_task_refuses_a_row_another_reviewer_is_holding(engine: sa.Engine) -> None:
+    with Session(engine) as session:
+        task = _task(session, 1)
+        next_task(session, "ada")
+
+        with pytest.raises(ValueError, match="ada"):
+            claim_task(session, task.id, "grace")
+
+        assert task.assigned_to == "ada"
+
+
+def test_claim_task_hands_the_holder_their_own_task_back_unchanged(engine: sa.Engine) -> None:
+    """Idempotent for the holder, the same shape ``next_task``'s resume has.
+
+    A double-click on the list, or a retry after a lost response, must not be
+    an error: the caller already has exactly what they asked for.
+    """
+    with Session(engine) as session:
+        task = _task(session, 1)
+        first = claim_task(session, task.id, "ada")
+
+        again = claim_task(session, task.id, "ada")
+
+        assert again.id == first.id
+        assert again.state is ReviewState.IN_PROGRESS
+        assert again.assigned_to == "ada"
+
+
+def test_claim_task_refuses_when_the_caller_already_holds_a_different_task(
+    engine: sa.Engine,
+) -> None:
+    """One claimed task per reviewer, enforced here rather than assumed.
+
+    ``_resume_stmt``'s docstring records that a user genuinely CAN end up
+    holding several (tasks stranded before ADR-0016, and concurrent polls), so
+    this is a rule this function imposes, not an invariant it inherits. The
+    frontend's draft stash holds exactly one overlay keyed by task id, so a
+    second claim would give a reviewer two editable tasks and one stash.
+    """
+    with Session(engine) as session:
+        held = _task(session, 1)
+        other = _task(session, 2)
+        claim_task(session, held.id, "ada")
+
+        with pytest.raises(ValueError, match=str(held.id)):
+            claim_task(session, other.id, "ada")
+
+        assert other.state is ReviewState.OPEN
+        assert other.assigned_to is None
+
+
+def test_claim_task_refuses_an_unknown_id(engine: sa.Engine) -> None:
+    missing = uuid.uuid4()
+    with Session(engine) as session:
+        with pytest.raises(ValueError, match=str(missing)):
+            claim_task(session, missing, "ada")
+
+
+def test_claim_task_refuses_a_closed_task(engine: sa.Engine) -> None:
+    """A DONE task is not claimable: reopening is ``enqueue_review``'s job,
+    which is also the only path that clears ``assigned_to`` on the way back --
+    the same reasoning ``release_task`` records for its own refusal.
+    """
+    with Session(engine) as session:
+        task = _task(session, 1)
+        next_task(session, "ada")
+        close_task(session, task.id)
+
+        with pytest.raises(ValueError, match="closed"):
+            claim_task(session, task.id, "grace")
+
+
+def test_the_by_id_claim_locks_the_row_on_a_backend_that_can_and_not_on_sqlite() -> None:
+    """Compiled for both dialects, like ``_claim_stmt``'s pair, so the locking
+    clause is read off the SQL rather than inferred from a call that passed.
+
+    **Plain ``FOR UPDATE``, deliberately -- not ``SKIP LOCKED``.**
+    ``_claim_stmt`` skips locked rows because it is picking *any* open task and
+    stepping over a contested one is the right answer. This query names one
+    row: skipping it would return nothing, and the caller would be told the
+    task is not open when in truth it is merely busy. Blocking briefly and then
+    reporting what the winner left behind is the honest answer.
+    """
+    locked = _claim_by_id_stmt(uuid.uuid4(), lock=True)
+    unlocked = _claim_by_id_stmt(uuid.uuid4(), lock=False)
+
+    rendered = str(locked.compile(dialect=postgresql.dialect()))
+    assert "FOR UPDATE" in rendered
+    assert "SKIP LOCKED" not in rendered
+    assert "FOR UPDATE" not in str(unlocked.compile(dialect=sqlite.dialect()))

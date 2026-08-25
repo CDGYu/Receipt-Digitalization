@@ -75,7 +75,15 @@ from .auth import (
     sign_url,
     verify_signature,
 )
-from .queue import close_task, list_corrections, list_tasks, next_task, queue_stats, release_task
+from .queue import (
+    claim_task,
+    close_task,
+    list_corrections,
+    list_tasks,
+    next_task,
+    queue_stats,
+    release_task,
+)
 from .schemas import (
     CorrectionListResponse,
     CorrectionPatch,
@@ -849,6 +857,56 @@ def _install_write_routes(app: FastAPI) -> None:
             if task is None:
                 session.commit()
                 return {"task": None}
+            receipt = get_receipt(session, task.receipt_id)
+            payload = {
+                "task": _task_summary(task),
+                "receipt": receipt_summary(receipt) if receipt is not None else None,
+            }
+            session.commit()
+            return payload
+
+    @app.post("/review/{task_id}/claim")
+    def review_claim(
+        task_id: uuid.UUID,
+        request: Request,
+        user: Annotated[SessionUser, Depends(require_user)],
+    ) -> dict[str, Any]:
+        """Claim one **named** task -- the row a reviewer picked off a list.
+
+        The companion to ``GET /review/next``, which claims whatever is at the
+        head of the queue. Both end in the same state and **answer in the same
+        shape** -- ``{"task": ..., "receipt": ...}`` with the light
+        ``receipt_summary`` -- so a client has one response to parse whether the
+        reviewer took what they were offered or chose for themselves.
+
+        ``{task_id}`` is a **review task** id, not a receipt id, like its two
+        siblings.
+
+        **404 for an unknown id, 409 for every other refusal.** The existence
+        check is made here rather than read out of ``claim_task``'s message,
+        because the difference matters to a client: a 404 means the row is gone
+        and the list is stale, while a 409 means the row is real and something
+        about the queue's current state stands in the way -- someone else holds
+        it, it is closed, or the caller already holds another. All three are
+        conditions a reviewer can act on, and all three carry
+        :func:`~receipts.review.queue.claim_task`'s own words, which name the
+        holder or the task in the way.
+
+        Guarded by ``require_user``: claiming is a reviewer's ordinary work.
+        There is no assignee check to make -- the caller becomes the assignee,
+        and the one case where an existing assignee matters (someone else holds
+        it) is a 409 from the queue rather than a 403, because it is not a
+        permission problem. An admin gets no override here: taking a task away
+        from the person holding it is ``POST /review/{id}/release`` (ADR-0025),
+        which is admin-only precisely so that transfer stays a deliberate act.
+        """
+        with request.app.state.session_factory() as session:
+            if session.get(ReviewTask, task_id) is None:
+                raise HTTPException(status_code=404, detail=f"no review task with id {task_id}")
+            try:
+                task = claim_task(session, task_id, user.username)
+            except ValueError as exc:
+                raise HTTPException(status_code=409, detail=str(exc)) from exc
             receipt = get_receipt(session, task.receipt_id)
             payload = {
                 "task": _task_summary(task),

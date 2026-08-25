@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from .queue import (
     QueueStats,
+    claim_task,
     close_review_for_receipt,
     close_task,
     enqueue_review,
@@ -26,6 +27,7 @@ from .queue import (
 __all__ = [
     "QueueStats",
     "close_review_for_receipt",
+    "claim_task",
     "close_task",
     "enqueue_review",
     "list_corrections",

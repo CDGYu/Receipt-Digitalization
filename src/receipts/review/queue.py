@@ -310,6 +310,107 @@ def next_task(session: Session, assignee: str) -> ReviewTask | None:
     return task
 
 
+def _claim_by_id_stmt(task_id: uuid.UUID, *, lock: bool) -> Select[tuple[ReviewTask]]:
+    """The "this exact task" query, optionally row-locked.
+
+    Split out from :func:`claim_task` for the same reason :func:`_claim_stmt` is
+    split out of :func:`next_task`: taking the locking decision as an argument
+    makes the statement compilable against either dialect in a test, so the
+    clause is read off the SQL rather than inferred from a call that happened to
+    pass.
+
+    **Plain ``FOR UPDATE``, deliberately -- not ``SKIP LOCKED``.**
+    :func:`_claim_stmt` skips locked rows because it is picking *any* open task,
+    and stepping over a row another reviewer is mid-claim on is exactly right
+    there. This query names one row. Skipping it would return nothing, and the
+    caller would be told the task does not exist when the truth is that it is
+    busy for a few milliseconds. Blocking briefly and then reporting what the
+    winner left behind -- ``IN_PROGRESS``, held by someone -- is the honest
+    answer, and it is the one a reviewer who just clicked a row needs.
+
+    **No state filter either.** The state is checked in Python, after the read,
+    so each refusal can say which state it found. A ``where(state == OPEN)``
+    here would collapse "already held", "closed" and "no such task" into one
+    empty result.
+    """
+    stmt = select(ReviewTask).where(ReviewTask.id == task_id).limit(1)
+    if lock:
+        stmt = stmt.with_for_update()
+    return stmt
+
+
+def claim_task(session: Session, task_id: uuid.UUID, assignee: str) -> ReviewTask:
+    """Claim one **named** task for ``assignee``.
+
+    :func:`next_task` hands out the head of the queue; this hands out the row a
+    reviewer pointed at. Both end in the same place -- ``IN_PROGRESS`` with
+    ``assigned_to`` set, flushed and not committed -- so a task claimed either
+    way completes, releases and resumes identically.
+
+    Four refusals, each naming what it found:
+
+      * an unknown id;
+      * a ``DONE`` task -- reopening is :func:`enqueue_review`'s job, which is
+        also the only path that clears ``assigned_to`` on the way back, the same
+        reasoning :func:`release_task` records for its own refusal;
+      * a task another reviewer holds, named so the caller knows who to ask;
+      * a caller who **already holds a different task**.
+
+    **That last rule is imposed here, not inherited.** :func:`_resume_stmt`
+    records that a user genuinely can end up holding several rows -- tasks
+    stranded before ADR-0016, and concurrent polls from one caller -- so this is
+    a new constraint rather than an existing invariant being preserved. It earns
+    its place at the frontend: the review screen's draft stash holds exactly one
+    overlay keyed by task id (``frontend/src/review/stash.ts``), so a reviewer
+    holding two claimed tasks would have two editable forms and one place to
+    keep unsubmitted edits. Refusing the second claim is what keeps that single
+    slot correct.
+
+    **Idempotent for the holder.** Re-claiming a task you already hold returns
+    it unchanged and writes nothing, the shape :func:`next_task`'s resume branch
+    and :func:`close_task` both use, so a double-click or a retry after a lost
+    response is not an error.
+
+    Raises ``ValueError`` in all four refusal cases. Flushes; does not commit.
+    """
+    # `_supports_skip_locked` is the same capability question one level up:
+    # these are the backends whose compiler honours a locking clause at all.
+    # SQLite silently emits nothing for `FOR UPDATE` exactly as it does for
+    # `FOR UPDATE SKIP LOCKED`, which is why the decision is made in Python
+    # here too rather than left to the compiler.
+    locked = session.scalars(
+        _claim_by_id_stmt(task_id, lock=_supports_skip_locked(session.get_bind()))
+    ).first()
+    if locked is None:
+        raise ValueError(f"no review task with id {task_id}")
+
+    if locked.state is ReviewState.DONE:
+        raise ValueError(
+            f"review task {task_id} is closed; claiming it would reopen work "
+            "whose assigned_to is the only record that anyone reviewed this "
+            "receipt. Reopening is enqueue_review's job."
+        )
+
+    if locked.state is ReviewState.IN_PROGRESS:
+        if locked.assigned_to == assignee:
+            return locked
+        raise ValueError(
+            f"review task {task_id} is already held by {locked.assigned_to}"
+        )
+
+    held = session.scalars(_resume_stmt(assignee)).first()
+    if held is not None:
+        raise ValueError(
+            f"{assignee} already holds review task {held.id}; complete or "
+            "release it before claiming another"
+        )
+
+    locked.assigned_to = assignee
+    locked.state = ReviewState.IN_PROGRESS
+    session.flush()
+    return locked
+
+
 def close_task(session: Session, task_id: uuid.UUID) -> ReviewTask:
     """Mark a task ``DONE`` with a timezone-aware UTC ``closed_at``.
 

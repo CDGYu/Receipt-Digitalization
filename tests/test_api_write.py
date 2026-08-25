@@ -1643,3 +1643,122 @@ def test_a_pdf_that_cannot_be_queued_still_leaves_its_rows_visible(
     detail = response.json()["error"]["message"]
     for row in pending:
         assert str(row.id) in detail
+
+
+# --------------------------------------------------------------------------- #
+# POST /review/{task_id}/claim -- taking a task off a list
+# --------------------------------------------------------------------------- #
+
+
+def test_review_claim_takes_the_named_task_not_the_head_of_the_queue(
+    reviewer_client, session_factory, receipt_id, other_receipt_id
+):
+    """The point of the route.
+
+    Two tasks, and the one claimed by id is deliberately the LOWER priority of
+    the pair -- priority 0 sorts ahead of priority 7, so a regression that fell
+    back to the queue head would hand back the urgent one and fail on the id
+    rather than passing by coincidence.
+    """
+    with session_factory() as session:
+        enqueue_review(session, receipt_id, reason="urgent: no total", priority=0)
+        chosen = enqueue_review(session, other_receipt_id, reason="quick verify", priority=7)
+        chosen_id = str(chosen.id)
+        session.commit()
+
+    body = reviewer_client.post(f"/review/{chosen_id}/claim").json()
+
+    assert body["task"]["id"] == chosen_id
+    assert body["task"]["state"] == "in_progress"
+    assert body["task"]["assigned_to"] == "alice"
+    with session_factory() as session:
+        held = session.scalars(
+            select(ReviewTask).where(ReviewTask.state == ReviewState.IN_PROGRESS)
+        ).all()
+        assert [str(task.id) for task in held] == [chosen_id]
+
+
+def test_review_claim_answers_in_the_same_shape_as_review_next(
+    reviewer_client, session_factory, receipt_id
+):
+    """One response shape for the client, whichever way the task was taken.
+
+    Asserted as a key-set equality rather than a spot-check of two fields: a
+    key added to one path and not the other is exactly the drift this exists to
+    catch, and it would pass any assertion that only names what it expects.
+    """
+    with session_factory() as session:
+        task = enqueue_review(session, receipt_id, reason="quick verify", priority=3)
+        task_id = str(task.id)
+        session.commit()
+
+    claimed = reviewer_client.post(f"/review/{task_id}/claim").json()
+    resumed = reviewer_client.get("/review/next").json()
+
+    assert claimed.keys() == resumed.keys()
+    assert claimed["task"].keys() == resumed["task"].keys()
+    assert claimed["receipt"].keys() == resumed["receipt"].keys()
+    assert claimed["task"]["id"] == resumed["task"]["id"]
+
+
+def test_review_claim_is_409_when_another_reviewer_holds_the_task(
+    reviewer_client, session_factory, task_id
+):
+    with session_factory() as session:
+        task = session.get(ReviewTask, task_id)
+        task.assigned_to = "bob"
+        task.state = ReviewState.IN_PROGRESS
+        session.commit()
+
+    response = reviewer_client.post(f"/review/{task_id}/claim")
+
+    assert response.status_code == 409
+    assert "bob" in response.json()["error"]["message"]
+
+
+def test_review_claim_is_409_when_the_caller_already_holds_another_task(
+    reviewer_client, session_factory, receipt_id, other_receipt_id
+):
+    """The one-task-per-reviewer rule, seen from the route.
+
+    The refusal names the task already in hand, because "you already hold one"
+    without saying which is not actionable from a list of rows that all look
+    claimable.
+    """
+    with session_factory() as session:
+        enqueue_review(session, receipt_id, reason="quick verify", priority=1)
+        second = enqueue_review(session, other_receipt_id, reason="quick verify", priority=2)
+        second_id = str(second.id)
+        session.commit()
+
+    held_id = reviewer_client.get("/review/next").json()["task"]["id"]
+    response = reviewer_client.post(f"/review/{second_id}/claim")
+
+    assert response.status_code == 409
+    assert held_id in response.json()["error"]["message"]
+
+
+def test_review_claim_is_404_for_an_unknown_task(reviewer_client):
+    """404, not 409: the row is gone and the caller's list is stale, which is a
+    different thing for a client to do about than a live row it cannot have.
+    """
+    missing = uuid.uuid4()
+    response = reviewer_client.post(f"/review/{missing}/claim")
+    assert response.status_code == 404
+
+
+def test_review_claim_lets_the_holder_reclaim_their_own_task(
+    reviewer_client, session_factory, receipt_id
+):
+    """A double-click on the list is not an error."""
+    with session_factory() as session:
+        task = enqueue_review(session, receipt_id, reason="quick verify", priority=1)
+        task_id = str(task.id)
+        session.commit()
+
+    first = reviewer_client.post(f"/review/{task_id}/claim")
+    again = reviewer_client.post(f"/review/{task_id}/claim")
+
+    assert first.status_code == 200
+    assert again.status_code == 200
+    assert again.json()["task"]["assigned_to"] == "alice"
