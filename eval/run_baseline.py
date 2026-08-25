@@ -44,7 +44,7 @@ from receipts.validate.context import ValidationContext
 
 from .golden_set import GOLDEN_DIR
 from .harness import DEFAULT_RESULTS_DIR, run_eval
-from .metrics import EvalReport, FieldBreakdown, ratio
+from .metrics import EvalReport, FieldBreakdown, ratio, tier_key
 
 #: Shown when the resolved provider is ``fake`` on the ``client=None`` path.
 _FAKE_PROVIDER_HINT = (
@@ -142,13 +142,28 @@ def run_baseline(
     # this the ladder's own record answers "which rung won" and not "why the
     # others lost", which is the question a ladder run is asked (ISSUE-018).
     discards: dict[str, dict[str, int]] = {}
+    rungs = tiers.extract_rungs
     for entry in attribution:
         if entry.pass_name != "extract":
             continue
+        # **`entry.rung` is the reader ISSUE-015 asked for, and it is load
+        # bearing rather than decorative.** `entry.model_id` cannot identify
+        # the tier when two rungs share a model and differ only in their tools
+        # answer -- the ladder ISSUE-013 measured. `rung` is the index into
+        # `extract_rungs`, so it is the only thing that resolves which of them
+        # ran. Guarded because an out-of-range index would key every count to
+        # one rung silently, which is the failure this replaces.
+        if not 0 <= entry.rung < len(rungs):
+            raise RuntimeError(
+                f"attribution names extract rung {entry.rung}, and this run "
+                f"built {len(rungs)}. The ladder and its record disagree, so "
+                f"no count keyed from it would mean anything."
+            )
+        key = tier_key(rungs[entry.rung])
         if entry.kept:
-            counts[entry.model_id] = counts.get(entry.model_id, 0) + 1
+            counts[key] = counts.get(key, 0) + 1
         else:
-            by_reason = discards.setdefault(entry.model_id, {})
+            by_reason = discards.setdefault(key, {})
             reason = entry.discarded.value
             by_reason[reason] = by_reason.get(reason, 0) + 1
     # ``None``, not ``{}``: an empty dict would read as "measured, and no rung
@@ -244,8 +259,11 @@ def format_report(report: EvalReport) -> str:
     if report.extract_rung_counts:
         rung_lines.append("  Extraction by rung:")
         rung_lines.extend(
-            f"    {model_id:32s} {count}"
-            for model_id, count in sorted(report.extract_rung_counts.items())
+            # Keyed by tier, not by model: the ` +tools`/` -tools` suffix is
+            # what tells two rungs of one model apart (ISSUE-013). Widened
+            # from 32 to fit it without pushing the count out of column.
+            f"    {tier:40s} {count}"
+            for tier, count in sorted(report.extract_rung_counts.items())
         )
 
     rule = "-" * 46

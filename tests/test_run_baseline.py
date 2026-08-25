@@ -253,6 +253,55 @@ def test_run_baseline_wires_the_ladder_and_reports_the_rung_that_was_kept(
     assert report.extract_rung_counts == {"cloud": 1}
 
 
+def test_two_rungs_of_one_model_are_counted_as_two_tiers(monkeypatch, tmp_path):
+    """ISSUE-013: design §2.2 defines a tier as `(model, use_tools)`, not a model.
+
+    Nothing forbids `VLM_MODEL_EXTRACT_FALLBACK` naming the same model as
+    `VLM_MODEL_EXTRACT` with a different tools answer, and
+    `make_pass_clients` builds exactly that ladder — measured 2026-08-21 as
+    `[('m', False), ('m', True)]`. Keyed by `model_id` alone both rungs landed
+    in one count and **the escalation was invisible in the very figure
+    ISSUE-001 asked for so that a good number could not hide one.**
+
+    **This pins `PassAttempt.rung` as a side effect, and that is deliberate
+    (ISSUE-015).** When two rungs share a `model_id`, the attempt's `model_id`
+    cannot say which rung it was — only `rung` can, because it is the index
+    into `extract_rungs`. So resolving the tier *requires* reading `rung`, and
+    a ladder that numbered every rung `0` would key both rungs to the first
+    rung's tools answer and redden here.
+    """
+    monkeypatch.setenv("VLM_PROVIDER", "ollama")
+    golden = tmp_path / "golden"
+    _write_golden(golden)
+
+    triage_client = FakeVLMClient([_triage()], model_id="triage-model")
+    # One model, two tools answers -- the constructible ladder ISSUE-013 names.
+    # `use_tools` is set on the instance rather than passed to the constructor
+    # because `FakeVLMClient` does not carry one; that is exactly why
+    # `run_repeats.rung_identity` reads it with `getattr`, and this test drives
+    # the same optional attribute the same way.
+    first = FakeVLMClient([_unparseable(), _unparseable()], model_id="m")
+    first.use_tools = False
+    second = FakeVLMClient([_good()], model_id="m")
+    second.use_tools = True
+    monkeypatch.setattr(
+        "eval.run_baseline.make_pass_clients",
+        lambda settings: PassClients(
+            triage=triage_client, extract_rungs=(first, second)
+        ),
+    )
+
+    report = run_baseline(
+        golden_dir=golden, ctx=CTX, results_dir=tmp_path / "results"
+    )
+
+    assert report.n_failed == 0, report.failures
+    # The kept rung and the discarded rung are the same MODEL and different
+    # TIERS, and the report says so.
+    assert report.extract_rung_counts == {"m +tools": 1}
+    assert report.extract_discard_counts == {"m -tools": {"read_nothing": 1}}
+
+
 def test_an_injected_client_gets_no_ladder(monkeypatch, tmp_path):
     """An injected ``client`` is one rung for every pass, as it always was.
 

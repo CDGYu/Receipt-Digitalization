@@ -16,8 +16,8 @@ import { HomeScreen } from '../src/home/HomeScreen'
  * screen reuses `fetchMetrics` rather than restating the shape.
  *
  * Nothing here asserts a class name: Vitest runs with `css: false`, so a
- * `.module.css` import echoes its keys back and a renamed class ships as
- * `class="undefined"` while every render test stays green. The last test in
+ * `.module.css` import echoes its keys back and a renamed class ships
+ * unpainted while every render test stays green. The last test in
  * this file is the one that can see that, and it reads both files as text.
  */
 
@@ -105,7 +105,7 @@ describe('the stylesheet and the component agree', () => {
   it('names no class the stylesheet does not define', () => {
     // Same guard, same reason as `nav.test.tsx`'s: Vitest runs with
     // `css: false`, so a `.module.css` import echoes its keys and a typo ships
-    // as `class="undefined"` with every render test above still green.
+    // unpainted with every render test above still green.
     // `value.test.tsx` is explicitly bounded to its own COMPONENTS list, so a
     // new component arrives unguarded unless it brings one.
     const here = dirname(fileURLToPath(import.meta.url))
@@ -122,7 +122,7 @@ describe('the stylesheet and the component agree', () => {
     for (const name of referenced) {
       expect(
         defined.has(name),
-        `styles.${name} has no .${name} rule -- it ships as class="undefined"`,
+        `styles.${name} has no .${name} rule -- it ships unpainted`,
       ).toBe(true)
     }
   })

@@ -321,6 +321,41 @@ def critical_field_accuracy(
 # --------------------------------------------------------------------------- #
 
 
+def tier_key(client: Any) -> str:
+    """One rung as a report key: the ``(model, use_tools)`` pair, rendered.
+
+    Design §2.2 defines a tier as a **pair**, not a model, and ADR-0047
+    decision 2 restates it. Keying a count by ``model_id`` alone merges two
+    rungs that differ only in their tools answer -- a ladder
+    ``make_pass_clients`` will genuinely build, measured as
+    ``[('m', False), ('m', True)]`` -- so an escalation between them vanishes
+    from the one figure that exists to make escalation visible (ISSUE-013).
+
+    ``use_tools`` is read with ``getattr`` and is genuinely optional:
+    ``OpenAICompatClient`` sets it, ``FakeVLMClient`` does not, and every
+    offline test uses a fake. Absent renders as the bare model id, which says
+    "the tools answer is not observable here" rather than asserting one --
+    the same thing ``run_repeats.rung_identity`` says with ``None``.
+
+    **This renders the same pair `rung_identity` records**, deliberately and
+    not by coincidence: that function writes the ladder into the aggregate's
+    ``config`` and this one keys the counts, so a reader joins the two by
+    model and tools. They are two renderings of one definition, which is a
+    duplication with a bound on it --
+    ``test_the_tier_key_and_the_rung_identity_agree`` fails if they drift.
+    The alternative was importing across ``run_baseline``/``run_repeats``,
+    which is a cycle: ``run_repeats`` calls ``run_baseline``.
+
+    The ``+``/``-`` suffix cannot collide with a model id: ids carry ``:`` and
+    ``/`` (``granite3.2-vision:2b``, ``gemma4:cloud``) and never a space.
+    """
+    model_id = getattr(client, "model_id", None)
+    use_tools = getattr(client, "use_tools", None)
+    if use_tools is None:
+        return f"{model_id}"
+    return f"{model_id} {'+' if use_tools else '-'}tools"
+
+
 @dataclass
 class EvalResult:
     """One receipt's scored outcome. ``field_acc`` maps dotted path -> correct."""
@@ -380,7 +415,11 @@ class EvalReport:
     p95_latency_s: float | None = None         # 6
 
     #: How many receipts each extract rung produced the *kept* extraction for,
-    #: keyed by model id. ``None`` when unobservable -- the same rule
+    #: keyed by :func:`tier_key` -- the ``(model, use_tools)`` pair design §2.2
+    #: defines a tier as. **It was keyed by model id until 2026-08-25**, which
+    #: merged two rungs differing only in their tools answer and hid exactly
+    #: the escalation this figure exists to show (ISSUE-013).
+    #: ``None`` when unobservable -- the same rule
     #: ``cost_per_receipt`` follows, and for the same reason: the injected
     #: ``pipeline_fn`` cannot see which rung ran, so a caller that measures the
     #: real pipeline (``eval.run_baseline``) fills it in. ``None``, never ``{}``:
@@ -392,8 +431,9 @@ class EvalReport:
     #: fact that everything escalated, and this is the figure that answers it.
     extract_rung_counts: dict[str, int] | None = None
 
-    #: Why each *discarded* extract rung was discarded, keyed model id -> reason
-    #: -> count. The counterpart to ``extract_rung_counts`` above, which counts
+    #: Why each *discarded* extract rung was discarded, keyed :func:`tier_key`
+    #: -> reason -> count, on the same key as the field above so a reader can
+    #: join them. The counterpart to ``extract_rung_counts`` above, which counts
     #: only the rung that was KEPT: a ladder run reporting
     #: ``{"gemma4:cloud": 1}`` said granite ran and was discarded, and which of
     #: ADR-0047 decision 3's two clauses fired was unrecoverable from the

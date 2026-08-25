@@ -20,8 +20,8 @@ import { Nav } from '../src/Nav'
  *
  * Nothing here asserts a class name against the DOM. Vitest runs with
  * `css: false`, so a `.module.css` import is a proxy that echoes its keys back
- * -- `styles.typo` renders as `class="typo"` here and as `class="undefined"` in
- * a real build. The last test in this file is the one that can see that, and it
+ * -- `styles.typo` ships unpainted in a real build. The last test in this file
+ * is the one that can see that, and it
  * reads both files as text.
  */
 
@@ -83,8 +83,8 @@ describe('the stylesheet and the component agree', () => {
   it('names no class the stylesheet does not define', () => {
     // The failure this exists to catch: Vitest runs with `css: false`, so a
     // `.module.css` import is a proxy that echoes its keys. `styles.typo`
-    // renders as `class="typo"` under every test above and as
-    // `class="undefined"` in a real build, unstyled and silent. `value.test.tsx`
+    // ships unpainted in a real build, unstyled and silent, with every test
+    // above still green. `value.test.tsx`
     // holds this guard for the components in its own COMPONENTS list and is
     // explicitly bounded to them ("it covers the components in COMPONENTS and
     // nothing else"), so a new component arrives unguarded unless it brings
@@ -117,7 +117,7 @@ describe('the stylesheet and the component agree', () => {
     for (const name of referenced) {
       expect(
         defined.has(name),
-        `styles.${name} has no .${name} rule -- it ships as class="undefined"`,
+        `styles.${name} has no .${name} rule -- it ships unpainted`,
       ).toBe(true)
     }
   })

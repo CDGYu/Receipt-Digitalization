@@ -172,10 +172,15 @@ describe('Chip — the tone is never the only signal', () => {
 //
 // The other sites in this file now say "unpainted", which is the true and
 // mechanism-free half, so there is one copy of the mechanism to keep right
-// rather than six. As of 2026-08-13 the same wrong spelling also stands in
-// `admin-screen.test.tsx`, `review-null-rule.test.tsx` (twice) and
-// `theme-control.test.tsx`, which were outside the permitted set of the round
-// that corrected it here.
+// rather than six. The same wrong spelling stood in several other test files,
+// which were outside the permitted set of the round that corrected it here;
+// they were corrected on 2026-08-25 (ISSUE-011) and no list of them is kept
+// here. **A list of the sites is what rotted, twice.** It was written as three
+// files and four sentences, and by the time it was cleared it was ten
+// sentences across five -- `nav.test.tsx` and `home-screen.test.tsx` were
+// written after the list was. The anchor outlives any count:
+// `grep -rn 'class="undefined"' frontend/tests/` should return only this
+// file's own corrective mentions.
 //
 // So: read both sides as text and check they agree, the way `tokens.test.ts`
 // reads the stylesheet rather than trusting prose. Reading the *component* as
