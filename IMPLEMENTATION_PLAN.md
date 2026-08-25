@@ -121,6 +121,13 @@ Rationale: nothing downstream can be measured without an evaluation harness and 
 **Acceptance:** `eval/golden/labels/` contains >= 50 schema-valid JSON files (a loader test parses each into `ReceiptExtraction` with no error).
 
 > Note (statistics): a >=99% precision target cannot be *validated* on a held-out set of ~20-30. Treat 99% as aspirational until the calibration set reaches the hundreds (the `corrections` table will supply this over time). Track the precision confidence interval, not just the point estimate.
+>
+> **Done as of `19c3b22`, and "the hundreds" was optimistic.** The interval is
+> now computed and printed on every run. Measured at *perfect* precision:
+> 300-of-300 still gives [98.74%, 100%] and does not clear 99%; roughly a
+> thousand does. **And the `corrections` table has supplied nothing so far —
+> zero rows, counted 2026-08-25** — because it fills only when a reviewer
+> corrects a real receipt, which needs P0.T1 first.
 
 ### Task P0.T2 — Evaluation harness (M-critical, §16) `[algorithm][backend]`
 
@@ -569,7 +576,15 @@ and the two that never did were indistinguishable from outside.)*
 
 ### Task P8.T1 — Fit confidence weights from data (review fix)
 
-> **STATUS 2026-08-23 — NOT STARTED, blocked on P0.T1.**
+> **STATUS 2026-08-25 — NOT STARTED, and the blocker is measured rather than
+> assumed: `corrections` has ZERO rows.** Counted against the local
+> `receipts.db` on 2026-08-25: `corrections` 0, `extraction_runs` 0, `receipts`
+> 1. There are no labelled outcomes to fit weights on — not few, none. A
+> logistic model over an empty table is not a smaller version of this task.
+>
+> **No code removes this.** It is P0.T1 (the golden set, 3 of 50) plus reviewers
+> actually correcting receipts, and the `corrections` table fills only when a
+> human uses the review screen on real data.
 
 - [ ] Once the `corrections` set is large enough, fit the penalty weights (or a logistic model) on labelled outcomes instead of hand-tuning; keep `explain_confidence` interpretable. Backtest against held-out data; update `config/rules.yaml`.
 - [ ] Re-calibrate the threshold. Commit results.
@@ -577,9 +592,28 @@ and the two that never did were indistinguishable from outside.)*
 
 ### Task P8.T2 — Grow the calibration set toward statistical validity
 
-> **STATUS 2026-08-23 — NOT STARTED, blocked on P0.T1.**
+> **STATUS 2026-08-25 — the second clause is DONE (`19c3b22`); the first is
+> blocked on data that does not exist.** `corrections` has **zero rows**, so
+> the set cannot be "expanded" by code. But "document the interval alongside the
+> point estimate" needed no new data and was never done, so every report printed
+> a bare percentage against a criterion that is a claim about evidence.
+>
+> **Measured at perfect precision, which is what makes this worth having:**
+>
+> | sample | precision | 95% Wilson CI | supports >= 99%? |
+> |---|---|---|---|
+> | **3 of 3** (today) | 100.00% | **[43.85%, 100%]** | no |
+> | 100 of 100 | 100.00% | [96.30%, 100%] | no |
+> | 300 of 300 | 100.00% | [98.74%, 100%] | no |
+> | 1000 of 1000 | 100.00% | [99.62%, 100%] | **yes** |
+>
+> **So the spec's >= 99% criterion needs on the order of a THOUSAND clean
+> receipts, not the 50 P0.T1 asks for.** That is the finding: 50 closes P0.T1
+> and still cannot validate the headline number. Recorded here rather than
+> quietly, because it re-scopes what "done" means for the acceptance criteria.
 
-- [ ] Expand the held-out set (from `corrections`) until a >= 99% precision claim has an acceptable confidence interval; document the interval alongside the point estimate.
+- [x] Document the interval alongside the point estimate — `19c3b22`. Wilson, not the normal approximation, which on 3-of-3 gives `1.0 +/- 1.96*sqrt(0/3)` = **[100%, 100%]** and would make a perfect run look like the criterion was met. Printed by `format_report` and committed in the results JSON.
+- [ ] Expand the held-out set (from `corrections`) until a >= 99% precision claim has an acceptable confidence interval. **Blocked: `corrections` is empty and no code fills it** — it needs reviewers correcting real receipts.
 
 ---
 
@@ -587,11 +621,24 @@ and the two that never did were indistinguishable from outside.)*
 
 ### Task P9.T1 — Self-hosted model benchmark + optional LoRA
 
-> **STATUS 2026-08-23 — NOT STARTED, blocked on P0.T1.** Note the ground has
-> shifted since this was written: the 2026-08-14 ruling is **Ollama only, no
-> hosted APIs**, so this is no longer a cost comparison against a hosted baseline.
+> **STATUS 2026-08-25 — NOT STARTED, and BOTH of its halves are blocked, each
+> for its own reason.** Note first that the ground shifted: the 2026-08-14
+> ruling is **Ollama only, no hosted APIs**, so this is no longer a cost
+> comparison against a hosted baseline — the box's "if within a couple of points
+> of hosted" compares against a thing this project no longer has.
+>
+> **The benchmark half** needs the golden set: **3 of 50** (P0.T1), and a run
+> costs ~1896s/receipt CPU-only on this box (ADR-0039). A comparison over three
+> handwritten receipts would produce a number whose interval is [43.85%, 100%]
+> — see P8.T2 — which cannot separate two models.
+>
+> **The LoRA half** says "with enough `corrections`": measured 2026-08-25, that
+> table has **zero rows**.
+>
+> Neither is a code task today. Both are P0.T1 and a person with a camera.
 
-- [ ] Benchmark an open model via `openai_compat` on the golden set; if within a couple of points of hosted, evaluate switching. With enough `corrections`, evaluate a LoRA fine-tune. Commit the comparison.
+- [ ] Benchmark an open model via `openai_compat` on the golden set. **Blocked on P0.T1 (3 of 50) and on the hosted baseline this comparison was written against no longer existing.**
+- [ ] With enough `corrections`, evaluate a LoRA fine-tune. Commit the comparison. **Blocked: `corrections` has zero rows.**
 
 ---
 
@@ -626,7 +673,13 @@ and the two that never did were indistinguishable from outside.)*
 ticked by inspection, because what they claim is a measurement nobody has taken
 — that is the honest state, not an oversight.)*
 
-- [ ] Golden set of >= 50 labelled receipts committed — **3 of 50** (P0.T1)
+- [ ] Golden set of >= 50 labelled receipts committed — **3 of 50** (P0.T1).
+      **50 closes this box and still cannot validate the >= 99% precision
+      criterion below.** Measured 2026-08-25 (P8.T2): at *perfect* precision the
+      95% interval is [43.85%, 100%] on 3 receipts, [96.30%, 100%] on 100, and
+      does not clear 99% until roughly a thousand. These two rows are a
+      collection target and an evidence threshold, and they are two different
+      numbers — ticking the first does not earn the second.
 - [x] `receipts ingest` handles JPEG, PNG, HEIC, PDF — **all four, as of
       2026-08-25** at `55f9847`. A PDF becomes one receipt per page.
       *(This row was ticked in the 2026-08-23 audit and the tick was wrong --
@@ -644,6 +697,12 @@ ticked by inspection, because what they claim is a measurement nobody has taken
       "demonstrably improves" is a measurement over a golden set of three.
 - [ ] Confidence threshold calibrated to >= 99% auto-approval precision (with a
       documented confidence interval) — blocked on the golden set (P3.T6 / P8).
+      **The "documented confidence interval" half is DONE** at `19c3b22`: every
+      report now prints the 95% Wilson interval beside the rate and commits it
+      to the results JSON. **The calibration half is blocked on evidence, and
+      the size needed is now known** — roughly a thousand clean receipts, not
+      the 50 P0.T1 collects. Measured, at perfect precision: 3 receipts give
+      [43.85%, 100%] and 300 give [98.74%, 100%].
 - [x] Review UI allows a full correction in under 60 seconds — pinned at **10s**,
       tighter than asked, by a scripted run. **Never trialled with a human**, and
       the test says so.
