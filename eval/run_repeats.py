@@ -314,6 +314,7 @@ def run_repeats(
     *,
     golden_dir: Path | None = None,
     results_root: Path | None = None,
+    max_attempts: int = 1,
 ) -> dict[str, Any]:
     """Run the baseline ``repeats`` times and write one aggregate artifact.
 
@@ -373,6 +374,8 @@ def run_repeats(
         # it has already seen, so claiming one for a run of nothing would burn
         # the id the real run wanted.
         raise ValueError(f"repeats must be at least 1, got {repeats}")
+    if max_attempts < 1:
+        raise ValueError(f"max_attempts must be at least 1, got {max_attempts}")
 
     root = Path(results_root) if results_root is not None else DEFAULT_RESULTS_DIR
     run_dir = prepare_run_dir(root, run_id)
@@ -385,13 +388,18 @@ def run_repeats(
     tiers = _baseline.make_pass_clients(settings)
 
     config = config_identity(tiers, settings)
+    config["max_attempts"] = max_attempts
     entries: list[dict[str, Any]] = []
     scored: set[str] = set()
     aggregate: dict[str, Any] = {}
 
     for index in range(1, repeats + 1):
         target = repeat_dir(run_dir, index)
-        report = _baseline.run_baseline(golden_dir=golden_dir, results_dir=target)
+        report = _baseline.run_baseline(
+            golden_dir=golden_dir,
+            results_dir=target,
+            max_attempts=max_attempts,
+        )
         # Which receipts this number is over. A clone can hold fewer labels
         # than the machine that ran it -- `eval/golden/labels/p*.json` is
         # gitignored -- so a total alone does not say what was covered.
@@ -529,6 +537,12 @@ def main(argv: list[str] | None = None) -> int:
                         help="names this run's directory; must not already exist")
     parser.add_argument("--repeats", type=int, required=True,
                         help="how many times to run the golden set")
+    parser.add_argument(
+        "--max-attempts",
+        type=int,
+        default=1,
+        help="total extraction attempts; 1 disables repair",
+    )
     parser.add_argument("--golden-dir", type=Path, default=None)
     parser.add_argument("--results-root", type=Path, default=None)
     args = parser.parse_args(argv)
@@ -542,6 +556,7 @@ def main(argv: list[str] | None = None) -> int:
             args.repeats,
             golden_dir=args.golden_dir,
             results_root=args.results_root,
+            max_attempts=args.max_attempts,
         )
     except FileExistsError:
         print(

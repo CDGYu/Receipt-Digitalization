@@ -57,6 +57,7 @@ const RECEIPT: ReceiptDetail = {
       line_total: '1000.00' as Money,
       is_template_row: null,
       modifiers: [],
+      bbox: null,
       line_confidence: '0.900' as Money,
     },
     {
@@ -69,6 +70,7 @@ const RECEIPT: ReceiptDetail = {
       line_total: '80.00' as Money,
       is_template_row: null,
       modifiers: [],
+      bbox: null,
       line_confidence: null,
     },
   ],

@@ -52,6 +52,12 @@ def _good() -> ReceiptExtraction:
     )
 
 
+def _broken() -> ReceiptExtraction:
+    extraction = _good()
+    extraction.totals.total = D("200.00")
+    return extraction
+
+
 def _no_currency() -> ReceiptExtraction:
     """The clean extraction with no currency printed (mirrors PH BIR invoices)."""
     extraction = _good()
@@ -156,6 +162,23 @@ def test_run_baseline_with_injected_client_scores_golden_set(tmp_path):
     assert report.n_auto_approved == 1
     # A results file was written under the injected results_dir.
     assert list((tmp_path / "results").glob("*.json"))
+
+
+def test_run_baseline_forwards_an_explicit_repair_budget(tmp_path):
+    golden = tmp_path / "golden"
+    _write_golden(golden)
+    client = FakeVLMClient([_triage(), _broken(), _good()])
+
+    report = run_baseline(
+        golden_dir=golden,
+        client=client,
+        ctx=CTX,
+        results_dir=tmp_path / "results",
+        max_attempts=2,
+    )
+
+    assert len(client.calls) == 3
+    assert report.critical_field_accuracy == 1.0
 
 
 def test_run_baseline_applies_configured_default_currency(monkeypatch, tmp_path):

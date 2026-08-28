@@ -554,6 +554,25 @@ def test_n_repeats_produce_n_directories_and_one_aggregate(tmp_path, monkeypatch
     ]
 
 
+def test_run_repeats_records_the_requested_extraction_budget(tmp_path, monkeypatch):
+    monkeypatch.setenv("VLM_PROVIDER", "ollama")
+    golden = tmp_path / "golden"
+    _write_golden(golden)
+    monkeypatch.setattr(
+        "eval.run_baseline.make_pass_clients", _fresh_tiers_factory(1)
+    )
+
+    aggregate = run_repeats(
+        "repair-budget",
+        1,
+        golden_dir=golden,
+        results_root=tmp_path / "results",
+        max_attempts=2,
+    )
+
+    assert aggregate["config"]["max_attempts"] == 2
+
+
 def test_the_aggregate_points_at_each_repeats_own_results_file(tmp_path, monkeypatch):
     """Relative paths, so the artifact survives being cloned anywhere."""
     monkeypatch.setenv("VLM_PROVIDER", "ollama")

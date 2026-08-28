@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
+import type { CSSProperties } from 'react'
+import type { NormalizedBBox } from '../api/types'
 import styles from './ImagePane.module.css'
 
 /** The receipt image, with the one retry its signed link needs.
@@ -66,11 +68,24 @@ import styles from './ImagePane.module.css'
 export interface ImagePaneProps {
   readonly receiptId: string
   readonly fetchUrl: (id: string) => Promise<string>
+  readonly lineItemBoxes?: readonly LineItemBox[]
+  readonly activeLineItemPosition?: number | null
+}
+
+export interface LineItemBox {
+  readonly position: number
+  readonly bbox: NormalizedBBox | null
 }
 
 interface Source {
   readonly url: string
   readonly generation: number
+}
+
+interface RenderedBox {
+  readonly position: number
+  readonly active: boolean
+  readonly style: CSSProperties
 }
 
 const ZOOM_STEP = 1.25
@@ -92,7 +107,54 @@ function messageFor(prefix: string, caught: unknown): string {
   return caught instanceof Error ? `${prefix}: ${caught.message}` : prefix
 }
 
-export function ImagePane({ receiptId, fetchUrl }: ImagePaneProps) {
+function isUnit(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 1
+}
+
+function styleForBox(bbox: NormalizedBBox | null): CSSProperties | null {
+  if (bbox === null || !Array.isArray(bbox) || bbox.length !== 4) {
+    return null
+  }
+  const [x0, y0, x1, y1] = bbox
+  if (!isUnit(x0) || !isUnit(y0) || !isUnit(x1) || !isUnit(y1)) {
+    return null
+  }
+  if (x1 <= x0 || y1 <= y0) {
+    return null
+  }
+  return {
+    left: `${x0 * 100}%`,
+    top: `${y0 * 100}%`,
+    width: `${(x1 - x0) * 100}%`,
+    height: `${(y1 - y0) * 100}%`,
+  }
+}
+
+function renderableBoxes(
+  lineItemBoxes: readonly LineItemBox[],
+  activeLineItemPosition: number | null,
+): RenderedBox[] {
+  const boxes: RenderedBox[] = []
+  for (const box of lineItemBoxes) {
+    const style = styleForBox(box.bbox)
+    if (style === null) {
+      continue
+    }
+    boxes.push({
+      position: box.position,
+      active: box.position === activeLineItemPosition,
+      style,
+    })
+  }
+  return boxes
+}
+
+export function ImagePane({
+  receiptId,
+  fetchUrl,
+  lineItemBoxes = [],
+  activeLineItemPosition = null,
+}: ImagePaneProps) {
   const [source, setSource] = useState<Source | null>(null)
   const [failure, setFailure] = useState<string | null>(null)
   const [zoom, setZoom] = useState(1)
@@ -158,6 +220,8 @@ export function ImagePane({ receiptId, fetchUrl }: ImagePaneProps) {
     })
   }
 
+  const boxes = renderableBoxes(lineItemBoxes, activeLineItemPosition)
+
   return (
     <div className={styles.pane}>
       <div className={styles.toolbar}>
@@ -197,18 +261,36 @@ export function ImagePane({ receiptId, fetchUrl }: ImagePaneProps) {
       ) : source === null ? (
         <p className={styles.loading}>Loading the receipt image…</p>
       ) : (
-        <img
-          key={source.generation}
-          className={styles.image}
-          src={source.url}
-          alt="Receipt"
-          onError={handleError}
-          // Zoom and rotation are per-instance state, not paint: they stay
-          // inline. `tests/image-pane.test.tsx` reads this attribute back
-          // verbatim (grep it for `transform: scale(1) rotate(0deg);`), so a
-          // stylesheet cannot own it.
+        <div
+          className={styles.stage}
+          // Zoom, rotation and boxes share one coordinate plane. The transform
+          // lives on the stage so the photograph and its overlay move together.
           style={{ transform: `scale(${zoom}) rotate(${rotation}deg)` }}
-        />
+        >
+          <img
+            key={source.generation}
+            className={styles.image}
+            src={source.url}
+            alt="Receipt"
+            onError={handleError}
+          />
+          {boxes.length === 0 ? null : (
+            <div className={styles.highlights} aria-hidden="true">
+              {boxes.map((box) => (
+                <span
+                  key={box.position}
+                  className={
+                    box.active
+                      ? `${styles.highlight} ${styles.highlightActive}`
+                      : styles.highlight
+                  }
+                  data-line-item-position={box.position}
+                  style={box.style}
+                />
+              ))}
+            </div>
+          )}
+        </div>
       )}
     </div>
   )

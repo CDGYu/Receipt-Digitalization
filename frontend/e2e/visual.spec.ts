@@ -195,6 +195,7 @@ function lineItem(position: number, values: Partial<LineItem> = {}): LineItem {
     line_total: null,
     is_template_row: null,
     modifiers: [],
+    bbox: null,
     line_confidence: null,
     ...values,
   }

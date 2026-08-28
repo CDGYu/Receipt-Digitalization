@@ -324,10 +324,11 @@ The rules and the repair loop exist. This phase wires them into the pipeline and
 > `run_receipt` to pretend otherwise would be the unread-prop mistake this repo
 > has already paid for once.
 >
-> **Word-level boxes are produced and nothing reads them yet.** `OcrLayer.words`
-> carries normalised 0-1 boxes matching `LineItem.bbox`'s declared convention,
-> which is what P5.T1's highlighting needs. Running OCR twice to get them
-> separately would be the expensive mistake; they cost nothing here.
+> **Word-level boxes now have one consumer.** Since 2026-08-28,
+> `process_receipt` reads `OcrLayer.words` to fill missing `LineItem.bbox` values
+> for P5.T1's highlighting, using the same normalised 0-1 convention. Running
+> OCR twice to get them separately would be the expensive mistake; they cost
+> nothing here.
 
 ### Task P2.T3 — Tall-receipt line-count cross-check (spec §18 trap)
 
@@ -462,38 +463,35 @@ The screen where the ongoing cost of the system lives. Optimise for time-per-rec
 
 ### Task P5.T1 — Review screen `[frontend]`
 
-> **STATUS 2026-08-23 — BUILT except bounding boxes.** The screen, the editable
-> fields, the keyboard flow, `explain_confidence` and the `corrections` write all
-> ship. **Bbox highlighting was never built** and is gated on P2.T2: nothing
-> produces a text layer with coordinates. The `<60s` acceptance is pinned tighter
-> than it asks — `review.spec.ts` rejects 60s as non-discriminating (a scripted
-> run takes about two seconds) and pins 10s, while saying plainly that it claims
-> nothing about a human reviewer. **No human trial has ever been run.**
+> **STATUS 2026-08-28 — BUILT.** The screen, editable fields, keyboard flow,
+> `explain_confidence`, `corrections` write, and bbox highlighting all ship. The
+> `<60s` acceptance is still pinned tighter than it asks — `review.spec.ts`
+> rejects 60s as non-discriminating (a scripted run takes about two seconds) and
+> pins 10s, while saying plainly that it claims nothing about a human reviewer.
+> **No human trial has ever been run.**
 >
-> **Four of the five boxes ticked 2026-08-25**, re-derived rather than taken
-> from the notes below them: `serializers.py:287` -> `ReviewScreen.tsx:567`
-> for the rail, `repository.py:1540` plus `test_api_write.py:348` for the
-> `corrections` write, and `review.spec.ts`'s own assertions for the test box.
-> The bbox box stays open, and a presence-grep is why it is not a close call:
-> the only `bbox` in `src/review/` is a comment saying it is **absent**.
+> The bbox gap closed on 2026-08-28: `OcrLayer.words` is now consumed by
+> `process_receipt`, missing `LineItem.bbox` values are filled only from unique
+> matching OCR text-line candidates, and `ImagePane` renders valid
+> `line_items[].bbox` rectangles over the receipt image.
 
-- [ ] Image pane on the left with **bounding-box highlighting** from `line_items[].bbox`; editable fields on the right; keyboard-first (Tab between fields, Enter to approve).
-  > **THREE OF FOUR CLAUSES ARE BUILT; the highlighting is the only one that is
-  > not — audited 2026-08-25.** `ImagePane` is mounted in `ReviewScreen`;
-  > fields are editable through `LineItemsTable`; keyboard-first is deliberate
-  > and *deviates from this box*: Tab order is native and plain Enter is left
-  > to the browser, with **Ctrl/Cmd+Enter** to approve, because a bare Enter
-  > moving focus through a form must keep working. That deviation is reasoned
-  > at the call site and is better than what this box asks for.
-  > **The highlighting is blocked on a step that appears in no plan.** A text
-  > layer now exists (`preprocess/ocr.py`, P2.T2, `3b023a4`) and its `OcrWord`s
-  > carry 0-1 boxes matching `LineItem.bbox`'s convention deliberately — but
-  > `OcrLayer.words` has **zero consumers**, `_ground_in_ocr` keeps
-  > `layer.text` and drops the geometry, and **nothing maps a word box onto a
-  > line item.** `bbox` is omitted from the frontend types on purpose. There
-  > are also **0 rows in `line_items`** to build against, and the model that
-  > runs here does not ground. Whoever takes this: it is a design step and then
-  > a feature, not the one-task green light the handoff called it.
+- [x] Image pane on the left with **bounding-box highlighting** from `line_items[].bbox`; editable fields on the right; keyboard-first (Tab between fields, Enter to approve).
+  > **BUILT 2026-08-28.** `ImagePane` is mounted in `ReviewScreen` and now
+  > receives `line_items[].bbox` from the typed API detail. Valid normalized
+  > boxes render as outline overlays in the same transformed coordinate plane as
+  > the image, and focusing a row in `LineItemsTable` activates the matching
+  > box. The fields remain editable through `LineItemsTable`.
+  >
+  > The previous data gap is closed for OCR-grounded runs: `_ground_in_ocr`
+  > keeps the raw `OcrLayer`, and `process_receipt` fills missing
+  > `LineItem.bbox` values only when one OCR text-line candidate uniquely and
+  > strongly matches the row description. Existing model-provided boxes are
+  > preserved, malformed or ambiguous geometry stays `null`, and a bbox-mapping
+  > failure cannot drop the receipt.
+  >
+  > Keyboard-first still deliberately deviates from the literal box: Tab order is
+  > native and plain Enter is left to the browser, with **Ctrl/Cmd+Enter** to
+  > approve, because a bare Enter moving focus through a form must keep working.
 - [x] Show the confidence explanation from `explain_confidence` so the reviewer sees *why* it was flagged.
   > **BUILT — audited 2026-08-25.** `ConfidenceRail` renders `confidence` and
   > `confidence_reasons`, mounted in `ReviewScreen`.

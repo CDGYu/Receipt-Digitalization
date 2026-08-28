@@ -19,6 +19,54 @@ import { ApiError } from '../src/api/client'
 afterEach(cleanup)
 
 describe('ImagePane', () => {
+  it('draws valid line-item boxes over the receipt image and marks the active one', async () => {
+    const fetchUrl = vi.fn().mockResolvedValue('/receipts/r1/image/blob?sig=s')
+    const { container } = render(
+      <ImagePane
+        receiptId="r1"
+        fetchUrl={fetchUrl}
+        lineItemBoxes={[
+          { position: 1, bbox: [0.125, 0.25, 0.5, 0.75] },
+          { position: 2, bbox: [0.5, 0.125, 0.75, 0.25] },
+        ]}
+        activeLineItemPosition={1}
+      />,
+    )
+
+    await screen.findByAltText(/receipt/i)
+
+    const active = container.querySelector<HTMLElement>('[data-line-item-position="1"]')
+    expect(active).not.toBeNull()
+    expect(active!.getAttribute('style')).toBe(
+      'left: 12.5%; top: 25%; width: 37.5%; height: 50%;',
+    )
+    expect(active!.className).toContain('highlightActive')
+    const quiet = container.querySelector<HTMLElement>('[data-line-item-position="2"]')
+    expect(quiet).not.toBeNull()
+    expect(quiet!.className).not.toContain('highlightActive')
+  })
+
+  it('drops malformed line-item boxes instead of painting guessed geometry', async () => {
+    const fetchUrl = vi.fn().mockResolvedValue('/receipts/r1/image/blob?sig=s')
+    const { container } = render(
+      <ImagePane
+        receiptId="r1"
+        fetchUrl={fetchUrl}
+        lineItemBoxes={[
+          { position: 1, bbox: null },
+          { position: 2, bbox: [0.5, 0.5, 0.25, 0.75] },
+          { position: 3, bbox: [0, 0, 1.25, 1] },
+          { position: 4, bbox: [0.25, 0.25, 0.5] as never },
+        ]}
+        activeLineItemPosition={2}
+      />,
+    )
+
+    await screen.findByAltText(/receipt/i)
+
+    expect(container.querySelector('[data-line-item-position]')).toBeNull()
+  })
+
   it('re-fetches the signed URL once when the signature has expired', async () => {
     const fetchUrl = vi
       .fn()
@@ -181,12 +229,14 @@ describe('ImagePane', () => {
     render(<ImagePane receiptId="r1" fetchUrl={fetchUrl} />)
 
     const image = await screen.findByAltText(/receipt/i)
-    expect(image.getAttribute('style')).toBe('transform: scale(1) rotate(0deg);')
+    const stage = image.parentElement as HTMLElement
+    expect(stage.getAttribute('style')).toBe('transform: scale(1) rotate(0deg);')
+    expect(image.getAttribute('style')).toBeNull()
 
     fireEvent.click(screen.getByRole('button', { name: 'Zoom in' }))
     fireEvent.click(screen.getByRole('button', { name: 'Rotate' }))
 
-    expect(screen.getByAltText(/receipt/i).getAttribute('style')).toBe(
+    expect(stage.getAttribute('style')).toBe(
       'transform: scale(1.25) rotate(90deg);',
     )
   })

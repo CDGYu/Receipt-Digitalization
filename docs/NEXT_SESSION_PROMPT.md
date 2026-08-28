@@ -237,23 +237,14 @@ figure, never blockers — and **ISSUE-034 is now the caveat that matters** (2h)
   **pinned as mounted** by mutation. This bullet asked you to rule on building a
   screen that had already shipped, for a day — found by a query, not by anyone
   re-reading it.
-- **P5.T1's bounding-box highlighting** — still never built, and **the gate
-  named here is discharged, but a bigger one nobody wrote down is in its
-  place.** R060/R061 was decided and built at `3b023a4` (P2.T2):
-  `preprocess/ocr.py` returns an `OcrLayer` of `OcrWord`s, each carrying text
-  and a 0-1 `bbox` deliberately matching `LineItem.bbox`'s convention, behind
-  `ocr_grounding_enabled` (default `False`). A text layer exists.
-  **What does not exist is the step from those words to a line item's box**, and
-  it is in no spec, no plan and no checkbox. Measured 2026-08-25 rather than
-  reasoned about: `OcrLayer.words` has **zero consumers** anywhere in `src/`,
-  because `_ground_in_ocr` keeps `layer.text` and drops the geometry;
-  `LineItem.bbox` is declared, persisted and serialised to the review UI but is
-  only ever filled by a grounding-capable model, which is not what runs here;
-  and `line_items` holds **0 rows, 0 with a bbox**. **So this is a design step
-  plus a feature, not a build**, and there is no extracted data on this box to
-  build it against. *(An earlier version of this correction called P5.T1 "the
-  one thing that became buildable" once P2.T2 landed. That was wrong, and wrong
-  in the direction that costs a session: it reads as a green light.)*
+- ~~**P5.T1's bounding-box highlighting** — still never built.~~
+  **RESOLVED 2026-08-28.** `process_receipt` now keeps `OcrLayer.words` and
+  fills missing `LineItem.bbox` values from unique, strongly matching OCR
+  text-line candidates; ambiguous or malformed geometry stays null and cannot
+  fail the receipt. The review UI types `line_items[].bbox`, draws valid boxes
+  over the image in `ImagePane`, and activates the matching box when a
+  `LineItemsTable` row receives focus. The deliberate keyboard deviation
+  remains: native Tab/plain Enter, Ctrl/Cmd+Enter to approve.
 - **P7.T1 self-consistency** — **BUILT, and this bullet was false.** It said
   `run_consistency` had **zero callers**: `pipeline.py` imports it and calls it,
   landed at `b3bc14e`, gated on `settings.consistency_enabled` **and**
@@ -2474,14 +2465,14 @@ measured text disagree, the measurement wins.**
    layer with word boxes; `_ground_in_ocr` carries its text onto the validation
    context; `ocr_grounding_enabled` defaults to `False`, so the pass costs
    nothing until someone turns it on.
-   > **The "also gates bbox highlighting" half did not come true, and that is
-   > worth more than the ruling.** A text layer was necessary for bbox and is
-   > nowhere near sufficient: `OcrLayer.words` has zero consumers,
-   > `_ground_in_ocr` keeps `layer.text` and drops the geometry, and nothing
-   > maps a word box onto a line item. That mapping is in no spec and no
-   > checkbox. **Discharging a gate is not the same as unblocking what it
-   > gated**, and this entry is left in place, struck, because the inference
-   > was made out loud here and was wrong.
+   > **The "also gates bbox highlighting" half took one more step than this
+   > ruling named.** A text layer was necessary for bbox and was not sufficient
+   > by itself; the missing word-to-line-item mapping was added on 2026-08-28.
+   > `process_receipt` now keeps the raw `OcrLayer`, maps word boxes to unique
+   > matching OCR text-line candidates, and leaves ambiguous geometry null.
+   > Discharging a gate was not the same as unblocking what it gated, and this
+   > entry is left in place, struck, because that inference was made out loud
+   > here and later corrected.
    >
    > **Superseded reasoning, kept:** defer behind item 1; a three-way choice
    > (model returns the text it read / a cheap OCR pass / drop the rules) that

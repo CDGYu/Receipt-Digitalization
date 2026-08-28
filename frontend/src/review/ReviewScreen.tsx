@@ -192,6 +192,7 @@ function submitFailure(caught: unknown, taskId: string, sentPatch: FieldMap): Su
 export function ReviewScreen() {
   const [phase, setPhase] = useState<Phase>({ kind: 'loading' })
   const [submit, setSubmit] = useState<Submit>({ kind: 'idle' })
+  const [activeLineItemPosition, setActiveLineItemPosition] = useState<number | null>(null)
   /** The task this reviewer already holds. Non-null means the queue has been
    *  charged for it and `fetchNext` must not be called again. */
   const claimed = useRef<ReviewTask | null>(null)
@@ -207,6 +208,7 @@ export function ReviewScreen() {
   const load = useCallback(async () => {
     setPhase({ kind: 'loading' })
     setSubmit({ kind: 'idle' })
+    setActiveLineItemPosition(null)
     try {
       let task = claimed.current
       if (task === null) {
@@ -557,12 +559,22 @@ export function ReviewScreen() {
    *  this region is caught by nothing (measured: a role-less sibling leaves
    *  the suite green). Reduced, not removed; ADR-0041 decision 1. */
   const hasOutcome = submit.kind !== 'idle' && submit.kind !== 'busy'
+  const lineItemBoxes = receipt.line_items.map((item) => ({
+    position: item.position,
+    bbox: item.bbox,
+  }))
   return (
     <main className={styles.screen}>
       <h1>{receipt.merchant_name_raw ?? 'Unknown merchant'}</h1>
       {/* Keyed on the receipt id so the pane starts clean for a new receipt
           rather than carrying over a stale link, a spent retry, or a failure. */}
-      <ImagePane key={receipt.id} receiptId={receipt.id} fetchUrl={fetchImageUrl} />
+      <ImagePane
+        key={receipt.id}
+        receiptId={receipt.id}
+        fetchUrl={fetchImageUrl}
+        lineItemBoxes={lineItemBoxes}
+        activeLineItemPosition={activeLineItemPosition}
+      />
       <FindingsPanel
         findings={receipt.findings}
         currentFindings={receipt.current_findings}
@@ -575,6 +587,8 @@ export function ReviewScreen() {
         fields={fields}
         onChange={edit}
         errors={fieldErrors}
+        activePosition={activeLineItemPosition}
+        onActivePositionChange={setActiveLineItemPosition}
       />
       {/* Beneath the items, which is where the summary block sits on the paper.
           `receipt.totals.tax_breakdown` is the list the API sent; `fields`

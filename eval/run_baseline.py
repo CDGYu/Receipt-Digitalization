@@ -65,6 +65,7 @@ def run_baseline(
     ctx: ValidationContext | None = None,
     results_dir: Path | None = None,
     default_currency: str | None = None,
+    max_attempts: int = 1,
 ) -> EvalReport:
     """Run the M1 pipeline over the golden set and return the eval report.
 
@@ -99,6 +100,9 @@ def run_baseline(
     The report is written under ``results_dir`` (the harness default
     ``eval/results/`` when ``None``) and returned.
     """
+    if max_attempts < 1:
+        raise ValueError(f"max_attempts must be at least 1, got {max_attempts}")
+
     golden_dir = Path(golden_dir) if golden_dir is not None else GOLDEN_DIR
     settings = get_settings()
 
@@ -130,6 +134,7 @@ def run_baseline(
             tiers.extract_rungs[1] if len(tiers.extract_rungs) > 1 else None
         ),
         attribution_sink=attribution,
+        max_attempts=max_attempts,
     )
     def _fold_rung_provenance(report: EvalReport) -> None:
         """Attach which rung produced what, **before the report is written**.

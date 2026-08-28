@@ -40,6 +40,14 @@ export interface Modifier {
   amount: Money | null
 }
 
+/** A normalized rectangle over the receipt image: `[x0, y0, x1, y1]`.
+ *
+ *  Coordinates are fractions of the rendered image plane, not money and not
+ *  pixels. The backend stores these in the same convention as `OcrWord.bbox`,
+ *  so the browser can project them as percentages without knowing the original
+ *  image size. */
+export type NormalizedBBox = readonly [number, number, number, number]
+
 export interface LineItem {
   position: number
   description_raw: string | null
@@ -61,6 +69,7 @@ export interface LineItem {
    *  omits `modifiers` and `bbox`: "they are documents, not scalars, and a
    *  reviewer edits them through the item they belong to." Render, do not edit. */
   modifiers: Modifier[]
+  bbox: NormalizedBBox | null
   line_confidence: Money | null
 }
 

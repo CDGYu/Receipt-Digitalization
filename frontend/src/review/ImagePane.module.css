@@ -10,20 +10,20 @@
  * Sunken rather than raised: the photograph sits *in* the page, below the panel
  * surfaces around it.
  *
- * **Nothing here tints, filters or overlays the image itself** (§5.5). The only
- * declarations on `.image` are ones that decide how much room it gets; its
- * pixels are the evidence.
+ * The photograph's own pixels stay untouched: no tinting, filtering, or
+ * image-level effects (§5.5). Bounding-box highlights are separate outline
+ * elements in the same coordinate plane, so they can point without becoming
+ * evidence.
  *
- * The `<img>`'s `transform` stays an inline style, untouched: it is the zoom and
- * rotation state, it is per-instance, and `tests/image-pane.test.tsx` reads
- * the style attribute back verbatim (grep it for `transform: scale(1) rotate(0deg);`), so
- * moving it into CSS would be both wrong and loud. */
+ * The stage's `transform` stays an inline style: it is the zoom and rotation
+ * state, and the overlay boxes must move in the same coordinate plane as the
+ * photograph. */
 
-/* The surround lives on the pane itself, not on a stage element wrapping the
- * image: there is no such element, and adding one would be a restructure. The
- * toolbar paints itself back to `--color-surface`, so what is left showing
- * `--color-surface-sunken` is exactly the region the image, the loading line and
- * the failure block occupy. */
+/* The surround lives on the pane itself, not on the stage element wrapping the
+ * image: the stage shrink-wraps the photograph and overlay, while the surround
+ * remains the area around them. The toolbar paints itself back to
+ * `--color-surface`, so what is left showing `--color-surface-sunken` is exactly
+ * the region the image, the loading line and the failure block occupy. */
 .pane {
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
@@ -76,12 +76,41 @@
  * in place of the padding a stage element would have carried. A block-level
  * replaced element has a definite used width, so `auto` side margins really do
  * centre it. */
-.image {
+.stage {
+  position: relative;
   display: block;
+  width: fit-content;
   max-width: calc(100% - 2 * var(--space-lg));
-  height: auto;
   margin: var(--space-lg) auto;
   transform-origin: center top;
+}
+
+.image {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+}
+
+.highlights {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.highlight {
+  position: absolute;
+  box-sizing: border-box;
+  border: 2px solid var(--color-ring);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  opacity: 0.55;
+  box-shadow: 0 0 0 1px var(--color-surface);
+}
+
+.highlightActive {
+  border-width: 3px;
+  opacity: 1;
 }
 
 /* A failure replaces the image, never the pane: the toolbar above survives and

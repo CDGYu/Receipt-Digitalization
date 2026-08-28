@@ -527,6 +527,25 @@ def test_build_eval_pipeline_runs_end_to_end_via_run_eval(tmp_path):
     assert report.auto_approval_precision == 1.0
 
 
+def test_build_eval_pipeline_spends_the_requested_repair_attempt(tmp_path):
+    golden = tmp_path / "golden"
+    labels, images = golden / "labels", golden / "images"
+    labels.mkdir(parents=True)
+    images.mkdir(parents=True)
+    (labels / "r1.json").write_text(_good().model_dump_json(), encoding="utf-8")
+    _write_png(images / "r1.png")
+
+    broken = _good()
+    broken.totals.total = D("200.00")
+    client = FakeVLMClient([_triage(), broken, _good()])
+    pipeline_fn = build_eval_pipeline(client, CTX, images, max_attempts=2)
+
+    report = run_eval(golden, pipeline_fn, results_dir=tmp_path / "results")
+
+    assert len(client.calls) == 3
+    assert report.critical_field_accuracy == 1.0
+
+
 def test_build_eval_pipeline_threads_default_currency(tmp_path):
     images = tmp_path / "images"
     _write_png(images / "r1.png")

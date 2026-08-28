@@ -10,6 +10,8 @@ export interface LineItemsTableProps {
   readonly onChange: (path: string, value: string | null) => void
   /** Server messages keyed by the same dotted paths as `fields`. */
   readonly errors?: Readonly<Record<string, string>>
+  readonly activePosition?: number | null
+  readonly onActivePositionChange?: (position: number) => void
 }
 
 /** One free-text cell, owning its error id. Extracted for the reason
@@ -97,8 +99,10 @@ function TextCell({
  * (persist/models.py:248) the way `apply_corrections`' docstring says, since the
  * UI never sends one.
  *
- * `modifiers` and `bbox` are absent for the reason `_LINE_ITEM_FIELDS` omits
- * them: they are documents, not scalars.
+ * `modifiers` stay absent from the table, and `bbox` stays absent from the
+ * editable cells, for the reason `_LINE_ITEM_FIELDS` omits them: they are
+ * documents, not scalars. `bbox` is rendered by `ImagePane` as geometry rather
+ * than corrected here as a value.
  *
  * Rows are the highlight unit. `onFocus` on the row rather than on each cell
  * because React's `onFocus` is the bubbling `focusin`, so one handler covers
@@ -126,8 +130,22 @@ function TextCell({
  * table's `display` drops its implicit ARIA role in a browser, while Testing
  * Library computes roles from the element and would never notice.
  */
-export function LineItemsTable({ items, fields, onChange, errors }: LineItemsTableProps) {
-  const [active, setActive] = useState<number | null>(null)
+export function LineItemsTable({
+  items,
+  fields,
+  onChange,
+  errors,
+  activePosition,
+  onActivePositionChange,
+}: LineItemsTableProps) {
+  const [localActive, setLocalActive] = useState<number | null>(null)
+  const active = activePosition === undefined ? localActive : activePosition
+
+  function activate(position: number): void {
+    setLocalActive(position)
+    onActivePositionChange?.(position)
+  }
+
   return (
     <section className={styles.scroller}>
       <table className={styles.table}>
@@ -150,7 +168,7 @@ export function LineItemsTable({ items, fields, onChange, errors }: LineItemsTab
               <tr
                 key={item.position}
                 className={styles.row}
-                onFocus={() => setActive(item.position)}
+                onFocus={() => activate(item.position)}
                 // **The colour is the swap this task owns; the mechanism is not.**
                 // `#fffbe6` stood here, and amber is WARN's reserved colour
                 // (ADR-0027 §2) -- a yellow row on an accounting screen reads as a

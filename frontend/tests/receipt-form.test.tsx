@@ -21,6 +21,7 @@ const ITEMS: LineItem[] = [
     line_total: '1000.00' as Money,
     is_template_row: false,
     modifiers: [],
+    bbox: null,
     line_confidence: '0.900' as Money,
   },
   {
@@ -35,6 +36,7 @@ const ITEMS: LineItem[] = [
     // pre-printed row shape ISSUE-003 describes, so `true` is the honest value.
     is_template_row: true,
     modifiers: [],
+    bbox: null,
     line_confidence: null,
   },
 ]

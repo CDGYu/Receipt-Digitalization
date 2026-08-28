@@ -55,9 +55,10 @@ class OcrLayer:
     """What a second reader saw. ``text`` is what R060/R061 consult.
 
     ``words`` carries the coordinates P5.T1's bounding-box highlighting needs and
-    that nothing else in this system produces. Nothing reads it yet; it is here
-    because the pass that yields the text yields the boxes for free, and running
-    OCR twice to get them separately would be the expensive mistake.
+    that nothing else in this system produces. ``process_receipt`` consumes them
+    to fill missing ``LineItem.bbox`` values when the row text is clearly grounded
+    in the OCR words. The pass that yields the text yields the boxes for free;
+    running OCR twice to get them separately would be the expensive mistake.
     """
 
     text: str

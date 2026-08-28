@@ -489,7 +489,12 @@ const CENSUS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
     '.button':
       'min-height, min-width, padding, border, border-radius, background, color, font-family, font-size, font-weight, line-height, cursor: pointer, transition',
     '.button:hover': 'border-color',
-    '.image': 'display: block, max-width, height: auto, margin, transform-origin',
+    '.stage': 'position: relative, display: block, width: fit-content, max-width, margin, transform-origin',
+    '.image': 'display: block, width, max-width, height: auto',
+    '.highlights': 'position: absolute, inset, pointer-events: none',
+    '.highlight':
+      'position: absolute, box-sizing: border-box, border, border-radius, background: transparent, opacity, box-shadow',
+    '.highlightActive': 'border-width, opacity',
     '.failure': 'display: flex, flex-direction: column, align-items: flex-start, gap, padding',
     '.alert': 'margin, color, font-size',
     '.loading': 'margin, padding, color, font-size, text-align: center',

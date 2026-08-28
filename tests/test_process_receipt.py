@@ -706,11 +706,30 @@ def test_the_pipeline_keeps_the_best_attempt_when_the_repair_is_worse(
 # --------------------------------------------------------------------------- #
 
 
-class _Layer:
-    """What a reader returns. Only `.text` is read by the grounding helper."""
+class _Word:
+    """One fake OCR word, shaped like ``OcrWord`` without importing the engine."""
 
-    def __init__(self, text: str) -> None:
+    def __init__(self, text: str, bbox: tuple[float, float, float, float]) -> None:
         self.text = text
+        self.bbox = bbox
+
+
+class _Layer:
+    """What a reader returns. `.words` is optional because text-only callers exist."""
+
+    def __init__(self, text: str, words: tuple[_Word, ...] = ()) -> None:
+        self.text = text
+        self.words = words
+
+
+class _LayerWithBrokenWords:
+    """A text layer whose geometry cannot be iterated."""
+
+    text = "SUPERMART INC.\nTOTAL 224.00"
+
+    @property
+    def words(self):
+        raise RuntimeError("word geometry unavailable")
 
 
 def _grounded(settings):
@@ -765,6 +784,101 @@ def test_a_text_layer_containing_the_total_leaves_R060_silent(
     )
 
     assert "R060" not in _fired(session_factory, job.id)
+
+
+def test_ocr_word_boxes_are_stored_for_matching_line_items(
+    session_factory, storage, settings
+):
+    """The image pane can only highlight boxes that survive into ``line_items``.
+
+    P2.T2 produced word boxes in the independent OCR layer, and ``LineItem.bbox``
+    already uses the same normalised convention. This is the missing bridge:
+    description words that strongly overlap one line item are unioned into that
+    row's stored bbox, while a row without enough matching words stays unboxed
+    rather than getting a guessed rectangle.
+    """
+
+    def _reader(b64: str) -> _Layer:
+        return _Layer(
+            "SUPERMART INC.\nRICE 5KG\nTOTAL 224.00",
+            (
+                _Word("RICE", (0.10, 0.20, 0.18, 0.24)),
+                _Word("5KG", (0.19, 0.20, 0.30, 0.24)),
+                _Word("TOTAL", (0.60, 0.80, 0.72, 0.84)),
+            ),
+        )
+
+    job = _job(storage)
+    _run(
+        job,
+        _Client([_triage(), _good()]),
+        session_factory,
+        storage,
+        _grounded(settings),
+        ocr_reader=_reader,
+    )
+
+    with session_factory() as session:
+        receipt = get_receipt(session, job.id)
+        by_position = {item.position: item for item in receipt.line_items}
+
+    assert by_position[0].bbox == [0.10, 0.20, 0.30, 0.24]
+    assert by_position[1].bbox is None
+
+
+def test_repeated_ocr_line_text_is_left_unboxed(
+    session_factory, storage, settings
+):
+    """A single-token row needs a unique line, not every matching word on paper."""
+    extraction = _good()
+    extraction.line_items[0].description_raw = "RICE"
+
+    def _reader(b64: str) -> _Layer:
+        return _Layer(
+            "RICE\nRICE\nTOTAL 224.00",
+            (
+                _Word("RICE", (0.10, 0.20, 0.18, 0.24)),
+                _Word("RICE", (0.60, 0.50, 0.68, 0.54)),
+                _Word("TOTAL", (0.60, 0.80, 0.72, 0.84)),
+            ),
+        )
+
+    job = _job(storage)
+    _run(
+        job,
+        _Client([_triage(), extraction]),
+        session_factory,
+        storage,
+        _grounded(settings),
+        ocr_reader=_reader,
+    )
+
+    with session_factory() as session:
+        receipt = get_receipt(session, job.id)
+        by_position = {item.position: item for item in receipt.line_items}
+
+    assert by_position[0].bbox is None
+
+
+def test_broken_ocr_word_geometry_omits_boxes_not_the_receipt(
+    session_factory, storage, settings
+):
+    """The geometry bridge is evidence for the UI, not a reason to drop a run."""
+    job = _job(storage)
+
+    result = _run(
+        job,
+        _Client([_triage(), _good()]),
+        session_factory,
+        storage,
+        _grounded(settings),
+        ocr_reader=lambda b64: _LayerWithBrokenWords(),
+    )
+
+    assert result.status is ReceiptStatus.AUTO_APPROVED
+    with session_factory() as session:
+        receipt = get_receipt(session, job.id)
+        assert [item.bbox for item in receipt.line_items] == [None, None]
 
 
 def test_grounding_is_off_by_default_and_the_reader_is_never_asked(

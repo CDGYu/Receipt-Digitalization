@@ -782,6 +782,7 @@ describe('ReviewScreen: editing and approval', () => {
           line_total: '7.00' as Money,
           is_template_row: null,
           modifiers: [],
+          bbox: [0.125, 0.25, 0.5, 0.75],
           line_confidence: null,
         },
       ],
@@ -807,6 +808,44 @@ describe('ReviewScreen: editing and approval', () => {
 
     await screen.findByText(/review queue is empty/i)
     expect(patchBody(fetchMock)).toEqual({ 'line_items[3].line_total': '7.001' })
+  })
+
+  it('activates the receipt-image box for the focused line item', async () => {
+    const withItems: ReceiptDetail = {
+      ...RECEIPT,
+      line_items: [
+        {
+          position: 3,
+          description_raw: 'AVOCADO',
+          sku: null,
+          qty: '2.000' as Money,
+          unit: null,
+          unit_price: '3.50' as Money,
+          line_total: '7.00' as Money,
+          is_template_row: null,
+          modifiers: [],
+          bbox: [0.125, 0.25, 0.5, 0.75],
+          line_confidence: null,
+        },
+      ],
+    }
+    const fetchMock = stubApi({
+      ...CLAIMED_ROUTES,
+      'GET /receipts/a1': [200, withItems],
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const user = userEvent.setup()
+
+    const { container } = render(<ReviewScreen />)
+    await screen.findByAltText(/receipt/i)
+
+    const box = container.querySelector<HTMLElement>('[data-line-item-position="3"]')
+    expect(box).not.toBeNull()
+    expect(box!.className).not.toContain('highlightActive')
+
+    await user.click(screen.getByLabelText('Qty 3'))
+
+    expect(box!.className).toContain('highlightActive')
   })
 })
 
@@ -1507,6 +1546,7 @@ describe('a refused field, beside the field', () => {
           line_total: '7.00' as Money,
           is_template_row: null,
           modifiers: [],
+          bbox: null,
           line_confidence: null,
         },
       ],

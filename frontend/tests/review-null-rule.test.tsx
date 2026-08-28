@@ -122,6 +122,7 @@ const ITEMS: LineItem[] = [
     line_total: '1000.00' as Money,
     is_template_row: null,
     modifiers: [],
+    bbox: null,
     line_confidence: '0.900' as Money,
   },
   // Every correctable column null: the case the mark exists for.
@@ -135,6 +136,7 @@ const ITEMS: LineItem[] = [
     line_total: null,
     is_template_row: null,
     modifiers: [],
+    bbox: null,
     line_confidence: null,
   },
 ]

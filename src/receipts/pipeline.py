@@ -31,6 +31,7 @@ import contextlib
 import hashlib
 import io
 import logging
+import math
 import traceback
 import uuid
 from concurrent.futures import ThreadPoolExecutor
@@ -39,7 +40,7 @@ from datetime import date as date_cls
 from decimal import Decimal
 from enum import Enum
 from pathlib import Path
-from typing import Callable, Iterable
+from typing import Callable, Iterable, Sequence
 
 from PIL import Image, UnidentifiedImageError
 from sqlalchemy.orm import Session
@@ -90,6 +91,7 @@ from .review.queue import close_review_for_receipt, enqueue_review
 from .score.confidence import ReceiptStatus, explain_confidence, route, score_confidence
 from .validate.context import ValidationContext
 from .validate.report import ValidationReport
+from .validate.rules import normalize_desc
 
 log = logging.getLogger(__name__)
 
@@ -99,6 +101,9 @@ ProgressSink = Callable[[ProgressEvent], None]
 
 #: Extensions the eval adapter searches, in order, to match a label by stem.
 DEFAULT_IMAGE_SUFFIXES: tuple[str, ...] = (".jpg", ".jpeg", ".png", ".webp")
+
+_MIN_LINE_ITEM_OCR_TOKEN_OVERLAP = 0.6
+_MIN_OCR_LINE_VERTICAL_OVERLAP = 0.5
 
 #: The stages of :func:`process_receipt`, in order. A failure in any of them
 #: routes the receipt to ``needs_review`` with that name as the reason (§18), so
@@ -441,6 +446,7 @@ def build_eval_pipeline(
     triage_client: VLMClient | None = None,
     extract_fallback_client: VLMClient | None = None,
     attribution_sink: list[PassAttempt] | None = None,
+    max_attempts: int = 1,
 ) -> Callable[[Path], tuple[ReceiptExtraction, Decimal]]:
     """Adapt the runner to :func:`eval.harness.run_eval`'s ``PipelineFn``.
 
@@ -462,6 +468,9 @@ def build_eval_pipeline(
     ``run_receipt`` consumes them, and nothing joins the two anywhere else.
     Left ``None`` -- the default, and what every caller that has not opted in
     passes -- ``client`` serves both passes and the extract ladder has one rung.
+
+    ``max_attempts`` is forwarded to :func:`run_receipt`; its default of one
+    preserves the historic single-extraction eval behavior.
 
     ``attribution_sink``, when given, is extended with every
     :class:`PassAttempt` each run produces. A caller-owned collector rather than
@@ -489,6 +498,7 @@ def build_eval_pipeline(
             image_path,
             client,
             ctx,
+            max_attempts=max_attempts,
             default_currency=default_currency,
             triage_client=triage_client,
             extract_fallback_client=extract_fallback_client,
@@ -530,6 +540,21 @@ class ProcessResult:
     failed_stage: str | None = None
     duplicate_of: uuid.UUID | None = None
     cost_usd: Decimal = Decimal("0")
+
+
+@dataclass(frozen=True)
+class _OcrGrounding:
+    ctx: ValidationContext
+    layer: object | None
+
+
+_OcrBBox = tuple[float, float, float, float]
+
+
+@dataclass
+class _OcrLine:
+    tokens: set[str] = field(default_factory=set)
+    boxes: list[_OcrBBox] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -662,14 +687,160 @@ def fan_out(*sinks: "ProgressSink | None") -> ProgressSink:
     return sink
 
 
+def _tokens(text: str | None) -> set[str]:
+    return set(normalize_desc(text or "").split())
+
+
+def _word_bbox(word: object) -> _OcrBBox | None:
+    bbox = getattr(word, "bbox", None)
+    if not isinstance(bbox, (list, tuple)) or len(bbox) != 4:
+        return None
+
+    values: list[float] = []
+    for value in bbox:
+        if (
+            isinstance(value, bool)
+            or not isinstance(value, (int, float))
+            or not math.isfinite(value)
+        ):
+            return None
+        values.append(float(value))
+
+    x0, y0, x1, y1 = values
+    if x0 < 0.0 or y0 < 0.0 or x1 > 1.0 or y1 > 1.0:
+        return None
+    if x1 <= x0 or y1 <= y0:
+        return None
+    return x0, y0, x1, y1
+
+
+def _bbox_union(boxes: Iterable[_OcrBBox]) -> list[float] | None:
+    found = list(boxes)
+    if not found:
+        return None
+    return [
+        min(box[0] for box in found),
+        min(box[1] for box in found),
+        max(box[2] for box in found),
+        max(box[3] for box in found),
+    ]
+
+
+def _same_ocr_line(line_bbox: Sequence[float], word_bbox: _OcrBBox) -> bool:
+    overlap = min(line_bbox[3], word_bbox[3]) - max(line_bbox[1], word_bbox[1])
+    if overlap <= 0:
+        return False
+
+    line_height = line_bbox[3] - line_bbox[1]
+    word_height = word_bbox[3] - word_bbox[1]
+    return (
+        overlap / min(line_height, word_height)
+        >= _MIN_OCR_LINE_VERTICAL_OVERLAP
+    )
+
+
+def _ocr_line_candidates(layer: object) -> list[tuple[set[str], list[float]]]:
+    word_boxes: list[tuple[set[str], _OcrBBox]] = []
+    for word in tuple(getattr(layer, "words", ()) or ()):
+        text_tokens = _tokens(str(getattr(word, "text", "")))
+        bbox = _word_bbox(word)
+        if text_tokens and bbox is not None:
+            word_boxes.append((text_tokens, bbox))
+    if not word_boxes:
+        return []
+
+    word_boxes.sort(key=lambda candidate: (
+        (candidate[1][1] + candidate[1][3]) / 2,
+        candidate[1][0],
+    ))
+    lines: list[_OcrLine] = []
+    for tokens, bbox in word_boxes:
+        for line in lines:
+            line_bbox = _bbox_union(line.boxes)
+            if line_bbox is not None and _same_ocr_line(line_bbox, bbox):
+                line.tokens.update(tokens)
+                line.boxes.append(bbox)
+                break
+        else:
+            lines.append(_OcrLine(tokens=set(tokens), boxes=[bbox]))
+
+    candidates: list[tuple[set[str], list[float]]] = []
+    for line in lines:
+        bbox = _bbox_union(line.boxes)
+        if line.tokens and bbox is not None:
+            candidates.append((line.tokens, bbox))
+    return candidates
+
+
+def _matching_ocr_line_box(
+    item_tokens: set[str],
+    candidates: Iterable[tuple[set[str], list[float]]],
+) -> list[float] | None:
+    best_score: tuple[float, int, int] | None = None
+    best_box: list[float] | None = None
+    ambiguous = False
+    for line_tokens, bbox in candidates:
+        matched_tokens = item_tokens & line_tokens
+        if not matched_tokens:
+            continue
+
+        coverage = len(matched_tokens) / len(item_tokens)
+        if coverage < _MIN_LINE_ITEM_OCR_TOKEN_OVERLAP:
+            continue
+
+        score = (
+            coverage,
+            len(matched_tokens),
+            -len(line_tokens - item_tokens),
+        )
+        if best_score is None or score > best_score:
+            best_score = score
+            best_box = bbox
+            ambiguous = False
+        elif score == best_score:
+            ambiguous = True
+
+    return None if ambiguous else best_box
+
+
+def _apply_ocr_line_item_boxes(
+    extraction: ReceiptExtraction, layer: object | None
+) -> None:
+    """Fill missing line-item boxes from OCR words when the match is clear.
+
+    The OCR layer and ``LineItem.bbox`` use the same 0-1 coordinate convention,
+    so the bridge is token matching, not geometry conversion. Words are grouped
+    into text-line candidates first; an item is boxed only when one candidate
+    covers enough of the description and no equally good candidate competes.
+    Existing model-provided boxes are left untouched.
+    """
+    if layer is None:
+        return
+
+    candidates = _ocr_line_candidates(layer)
+    if not candidates:
+        return
+
+    for item in extraction.line_items:
+        if item.bbox is not None:
+            continue
+        item_tokens = _tokens(item.description_raw)
+        if not item_tokens:
+            continue
+
+        bbox = _matching_ocr_line_box(item_tokens, candidates)
+        if bbox is not None:
+            item.bbox = bbox
+
+
 def _ground_in_ocr(
     ctx: ValidationContext,
     image: PreparedImage,
     *,
     settings: Settings,
     reader: "Callable[[str], object] | None" = None,
-) -> ValidationContext:
-    """Return ``ctx`` carrying an independent text layer, or unchanged.
+) -> _OcrGrounding:
+    """Return ``ctx`` carrying an independent text layer, plus the raw layer.
 
     **Returns a new context rather than assigning to the caller's.** A
     :class:`ValidationContext` handed in by a caller may be reused across
@@ -693,7 +864,7 @@ def _ground_in_ocr(
     # grounded" produce identical findings, which is the very confusion R060 and
     # R061 have been living in. A test turns the flag on.
     if not settings.ocr_grounding_enabled:
-        return ctx
+        return _OcrGrounding(ctx=ctx, layer=None)
     reader = reader or read_prepared
     try:
         layer = reader(image.b64)
@@ -702,8 +873,10 @@ def _ground_in_ocr(
             "the OCR grounding pass failed; R060/R061 will skip for this receipt",
             exc_info=True,
         )
-        return ctx
-    return replace(ctx, ocr_text=layer.text)
+        return _OcrGrounding(ctx=ctx, layer=None)
+    text = getattr(layer, "text", "")
+    return _OcrGrounding(ctx=replace(ctx, ocr_text=str(text)), layer=layer)
+
 
 
 def process_receipt(
@@ -830,6 +1003,7 @@ def process_receipt(
         if extract_fallback_client is None
         else GuardedVLMClient(extract_fallback_client, gate=gate, guard=cost_guard)
     )
+    ocr_layer: object | None = None
 
     # The heartbeat is built here rather than accepted from the caller: it
     # carries the terminal-state guarantee, and a guarantee a call site can
@@ -858,7 +1032,11 @@ def process_receipt(
             # `receipts.progress` binds a narration contract to. A new member
             # would be a change to what every screen can be told, to narrate a
             # step that is off by default.
-            ctx = _ground_in_ocr(ctx, image, settings=settings, reader=ocr_reader)
+            grounding = _ground_in_ocr(
+                ctx, image, settings=settings, reader=ocr_reader
+            )
+            ctx = grounding.ctx
+            ocr_layer = grounding.layer
 
         with _stage("dedupe", progress):
             duplicate_id = _find_duplicate_image(session_factory, job, phash)
@@ -961,6 +1139,14 @@ def process_receipt(
                         # escalates is still repaired. `run_passes` makes
                         # exactly this trade for exactly this reason.
                         outcome = probe
+
+        try:
+            _apply_ocr_line_item_boxes(outcome.extraction, ocr_layer)
+        except Exception:
+            log.warning(
+                "the OCR bbox mapping pass failed; line-item boxes will be omitted",
+                exc_info=True,
+            )
 
         # **Self-consistency, gated twice (P7.T1).** Extract n more times at a
         # non-zero temperature and score the disagreement -- an honest
