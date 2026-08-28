@@ -13,7 +13,7 @@ from decimal import Decimal
 from enum import Enum
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 # --------------------------------------------------------------------------- #
 # Enums
@@ -134,6 +134,27 @@ class ReceiptMeta(BaseModel):
     time: str | None = Field(default=None, description="HH:MM 24h")
     currency: str | None = Field(default=None, description="ISO 4217")
     decimal_convention: Literal["point", "comma"] = "point"
+
+    @field_validator("decimal_convention", mode="before")
+    @classmethod
+    def _normalize_decimal_convention(cls, v: Any) -> str:
+        """Accept common VLM synonyms and normalize to the schema's vocabulary.
+
+        Cloud models (measured: gemma4:cloud) reliably return ``"dot"`` instead
+        of ``"point"``, which fails the ``Literal`` check, causes a parse_error,
+        and downgrades the extraction to an empty ``ReceiptExtraction()`` — the
+        zero-confidence bug. Normalizing here is cheaper and narrower than
+        loosening the Literal (which tools and downstream code rely on) or
+        post-processing in every consumer.
+        """
+        if isinstance(v, str):
+            lowered = v.strip().lower()
+            if lowered in ("dot", "period", "."):
+                return "point"
+            if lowered in (",",):
+                return "comma"
+            return lowered
+        return v
     cashier: str | None = None
     terminal: str | None = None
 

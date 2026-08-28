@@ -715,13 +715,13 @@ def test_no_fallback_configured_means_no_second_rung() -> None:
 
 
 def test_the_ladder_is_built_in_one_place() -> None:
-    """`make_pass_clients` is the only builder, so there is one thing to audit.
+    """`make_extract_ladder` is the only builder a production path calls.
 
-    The old guard read `cli` and `worker` as text and forbade the name outright.
-    `worker` now names it deliberately. What replaces the ban is a narrower
-    claim that is still worth holding: `cli` does NOT build a ladder, so the
-    escalation has exactly one construction site in production code and an
-    auditor has one place to look.
+    Both `cli` and `worker` build every rung -- triage, primary and fallback --
+    through `make_extract_ladder`, and neither reaches past it to
+    `make_pass_clients` (the eval path's entry). That keeps the escalation, and
+    now the triage rung it also returns, at exactly one construction site an
+    auditor can look at.
 
     Its own 2026-08-21 note applies unchanged and is worth repeating: this reads
     source as text, so a comment naming the builder trips it, and it checks one

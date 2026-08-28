@@ -130,6 +130,7 @@ def run_baseline(
         golden_dir / "images",
         default_currency=default_currency,
         triage_client=tiers.triage,
+        triage_fallback_client=tiers.triage_fallback,
         extract_fallback_client=(
             tiers.extract_rungs[1] if len(tiers.extract_rungs) > 1 else None
         ),

@@ -275,6 +275,41 @@ class RunOutcome:
     attribution: tuple[PassAttempt, ...]
 
 
+def _triage_with_fallback(
+    image: PreparedImage,
+    primary: VLMClient,
+    fallback: VLMClient | None,
+) -> tuple[TriageResult, VLMResponse]:
+    """Triage on ``primary``, escalating to ``fallback`` when the primary fails.
+
+    The triage parallel of the extract ladder. When a triage fallback is
+    configured the ``primary`` is a probe (short ``VLM_PRIMARY_TIMEOUT_S``
+    deadline, ``max_retries=0``), so a slow local box gives up at that deadline
+    and the cloud rung answers instead -- rather than holding the receipt for
+    the full local triage time (~10m45s measured for granite).
+
+    **The escalation trigger is a raise, not "read nothing".** Unlike extract,
+    :func:`~receipts.extract.extractor.triage` returns safe defaults for a
+    parse failure and never raises for one, so there is no "read nothing" case
+    to catch here; what escalates is a transport failure (a timeout is a
+    ``VLMError``), which is exactly the probe deadline firing. With no fallback
+    (``fallback is None``) this is a plain single triage call, unchanged.
+
+    If the fallback ALSO fails, its exception propagates -- the ``triage`` stage
+    then lands the receipt in ``needs_review`` naming the stage, the same
+    terminal guarantee as before. Escalation only ever adds a second chance.
+    """
+    if fallback is None:
+        return triage(image, primary)
+    try:
+        return triage(image, primary)
+    except VLMError:
+        log.info(
+            "Triage primary failed or timed out; escalating to the triage fallback"
+        )
+        return triage(image, fallback)
+
+
 def run_receipt(
     image_path: Path,
     client: VLMClient,
@@ -283,6 +318,7 @@ def run_receipt(
     max_attempts: int = 1,
     default_currency: str | None = None,
     triage_client: VLMClient | None = None,
+    triage_fallback_client: VLMClient | None = None,
     extract_fallback_client: VLMClient | None = None,
 ) -> RunOutcome:
     """Run one receipt end to end: preprocess -> triage -> extract(+repair) ->
@@ -331,7 +367,9 @@ def run_receipt(
     image = prepare_image(image_path)
 
     triage_source = triage_client or client
-    triage_result, _triage_response = triage(image, triage_source)
+    triage_result, _triage_response = _triage_with_fallback(
+        image, triage_source, triage_fallback_client
+    )
     attribution = [PassAttempt("triage", triage_source.model_id, rung=0)]
 
     rungs: list[VLMClient] = [client]
@@ -426,6 +464,7 @@ def build_eval_pipeline(
     image_suffixes: tuple[str, ...] = DEFAULT_IMAGE_SUFFIXES,
     default_currency: str | None = None,
     triage_client: VLMClient | None = None,
+    triage_fallback_client: VLMClient | None = None,
     extract_fallback_client: VLMClient | None = None,
     attribution_sink: list[PassAttempt] | None = None,
     max_attempts: int = 1,
@@ -483,6 +522,7 @@ def build_eval_pipeline(
             max_attempts=max_attempts,
             default_currency=default_currency,
             triage_client=triage_client,
+            triage_fallback_client=triage_fallback_client,
             extract_fallback_client=extract_fallback_client,
         )
         if attribution_sink is not None:
@@ -879,6 +919,27 @@ def process_receipt(
     #: client with `make_client`, so `VLM_MODEL_EXTRACT_FALLBACK` was a setting
     #: that changed nothing for an uploaded receipt.
     extract_fallback_client: VLMClient | None = None,
+    #: The triage-pass client. **Distinct from ``client`` on purpose.** When a
+    #: fallback extract rung is configured, ``client`` (the primary extract
+    #: rung) is built as a *probe*: a short ``VLM_PRIMARY_TIMEOUT_S`` deadline
+    #: with ``max_retries=0`` so the ladder can escalate to the cloud on time.
+    #: Triage has no fallback rung to escalate to and, on a local model, takes
+    #: far longer than that probe deadline -- so running triage through
+    #: ``client`` times it out on every receipt and lands it in
+    #: ``needs_review`` (``triage: VLMTransientError: connection: Request timed
+    #: out``). ``make_pass_clients`` already builds a proper triage rung with
+    #: the full ``VLM_TIMEOUT_S`` and no probe deadline; this parameter is how
+    #: the worker hands it in. ``None`` keeps the old behaviour of reusing
+    #: ``client`` for triage, which is correct only when ``client`` is not a
+    #: probe (no fallback configured, or a test's single fake).
+    triage_client: VLMClient | None = None,
+    #: The cloud triage rung. When set, ``triage_client`` becomes a probe (short
+    #: ``VLM_PRIMARY_TIMEOUT_S`` deadline, ``max_retries=0``) and triage escalates
+    #: here on a raise/timeout -- the exact parallel of ``extract_fallback_client``
+    #: for the triage pass, so a slow local box does not hold a receipt for the
+    #: full local triage time (~10m45s measured for granite) before it can be
+    #: routed. ``None`` means triage has one rung and waits ``VLM_TIMEOUT_S``.
+    triage_fallback_client: VLMClient | None = None,
     #: Injected so the offline suite drives the grounding wiring without an
     #: OCR engine installed -- the same seam `progress` and `submit` are.
     #: `None` means "use the real reader, if settings enable it".
@@ -977,6 +1038,21 @@ def process_receipt(
     gate = gate if gate is not None else get_vlm_gate(settings)
     cost_guard = cost_guard if cost_guard is not None else CostGuard.from_settings(settings)
     guarded = GuardedVLMClient(client, gate=gate, guard=cost_guard)
+    # Triage gets its own guarded client when one was supplied, so it is not
+    # bound by the primary extract rung's probe deadline (see `triage_client`).
+    # It shares the gate and cost guard for the same reason the fallback does.
+    guarded_triage = (
+        guarded
+        if triage_client is None
+        else GuardedVLMClient(triage_client, gate=gate, guard=cost_guard)
+    )
+    # The triage fallback shares the gate and cost guard for the same reason the
+    # extract fallback does: escalating must not be a way to spend past a budget.
+    guarded_triage_fallback = (
+        None
+        if triage_fallback_client is None
+        else GuardedVLMClient(triage_fallback_client, gate=gate, guard=cost_guard)
+    )
     # The fallback shares the gate and the cost guard, deliberately: escalating
     # must not be a way to spend past a budget the first rung was held to.
     guarded_fallback = (
@@ -1033,7 +1109,9 @@ def process_receipt(
             pass
 
         with _stage("triage", progress):
-            triage_result, triage_response = triage(image, guarded)
+            triage_result, triage_response = _triage_with_fallback(
+                image, guarded_triage, guarded_triage_fallback
+            )
 
         with _stage("merchant", progress):
             hints: P.MerchantHints | None = None

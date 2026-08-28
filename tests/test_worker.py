@@ -246,9 +246,11 @@ def test_the_job_function_forwards_the_fallback_rung(monkeypatch, deps):
 
 def test_build_deps_builds_a_second_rung_when_one_is_configured(monkeypatch, tmp_path):
     """`build_deps` reads the ladder from settings rather than ignoring it."""
-    primary, cloud = object(), object()
+    triage, triage_cloud, primary, cloud = object(), object(), object(), object()
     monkeypatch.setattr(
-        worker_module, "make_extract_ladder", lambda _settings: (primary, cloud)
+        worker_module,
+        "make_extract_ladder",
+        lambda _settings: (triage, triage_cloud, primary, cloud),
     )
     monkeypatch.setattr(worker_module, "make_engine", lambda _url: make_engine("sqlite://"))
 
@@ -258,13 +260,17 @@ def test_build_deps_builds_a_second_rung_when_one_is_configured(monkeypatch, tmp
 
     assert built.client is primary
     assert built.extract_fallback_client is cloud
+    # Triage gets its own rung, not the probe primary (the timeout bug), plus its
+    # own cloud fallback so it escalates instead of waiting out a slow local box.
+    assert built.triage_client is triage
+    assert built.triage_fallback_client is triage_cloud
 
 
 def test_build_deps_leaves_the_fallback_unset_when_there_is_one_rung(monkeypatch, tmp_path):
     """The unconfigured deployment keeps its single rung and no fallback."""
-    only = object()
+    triage, only = object(), object()
     monkeypatch.setattr(
-        worker_module, "make_extract_ladder", lambda _settings: (only, None)
+        worker_module, "make_extract_ladder", lambda _settings: (triage, None, only, None)
     )
     monkeypatch.setattr(worker_module, "make_engine", lambda _url: make_engine("sqlite://"))
 
@@ -274,6 +280,11 @@ def test_build_deps_leaves_the_fallback_unset_when_there_is_one_rung(monkeypatch
 
     assert built.client is only
     assert built.extract_fallback_client is None
+    # Even with no fallback, triage is wired explicitly (here the same object a
+    # real single-rung build would return: triage == primary model, own client).
+    assert built.triage_client is triage
+    # No triage fallback configured, so no cloud triage rung.
+    assert built.triage_fallback_client is None
 
 
 def test_the_job_function_runs_the_real_pipeline_offline(deps):
@@ -598,11 +609,14 @@ def test_build_deps_wires_a_progress_factory_that_writes_where_the_reader_looks(
     # in-memory, so `make_session_factory` still gets something it can bind to.
     # (The module-level `make_engine` this lambda calls is the unpatched one --
     # `monkeypatch.setattr` rebinds the name in `worker_module`, not here.)
-    # `make_pass_clients`, not `make_client`: `build_deps` builds the extract
-    # ladder as of 2026-08-25, so that is the seam a provider-free test has to
-    # cut. A one-rung result is what an unconfigured deployment gets.
+    # `make_extract_ladder` is the one construction site `build_deps` uses, so
+    # that is the seam a provider-free test has to cut. It returns
+    # `(triage, primary, fallback)`; a one-rung result (fallback None) is what an
+    # unconfigured deployment gets.
     monkeypatch.setattr(
-        worker_module, "make_extract_ladder", lambda _settings: (object(), None)
+        worker_module,
+        "make_extract_ladder",
+        lambda _settings: (object(), None, object(), None),
     )
     monkeypatch.setattr(worker_module, "make_engine", lambda _url: make_engine("sqlite://"))
 

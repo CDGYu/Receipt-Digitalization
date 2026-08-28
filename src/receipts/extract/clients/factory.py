@@ -168,14 +168,30 @@ class PassClients:
     ``extract_rungs`` is a tuple so the shape generalises, but this milestone
     builds **at most two** rungs. A third is a new decision and is not earned by
     anything measured.
+
+    ``triage`` is the primary triage rung and ``triage_fallback`` its optional
+    cloud escalation, the exact parallel of ``extract_rungs[0]`` and
+    ``extract_rungs[1]``. ``triage_fallback`` is ``None`` unless
+    ``VLM_MODEL_TRIAGE_FALLBACK`` names a model; when it is set, ``triage``
+    becomes a probe (short ``vlm_primary_timeout_s`` deadline, ``max_retries=0``)
+    so a slow local box escalates triage after that deadline instead of holding
+    a receipt for the full local triage time (~10m45s measured for granite).
+    Kept as two fields rather than a rung tuple so every existing reader of
+    ``.triage`` -- the eval path and its tests -- is unchanged.
     """
 
     triage: VLMClient
     extract_rungs: tuple[VLMClient, ...]
+    #: The cloud triage rung, or ``None`` for one triage rung. Defaulted so
+    #: every existing construction of this object keeps working unchanged.
+    triage_fallback: VLMClient | None = None
 
 
-def make_extract_ladder(settings: Settings) -> tuple[VLMClient, VLMClient | None]:
-    """The extract rungs as ``(primary, fallback_or_None)``, for any entry point.
+def make_extract_ladder(
+    settings: Settings,
+) -> tuple[VLMClient, VLMClient | None, VLMClient, VLMClient | None]:
+    """All production rungs as
+    ``(triage_primary, triage_fallback_or_None, extract_primary, extract_fallback_or_None)``.
 
     **Exists because wiring one entry point is not wiring the feature.** On
     2026-08-25 the ladder was wired into ``worker.build_deps`` and left out of
@@ -187,11 +203,29 @@ def make_extract_ladder(settings: Settings) -> tuple[VLMClient, VLMClient | None
     given, and no ``gemma4:cloud`` row at all. Every one of those is what "the
     ladder was not on this path" looks like.
 
+    **Both passes are ladders now, and both are returned here.** Triage escalates
+    on the same ``VLM_PRIMARY_TIMEOUT_S`` deadline as extract: its primary is a
+    probe (short deadline, ``max_retries=0``) built from ``VLM_MODEL_TRIAGE``,
+    and its fallback is ``VLM_MODEL_TRIAGE_FALLBACK`` when set. Without a triage
+    fallback the triage primary keeps the full ``VLM_TIMEOUT_S`` and no probe
+    deadline -- the behaviour that fixed the earlier bug where triage rode the
+    *extract* probe and timed every receipt out at ~300s
+    (``triage: VLMTransientError: connection: Request timed out``). Returning all
+    four rungs here keeps **one** construction site for the whole thing rather
+    than letting ``worker`` and ``cli`` reach past this wrapper to the raw
+    builder.
+
     So the escalation now has **one** construction site that every runner
     shares, rather than a correct one and two that quietly do not escalate.
     """
-    rungs = make_pass_clients(settings).extract_rungs
-    return rungs[0], (rungs[1] if len(rungs) > 1 else None)
+    pass_clients = make_pass_clients(settings)
+    extract = pass_clients.extract_rungs
+    return (
+        pass_clients.triage,
+        pass_clients.triage_fallback,
+        extract[0],
+        (extract[1] if len(extract) > 1 else None),
+    )
 
 
 def _client_for(
@@ -238,44 +272,86 @@ def make_pass_clients(settings: Settings) -> PassClients:
     """
     provider = settings.vlm_provider.strip().lower()
 
-    triage = _client_for(
+    # **The triage pass is now a ladder, exactly like extract.** The primary is
+    # the local triage model (falling back to the extract model when
+    # VLM_MODEL_TRIAGE is unset); the fallback is VLM_MODEL_TRIAGE_FALLBACK when
+    # set. The probe/deadline reasoning below is identical for both passes, so
+    # it lives in `_build_ladder` and is applied to each.
+    #
+    # Triage's own tool-use flag stays `vlm_use_tools_triage` for the primary
+    # (granite loses `merchant_name_guess` with tools on -- ISSUE-001) and
+    # `vlm_use_tools_fallback` for the cloud triage rung, the same two flags the
+    # extract ladder reads for its two rungs.
+    triage_rungs = _build_ladder(
         settings,
-        model=settings.vlm_model_triage or settings.vlm_model_extract,
-        use_tools=resolve_use_tools(
+        provider,
+        primary_model=settings.vlm_model_triage or settings.vlm_model_extract,
+        primary_use_tools=resolve_use_tools(
             provider,
             explicit=settings.vlm_use_tools_triage,
             global_default=settings.vlm_use_tools,
         ),
+        fallback_model=settings.vlm_model_triage_fallback,
     )
 
-    # **The first rung's deadline is conditional on there being a second one.**
-    # `vlm_primary_timeout_s` turns the first rung into a probe that gives up at
-    # a known time so the ladder can escalate (owner ruling 2026-08-25: ten
-    # minutes on local, then cloud). With no fallback configured there is
-    # nowhere to escalate to, and cutting the only attempt short would convert a
-    # slow success into a hard failure -- so the deadline is simply not applied.
-    escalates = bool(settings.vlm_model_extract_fallback)
+    extract_rungs = _build_ladder(
+        settings,
+        provider,
+        primary_model=settings.vlm_model_extract,
+        primary_use_tools=resolve_use_tools(
+            provider, explicit=None, global_default=settings.vlm_use_tools
+        ),
+        fallback_model=settings.vlm_model_extract_fallback,
+    )
+
+    return PassClients(
+        triage=triage_rungs[0],
+        triage_fallback=triage_rungs[1] if len(triage_rungs) > 1 else None,
+        extract_rungs=extract_rungs,
+    )
+
+
+def _build_ladder(
+    settings: Settings,
+    provider: str,
+    *,
+    primary_model: str | None,
+    primary_use_tools: bool,
+    fallback_model: str | None,
+) -> tuple[VLMClient, ...]:
+    """A pass's rungs as ``(primary,)`` or ``(primary, fallback)``.
+
+    Shared by the triage and extract passes because their escalation shape is
+    identical: a probe primary that gives up at ``vlm_primary_timeout_s`` when a
+    fallback exists, then the cloud fallback.
+
+    **The primary's deadline is conditional on there being a second rung.**
+    `vlm_primary_timeout_s` turns the primary into a probe that gives up at a
+    known time so the ladder can escalate (owner ruling 2026-08-25: five minutes
+    on local, then cloud). With no fallback configured there is nowhere to
+    escalate to, and cutting the only attempt short would convert a slow success
+    into a hard failure -- so the deadline is simply not applied.
+    """
+    escalates = bool(fallback_model)
     probe_timeout = settings.vlm_primary_timeout_s if escalates else None
     rungs = [
         _client_for(
             settings,
-            model=settings.vlm_model_extract,
-            use_tools=resolve_use_tools(
-                provider, explicit=None, global_default=settings.vlm_use_tools
-            ),
+            model=primary_model,
+            use_tools=primary_use_tools,
             timeout_s=probe_timeout,
-            # Retries would multiply the deadline by three and make a "ten
-            # minute" escalation fire at thirty. Only when a deadline is
+            # Retries would multiply the deadline by three and make a "five
+            # minute" escalation fire at fifteen. Only when a deadline is
             # actually in force -- otherwise this rung keeps the SDK's own
             # resilience, which is what it has today.
             max_retries=0 if probe_timeout is not None else None,
         )
     ]
-    if settings.vlm_model_extract_fallback:
+    if fallback_model:
         rungs.append(
             _client_for(
                 settings,
-                model=settings.vlm_model_extract_fallback,
+                model=fallback_model,
                 use_tools=resolve_use_tools(
                     provider,
                     explicit=settings.vlm_use_tools_fallback,
@@ -283,5 +359,4 @@ def make_pass_clients(settings: Settings) -> PassClients:
                 ),
             )
         )
-
-    return PassClients(triage=triage, extract_rungs=tuple(rungs))
+    return tuple(rungs)

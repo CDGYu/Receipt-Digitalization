@@ -55,6 +55,16 @@ class Settings(BaseSettings):
     # there is no fallback and the ladder has exactly one rung, which is
     # today's behaviour.
     vlm_model_extract_fallback: str | None = None
+    # Maps VLM_MODEL_TRIAGE_FALLBACK. The second TRIAGE rung, the exact parallel
+    # of ``vlm_model_extract_fallback`` for the triage pass. Unset means triage
+    # has one rung and waits ``vlm_timeout_s`` for the local model -- measured at
+    # ~10m45s for granite on this box, which is the whole reason a triage
+    # fallback exists. Set to a cloud model to make triage escalate after
+    # ``vlm_primary_timeout_s`` (the same probe deadline the extract ladder
+    # uses), so a slow local box does not hold a receipt for ten minutes before
+    # it can even be routed. The triage fallback's tool-use flag comes from
+    # ``vlm_use_tools_fallback``, the same as the extract fallback.
+    vlm_model_triage_fallback: str | None = None
     # Maps VLM_USE_TOOLS_TRIAGE. Tool use for the triage rung. Not optional
     # convenience: ISSUE-001 tells a reader to set VLM_USE_TOOLS=true for the
     # cloud tier, and that is a process-wide default -- it would turn tools on

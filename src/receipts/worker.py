@@ -220,6 +220,15 @@ class WorkerDeps:
     #: existing construction of this object -- the offline suite builds it with
     #: a fake client and no fallback -- keeps working unchanged.
     extract_fallback_client: VLMClient | None = None
+    #: The triage-pass client. Built as a probe (short ``VLM_PRIMARY_TIMEOUT_S``
+    #: deadline) when a triage fallback is configured, else with the full
+    #: ``VLM_TIMEOUT_S``. ``None`` reuses ``client`` for triage -- correct for
+    #: the offline suite (a single fake). See
+    #: :func:`~receipts.pipeline.process_receipt`'s ``triage_client``.
+    triage_client: VLMClient | None = None
+    #: The cloud triage rung, or ``None`` for one triage rung. When set, triage
+    #: escalates to it after the probe deadline (``VLM_MODEL_TRIAGE_FALLBACK``).
+    triage_fallback_client: VLMClient | None = None
     ctx: ValidationContext | None = None
     #: Builds the progress sink for one receipt, the way ``session_factory``
     #: builds one session -- per job, because the key is the receipt's. ``None``
@@ -254,19 +263,32 @@ def build_deps(settings: Settings | None = None) -> WorkerDeps:
         )
 
     engine = make_engine(settings.database_url)
-    # **The ladder is built here now, not just in the eval path.** Its builder
-    # had no code caller anywhere -- it was named in one `pipeline.py` docstring
-    # and nothing else -- so `VLM_MODEL_EXTRACT_FALLBACK` was a setting that
-    # could be set and would change nothing for an uploaded receipt. `fallback`
-    # is `None` unless a fallback model is configured.
+    # **All three rungs are built here now, not just in the eval path.** The
+    # builder had no code caller anywhere -- it was named in one `pipeline.py`
+    # docstring and nothing else -- so `VLM_MODEL_EXTRACT_FALLBACK` was a setting
+    # that could be set and would change nothing for an uploaded receipt.
+    # `fallback` is `None` unless a fallback model is configured.
     #
-    # Built through `make_extract_ladder` rather than the raw builder so this
-    # path and the CLI's cannot drift: wiring only this one is how `receipts
-    # reprocess` came to run a receipt with no escalation at all.
-    primary, fallback = make_extract_ladder(settings)
+    # **Triage gets its OWN client, and that is load-bearing.** When a fallback
+    # is configured the primary extract rung is a probe -- a short
+    # `VLM_PRIMARY_TIMEOUT_S` deadline with `max_retries=0` so the ladder can
+    # escalate on time. Triage has no fallback to escalate to and, on a local
+    # model, runs far longer than that probe deadline; running it through the
+    # primary rung timed out every receipt at ~300s and parked it in
+    # `needs_review` (`triage: VLMTransientError: connection: Request timed
+    # out`). `make_extract_ladder` returns the triage rungs alongside the
+    # extract rungs, so triage is not bound by the extract probe -- and the whole
+    # ladder still has one construction site. Triage now has its own fallback:
+    # when `VLM_MODEL_TRIAGE_FALLBACK` is set, `triage` is a probe and
+    # `triage_fallback` is the cloud rung it escalates to after
+    # `VLM_PRIMARY_TIMEOUT_S`, so a slow local box does not hold a receipt for
+    # the full local triage time before it can be routed.
+    triage, triage_fallback, primary, fallback = make_extract_ladder(settings)
     return WorkerDeps(
         client=primary,
         extract_fallback_client=fallback,
+        triage_client=triage,
+        triage_fallback_client=triage_fallback,
         storage=storage,
         session_factory=make_session_factory(engine),
         settings=settings,
@@ -334,6 +356,8 @@ def process_receipt_job(
     result = process_receipt(
         job,
         client=deps.client,
+        triage_client=deps.triage_client,
+        triage_fallback_client=deps.triage_fallback_client,
         extract_fallback_client=deps.extract_fallback_client,
         storage=deps.storage,
         session_factory=deps.session_factory,

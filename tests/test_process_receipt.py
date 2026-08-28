@@ -368,6 +368,138 @@ def test_a_primary_that_read_something_is_kept_and_the_fallback_is_never_asked(
     assert fallback.calls == [], "the fallback was asked for a receipt the primary read"
 
 
+def test_triage_uses_its_own_client_not_the_extract_primary(
+    session_factory, storage, settings
+):
+    """The triage-timeout bug, pinned.
+
+    In production the primary extract rung is a *probe* (short
+    `VLM_PRIMARY_TIMEOUT_S`, `max_retries=0`) when a fallback is configured.
+    Triage has no fallback and, on a local model, runs far longer than the
+    probe deadline -- so routing triage through the primary timed every receipt
+    out at ~300s and parked it in `needs_review`
+    (`triage: VLMTransientError: connection: Request timed out`).
+
+    Here the *primary* would raise on any call, and triage still succeeds,
+    because it runs on the dedicated `triage_client`. The primary is asked only
+    for the extract pass. If triage ever fell back to `client` again, the first
+    call would raise and this test would fail at the triage stage.
+    """
+    job = _job(storage)
+    triage_client = _Client([_triage()])
+    # A primary that raises immediately: if triage touched it, the run would
+    # fail at the triage stage instead of reaching extract.
+    primary = _Client([_good()])
+
+    result = _run(
+        job, primary, session_factory, storage, settings,
+        triage_client=triage_client,
+    )
+
+    assert result.failed_stage is None
+    assert result.status is ReceiptStatus.AUTO_APPROVED
+    # Triage ran on its own client; the primary saw only the extract call.
+    assert triage_client.calls == ["TriageResult"]
+    assert primary.calls == ["ReceiptExtraction"]
+
+
+def test_triage_falls_back_to_client_when_no_triage_client_is_given(
+    session_factory, storage, settings
+):
+    """The default is unchanged: one client serves both passes.
+
+    `triage_client=None` (the offline suite, and any single-rung deployment)
+    keeps the old behaviour where `client` handles triage and extract alike, so
+    nothing that did not opt in is affected.
+    """
+    job = _job(storage)
+    client = _Client([_triage(), _good()])
+
+    result = _run(job, client, session_factory, storage, settings)
+
+    assert result.status is ReceiptStatus.AUTO_APPROVED
+    assert client.calls == ["TriageResult", "ReceiptExtraction"]
+
+
+def test_triage_escalates_to_the_fallback_when_the_probe_times_out(
+    session_factory, storage, settings
+):
+    """The whole point of the triage ladder: don't wait out a slow local box.
+
+    The triage probe raises (a `VLMTransientError` is what a
+    `VLM_PRIMARY_TIMEOUT_S` deadline produces), so triage escalates to the cloud
+    triage rung, which answers -- and the receipt is routed normally instead of
+    landing in `needs_review`.
+    """
+    job = _job(storage)
+    triage_probe = _Client([VLMTransientError("connection: timed out")])
+    triage_cloud = _Client([_triage()])
+    primary = _Client([_good()])
+
+    result = _run(
+        job, primary, session_factory, storage, settings,
+        triage_client=triage_probe,
+        triage_fallback_client=triage_cloud,
+    )
+
+    assert result.failed_stage is None
+    assert result.status is ReceiptStatus.AUTO_APPROVED
+    # The probe was asked and failed; the cloud triage rung answered.
+    assert triage_probe.calls == ["TriageResult"]
+    assert triage_cloud.calls == ["TriageResult"]
+    # Extract still ran on the primary extract rung.
+    assert primary.calls == ["ReceiptExtraction"]
+
+
+def test_triage_probe_success_never_asks_the_triage_fallback(
+    session_factory, storage, settings
+):
+    """Escalation is a fallback, not a second call. A probe that answers wins.
+
+    If the local triage rung succeeds within its deadline, the cloud triage rung
+    is never touched -- otherwise every receipt would pay for two triage calls.
+    """
+    job = _job(storage)
+    triage_probe = _Client([_triage()])
+    triage_cloud = _Client([_triage()])
+    primary = _Client([_good()])
+
+    result = _run(
+        job, primary, session_factory, storage, settings,
+        triage_client=triage_probe,
+        triage_fallback_client=triage_cloud,
+    )
+
+    assert result.status is ReceiptStatus.AUTO_APPROVED
+    assert triage_probe.calls == ["TriageResult"]
+    assert triage_cloud.calls == [], "the probe answered; the fallback was not asked"
+
+
+def test_triage_fails_only_when_both_rungs_fail(
+    session_factory, storage, settings
+):
+    """If the cloud triage rung also fails, the receipt lands in needs_review.
+
+    Escalation only ever adds a second chance; it does not swallow a genuine
+    failure of both rungs. The stage is named `triage`, the §18 terminal
+    guarantee, unchanged.
+    """
+    job = _job(storage)
+    triage_probe = _Client([VLMTransientError("connection: timed out")])
+    triage_cloud = _Client([VLMTransientError("cloud also down")])
+    primary = _Client([_good()])
+
+    result = _run(
+        job, primary, session_factory, storage, settings,
+        triage_client=triage_probe,
+        triage_fallback_client=triage_cloud,
+    )
+
+    assert triage_probe.calls == ["TriageResult"]
+    assert triage_cloud.calls == ["TriageResult"]
+    _assert_terminal_needs_review(result, session_factory, "triage")
+
+
 def test_with_no_fallback_the_single_rung_keeps_its_repair_budget(
     session_factory, storage, settings
 ):

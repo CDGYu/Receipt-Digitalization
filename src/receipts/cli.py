@@ -133,7 +133,7 @@ from sqlalchemy.exc import DBAPIError
 from config.settings import Settings, get_settings
 
 from .extract.clients.base import VLMClient
-from .extract.clients.factory import make_client, make_extract_ladder
+from .extract.clients.factory import make_extract_ladder
 from .ingest.ingest import ReceiptJob, ingest_file
 from .ingest.storage import StorageBackend, make_storage
 from .persist.models import Merchant, Receipt
@@ -820,9 +820,10 @@ def cmd_process(
 
     **``--inline``** runs :func:`~receipts.pipeline.process_receipt`
     synchronously in this process, ``--workers`` at a time, building each
-    call's client from ``client_factory`` (defaulting to
-    ``lambda: make_client(settings)``) exactly the way
-    :func:`~receipts.pipeline.process_batch` builds one client per job.
+    call's primary rung from ``client_factory`` (defaulting to the probe
+    primary from ``make_extract_ladder``) exactly the way
+    :func:`~receipts.pipeline.process_batch` builds one client per job, with a
+    shared triage rung and fallback built once from ``make_extract_ladder``.
 
     **Both loops contain per-job failures identically**
     (:data:`_UNCONTAINED`). On the inline path, ``process_receipt`` raises
@@ -895,16 +896,32 @@ def cmd_process(
 
     # An injected `client_factory` is a test seam and stays single-rung: a test
     # that hands over one scripted client must not silently acquire a second
-    # from this machine's settings. A real run builds the ladder.
-    fallback = None if client_factory is not None else make_extract_ladder(settings)[1]
-    client_factory = (
-        client_factory if client_factory is not None else (lambda: make_client(settings))
-    )
+    # from this machine's settings, and reuses that one client for triage
+    # (`triage_client=None`). A real run builds all three rungs from
+    # `make_extract_ladder`, so `receipts process` escalates and gives triage
+    # its own full-timeout client exactly like the worker does -- wiring only
+    # the worker is how these two paths drift (the factory's own docstring
+    # records an earlier instance of that drift).
+    if client_factory is not None:
+        triage_client: VLMClient | None = None
+        triage_fallback = None
+        fallback = None
+    else:
+        # The triage rungs and extract fallback (full-timeout / cloud) are shared
+        # across jobs; the per-job factory builds the primary extract probe rung
+        # fresh for thread isolation, the way this path always built its per-job
+        # client. All rungs come from the single `make_extract_ladder`
+        # construction site, which returns
+        # `(triage, triage_fallback, extract_primary, extract_fallback)`.
+        triage_client, triage_fallback, _primary, fallback = make_extract_ladder(settings)
+        client_factory = lambda: make_extract_ladder(settings)[2]  # noqa: E731
 
     def run(job: ReceiptJob) -> tuple[ReceiptJob, ProcessResult | None, BaseException | None]:
         try:
             result = process_receipt(
                 job, client=client_factory(), storage=storage,
+                triage_client=triage_client,
+                triage_fallback_client=triage_fallback,
                 extract_fallback_client=fallback,
                 session_factory=session_factory, settings=settings,
             )
@@ -1009,13 +1026,20 @@ def cmd_reprocess(
         )
         return EXIT_FAILED
 
-    # Same seam rule as `cmd_process` above.
-    fallback = None if client_factory is not None else make_extract_ladder(settings)[1]
-    client_factory = (
-        client_factory if client_factory is not None else (lambda: make_client(settings))
-    )
+    # Same seam rule as `cmd_process` above: a real run gives triage its own
+    # full-timeout client and escalates through the probe primary; an injected
+    # factory stays single-rung and reuses that one client for triage.
+    if client_factory is not None:
+        triage_client: VLMClient | None = None
+        triage_fallback = None
+        fallback = None
+    else:
+        triage_client, triage_fallback, _primary, fallback = make_extract_ladder(settings)
+        client_factory = lambda: make_extract_ladder(settings)[2]  # noqa: E731
     result = process_receipt(
         job, client=client_factory(), storage=storage,
+        triage_client=triage_client,
+        triage_fallback_client=triage_fallback,
         extract_fallback_client=fallback,
         session_factory=session_factory, settings=settings,
     )
