@@ -138,7 +138,7 @@ nothing else: a stamp cannot name the commit that writes it. The test is a
 command, not a commit and not a count:
 
 ```
-git log --oneline 7b74402..main -- ":(top,exclude)docs/MEMORY.md" ":(top,exclude)docs/NEXT_SESSION_PROMPT.md"
+git log --oneline 5236cc8..main -- ":(top,exclude)docs/MEMORY.md" ":(top,exclude)docs/NEXT_SESSION_PROMPT.md"
 git log --oneline refs/remotes/origin/main..main   # what a push would send
 git ls-remote --heads origin main                  # authoritative on what is pushed
 git branch --no-merged main                        # named FOUR on 2026-08-25
