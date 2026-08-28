@@ -68,6 +68,26 @@ class LineItem(BaseModel):
     position: int = 0
     description_raw: str = ""
     sku: str | None = None
+
+    @field_validator("description_raw", mode="before")
+    @classmethod
+    def _coerce_blank_description(cls, v: Any) -> str:
+        """Accept a ``null`` description as the empty string the default intends.
+
+        A blank template row (``is_template_row: true``) has no product text, and
+        cloud models (measured: gemma4:cloud) send those rows with
+        ``"description_raw": null`` rather than omitting the key -- so the `str`
+        default (``""``) never applies and Pydantic rejects the ``null``. That
+        one rejection fails the whole extraction, degrades it to an empty
+        `ReceiptExtraction()`, and lands a well-read receipt in `needs_review` at
+        0.000 with "total is missing". Folding ``null`` (and a non-string the
+        model might send) to the empty string keeps the row -- `is_template_row`
+        already marks it excluded from the totals -- without loosening the type
+        every consumer relies on.
+        """
+        if v is None:
+            return ""
+        return v if isinstance(v, str) else str(v)
     qty: Decimal | None = None
     unit: str | None = None
     unit_price: Decimal | None = None

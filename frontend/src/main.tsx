@@ -40,6 +40,7 @@ import { HomeScreen } from './home/HomeScreen'
 import { LoginPage } from './login/LoginPage'
 import { Nav } from './Nav'
 import navStyles from './Nav.module.css'
+import { ProcessingListScreen } from './processing/ProcessingListScreen'
 import { ReceiptsScreen } from './receipts/ReceiptsScreen'
 import { ReviewQueue } from './review/ReviewQueue'
 import { ReviewScreen } from './review/ReviewScreen'
@@ -154,6 +155,10 @@ function App() {
         // offers the one control to all of them -- so passing an identity it
         // does not read would be a prop that looks like a gate and is not one.
         <UploadScreen />
+      ) : route === 'processing' ? (
+        // No `identity`: `GET /receipts` is `require_user` with no role check,
+        // so every signed-in caller sees the same list of what is processing.
+        <ProcessingListScreen />
       ) : (
         <ReviewScreen />
       )}

@@ -134,6 +134,10 @@ vi.mock('../src/upload/UploadScreen', () => ({
   UploadScreen: () => <p>the upload screen</p>,
 }))
 
+vi.mock('../src/processing/ProcessingListScreen', () => ({
+  ProcessingListScreen: () => <p>the processing screen</p>,
+}))
+
 vi.mock('../src/login/LoginPage', () => ({
   LoginPage: () => <p>the login page</p>,
 }))
@@ -158,6 +162,7 @@ const SCREEN: Record<Route, string> = {
   admin: 'the admin screen',
   receipts: 'the receipts screen',
   upload: 'the upload screen',
+  processing: 'the processing screen',
 }
 
 /** Every `/app/` path literal `route.ts` declares, read from its source.

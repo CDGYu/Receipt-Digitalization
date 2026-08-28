@@ -24,7 +24,15 @@
  * the destination moved, because `/app/` became a landing screen that offers
  * every way forward rather than a queue that is usually empty.
  */
-export type Route = 'login' | 'home' | 'review' | 'queue' | 'admin' | 'receipts' | 'upload'
+export type Route =
+  | 'login'
+  | 'home'
+  | 'review'
+  | 'queue'
+  | 'admin'
+  | 'receipts'
+  | 'upload'
+  | 'processing'
 
 export function currentRoute(pathname: string = window.location.pathname): Route {
   if (pathname === '/app/login') {
@@ -59,6 +67,14 @@ export function currentRoute(pathname: string = window.location.pathname): Route
   // with no branch here at all.
   if (pathname.startsWith('/app/upload')) {
     return 'upload'
+  }
+  // `startsWith`, like its siblings. The list of receipts still in the pipeline
+  // -- each expandable to its live progress. A disjoint prefix from every other
+  // path here, so its position among the branches does not matter; its position
+  // above the `return` does, the same hazard the `upload` branch's comment
+  // names.
+  if (pathname.startsWith('/app/processing')) {
+    return 'processing'
   }
   // `/app/queue`, NOT `/app/review/queue`, and the reason is the invariant the
   // comment below rests on: no two of these prefixes overlap. A `/app/review`

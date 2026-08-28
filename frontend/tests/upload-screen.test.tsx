@@ -80,6 +80,15 @@ function choose(input: HTMLInputElement, file: File): void {
   fireEvent.change(input)
 }
 
+/** Several files arriving at once, the way a multi-select picker delivers them.
+ *
+ * The input carries `multiple`, so `files` is a list of more than one and the
+ * screen offers each in turn. */
+function chooseMany(input: HTMLInputElement, files: File[]): void {
+  Object.defineProperty(input, 'files', { value: files, configurable: true })
+  fireEvent.change(input)
+}
+
 function field(): HTMLInputElement {
   return screen.getByLabelText(/receipt/i) as HTMLInputElement
 }
@@ -234,7 +243,7 @@ describe('UploadScreen', () => {
     expect(alert.textContent).not.toContain('Failed to fetch')
   })
 
-  it('hands one accepted file to the processing view, in place', async () => {
+  it('appends an accepted file to the list and keeps the chooser open', async () => {
     const upload = vi
       .fn()
       .mockResolvedValue({
@@ -249,53 +258,112 @@ describe('UploadScreen', () => {
     choose(field(), jpeg())
 
     await waitFor(() => expect(upload).toHaveBeenCalledTimes(1))
-    // The file chooser is gone and the processing view is here -- same route, no
-    // navigation. A page load at this moment is the beat this design avoids.
-    await waitFor(() => expect(screen.queryByLabelText(/receipt/i)).toBeNull())
-    expect(document.body.textContent).toContain('r-1')
+    // The receipt is now followed in the list, and the chooser is STILL here --
+    // that is the batch flow: hand over one and immediately add the next, no
+    // navigation. This is the inverse of the first version, which asserted the
+    // chooser disappeared.
+    await waitFor(() => expect(document.body.textContent).toContain('r-1'))
+    expect(screen.getByLabelText(/receipt/i), 'the chooser was replaced by the receipt').toBeTruthy()
     // The injected `progress` reached the view, with the id the server just
     // returned. Without this the forwarding is deletable in silence: the view
     // falls back to the real `fetchProgress`, which rejects under jsdom straight
     // into the handler that deliberately swallows it, and `r-1` still renders
     // from the receipt pane -- so `UploadScreenProps.progress` goes back to
-    // being an unread prop. Measured as a mutation in fix round 1: with the
-    // forwarding deleted this file's other 25 tests all still pass, and this
-    // assertion is the only thing that reddens.
+    // being an unread prop.
     await waitFor(() => expect(progress).toHaveBeenCalledWith('r-1'))
+  })
+
+  it('queues several files chosen at once, one row each', async () => {
+    // The batch: `multiple` on the input and a picker that hands over more than
+    // one file. Each is uploaded and each becomes its own followed row.
+    const upload = vi
+      .fn()
+      .mockResolvedValueOnce({ receipts: [{ receipt_id: 'r-1', image_key: 'k1' }], status: 'pending' })
+      .mockResolvedValueOnce({ receipts: [{ receipt_id: 'r-2', image_key: 'k2' }], status: 'pending' })
+    const progress = vi.fn().mockResolvedValue({ status: 'pending', stage: 'triage', detail: null })
+    render(<UploadScreen upload={upload} progress={progress} />)
+
+    chooseMany(field(), [jpeg('one.jpg'), jpeg('two.jpg')])
+
+    await waitFor(() => expect(upload).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(document.body.textContent).toContain('r-1'))
+    await waitFor(() => expect(document.body.textContent).toContain('r-2'))
+    // Both files were sent, in the order they were chosen.
+    expect((upload.mock.calls[0][0] as File).name).toBe('one.jpg')
+    expect((upload.mock.calls[1][0] as File).name).toBe('two.jpg')
+    // The chooser is still open for the next batch.
+    expect(screen.getByLabelText(/receipt/i)).toBeTruthy()
+  })
+
+  it('expands one PDF into a row per page', async () => {
+    // A single file can become several receipts (ISSUE-027). Each page gets its
+    // own followed row and its own id, labelled with the page number so two rows
+    // from one file are told apart.
+    const upload = vi.fn().mockResolvedValue({
+      receipts: [
+        { receipt_id: 'p-1', image_key: 'k1' },
+        { receipt_id: 'p-2', image_key: 'k2' },
+      ],
+      status: 'pending',
+    })
+    const progress = vi.fn().mockResolvedValue({ status: 'pending', stage: null, detail: null })
+    render(<UploadScreen upload={upload} progress={progress} />)
+
+    choose(field(), new File([new Uint8Array(1)], 'invoice.pdf', { type: 'application/pdf' }))
+
+    await waitFor(() => expect(document.body.textContent).toContain('p-1'))
+    await waitFor(() => expect(document.body.textContent).toContain('p-2'))
+    const text = document.body.textContent ?? ''
+    expect(text).toContain('invoice.pdf (page 1)')
+    expect(text).toContain('invoice.pdf (page 2)')
+  })
+
+  it('offers "Upload another" once there is a receipt, and it reaches the chooser', async () => {
+    const upload = vi.fn().mockResolvedValue({
+      receipts: [{ receipt_id: 'r-1', image_key: 'k' }],
+      status: 'pending',
+    })
+    const progress = vi.fn().mockResolvedValue({ status: 'pending', stage: null, detail: null })
+    render(<UploadScreen upload={upload} progress={progress} />)
+
+    // Absent before anything is queued: the button belongs to the list, and
+    // there is no list yet.
+    expect(screen.queryByRole('button', { name: /upload another/i })).toBeNull()
+
+    choose(field(), jpeg())
+    const another = await screen.findByRole('button', { name: /upload another/i })
+
+    // It opens the same chooser rather than being a second upload path. jsdom
+    // does not open a native picker, so what is asserted is that the click
+    // reaches the input -- the control the whole flow already goes through.
+    const clicked = vi.fn()
+    field().addEventListener('click', clicked)
+    fireEvent.click(another)
+    expect(clicked).toHaveBeenCalled()
   })
 
   it('clears a refusal the moment the next attempt starts, not when it finishes', async () => {
     // A message about a file the person has already replaced is worse than no
     // message: it reads as a refusal of the file they are now looking at.
     //
-    // Observed WHILE the upload is in flight, and that is the whole design of
-    // this test. The first version asserted it after a successful upload and was
-    // **vacuous** -- success swaps the entire screen for the processing view,
-    // which has no alert region at all, so `queryByRole('alert')` was null for a
-    // reason that had nothing to do with the clear. Measured on 2026-08-24 by
-    // deleting `setError(null)` from `offer`: the whole file passed.
-    // A promise that never settles keeps the chooser on screen, so the absence
-    // of the alert is an assertion about the state and not about the branch.
+    // The chooser stays on screen throughout now, so the alert region is always
+    // present -- its absence after a fresh choice is a real assertion about the
+    // clear rather than about a screen that swapped itself away.
     const upload = vi.fn().mockReturnValue(new Promise<UploadAccepted>(() => {}))
     render(<UploadScreen upload={upload} />)
 
     const input = field()
-    // A `.txt`, not the `.pdf` this used until ISSUE-027 was fixed: a PDF is
-    // accepted now, so it would raise no alert and this test would assert the
-    // clearing of a message that was never shown.
+    // A `.txt`: an unknown suffix is refused client-side, so an alert appears.
     choose(input, new File([new Uint8Array(1)], 'notes.txt', { type: 'text/plain' }))
     expect(screen.getByRole('alert')).toBeTruthy()
 
     choose(input, jpeg())
     await waitFor(() => expect(upload).toHaveBeenCalledTimes(1))
-    expect(screen.getByLabelText(/receipt/i), 'the chooser left before anything settled').toBeTruthy()
     expect(screen.queryByRole('alert')).toBeNull()
-    // The control is shut for as long as the request is out. One photograph per
-    // request is what the route takes, and a second choice while the first is
-    // in flight would start a second upload against a screen that can only show
-    // one. Asserted here rather than in its own test because this is the only
-    // moment the suite holds the in-flight state still.
-    expect(field().hasAttribute('disabled'), 'the chooser stayed open mid-flight').toBe(true)
+    // The chooser is never shut now -- uploads are concurrent and the point is
+    // to accept the next file while the last is still going. The input carries
+    // no `disabled` attribute at any time.
+    expect(field().hasAttribute('disabled'), 'the chooser locked while sending').toBe(false)
   })
 })
 
@@ -569,8 +637,8 @@ describe('ProcessingView', () => {
     )
     fire2()
 
-    // The server's own word for what it became, echoed rather than re-worded.
-    expect(await screen.findByText(/needs_review/)).toBeTruthy()
+    // User-facing copy, not the database spelling the API reports.
+    expect(await screen.findByText(/needs reviews/)).toBeTruthy()
     // Asserted through `currentRoute` rather than against the literal the
     // subject writes. `toHaveAttribute('href', '/app/review')` is a string
     // matching itself: it stays green if the app's review path moves, and green
@@ -844,10 +912,11 @@ describe('UploadScreen drag-and-drop (P5.T2)', () => {
     expect(dragover.defaultPrevented).toBe(true)
   })
 
-  it('ignores a drop while a send is already in flight', async () => {
-    // The input is `disabled` while sending; a drop target has no such
-    // attribute, so the guard has to be in the handler or a second file
-    // overtakes the first.
+  it('accepts a drop while an earlier send is still in flight', async () => {
+    // The inverse of the first version, which rejected a second file mid-flight
+    // because the screen could only follow one. The batch flow accepts the next
+    // file while the last is still going: uploads are concurrent, so both are
+    // sent.
     const upload = vi.fn().mockReturnValue(new Promise<UploadAccepted>(() => {}))
     render(<UploadScreen upload={upload} />)
 
@@ -855,7 +924,27 @@ describe('UploadScreen drag-and-drop (P5.T2)', () => {
     await waitFor(() => expect(upload).toHaveBeenCalledTimes(1))
     drop(dropZone(), jpeg('second.jpg'))
 
-    await waitFor(() => expect(upload).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(upload).toHaveBeenCalledTimes(2))
     expect((upload.mock.calls[0][0] as File).name).toBe('first.jpg')
+    expect((upload.mock.calls[1][0] as File).name).toBe('second.jpg')
+  })
+
+  it('sends every file in a multi-file drop', async () => {
+    // A drop can carry a whole selection. `accept` does not apply to a drop, so
+    // each file still goes through `rejectionReason`; here all are valid.
+    const upload = vi.fn().mockResolvedValue({
+      receipts: [{ receipt_id: 'r-1', image_key: 'k' }],
+      status: 'pending',
+    })
+    const progress = vi.fn().mockResolvedValue({ status: 'pending', stage: null, detail: null })
+    render(<UploadScreen upload={upload} progress={progress} />)
+
+    fireEvent.drop(dropZone(), {
+      dataTransfer: { files: [jpeg('a.jpg'), jpeg('b.jpg')], types: ['Files'] },
+    })
+
+    await waitFor(() => expect(upload).toHaveBeenCalledTimes(2))
+    expect((upload.mock.calls[0][0] as File).name).toBe('a.jpg')
+    expect((upload.mock.calls[1][0] as File).name).toBe('b.jpg')
   })
 })

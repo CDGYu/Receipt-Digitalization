@@ -752,17 +752,26 @@ const CENSUS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
     // shape that provokes vestibular symptoms, and the sentence beside it
     // carries the whole message without it.
     '@media (prefers-reduced-motion: reduce) .spinner': 'animation: none',
-    // The one moment the card refuses a file. Before this, `disabled` was set on
-    // the input and nothing about the card changed -- so the state that turns a
-    // second drop away looked exactly like the state that wants one.
-    '.busy': 'opacity, cursor: not-allowed',
-    '.busy .cta': 'border-color, background',
-    // `.dragging` and `.busy` can both be set at once -- a drag entered while an
-    // upload is in flight -- and they set DISJOINT properties: `.busy` is
-    // opacity and cursor, `.dragging` is border and background. So both apply
-    // and the source order between them decides nothing. Stated because the
-    // tempting explanation ("`.busy` is last so it wins") is false twice over:
-    // it is not last, and nothing it sets is contested.
+    // The batch appended below the chooser. `.busy`/`.busy .cta` were removed
+    // when the single-flight lock went: uploads are concurrent now and the
+    // chooser never dims, so the state those painted no longer exists. In their
+    // place, the session list: how many are queued, the "Upload another" button,
+    // the receipts themselves, and the batch-level exit.
+    '.queued': 'display: flex, flex-direction: column, gap',
+    '.queuedHead': 'display: flex, align-items: center, justify-content: space-between, gap',
+    '.queuedHeading': 'margin, font-family, font-size, font-weight, line-height',
+    // A real `<button>` this time -- it re-opens the chooser rather than being a
+    // click target inside the label -- styled as the secondary action
+    // `ProcessingView`'s `.next` is, at the 44px touch floor.
+    '.another':
+      'flex: none, display: inline-flex, align-items: center, justify-content: center, min-height, padding, border, border-radius, background, color, font-family, font-size, font-weight, line-height, cursor: pointer',
+    '.another:hover': 'border-color, background',
+    '.another:focus-visible': 'outline, outline-offset',
+    '.queuedList': 'display: flex, flex-direction: column, gap, margin, padding, list-style: none',
+    '.queuedItem': 'min-width',
+    '.review':
+      'align-self: start, padding, border, border-radius, background, color, font-size, font-weight, line-height, text-decoration: none',
+    '.review:focus-visible': 'outline, outline-offset',
     '.dragging': 'border-color, border-style: solid, background',
   },
   // The processing view. Two columns placed by class rather than by position --
@@ -802,6 +811,41 @@ const CENSUS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
     // implicit second column rather than clamping.
     '@media (max-width: 1023px) .screen': 'grid-template-columns, padding',
     '@media (max-width: 1023px) .receipt, .steps': 'grid-column',
+  },
+  // The processing landing screen. A single column of expandable rows, placed
+  // by class -- no `>` selector for a wrapper to be added under. Derived by
+  // running `censusFor` over the file, not transcribed by eye. In source order,
+  // which the check below also enforces.
+  'processing/ProcessingListScreen.module.css': {
+    '.screen':
+      'box-sizing: border-box, display: flex, flex-direction: column, align-items: stretch, gap, max-width, margin, padding, color, font-family',
+    '.heading': 'margin, font-family, font-size, font-weight, line-height',
+    '.scope': 'margin, color, font-size, line-height',
+    // `border` before `border-left-width`, the shorthand-then-longhand order the
+    // other screens' alerts keep so the thicker left edge is not reset away.
+    '.alert':
+      'margin, padding, border, border-left-width, border-radius, background, color, font-size, line-height',
+    '.waiting': 'margin, color, font-size, line-height',
+    '.empty':
+      'margin, padding, border, border-radius, background, color, font-size, line-height, text-align: center',
+    '.list': 'display: flex, flex-direction: column, gap, margin, padding, list-style: none',
+    '.item':
+      'box-sizing: border-box, border, border-radius, background, box-shadow, overflow: hidden',
+    // The whole row is the toggle: a full-width transparent `<button>` at the
+    // 44px touch floor. `background: none` is the keyword the census pins.
+    '.rowButton':
+      'display: flex, align-items: center, gap, box-sizing: border-box, width, min-height, padding, border, background: none, color, font-family, font-size, text-align: left, cursor: pointer',
+    '.rowButton:hover': 'background',
+    '.rowButton:focus-visible': 'outline, outline-offset',
+    // One glyph, two states: it rotates on open rather than swapping to a second
+    // shape. `.chevronOpen` is the rotation; the reduced-motion block drops the
+    // transition.
+    '.chevron': 'flex: none, display: inline-flex, width, height, color, transition',
+    '.chevronOpen': 'transform',
+    '.merchant': 'flex, min-width, overflow-wrap: anywhere, font-weight, line-height',
+    '.rowId': 'flex: none, color, font-family, font-size, line-height',
+    '.panel': 'border-top, background',
+    '@media (prefers-reduced-motion: reduce) .chevron': 'transition: none',
   },
 }
 
@@ -870,7 +914,7 @@ describe('the census reads what is there, not what it hopes for', () => {
     // an exact count is what makes "found nothing" and "found one" both fail.
     // It is expected to move whenever a stylesheet is added, and the census
     // entry that must accompany it is the other half of the same step.
-    expect(files.length, 'no stylesheets found -- the whole census is vacuous').toBe(24)
+    expect(files.length, 'no stylesheets found -- the whole census is vacuous').toBe(25)
     let rules = 0
     let declarations = 0
     for (const file of files) {

@@ -43,6 +43,7 @@ const DESTINATIONS: readonly Destination[] = [
   // `/app/` lands here too, and this is the screen that offers every way on.
   { label: 'Home', href: '/app/', route: 'home' },
   { label: 'Upload', href: '/app/upload', route: 'upload' },
+  { label: 'Processing', href: '/app/processing', route: 'processing' },
   { label: 'Review', href: '/app/queue', route: 'queue', alsoCurrentFor: ['review'] },
   { label: 'Results', href: '/app/receipts', route: 'receipts' },
 ]

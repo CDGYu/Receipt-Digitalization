@@ -38,6 +38,10 @@ function terminalStatus(report: ProgressReport | null): string | null {
   return report.status
 }
 
+function statusLabel(status: string): string {
+  return status === 'needs_review' ? 'needs reviews' : status
+}
+
 /** Ask again every so often, until the caller stops it. The default `poll`.
  *
  * A seam rather than a `setInterval` written into the effect, so the tests drive
@@ -239,12 +243,17 @@ export function ProcessingView({
   const past = narration.seen.filter((name) => name !== stage)
 
   return (
-    <main className={styles.screen}>
-      <h1 className={styles.heading}>Processing</h1>
+    // A `<section>`, not a `<main>`: this view is now embedded one-per-receipt
+    // inside `UploadScreen`'s own `<main>` list, and a page has one main. The
+    // heading is an `<h2>` for the same reason -- it sits under the screen's
+    // `<h1>`. The two-column grid, the receipt pane and the steps pane are
+    // unchanged; only the outer landmark and the heading level moved, so the
+    // narration this file is tested on is untouched.
+    <section className={styles.screen}>
+      <h2 className={styles.heading}>Processing</h2>
       <p className={styles.scope}>
-        Each step appears here as this page sees the pipeline reach it. There is nothing to reload
-        and nowhere to come back to -- this page stays with the receipt until the server says it is
-        done.
+        Each step appears here as this page sees the pipeline reach it — it stays with the receipt
+        until the server says it is done.
       </p>
 
       <section className={styles.receipt}>
@@ -307,7 +316,7 @@ export function ProcessingView({
         ) : (
           <p className={styles.outcome}>
             The pipeline is done with it. The server now calls it{' '}
-            <span className={styles.status}>{finished}</span>.
+            <span className={styles.status}>{statusLabel(finished)}</span>.
           </p>
         )}
 
@@ -327,6 +336,6 @@ export function ProcessingView({
           Open the review queue
         </a>
       </section>
-    </main>
+    </section>
   )
 }
