@@ -1717,14 +1717,30 @@ Total column share a right edge at the same x, right-aligned marks paint a right
 rule and no left one, and the left-aligned Date and Merchant marks are unchanged
 -- in all three engines and both themes.
 
-### 4. The `border-radius` on a collapsed table is confirmed ignored -- STILL OPEN
+### 4. The `border-radius` on a collapsed table -- RULED AND FIXED 2026-08-25
 
-`.table` sets `border-collapse: collapse` and `border-radius: var(--radius-lg)`
-on the same rule; the corners render square in all three engines, so the radius
-declares an intent the browser discards. **Pre-existing as a pattern:**
-`admin/TaskTable.module.css` and `review/LineItemsTable.module.css` both do the
-same, so it is a repository-wide question and not this screen's. Nobody has ruled
-on it.
+**This header read "confirmed ignored -- STILL OPEN" until 2026-08-25, and it
+outlived its own resolution: the Status line at the top of this entry had
+already recorded item 4 as ruled and fixed while this sub-heading still said
+open.** The stale sub-heading is the failure ADR-0033 §3 names -- a claim that
+appears more than once, corrected in one place and not the other.
+
+**What was wrong.** `.table` set `border-collapse: collapse` and
+`border-radius: var(--radius-lg)` on the same rule; the corners rendered square
+in all three engines, so the radius declared an intent the browser discards.
+**Pre-existing as a pattern:** `admin/TaskTable.module.css` and
+`review/LineItemsTable.module.css` both did the same, so it was a
+repository-wide question and not this screen's.
+
+**The ruling and the fix are recorded in full at the top of this entry**
+(Status, 2026-08-25) and landed at `85ca42f`: honour the intent rather than
+delete the declaration -- the radius and border move from `.table` to the
+`.scroller` wrapper, which already clips (`overflow-x: auto`), across all three
+tables. `border-collapse` is untouched. It is pinned as a property over the tree
+by `frontend/tests/stylesheets.test.ts`'s
+*"never sets border-radius on the same rule that collapses its borders"*, proven
+red against all three `.table` rules before the fix, so a fourth table cannot
+reintroduce it quietly.
 
 ### What looking produced that nothing had asked for
 
