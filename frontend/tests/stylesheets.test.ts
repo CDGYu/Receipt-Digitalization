@@ -592,6 +592,10 @@ const CENSUS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
     // and jsdom has no layout. A browser could, at a glance.
     '.table th.numeric, .table td.numeric':
       'text-align: right, font-variant-numeric: tabular-nums, white-space: nowrap',
+    // The confidence column carries a `Chip` now, so it reads left like a label
+    // rather than aligning right like the money column -- only the no-wrap is
+    // declared, the left alignment is inherited from `.table th, .table td`.
+    '.confidence': 'white-space: nowrap',
     '.reason': 'color',
     '.opened': 'white-space: nowrap, font-variant-numeric: tabular-nums',
     '.mine': 'background',

@@ -113,6 +113,16 @@
   white-space: nowrap;
 }
 
+/* The confidence column holds a `Chip`, not a bare number, so it reads from the
+ * left like the label it now carries rather than aligning right like the money
+ * column beside it. `nowrap` keeps the band word and the score on one line so
+ * the chip stays a single pill. Left as the default `text-align: left` set by
+ * `.table th, .table td`, so no alignment declaration is needed here -- only the
+ * no-wrap. */
+.confidence {
+  white-space: nowrap;
+}
+
 .reason {
   color: var(--color-muted-foreground);
 }
