@@ -1,121 +1,11 @@
 import { useCallback, useEffect, useState } from 'react'
-import type { JSX } from 'react'
 import { fetchTasks } from '../api/admin'
 import { ApiError } from '../api/client'
 import { claimTask } from '../api/review'
 import { fetchReceipts } from '../api/receipts'
 import type { ReceiptSummary, ReviewTask } from '../api/types'
-import { Chip } from '../ui/Chip'
+import { ConfidenceChip } from '../ui/ConfidenceChip'
 import styles from './ReviewQueue.module.css'
-
-/** Whether decimal string `a` is `>=` decimal string `b`, WITHOUT going through
- *  a float.
- *
- *  `Number("0.850")` is `0.85` and, worse on the money path generally, drops the
- *  precision ADR-0001 forbids losing -- and the repository's no-float guard
- *  fails on any `Number(...)`/`parseFloat(...)` of a money-path value. Confidence
- *  is such a value (a `Money`-branded decimal string), so the band comparison is
- *  done on the digits instead: split each value into its whole and fraction
- *  parts, right-pad the fractions to equal length, and compare the two parts as
- *  strings. For equal-length numeric strings, lexicographic order IS numeric
- *  order, so no coercion is needed and no precision is invented.
- *
- *  Confidence is always `0.000`..`1.000` here, so the inputs are well-formed;
- *  the parser is still defensive (a missing fraction pads to "0") so a
- *  differently formatted value degrades gracefully rather than throwing. */
-function decimalAtLeast(a: string, b: string): boolean {
-  const [aWhole, aFrac = ''] = a.split('.')
-  const [bWhole, bFrac = ''] = b.split('.')
-  const width = Math.max(aFrac.length, bFrac.length)
-  const aKey = `${aWhole.padStart(3, '0')}.${aFrac.padEnd(width, '0')}`
-  const bKey = `${bWhole.padStart(3, '0')}.${bFrac.padEnd(width, '0')}`
-  return aKey >= bKey
-}
-
-type ChipTone = 'error' | 'warn' | 'info' | 'positive' | 'neutral'
-
-/** A ring glyph carrying `fill` inside it, so each band's icon differs by more
- *  than its colour (§6 -- never colour alone). `fill` is the fraction of the
- *  ring filled from the bottom, drawn as a chord: 1 is a full disc (lowest
- *  band, loudest), 0 is a bare ring (highest band). A reader who cannot
- *  separate the five tones still sees five different amounts of fill. */
-function GlyphGauge({ fill }: { fill: 0 | 1 | 2 | 3 | 4 | 5 }) {
-  // Five discrete fills. `d` is a filled path from the bottom of the ring up to
-  // the band's level; the empty and full cases are a bare ring and a whole disc.
-  const FILLS: Record<0 | 1 | 2 | 3 | 4 | 5, string | null> = {
-    0: null,
-    1: 'M4 13 A6.25 6.25 0 0 0 16 13 Z',
-    2: 'M3.9 10 A6.25 6.25 0 0 0 16.1 10 Z',
-    3: 'M3.75 10 A6.25 6.25 0 0 0 16.25 10 L16.25 6.5 A6.25 6.25 0 0 0 3.75 6.5 Z',
-    4: 'M4 7 A6.25 6.25 0 0 0 16 7 L16 5 A6.25 6.25 0 0 0 4 5 Z',
-    5: 'M10 3.75 A6.25 6.25 0 1 0 10 16.25 A6.25 6.25 0 1 0 10 3.75 Z',
-  }
-  const d = FILLS[fill]
-  return (
-    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5">
-      <circle cx="10" cy="10" r="6.25" />
-      {d === null ? null : <path d={d} fill="currentColor" stroke="none" />}
-    </svg>
-  )
-}
-
-/** No score to band: a bare ring, the neutral placeholder. */
-function GlyphUnknown() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5">
-      <circle cx="10" cy="10" r="6.25" />
-    </svg>
-  )
-}
-
-/** The five confidence bands, lowest first -- the order a reviewer works them.
- *
- *  Fixed 0.20-wide ranges (0.00-0.20, 0.21-0.40, 0.41-0.60, 0.61-0.80,
- *  0.81-1.00), each with its own tone and its own amount of gauge fill so it
- *  reads without colour. `min` is the inclusive lower bound as a decimal string;
- *  the band a score falls in is the highest whose `min` it is `>=`, so a value
- *  below every `min` (only `< 0.00`, which cannot happen) would be none. Lowest
- *  is the loudest (error, full gauge) because it most needs a human; highest is
- *  calmest (positive, empty gauge).
- *
- *  This replaced a three-band split keyed on the routing thresholds (0.60 /
- *  0.85). These even 0.20 steps are the owner's chosen buckets for triage and
- *  are deliberately independent of where the pipeline auto-approves. */
-const BANDS: readonly {
-  readonly min: string
-  readonly tone: ChipTone
-  readonly fill: 0 | 1 | 2 | 3 | 4 | 5
-  readonly label: string
-}[] = [
-  { min: '0.81', tone: 'positive', fill: 0, label: '0.81-1.00' },
-  { min: '0.61', tone: 'info', fill: 2, label: '0.61-0.80' },
-  { min: '0.41', tone: 'neutral', fill: 3, label: '0.41-0.60' },
-  { min: '0.21', tone: 'warn', fill: 4, label: '0.21-0.40' },
-  { min: '0.00', tone: 'error', fill: 5, label: '0.00-0.20' },
-]
-
-/** A confidence score as a tone, a glyph and its band, so a reviewer can see
- *  which receipts to check first without reading every number.
- *
- *  `confidence` arrives as a decimal string (`Money`) or `null`. It is compared
- *  against the band bounds AS A STRING (see `decimalAtLeast`), never coerced to
- *  a float (ADR-0001), and the exact string is what the chip shows -- so no
- *  precision is invented or lost. A `null` is the neutral "--" placeholder
- *  rather than a guessed band. */
-function confidenceBand(confidence: string | null): {
-  tone: ChipTone
-  icon: JSX.Element
-  label: string
-  value: string
-} {
-  if (confidence === null) {
-    return { tone: 'neutral', icon: <GlyphUnknown />, label: 'no score', value: '--' }
-  }
-  // The highest band whose lower bound the score meets. `BANDS` runs high to
-  // low, so the first match is the right one.
-  const band = BANDS.find((candidate) => decimalAtLeast(confidence, candidate.min)) ?? BANDS[BANDS.length - 1]
-  return { tone: band.tone, icon: <GlyphGauge fill={band.fill} />, label: band.label, value: confidence }
-}
 
 /** The review queue as rows a reviewer picks from.
  *
@@ -416,16 +306,7 @@ function QueueTable({
                   if (receipt === null) {
                     return <span className={styles.unknown}>--</span>
                   }
-                  const band = confidenceBand(receipt.confidence)
-                  return (
-                    <Chip tone={band.tone} icon={band.icon}>
-                      {/* The exact score leads -- it is what a reviewer reads off
-                          -- and the band range follows in parentheses so the
-                          bucket the tone and gauge stand for is spelled out. For
-                          a null score there is no range, just the "--" value. */}
-                      {band.value === '--' ? band.label : `${band.value} (${band.label})`}
-                    </Chip>
-                  )
+                  return <ConfidenceChip confidence={receipt.confidence} />
                 })()}
               </td>
               <td className={styles.reason}>{task.reason}</td>

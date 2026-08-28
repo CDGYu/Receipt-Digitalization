@@ -1,0 +1,219 @@
+- generic [ref=f1e2]:
+  - banner [ref=f1e3]:
+    - navigation "Screens" [ref=f1e4]:
+      - link "Home" [ref=f1e5] [cursor=pointer]:
+        - /url: /app/
+      - link "Upload" [ref=f1e6] [cursor=pointer]:
+        - /url: /app/upload
+      - link "Processing" [ref=f1e7] [cursor=pointer]:
+        - /url: /app/processing
+      - link "Review" [ref=f1e8] [cursor=pointer]:
+        - /url: /app/queue
+      - link "Results" [ref=f1e9] [cursor=pointer]:
+        - /url: /app/receipts
+      - link "Admin" [ref=f1e10] [cursor=pointer]:
+        - /url: /app/admin
+    - button "Sign out" [ref=f1e12] [cursor=pointer]
+  - main [ref=f1e13]:
+    - heading "Processed receipts" [level=1] [ref=f1e14]
+    - paragraph [ref=f1e15]: Signed in as admin (admin).
+    - paragraph [ref=f1e16]: Exactly the receipts the export workbook contains. A receipt that is still pending, or that was rejected, is out of scope for both.
+    - generic [ref=f1e17]:
+      - generic [ref=f1e18]:
+        - text: Status
+        - combobox "Status" [ref=f1e19]:
+          - option "All statuses" [selected]
+          - option "auto_approved"
+          - option "needs_review"
+          - option "reviewed"
+      - generic [ref=f1e20]:
+        - text: Confidence
+        - combobox "Confidence" [ref=f1e21]:
+          - option "Any confidence" [selected]
+          - option "0.50 and above"
+          - option "0.70 and above"
+          - option "0.90 and above"
+    - button "Export to Excel" [ref=f1e22] [cursor=pointer]
+    - region "Processed receipts" [ref=f1e23]:
+      - table [ref=f1e24]:
+        - rowgroup [ref=f1e25]:
+          - row [ref=f1e26]:
+            - columnheader "Date" [ref=f1e27]
+            - columnheader "Merchant" [ref=f1e28]
+            - columnheader "Total" [ref=f1e29]
+            - columnheader "Status" [ref=f1e30]
+            - columnheader "Confidence" [ref=f1e31]
+            - columnheader "Detail" [ref=f1e32]
+        - rowgroup [ref=f1e33]:
+          - row [ref=f1e34]:
+            - cell [ref=f1e35]:
+              - img "not extracted" [ref=f1e36]: —
+            - cell [ref=f1e37]:
+              - img "not extracted" [ref=f1e38]: —
+            - cell [ref=f1e39]:
+              - img "not extracted" [ref=f1e40]: —
+            - cell "reviewed" [ref=f1e41]
+            - cell "0.000 (0.00-0.20)" [ref=f1e47]
+            - cell [ref=f1e53]:
+              - button "View" [ref=f1e54] [cursor=pointer]
+          - row [ref=f1e55]:
+            - cell [ref=f1e56]:
+              - img "not extracted" [ref=f1e57]: —
+            - cell [ref=f1e58]:
+              - img "not extracted" [ref=f1e59]: —
+            - cell [ref=f1e60]:
+              - img "not extracted" [ref=f1e61]: —
+            - cell "reviewed" [ref=f1e62]
+            - cell "0.000 (0.00-0.20)" [ref=f1e68]
+            - cell [ref=f1e74]:
+              - button "View" [ref=f1e75] [cursor=pointer]
+          - row [ref=f1e76]:
+            - cell [ref=f1e77]:
+              - img "not extracted" [ref=f1e78]: —
+            - cell [ref=f1e79]:
+              - img "not extracted" [ref=f1e80]: —
+            - cell [ref=f1e81]:
+              - img "not extracted" [ref=f1e82]: —
+            - cell "needs review" [ref=f1e83]
+            - cell "0.000 (0.00-0.20)" [ref=f1e88]
+            - cell [ref=f1e94]:
+              - button "View" [ref=f1e95] [cursor=pointer]
+          - row [ref=f1e96]:
+            - cell [ref=f1e97]:
+              - img "not extracted" [ref=f1e98]: —
+            - cell [ref=f1e99]:
+              - img "not extracted" [ref=f1e100]: —
+            - cell [ref=f1e101]:
+              - img "not extracted" [ref=f1e102]: —
+            - cell "needs review" [ref=f1e103]
+            - cell "0.000 (0.00-0.20)" [ref=f1e108]
+            - cell [ref=f1e114]:
+              - button "View" [ref=f1e115] [cursor=pointer]
+          - row [ref=f1e116]:
+            - cell [ref=f1e117]:
+              - img "not extracted" [ref=f1e118]: —
+            - cell [ref=f1e119]:
+              - img "not extracted" [ref=f1e120]: —
+            - cell [ref=f1e121]:
+              - img "not extracted" [ref=f1e122]: —
+            - cell "reviewed" [ref=f1e123]
+            - cell "0.000 (0.00-0.20)" [ref=f1e129]
+            - cell [ref=f1e135]:
+              - button "View" [ref=f1e136] [cursor=pointer]
+          - row [ref=f1e137]:
+            - cell [ref=f1e138]:
+              - img "not extracted" [ref=f1e139]: —
+            - cell [ref=f1e140]:
+              - img "not extracted" [ref=f1e141]: —
+            - cell [ref=f1e142]:
+              - img "not extracted" [ref=f1e143]: —
+            - cell "reviewed" [ref=f1e144]
+            - cell "0.000 (0.00-0.20)" [ref=f1e150]
+            - cell [ref=f1e156]:
+              - button "View" [ref=f1e157] [cursor=pointer]
+          - row [ref=f1e158]:
+            - cell [ref=f1e159]:
+              - img "not extracted" [ref=f1e160]: —
+            - cell [ref=f1e161]:
+              - img "not extracted" [ref=f1e162]: —
+            - cell [ref=f1e163]:
+              - img "not extracted" [ref=f1e164]: —
+            - cell "needs review" [ref=f1e165]
+            - cell "0.000 (0.00-0.20)" [ref=f1e170]
+            - cell [ref=f1e176]:
+              - button "View" [ref=f1e177] [cursor=pointer]
+          - row [ref=f1e178]:
+            - cell [ref=f1e179]:
+              - img "not extracted" [ref=f1e180]: —
+            - cell [ref=f1e181]:
+              - img "not extracted" [ref=f1e182]: —
+            - cell [ref=f1e183]:
+              - img "not extracted" [ref=f1e184]: —
+            - cell "reviewed" [ref=f1e185]
+            - cell "0.000 (0.00-0.20)" [ref=f1e191]
+            - cell [ref=f1e197]:
+              - button "View" [ref=f1e198] [cursor=pointer]
+          - row [ref=f1e199]:
+            - cell [ref=f1e200]:
+              - img "not extracted" [ref=f1e201]: —
+            - cell [ref=f1e202]:
+              - img "not extracted" [ref=f1e203]: —
+            - cell [ref=f1e204]:
+              - img "not extracted" [ref=f1e205]: —
+            - cell "needs review" [ref=f1e206]
+            - cell "0.000 (0.00-0.20)" [ref=f1e211]
+            - cell [ref=f1e217]:
+              - button "View" [ref=f1e218] [cursor=pointer]
+          - row [ref=f1e219]:
+            - cell [ref=f1e220]:
+              - img "not extracted" [ref=f1e221]: —
+            - cell [ref=f1e222]:
+              - img "not extracted" [ref=f1e223]: —
+            - cell [ref=f1e224]:
+              - img "not extracted" [ref=f1e225]: —
+            - cell "reviewed" [ref=f1e226]
+            - cell "0.000 (0.00-0.20)" [ref=f1e232]
+            - cell [ref=f1e238]:
+              - button "View" [ref=f1e239] [cursor=pointer]
+          - row [ref=f1e240]:
+            - cell [ref=f1e241]:
+              - img "not extracted" [ref=f1e242]: —
+            - cell "SUMMIT FUEL OPC" [ref=f1e243]
+            - cell "PHP2000.0000" [ref=f1e244]
+            - cell "needs review" [ref=f1e245]
+            - cell "0.820 (0.81-1.00)" [ref=f1e250]
+            - cell [ref=f1e255]:
+              - button "View" [ref=f1e256] [cursor=pointer]
+          - row [ref=f1e257]:
+            - cell [ref=f1e258]:
+              - img "not extracted" [ref=f1e259]: —
+            - cell [ref=f1e260]:
+              - img "not extracted" [ref=f1e261]: —
+            - cell [ref=f1e262]:
+              - img "not extracted" [ref=f1e263]: —
+            - cell "needs review" [ref=f1e264]
+            - cell "0.000 (0.00-0.20)" [ref=f1e269]
+            - cell [ref=f1e275]:
+              - button "View" [ref=f1e276] [cursor=pointer]
+          - row [ref=f1e277]:
+            - cell [ref=f1e278]:
+              - img "not extracted" [ref=f1e279]: —
+            - cell [ref=f1e280]:
+              - img "not extracted" [ref=f1e281]: —
+            - cell [ref=f1e282]:
+              - img "not extracted" [ref=f1e283]: —
+            - cell "needs review" [ref=f1e284]
+            - cell "0.000 (0.00-0.20)" [ref=f1e289]
+            - cell [ref=f1e295]:
+              - button "View" [ref=f1e296] [cursor=pointer]
+          - row [ref=f1e297]:
+            - cell [ref=f1e298]:
+              - img "not extracted" [ref=f1e299]: —
+            - cell [ref=f1e300]:
+              - img "not extracted" [ref=f1e301]: —
+            - cell [ref=f1e302]:
+              - img "not extracted" [ref=f1e303]: —
+            - cell "needs review" [ref=f1e304]
+            - cell "0.000 (0.00-0.20)" [ref=f1e309]
+            - cell [ref=f1e315]:
+              - button "View" [ref=f1e316] [cursor=pointer]
+          - row [ref=f1e317]:
+            - cell [ref=f1e318]:
+              - img "not extracted" [ref=f1e319]: —
+            - cell "SERV CENTRAL, INC." [ref=f1e320]
+            - cell "PHP2000.0000" [ref=f1e321]
+            - cell "needs review" [ref=f1e322]
+            - cell "0.380 (0.21-0.40)" [ref=f1e327]
+            - cell [ref=f1e333]:
+              - button "View" [ref=f1e334] [cursor=pointer]
+          - row [ref=f1e335]:
+            - cell [ref=f1e336]:
+              - img "not extracted" [ref=f1e337]: —
+            - cell [ref=f1e338]:
+              - img "not extracted" [ref=f1e339]: —
+            - cell [ref=f1e340]:
+              - img "not extracted" [ref=f1e341]: —
+            - cell "needs review" [ref=f1e342]
+            - cell "0.000 (0.00-0.20)" [ref=f1e347]
+            - cell [ref=f1e353]:
+              - button "View" [ref=f1e354] [cursor=pointer]

@@ -6,6 +6,7 @@ import type { ReceiptSummary } from '../api/types'
 import { Button } from '../ui/Button'
 import type { JSX } from 'react'
 import { Chip } from '../ui/Chip'
+import { ConfidenceChip } from '../ui/ConfidenceChip'
 import { Value } from '../ui/Value'
 import { ReceiptDetailPanel } from './ReceiptDetailPanel'
 import styles from './ReceiptsScreen.module.css'
@@ -508,7 +509,7 @@ export function ReceiptsScreen({ identity }: ReceiptsScreenProps) {
                 <th scope="col">Merchant</th>
                 <th scope="col" className={styles.number}>Total</th>
                 <th scope="col">Status</th>
-                <th scope="col" className={styles.number}>Confidence</th>
+                <th scope="col" className={styles.confidence}>Confidence</th>
                 {/* A real header rather than an empty cell: a column with no
                     name is a column a screen reader announces as nothing, and
                     the row's action needs saying once here instead of being
@@ -582,8 +583,12 @@ export function ReceiptsScreen({ identity }: ReceiptsScreenProps) {
                       </Chip>
                     )}
                   </td>
-                  <td className={styles.number}>
-                    <Value value={row.confidence} kind="count" align="end" />
+                  {/* The banded confidence indicator, the same one the review
+                      queue uses, so a re-check reads the same here. A chip reads
+                      from the left rather than aligning right like the money
+                      column, hence its own cell class. */}
+                  <td className={styles.confidence}>
+                    <ConfidenceChip confidence={row.confidence} />
                   </td>
                   <td className={styles.detail}>
                     {/* Absent, not disabled, while a receipt is still `pending`:

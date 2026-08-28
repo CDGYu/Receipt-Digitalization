@@ -206,11 +206,12 @@
   min-width: 12rem;
 }
 
-/* Both numeric columns -- the total and the confidence. Right-aligned so a scan
- * down the column compares decimal points rather than first digits; design
- * section 5.2 assigns that to the cell rather than to the value, which is why
- * `ui/Value.module.css` deliberately carries no `text-align`. The value itself
- * brings the monospaced family and tabular figures. */
+/* The total column. Right-aligned so a scan down the column compares decimal
+ * points rather than first digits; design section 5.2 assigns that to the cell
+ * rather than to the value, which is why `ui/Value.module.css` deliberately
+ * carries no `text-align`. The value itself brings the monospaced family and
+ * tabular figures. (Confidence used to share this class; it carries a banded
+ * `Chip` now and reads from the left, so it has its own `.confidence`.) */
 .number {
   white-space: nowrap;
   text-align: right;
@@ -230,6 +231,14 @@
  * a design decision nobody has made, so nothing is invented for the status
  * column here. */
 .status {
+  white-space: nowrap;
+}
+
+/* The confidence column carries a banded `Chip`, not a bare number, so it reads
+ * from the left like the status column beside it rather than aligning right like
+ * the total. Left alignment is inherited from `.head th`/the body cells; only
+ * the no-wrap is declared, so the score and its range stay on one line. */
+.confidence {
   white-space: nowrap;
 }
 

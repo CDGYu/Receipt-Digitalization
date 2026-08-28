@@ -428,6 +428,9 @@ const CENSUS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
     '.number': 'white-space: nowrap, text-align: right',
     '.currency': 'margin-right, color, font-family',
     '.status': 'white-space: nowrap',
+    // Confidence carries a banded `Chip` now, so it reads from the left like
+    // `.status` -- only the no-wrap is declared, the left alignment inherited.
+    '.confidence': 'white-space: nowrap',
     '.more': 'align-self: center',
     '.filters': 'display: flex, flex-wrap: wrap, align-items: end, gap, margin',
     '.filterLabel':

@@ -270,7 +270,11 @@ describe('the table renders the row shape the serializer sends', () => {
     const cells = [...table.querySelectorAll('tbody tr:first-child > td')]
     const labels = headers.map((th) => th.textContent?.trim())
 
-    for (const column of ['Total', 'Confidence', 'Detail']) {
+    // Confidence is NOT in this list any more: it carries a banded `Chip` now
+    // and reads from the left like Status, so it is no longer a right-aligned
+    // column whose header has to chase its cells to the right edge. Total and
+    // Detail still are.
+    for (const column of ['Total', 'Detail']) {
       const at = labels.indexOf(column)
       const cellClass = cells[at].className
       // Non-vacuity, and it is the whole risk here: an unresolved `styles.x`
@@ -325,7 +329,11 @@ describe('the table renders the row shape the serializer sends', () => {
 
     const table = await screen.findByRole('table')
     const row = bodyRows(table)[0]
-    for (const column of ['Date', 'Merchant', 'Total', 'Confidence']) {
+    // Confidence is NOT in this list: its column carries a `ConfidenceChip`, not
+    // a `ui/Value`, so a null confidence renders the neutral "no score" chip
+    // rather than the not-extracted mark. That chip is asserted separately
+    // below. The other three nullable columns still show the mark.
+    for (const column of ['Date', 'Merchant', 'Total']) {
       // Through the accessibility tree, not through `getByLabelText`.
       // `ui/Value`'s own docstring records why: `getByLabelText` reads the
       // attribute off the DOM and never consults the role, so it passed
@@ -336,6 +344,9 @@ describe('the table renders the row shape the serializer sends', () => {
         `the ${column} cell renders a null as an empty cell`,
       ).toBeDefined()
     }
+    // The confidence cell's own null treatment: the neutral band chip reading
+    // "no score", not a blank cell.
+    expect(cellUnder(row, table, 'Confidence').textContent).toContain('no score')
   })
 
   it('renders an empty-string status as not-extracted, because the cast is unchecked', async () => {
@@ -847,8 +858,14 @@ describe('the status column as a chip', () => {
     // it; `Value` owns that case and says so with an em dash.
     stubPage({ items: [rowFixture({ status: '' })], has_more: false })
     render(<ReceiptsScreen identity={REVIEWER} />)
-    const row = (await screen.findByText('Summit Fuel')).closest('tr') as HTMLElement
+    const row = (await screen.findByText('Summit Fuel')).closest('tr') as HTMLTableRowElement
 
-    expect(row.querySelector('svg')).toBeNull()
+    // Scoped to the STATUS cell, not the whole row: the confidence column now
+    // always carries a `ConfidenceChip` whose gauge glyph is an `svg`, so a
+    // row-wide `querySelector('svg')` would find that instead. The claim here is
+    // only that an empty status renders no status chip.
+    const table = row.closest('table') as HTMLElement
+    const statusCell = cellUnder(row, table, 'Status')
+    expect(statusCell.querySelector('svg')).toBeNull()
   })
 })
