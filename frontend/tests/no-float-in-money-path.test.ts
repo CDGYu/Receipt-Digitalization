@@ -278,7 +278,19 @@ interface AllowlistEntry {
  * exists: an over-broad entry has to be a visible code change here, and the
  * matching is pinned in all four directions.
  */
-const ALLOWLIST: readonly AllowlistEntry[] = []
+const ALLOWLIST: readonly AllowlistEntry[] = [
+  {
+    file: 'ui/ConfidenceChip.tsx',
+    name: '.toFixed',
+    why:
+      'SVG path geometry, not money. `wedge()` rounds the gauge glyph\'s arc end ' +
+      'point (endX, endY) -- values computed from Math.sin/Math.cos over the ' +
+      'geometry constants CX/CY/R, never from a Money string -- to three decimals ' +
+      'so the "d" attribute is not a 17-digit float. This is the frontend twin of ' +
+      'the Python guard allowlisting LineItem.bbox: pixel geometry that is not ' +
+      'money and never becomes money.',
+  },
+]
 
 // --------------------------------------------------------------------------- //
 // Parsing and walking
