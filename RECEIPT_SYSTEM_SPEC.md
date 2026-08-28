@@ -93,9 +93,10 @@ Explicitly out of scope. Do not build these.
 ```mermaid
 flowchart TD
     A[Upload / Folder watch] --> B[Ingest]
-    B --> B1{Duplicate?}
-    B1 -->|yes| B2[Link to existing receipt, stop]
-    B1 -->|no| C[Preprocess]
+    B --> C[Preprocess]
+    %% Duplicate detection is disabled (Option C — duplicates are allowed).
+    %% The original design branched here on {Duplicate?} and linked+stopped;
+    %% see the change note below the diagram.
 
     C --> C1[Normalise format + EXIF rotate]
     C1 --> C2[Detect bounds + deskew]
@@ -136,11 +137,23 @@ flowchart TD
     M --> O[Excel export]
 ```
 
+> **Change note — duplicates are allowed (Option C).** The original design
+> rejected duplicates at two points: an image check in ingest (link to the
+> existing receipt and stop, before any model call) and a semantic
+> merchant+date+total check inside persist (flip the row to `rejected` and link
+> it). Both were removed. A re-uploaded image or a repeat of the same purchase
+> now becomes its own independent receipt, extracted and routed on its own
+> confidence. The `image_phash` column is still populated on every row and the
+> repository dedupe queries (`find_duplicate_by_phash`,
+> `find_duplicate_by_content`) still exist, so the checks could be reinstated
+> without a schema change. Accepted trade: a re-upload costs a full extraction,
+> and the ledger/export may hold two rows for one purchase.
+
 **Stage responsibilities**
 
 | Stage | Owns | Never does |
 |---|---|---|
-| Ingest | Dedupe, job creation, blob storage | Any parsing |
+| Ingest | Job creation, blob storage, perceptual hashing (stored only — no longer rejects; see change note) | Any parsing |
 | Preprocess | Geometry and quality only | Content interpretation |
 | Extract | All model calls | Arithmetic, normalisation |
 | Normalise | Type coercion, date/currency canonicalisation | Judging correctness |
@@ -1669,7 +1682,7 @@ Tolerances, penalty weights, and per-rule overrides live in `config/rules.yaml` 
 
 ## 18. Operational notes and known traps
 
-**Cost control.** Triage on a cheap model, extract on a strong one. Gate on `assess_quality` before any model call — a blurry photo costs the same as a good one and returns garbage. Cache by image hash so reprocessing a duplicate is free.
+**Cost control.** Triage on a cheap model, extract on a strong one. Gate on `assess_quality` before any model call — a blurry photo costs the same as a good one and returns garbage. A response cache keyed by image hash can make *re-running the same image* free (this is the VLM response cache, distinct from duplicate rejection — duplicates are allowed and are extracted in full; see §5 change note).
 
 **Long receipts.** The most common silent failure is a tall receipt being downscaled until the text is unreadable, producing a plausible-looking extraction with half the items missing. `R020` catches this only when a subtotal is printed. Enforce `split_tall_receipt` and check `estimated_line_item_count` from triage against the number actually extracted — a large mismatch should be its own warning.
 

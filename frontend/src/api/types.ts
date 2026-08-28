@@ -253,7 +253,13 @@ export interface ReviewTask {
   /** `null` until `GET /review/next` claims it for a reviewer. */
   assigned_to: string | null
   state: string
-  /** ISO 8601, never null. */
+  /** When the receipt was uploaded (`Receipt.created_at`). ISO 8601, never
+   *  null. This is what the "Uploaded" column shows and what the queue is
+   *  ordered by -- distinct from `opened_at`, which is when this task was
+   *  enqueued and can lag the upload. */
+  uploaded_at: string
+  /** When this review task was enqueued. ISO 8601, never null. Kept for the
+   *  queue's own bookkeeping; not shown as the receipt's upload time. */
   opened_at: string
   /** ISO 8601, or `null` while the task is still open. */
   closed_at: string | null

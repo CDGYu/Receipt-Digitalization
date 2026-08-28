@@ -82,14 +82,24 @@ def _claim_stmt(*, skip_locked: bool) -> Select[tuple[ReviewTask]]:
     against either dialect, so the locking clause is verified without a Postgres
     driver or a live database.
 
-    Ordered ``priority`` ASC (lower is more urgent), then ``opened_at`` ASC, then
-    ``id`` -- the last is a tiebreaker that makes the order total, so a backend
-    with coarse timestamp resolution still hands out tasks deterministically.
+    Ordered ``priority`` ASC (lower is more urgent), then the receipt's upload
+    time (``Receipt.created_at``) ASC, then ``id`` -- the last is a tiebreaker
+    that makes the order total, so a backend with coarse timestamp resolution
+    still hands out tasks deterministically.
+
+    **Ordered by upload time, not ``opened_at``.** ``opened_at`` is when the
+    *task* was enqueued, which is after the whole pipeline has run and can lag
+    the upload by a long backlog, a reprocess, or a reopen. Handing out (and
+    displaying) work in the order receipts were uploaded is what a reviewer
+    expects, so the queue joins the receipt and orders on its ``created_at``.
+    Priority still comes first: §12's urgent work is not overtaken by an older
+    upload.
     """
     stmt = (
         select(ReviewTask)
+        .join(Receipt, Receipt.id == ReviewTask.receipt_id)
         .where(ReviewTask.state == ReviewState.OPEN)
-        .order_by(ReviewTask.priority, ReviewTask.opened_at, ReviewTask.id)
+        .order_by(ReviewTask.priority, Receipt.created_at, ReviewTask.id)
         .limit(1)
     )
     if skip_locked:
@@ -546,15 +556,17 @@ def list_tasks(
     catch -- and ADR-0026 records the limit of that guard: it catches such a
     producer only if some test exercises it.
 
-    Ordered ``priority`` then ``opened_at`` then ``id``, the same total order
-    :func:`_claim_stmt` uses, so the first row of a ``state=open`` page is the
-    row :func:`next_task` would hand out next.
+    Ordered ``priority`` then the receipt's upload time (``Receipt.created_at``)
+    then ``id``, the same total order :func:`_claim_stmt` uses, so the first row
+    of a ``state=open`` page is the row :func:`next_task` would hand out next.
+    See :func:`_claim_stmt` for why the order keys off upload time rather than
+    ``opened_at``.
 
     A pure read: no flush, no commit, and no ``ValueError``. The route's own
     query validation rejects an unknown ``state`` and an out-of-range ``limit``
     before this is reached.
     """
-    query = select(ReviewTask)
+    query = select(ReviewTask).join(Receipt, Receipt.id == ReviewTask.receipt_id)
     if visible_to is not None:
         query = query.where(
             or_(
@@ -564,7 +576,7 @@ def list_tasks(
         )
     if state is not None:
         query = query.where(ReviewTask.state == state)
-    query = query.order_by(ReviewTask.priority, ReviewTask.opened_at, ReviewTask.id)
+    query = query.order_by(ReviewTask.priority, Receipt.created_at, ReviewTask.id)
     return list(session.scalars(query.limit(limit).offset(offset)))
 
 

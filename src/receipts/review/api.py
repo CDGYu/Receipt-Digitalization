@@ -38,7 +38,7 @@ import mimetypes
 import shutil
 import tempfile
 import uuid
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import Annotated, Any, Literal
@@ -253,8 +253,19 @@ def _install_error_handlers(app: FastAPI) -> None:
 # --------------------------------------------------------------------------- #
 
 
-def _task_summary(task: ReviewTask) -> dict[str, Any]:
-    """A :class:`~receipts.persist.models.ReviewTask` row as JSON."""
+def _task_summary(task: ReviewTask, *, uploaded_at: datetime | None = None) -> dict[str, Any]:
+    """A :class:`~receipts.persist.models.ReviewTask` row as JSON.
+
+    ``uploaded_at`` is the review UI's "Opened" column: **when the receipt was
+    uploaded** (``Receipt.created_at``), not when this task was enqueued.
+    ``opened_at`` (task creation) is kept in the payload for the queue's own
+    bookkeeping, but it lags the upload whenever a receipt sits ``pending``, is
+    reprocessed, or has its task reopened, so it is the wrong thing to show a
+    reviewer. Callers pass the receipt's ``created_at``; it falls back to the
+    task's ``opened_at`` only when the receipt could not be loaded, so the
+    field is never null.
+    """
+    upload_iso = (uploaded_at or task.opened_at).isoformat()
     return {
         "id": str(task.id),
         "receipt_id": str(task.receipt_id),
@@ -262,6 +273,7 @@ def _task_summary(task: ReviewTask) -> dict[str, Any]:
         "priority": task.priority,
         "assigned_to": task.assigned_to,
         "state": task.state.value,
+        "uploaded_at": upload_iso,
         "opened_at": task.opened_at.isoformat(),
         "closed_at": task.closed_at.isoformat() if task.closed_at is not None else None,
     }
@@ -587,7 +599,17 @@ def _install_read_routes(app: FastAPI) -> None:
                 limit=limit + 1,
                 offset=offset,
             )
-            items = [_task_summary(task) for task in rows[:limit]]
+            # `task.receipt` is loaded here, inside the session: the relationship
+            # detaches on the way out. `created_at` is the receipt's upload time,
+            # which is what the "Opened" column shows and what the queue is now
+            # ordered by.
+            items = [
+                _task_summary(
+                    task,
+                    uploaded_at=task.receipt.created_at if task.receipt is not None else None,
+                )
+                for task in rows[:limit]
+            ]
         return {"items": items, "has_more": len(rows) > limit}
 
 
@@ -965,7 +987,9 @@ def _install_write_routes(app: FastAPI) -> None:
                 return {"task": None}
             receipt = get_receipt(session, task.receipt_id)
             payload = {
-                "task": _task_summary(task),
+                "task": _task_summary(
+                    task, uploaded_at=receipt.created_at if receipt is not None else None
+                ),
                 "receipt": receipt_summary(receipt) if receipt is not None else None,
             }
             session.commit()
@@ -1015,7 +1039,9 @@ def _install_write_routes(app: FastAPI) -> None:
                 raise HTTPException(status_code=409, detail=str(exc)) from exc
             receipt = get_receipt(session, task.receipt_id)
             payload = {
-                "task": _task_summary(task),
+                "task": _task_summary(
+                    task, uploaded_at=receipt.created_at if receipt is not None else None
+                ),
                 "receipt": receipt_summary(receipt) if receipt is not None else None,
             }
             session.commit()
@@ -1047,8 +1073,10 @@ def _install_write_routes(app: FastAPI) -> None:
                     detail="only the assignee or an admin may complete this task",
                 )
             task = close_task(session, task_id)
+            uploaded_at = task.receipt.created_at if task.receipt is not None else None
+            summary = _task_summary(task, uploaded_at=uploaded_at)
             session.commit()
-            return _task_summary(task)
+            return summary
 
     @app.post("/review/{task_id}/release")
     def review_release(
@@ -1090,7 +1118,11 @@ def _install_write_routes(app: FastAPI) -> None:
             if task is None:
                 raise HTTPException(status_code=404, detail=f"no review task with id {task_id}")
             task, released_from = release_task(session, task_id)
-            payload = {**_task_summary(task), "released_from": released_from}
+            uploaded_at = task.receipt.created_at if task.receipt is not None else None
+            payload = {
+                **_task_summary(task, uploaded_at=uploaded_at),
+                "released_from": released_from,
+            }
             session.commit()
 
         # Logged here rather than in release_task for two reasons: only the

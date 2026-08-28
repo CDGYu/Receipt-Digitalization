@@ -36,7 +36,6 @@ import traceback
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field, replace
-from datetime import date as date_cls
 from decimal import Decimal
 from enum import Enum
 from pathlib import Path
@@ -67,10 +66,7 @@ from .merchants import registry
 from .normalize import normalize
 from .persist.models import PassName
 from .persist.repository import (
-    find_duplicate_by_content,
-    find_duplicate_by_phash,
     get_receipt,
-    mark_duplicate,
     record_progress,
     redact_pan,
     save_extraction,
@@ -163,20 +159,6 @@ def _wants_consistency(triage_result: TriageResult) -> bool:
 #: leaves no data at all, which is exactly what priority ``1`` (full re-key)
 #: describes.
 _FAILURE_PRIORITY = 1
-
-#: Statuses that mean the row already holds an extraction of its **own** image,
-#: so a re-run of that id is a reprocess rather than a fresh upload and image
-#: dedupe must not run again (see :func:`_find_duplicate_image`).
-#:
-#: ``PENDING`` is absent because that is exactly the row ``POST /upload`` writes
-#: before the worker has looked at the image -- the ordinary first run, which
-#: must still be deduped. ``REJECTED`` is absent for the opposite reason: it is
-#: the pipeline's own marking for a duplicate, and re-running one must
-#: re-establish the same link rather than skip dedupe and extract over it.
-_ALREADY_EXTRACTED = frozenset(
-    {ReceiptStatus.AUTO_APPROVED, ReceiptStatus.NEEDS_REVIEW, ReceiptStatus.REVIEWED}
-)
-
 
 def prepare_image(image_path: Path, *, max_edge: int = 2048) -> PreparedImage:
     """Preprocess ``image_path`` into the :class:`PreparedImage` the extractor
@@ -905,15 +887,14 @@ def process_receipt(
     """The whole thing, end to end. The only function the queue worker calls.
 
     Stages, in order (:data:`STAGES`): read the original bytes from storage ->
-    preprocess and perceptually hash them -> check for a duplicate image ->
-    triage -> look the merchant up for its hints and its currency -> extract
-    with the repair loop (normalization applied inside it) -> score -> route ->
-    persist, resolving the merchant again from the finished extraction, writing
-    it to ``receipts.merchant_id``, and checking that merchant plus the date and
-    the total against the receipts already stored. Dependencies
-    are injected exactly the way :func:`run_receipt` and
-    :func:`build_eval_pipeline` take theirs, which is what keeps the whole suite
-    offline.
+    preprocess and perceptually hash them -> ``dedupe`` (a no-op marker now that
+    duplicates are allowed; see below) -> triage -> look the merchant up for its
+    hints and its currency -> extract with the repair loop (normalization
+    applied inside it) -> score -> route -> persist, resolving the merchant
+    again from the finished extraction and writing it to
+    ``receipts.merchant_id``. Dependencies are injected exactly the way
+    :func:`run_receipt` and :func:`build_eval_pipeline` take theirs, which is
+    what keeps the whole suite offline.
 
     **Nothing is ever silently dropped** (§18). Every stage is wrapped: any
     exception marks the receipt ``needs_review`` with the failing stage as the
@@ -963,16 +944,16 @@ def process_receipt(
     receipt id here; a PDF that reached this function would fail cleanly at
     ``preprocess`` rather than silently extracting only its first page.
 
-    **Semantic (merchant + date + total) dedupe runs inside the ``persist``
-    stage, not beside the image check.** It cannot run where image dedupe runs:
-    that stage is pre-extraction, and none of ``merchant_id``, ``txn_date`` or
-    ``total`` exists until the model has answered. It therefore **saves no model
-    call** -- by the time a semantic duplicate is detectable the extraction has
-    already been paid for in full, so the §18 cost-control argument that covers
-    a re-uploaded *image* does not reach this path. What it buys is a ledger
-    that does not hold two rows for one purchase. See
-    :func:`_find_duplicate_content` for the guard that keeps the merge narrow
-    and :func:`_persist_outcome` for what the rejected row keeps.
+    **Duplicates are allowed (Option C), so no dedupe rejects a receipt.**
+    Neither the pre-extraction image check nor the post-extraction semantic
+    (merchant + date + total) check runs any more. A user who re-uploads a
+    receipt they forgot was already processed gets a second, independent receipt
+    routed on its own confidence, rather than a ``rejected`` duplicate row. The
+    ``dedupe`` stage marker is retained (``STAGES`` is a closed narration
+    contract) but does no work. The accepted trade: the ledger may hold two rows
+    for one purchase, and a re-uploaded image now pays a full extraction instead
+    of short-circuiting on the perceptual hash. ``receipts.image_phash`` is
+    still stored, so the check could be reinstated later without a backfill.
 
     Self-consistency (M6) and few-shot examples plug in at the marked points.
     """
@@ -1039,13 +1020,17 @@ def process_receipt(
             ocr_layer = grounding.layer
 
         with _stage("dedupe", progress):
-            duplicate_id = _find_duplicate_image(session_factory, job, phash)
-        if duplicate_id is not None:
-            # §18 cost control: a re-upload costs nothing beyond the hash.
-            with _stage("persist", progress):
-                return _persist_duplicate(
-                    session_factory, job, phash, duplicate_id, cost_guard.spent
-                )
+            # Duplicates are allowed by design: a user who forgets a receipt was
+            # already processed and re-uploads it should get a normal, terminal
+            # receipt rather than a `rejected` row. Image dedupe therefore no
+            # longer short-circuits here. The stage marker is kept so the
+            # progress narration contract (`STAGES`) is unchanged; the trade the
+            # short-circuit used to buy -- a re-upload costing nothing beyond the
+            # hash -- is deliberately given up, so a re-upload now pays a full
+            # extraction like any first upload. `phash` is still computed above
+            # and stored, so the link could be re-established later if the policy
+            # is ever narrowed again.
+            pass
 
         with _stage("triage", progress):
             triage_result, triage_response = triage(image, guarded)
@@ -1261,134 +1246,6 @@ def _normalizer(
     return run
 
 
-def _find_duplicate_image(
-    session_factory: Callable[[], Session], job: ReceiptJob, phash: str
-) -> uuid.UUID | None:
-    """The id of an existing receipt whose image matches, or ``None``.
-
-    Read-only and on its own short-lived session: this runs *before* any model
-    call precisely so a re-upload never reaches a provider.
-
-    **Dedupe is skipped entirely for a receipt that already holds its own
-    extraction** (:data:`_ALREADY_EXTRACTED`). That job is a reprocess, not an
-    upload: its image is by definition already in the table under this very id,
-    and every row that copied it is a *later* duplicate of it. Running dedupe
-    anyway is how a reprocessed original used to be marked a duplicate of its
-    own copy -- emptied of its amounts, flipped to ``rejected``, and dropped out
-    of the export along with the copy, taking the transaction with it.
-    :func:`~receipts.persist.repository.find_duplicate_by_phash` refuses the
-    same link from the other side (it drops candidates whose ``duplicate_of``
-    is this id), so neither defence is load-bearing alone.
-    """
-    session = session_factory()
-    try:
-        current = get_receipt(session, job.id)
-        if current is not None and current.status in _ALREADY_EXTRACTED:
-            return None
-        existing = find_duplicate_by_phash(session, phash, exclude_id=job.id)
-        return existing.id if existing is not None else None
-    finally:
-        session.close()
-
-
-def _find_duplicate_content(
-    session: Session,
-    job: ReceiptJob,
-    merchant_id: uuid.UUID | None,
-    txn_date: date_cls | None,
-    total: Decimal | None,
-) -> uuid.UUID | None:
-    """The id of an already-stored receipt this one duplicates, or ``None``.
-
-    The twin of :func:`_find_duplicate_image`, and deliberately unlike it in
-    three ways.
-
-    **It runs after the model call, not before**, on the caller's session rather
-    than one of its own. ``merchant_id``, ``txn_date`` and ``total`` are all
-    products of the extraction, so this cannot be moved earlier and cannot save
-    a call: the image check saves an inference, this one saves a duplicated row
-    in the ledger.
-
-    **A NULL ``merchant_id`` matches nothing here.** That is the one restriction
-    the pipeline adds over
-    :func:`~receipts.persist.repository.find_duplicate_by_content`, whose own
-    contract permits NULL-to-NULL and is right to -- an unresolved merchant
-    matching only other unresolved merchants is a coherent rule for a lookup.
-    It is the wrong rule for a **merge**. Merchant resolution is
-    exact-match-only, so early receipts routinely have no merchant at all, and
-    without this guard two genuinely different shops that happened to share a
-    date and a total would be merged on the strength of the two keys that say
-    nothing about *which shop*. The repository's NULL-merchant rule is left
-    alone; the restriction lives here, next to the consequence.
-
-    **There is no reprocess skip here.** The failure its twin's skip exists for
-    -- a reprocessed original marked a duplicate of its own copy -- is closed on
-    the other side instead:
-    :func:`~receipts.persist.repository.find_duplicate_by_content` will not offer
-    a candidate that already resolves back to ``job.id``.
-
-    **The keys are read off the row that was just written**, not derived a
-    second time from the extraction. A second derivation is how the stored
-    ``txn_date`` and the dedupe key come to disagree:
-    :func:`~receipts.persist.repository.save_extraction` stores NULL and parks
-    an unparseable date in ``date_raw``, and a re-parse that decided otherwise
-    would key a merge on a date the row does not hold.
-    """
-    if merchant_id is None:
-        return None
-    existing = find_duplicate_by_content(
-        session, merchant_id, txn_date, total, exclude_id=job.id
-    )
-    return existing.id if existing is not None else None
-
-
-def _persist_duplicate(
-    session_factory: Callable[[], Session],
-    job: ReceiptJob,
-    phash: str,
-    existing_id: uuid.UUID,
-    cost: Decimal,
-) -> ProcessResult:
-    """Record a re-uploaded image as a duplicate of the receipt already stored.
-
-    The new upload still gets a row -- it happened, and its blob exists, so
-    pretending otherwise would lose the fact of the upload -- but it is
-    ``rejected``, which is terminal, keeps it out of exports, and keeps it out
-    of the review queue. ``duplicate_of`` points at the original, so nothing is
-    lost and the link is inspectable. The row itself carries no extraction: no
-    model was called, and inventing amounts for it would be worse than leaving
-    them null.
-    """
-    session = session_factory()
-    try:
-        receipt = save_extraction(
-            session,
-            job,
-            ReceiptExtraction(),
-            ValidationReport(),
-            Decimal("0"),
-            ReceiptStatus.REJECTED,
-            image_phash=phash,
-        )
-        mark_duplicate(session, receipt.id, existing_id)
-        session.commit()
-    except Exception:
-        session.rollback()
-        raise
-    finally:
-        session.close()
-
-    log.info("Receipt %s is a duplicate of %s; no model call made", job.id, existing_id)
-    return ProcessResult(
-        receipt_id=job.id,
-        status=ReceiptStatus.REJECTED,
-        confidence=Decimal("0"),
-        reason=f"duplicate of receipt {existing_id}",
-        duplicate_of=existing_id,
-        cost_usd=cost,
-    )
-
-
 def _persist_outcome(
     session_factory: Callable[[], Session],
     job: ReceiptJob,
@@ -1421,30 +1278,13 @@ def _persist_outcome(
     here only to compare against the merchant the extraction actually resolved
     to. They can differ; see the warning below.
 
-    **A semantic duplicate keeps everything it paid for.** The check runs
-    *after* :func:`~receipts.persist.repository.save_extraction`, so the
-    duplicate branch decorates a stored extraction rather than replacing one --
-    the row is flipped to ``rejected`` and given a ``duplicate_of``, and it
-    keeps its amounts, its line items, its findings and its ``extraction_runs``.
-    That is the whole reason this design was accepted: image dedupe writes an
-    empty row because no model was called, but here one was and the money is
-    spent either way, so storing the extraction costs nothing and is what lets a
-    human read a **wrong** merge -- see the amounts that were merged over and
-    disagree -- instead of only being able to undo one. ``priority`` drops to
-    ``-1`` with it: ``rejected`` is terminal, and a duplicate is not work for a
-    reviewer. The transient window in which the row carries the routed status
-    before being flipped is inside this function's single transaction, so
-    nothing outside it observes that state.
-
-    The merchant is still credited for a receipt that turns out to be a
-    duplicate -- ``_resolve_merchant`` has already run and incremented by the
-    time the duplicate is known. That leaves ``merchants.receipt_count`` one
-    high per duplicate caught *here*: the same bounded imprecision in a
-    display-only counter that :func:`_resolve_merchant` documents from the other
-    side, and cheaper than the decrement path it declines for the same reason. A
-    re-uploaded **image** adds nothing to the count and never could:
-    :func:`_persist_duplicate` returns before this function is reached, so no
-    merchant is resolved for it at all.
+    **Duplicates are allowed (Option C).** There is no dedupe branch here any
+    more: a receipt that happens to match an existing one on image or on
+    merchant + date + total is still stored and routed on its own confidence
+    like any other. A user who forgets a receipt was already processed and
+    re-uploads it gets a second, independent receipt rather than a ``rejected``
+    row. The ledger and the export may therefore hold two rows for one purchase;
+    that is the accepted trade for never blocking a re-upload.
 
     Three details are easy to get wrong and are therefore spelled out:
 
@@ -1481,20 +1321,12 @@ def _persist_outcome(
             image_phash=phash, merchant_id=merchant_id, confidence_reasons=reasons,
         )
 
-        # Semantic dedupe, keyed on what the row now actually holds. The write
-        # above is unconditional and already done, which is the point: the
-        # branch below can only ever *add* a rejection and a link on top of a
-        # stored extraction, never stand in place of storing one.
-        duplicate_id = _find_duplicate_content(
-            session, job, merchant_id, receipt.txn_date, receipt.total
-        )
-        if duplicate_id is not None:
-            status = ReceiptStatus.REJECTED
-            priority = -1
-            reason = f"duplicate of receipt {duplicate_id}"
-            receipt.status = status
-            mark_duplicate(session, receipt.id, duplicate_id)
-
+        # Semantic dedupe is disabled by design: duplicates are allowed, so a
+        # second photo of the same purchase (same merchant + date + total)
+        # becomes its own independent receipt routed on its own confidence,
+        # rather than being flipped to `rejected` and linked as a duplicate. The
+        # extraction was paid for either way and is kept exactly as it would be
+        # for any non-duplicate receipt.
         save_findings(session, receipt.id, outcome.report)
 
         repaired = [
@@ -1566,7 +1398,6 @@ def _persist_outcome(
         confidence=confidence,
         reason=reason,
         review_priority=priority,
-        duplicate_of=duplicate_id,
         cost_usd=cost,
     )
 

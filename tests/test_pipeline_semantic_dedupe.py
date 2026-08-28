@@ -1,27 +1,22 @@
-"""Task 6: semantic dedupe -- same merchant, same date, same total.
+"""Option C: duplicates are allowed -- no semantic (merchant+date+total) merge.
 
-This is the only stage in the milestone that can do damage that *feels*
-irreversible. Everything else is additive: a receipt that gets no hints behaves
-exactly as it does today. This one **merges two receipts**, and a false match
-marks a genuinely different purchase as a duplicate of another one.
+This file used to pin the semantic-dedupe *merge*: a second photo of the same
+purchase (same merchant, same date, same total) was flipped to ``rejected`` and
+linked to the original. That behaviour was removed on purpose -- a user who
+forgets a receipt was already processed and re-uploads it should get a second,
+independent receipt rather than a blocked/rejected row.
 
-Three properties are pinned here, and each closes a different way of being
-wrong:
+What is pinned now is the inverse guarantee:
 
-  * a real re-key of one purchase is caught (the whole point);
-  * two receipts whose merchant is **unresolved** are never merged, even though
-    the repository function this calls would happily match them -- the pipeline
-    is deliberately stricter than
-    :func:`~receipts.persist.repository.find_duplicate_by_content`;
-  * the duplicate **keeps the extraction that was paid for**. Image dedupe runs
-    before the model call and so writes an empty row; this runs after, and by
-    then the extraction has been bought, validated and scored. Storing it is
-    what makes a wrong merge *readable* rather than merely undoable -- a human
-    looking at the rejected row can see the amounts it was merged over.
+  * a second receipt that matches an existing one on merchant + date + total is
+    stored as its **own** receipt, routed on its own confidence, never
+    ``rejected`` and never given a ``duplicate_of``;
+  * it still gets a full, audited extraction (triage + extract in
+    ``extraction_runs``);
+  * the original is untouched.
 
-There is no cost-control claim on this path. Image dedupe saves a model call;
-this cannot, because none of the three keys it matches on exists until the
-extraction has already been paid for in full.
+The ledger/export may therefore hold two rows for one purchase. That is the
+accepted trade for never blocking a re-upload.
 """
 
 from __future__ import annotations
@@ -73,7 +68,9 @@ MERCHANT_NAME = "METRO OIL SUBIC INC."
 
 #: A TIN no merchant holds yet, so the first run registers a merchant and the
 #: second resolves to that same row -- which is what gives both receipts the
-#: non-NULL ``merchant_id`` the dedupe key needs.
+#: non-NULL ``merchant_id`` that the old dedupe key needed. Kept so the tests
+#: below exercise the *resolved-merchant* case, the one most likely to look like
+#: a duplicate, and prove it is still allowed through.
 FRESH_TAX_ID = "123-456-789"
 
 
@@ -110,9 +107,9 @@ def storage(tmp_path) -> LocalStorage:
 def _png_bytes(seed: int = 0, size: tuple[int, int] = (900, 1400)) -> bytes:
     """A deterministic PNG with enough structure to have a distinctive dHash.
 
-    The seeds used below are far apart perceptually (measured: 30-43 bits,
-    against a dedupe threshold of 5), so **image** dedupe never fires in this
-    file. Without that, every test here would pass for the wrong reason.
+    The seeds used below are far apart perceptually, so even though image dedupe
+    no longer rejects anything, the images here are genuinely different photos --
+    the tests are about the *semantic* keys, not byte-identical re-uploads.
     """
     rng = random.Random(seed)
     image = Image.new("RGB", size, (240, 240, 240))
@@ -210,35 +207,6 @@ def _good_with_tax_id(tax_id: str = FRESH_TAX_ID) -> ReceiptExtraction:
     return extraction
 
 
-def _good_no_tax_id() -> ReceiptExtraction:
-    """``_good()`` with no TIN, so nothing registers and ``merchant_id`` stays NULL.
-
-    ``register`` requires a ``tax_id``, and the ``lookup`` fallback finds nothing
-    because no merchant was ever put in the table. Both receipts therefore land
-    with an unresolved merchant -- the case the pipeline must refuse to merge.
-    """
-    extraction = _good()
-    extraction.merchant.tax_id = None
-    return extraction
-
-
-def _a_cheaper_purchase() -> ReceiptExtraction:
-    """Same merchant, same date, a different total -- and internally consistent.
-
-    Kept arithmetically clean (subtotal 150 + 12% VAT 18 = 168) so it takes the
-    same single-attempt path as ``_good()``; a total that merely disagreed with
-    its own line items would spend a repair round and test the repair loop
-    instead of the dedupe key.
-    """
-    extraction = _good_with_tax_id()
-    extraction.line_items[1].unit_price = D("25.00")
-    extraction.line_items[1].line_total = D("50.00")
-    extraction.totals = Totals(
-        subtotal=D("150.00"), tax=D("18.00"), discount=D("0.00"), total=D("168.00")
-    )
-    return extraction
-
-
 def _run(job, client, session_factory, storage, settings):
     return process_receipt(
         job,
@@ -251,18 +219,17 @@ def _run(job, client, session_factory, storage, settings):
 
 
 # --------------------------------------------------------------------------- #
-# The catch
+# Duplicates are allowed
 # --------------------------------------------------------------------------- #
 
 
-def test_a_second_receipt_from_the_same_merchant_date_and_total_is_a_duplicate(
+def test_same_merchant_date_and_total_is_stored_as_its_own_receipt(
     session_factory, storage, settings
 ):
-    """Two different photographs of one purchase are one purchase.
+    """Two photographs of one purchase are now two independent receipts.
 
-    Image dedupe cannot see this: the images differ, so their hashes differ.
-    Only the extracted merchant, date and total say they are the same receipt --
-    and none of the three exists before the model has been paid for.
+    Before Option C this was the merge case: the second was flipped to
+    ``rejected`` and linked to the first. It must now stand on its own.
     """
     first = _job(storage)
     first_result = _run(
@@ -277,34 +244,38 @@ def test_a_second_receipt_from_the_same_merchant_date_and_total_is_a_duplicate(
     )
 
     assert result.failed_stage is None
-    assert result.duplicate_of == first.id
-    assert result.status is ReceiptStatus.REJECTED
+    assert result.duplicate_of is None
+    assert result.status is ReceiptStatus.AUTO_APPROVED
 
     with session_factory() as session:
         row = session.get(Receipt, second.id)
-        assert row.status is ReceiptStatus.REJECTED
-        assert row.duplicate_of == first.id
-        assert row.total is not None, "the paid-for extraction is kept (spec D4)"
+        assert row.status is ReceiptStatus.AUTO_APPROVED
+        assert row.duplicate_of is None
         assert row.total == D("224.00")
         assert row.txn_date == date(2026, 7, 20)
-        assert len(row.line_items) == 2, "the line items were paid for too"
+        assert len(row.line_items) == 2
 
-        # The original is untouched: a merge must never damage the receipt it
-        # merged into.
+        # The original is untouched.
         original = session.get(Receipt, first.id)
         assert original.duplicate_of is None
         assert original.status is not ReceiptStatus.REJECTED
         assert original.total == D("224.00")
 
+        # Both resolved to the same merchant -- so the only thing that used to
+        # keep them from merging was that the merge no longer happens.
+        assert row.merchant_id is not None
+        assert row.merchant_id == original.merchant_id
+        assert session.scalars(select(Merchant)).all()[0].tax_id == FRESH_TAX_ID
 
-def test_the_duplicates_model_calls_stay_in_the_audit_trail(
+
+def test_the_second_receipt_still_gets_a_full_audit_trail(
     session_factory, storage, settings
 ):
-    """A merge that hid the calls it paid for would be unauditable.
+    """A re-upload pays for its own extraction, and the calls are recorded.
 
-    ``extraction_runs`` is where the cost and the raw response live. If the
-    duplicate branch skipped them, the money spent on this receipt would be
-    invisible and the merge would be a claim with no evidence under it.
+    Under Option C the model DOES run for the second receipt (there is no
+    short-circuit), so its ``extraction_runs`` must hold both the triage and the
+    extract call, exactly like any first upload.
     """
     first = _job(storage)
     _run(first, _Client([_triage(), _good_with_tax_id()]), session_factory, storage, settings)
@@ -313,58 +284,23 @@ def test_the_duplicates_model_calls_stay_in_the_audit_trail(
     result = _run(
         second, _Client([_triage(), _good_with_tax_id()]), session_factory, storage, settings
     )
-    assert result.duplicate_of == first.id
+    assert result.duplicate_of is None
 
     with session_factory() as session:
         runs = session.scalars(
             select(ExtractionRun).where(ExtractionRun.receipt_id == second.id)
         ).all()
-    assert len(runs) == 2, "triage and extract were both called and both cost money"
+    assert len(runs) == 2, "triage and extract both ran for the re-upload"
 
 
-def test_a_semantic_duplicate_opens_no_review_task(session_factory, storage, settings):
-    """``rejected`` is terminal. A duplicate is not work for a human.
-
-    This exercises the auto-approve route, where ``route`` itself already
-    returns ``-1``. It therefore says nothing about the branch's own
-    ``priority = -1`` -- see the test below, which is the one that pins it.
-    """
-    first = _job(storage)
-    _run(first, _Client([_triage(), _good_with_tax_id()]), session_factory, storage, settings)
-
-    second = _job(storage, data=_png_bytes(seed=7))
-    result = _run(
-        second, _Client([_triage(), _good_with_tax_id()]), session_factory, storage, settings
-    )
-    assert result.duplicate_of == first.id
-    assert result.review_priority == -1
-
-    with session_factory() as session:
-        tasks = session.scalars(
-            select(ReviewTask).where(ReviewTask.receipt_id == second.id)
-        ).all()
-    assert tasks == []
-
-
-def test_a_duplicate_routed_to_review_is_rejected_and_still_opens_no_task(
+def test_a_re_upload_is_routed_on_its_own_confidence_not_terminated(
     session_factory, storage
 ):
-    """The duplicate branch, reached from a route **other than** auto-approve.
+    """The second receipt goes through routing like any other.
 
-    Every other test in this file scores 1.000 and auto-approves, and ``route``
-    already returns priority ``-1`` on that path -- so none of them can tell
-    whether the branch's own ``priority = -1`` and
-    ``status = ReceiptStatus.REJECTED`` do anything at all. Each of those lines
-    was redundant in every case exercised, which is not the same as being
-    pinned: deleting ``priority = -1`` left the whole file green while a
-    needs-review duplicate opened a review task on a ``rejected`` row.
-
-    Raising ``auto_approve_threshold`` above the score this extraction earns is
-    what makes the override real: ``route`` now hands back ``needs_review`` at a
-    genuinely non-negative priority, and the branch has to overrule both halves
-    of it. The two controls below (the first receipt's status, and the task the
-    *original* legitimately gets) are what stop this passing by auto-approving
-    after all.
+    With a threshold above the score this extraction earns, the second receipt
+    is routed to ``needs_review`` (a normal, actionable outcome) -- it is *not*
+    quietly ``rejected`` as a duplicate. It opens its own review task.
     """
     settings = Settings(
         _env_file=None, max_repair_attempts=1, auto_approve_threshold=D("1.01")
@@ -373,10 +309,7 @@ def test_a_duplicate_routed_to_review_is_rejected_and_still_opens_no_task(
     first_result = _run(
         first, _Client([_triage(), _good_with_tax_id()]), session_factory, storage, settings
     )
-    assert first_result.failed_stage is None
-    # Control: the premise is that this route is not auto-approve.
     assert first_result.status is ReceiptStatus.NEEDS_REVIEW
-    assert first_result.review_priority >= 0
 
     second = _job(storage, data=_png_bytes(seed=7))
     result = _run(
@@ -384,182 +317,16 @@ def test_a_duplicate_routed_to_review_is_rejected_and_still_opens_no_task(
     )
 
     assert result.failed_stage is None
-    assert result.duplicate_of == first.id
-    assert result.status is ReceiptStatus.REJECTED, "the route said needs_review"
-    assert result.review_priority == -1, "the route said 2"
+    assert result.duplicate_of is None
+    assert result.status is ReceiptStatus.NEEDS_REVIEW
+    assert result.review_priority >= 0
 
     with session_factory() as session:
         row = session.get(Receipt, second.id)
-        assert row.status is ReceiptStatus.REJECTED
-        assert row.duplicate_of == first.id
-        assert row.total == D("224.00"), "D4 holds on this route too"
-        assert len(row.line_items) == 2
-
+        assert row.status is ReceiptStatus.NEEDS_REVIEW
+        assert row.duplicate_of is None
+        # A re-upload routed to review IS work for a human: it opens its own task.
         tasks = session.scalars(
             select(ReviewTask).where(ReviewTask.receipt_id == second.id)
         ).all()
-        assert tasks == [], "a rejected duplicate is not work for a reviewer"
-        # Control, from the other side: the original *did* get a task, so the
-        # empty list above is a decision and not an empty queue.
-        original_task = session.scalars(
-            select(ReviewTask).where(ReviewTask.receipt_id == first.id)
-        ).one()
-        assert original_task.priority >= 0
-
-
-# --------------------------------------------------------------------------- #
-# The original, reprocessed
-# --------------------------------------------------------------------------- #
-
-
-def test_reprocessing_an_original_that_has_a_duplicate_is_not_a_failure(
-    session_factory, storage, settings
-):
-    """A prior run's duplicate must not make the original un-reprocessable.
-
-    Once a copy points at this receipt, the copy is itself a candidate for the
-    content keys the original still holds -- so a reprocess of the original is
-    offered its own copy as the receipt it duplicates. Following that offer
-    closes an ``A -> B -> A`` cycle, which
-    :func:`~receipts.persist.repository.mark_duplicate` refuses by raising. The
-    raise escapes the ``persist`` stage, so the original is demoted to
-    ``needs_review`` and loses the run it just paid for -- every time, with no
-    command that can undo it short of deleting the copy's row.
-
-    :func:`~receipts.pipeline._find_duplicate_image` names this exact failure in
-    its own docstring and carries two defences against it. This is the same
-    failure on the content path, so the same property has to hold: a receipt
-    that already resolves back to this one is never offered as its target.
-    """
-    first = _job(storage)
-    first_result = _run(
-        first, _Client([_triage(), _good_with_tax_id()]), session_factory, storage, settings
-    )
-    assert first_result.failed_stage is None
-    assert first_result.duplicate_of is None
-
-    second = _job(storage, data=_png_bytes(seed=7))
-    second_result = _run(
-        second, _Client([_triage(), _good_with_tax_id()]), session_factory, storage, settings
-    )
-    assert second_result.duplicate_of == first.id, "the premise: a copy points at it"
-
-    again = _run(
-        first, _Client([_triage(), _good_with_tax_id()]), session_factory, storage, settings
-    )
-
-    assert again.failed_stage is None, "the reprocess failed on its own copy"
-    assert again.duplicate_of is None
-    assert again.status is not ReceiptStatus.REJECTED
-
-    with session_factory() as session:
-        row = session.get(Receipt, first.id)
-        assert row.duplicate_of is None, "the original was pointed at its own copy"
-        assert row.status is not ReceiptStatus.REJECTED
-        assert row.total == D("224.00"), "the reprocess kept the amounts"
-        assert len(row.line_items) == 2
-
-        runs = session.scalars(
-            select(ExtractionRun).where(ExtractionRun.receipt_id == first.id)
-        ).all()
-        assert len(runs) == 4, "the reprocess paid for two calls and recorded neither"
-
-        # Control: the copy is untouched, so the reprocess did not simply
-        # succeed by the duplicate link having gone away.
-        copy = session.get(Receipt, second.id)
-        assert copy.duplicate_of == first.id
-        assert copy.status is ReceiptStatus.REJECTED
-
-
-def test_a_reprocessed_original_is_still_offered_a_genuine_duplicate(
-    session_factory, storage, settings
-):
-    """The refusal above is narrow: it drops the copies, not every candidate.
-
-    Two purchases share the keys and neither resolves back to the other, so the
-    older one is still the target -- otherwise "never offered its own copy"
-    could be satisfied by never offering anything, and the branch this milestone
-    exists for would be dead on every reprocess.
-    """
-    first = _job(storage)
-    assert (
-        _run(
-            first, _Client([_triage(), _good_with_tax_id()]), session_factory, storage, settings
-        ).failed_stage
-        is None
-    )
-
-    # A second receipt with a *different* total, so nothing links the two yet.
-    second = _job(storage, data=_png_bytes(seed=7))
-    second_result = _run(
-        second, _Client([_triage(), _a_cheaper_purchase()]), session_factory, storage, settings
-    )
-    assert second_result.duplicate_of is None, "the premise: no link either way"
-
-    # Re-extract the second at the first's total: now it really is a duplicate.
-    again = _run(
-        second, _Client([_triage(), _good_with_tax_id()]), session_factory, storage, settings
-    )
-
-    assert again.failed_stage is None
-    assert again.duplicate_of == first.id
-    with session_factory() as session:
-        assert session.get(Receipt, second.id).duplicate_of == first.id
-
-
-# --------------------------------------------------------------------------- #
-# The refusals
-# --------------------------------------------------------------------------- #
-
-
-def test_two_unresolved_merchants_are_never_merged(session_factory, storage, settings):
-    """The pipeline is stricter than the repository: NULL merchant_id never matches.
-
-    :func:`~receipts.persist.repository.find_duplicate_by_content` permits
-    NULL-to-NULL, and that is right for its own contract. It is wrong here.
-    Under exact-match-only merchant resolution many early receipts have no
-    merchant at all, so two genuinely different shops that happen to share a
-    date and a total would be merged -- and the shop is the only one of the
-    three keys that distinguishes them.
-    """
-    first = _job(storage)
-    _run(first, _Client([_triage(), _good_no_tax_id()]), session_factory, storage, settings)
-
-    second = _job(storage, data=_png_bytes(seed=9))
-    result = _run(
-        second, _Client([_triage(), _good_no_tax_id()]), session_factory, storage, settings
-    )
-
-    assert result.failed_stage is None
-    assert result.duplicate_of is None
-    with session_factory() as session:
-        assert session.get(Receipt, first.id).merchant_id is None
-        row = session.get(Receipt, second.id)
-        assert row.merchant_id is None, "the premise: neither receipt has a merchant"
-        assert row.duplicate_of is None
-        assert row.status is not ReceiptStatus.REJECTED
-
-
-def test_a_different_total_at_the_same_merchant_and_date_is_not_a_duplicate(
-    session_factory, storage, settings
-):
-    """All three keys are load-bearing. Two purchases in one day are two purchases."""
-    first = _job(storage)
-    _run(first, _Client([_triage(), _good_with_tax_id()]), session_factory, storage, settings)
-
-    second = _job(storage, data=_png_bytes(seed=7))
-    result = _run(
-        second, _Client([_triage(), _a_cheaper_purchase()]), session_factory, storage, settings
-    )
-
-    assert result.failed_stage is None
-    assert result.duplicate_of is None
-    with session_factory() as session:
-        row = session.get(Receipt, second.id)
-        assert row.duplicate_of is None
-        assert row.total == D("168.00")
-        # The premise: they *did* resolve to the same merchant, so the total is
-        # the only thing that kept them apart.
-        assert row.merchant_id is not None
-        assert row.merchant_id == session.get(Receipt, first.id).merchant_id
-        assert session.scalars(select(Merchant)).all()[0].tax_id == FRESH_TAX_ID
+        assert len(tasks) == 1

@@ -503,6 +503,13 @@ class ReviewTask(Base):
     )
     closed_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True), nullable=True)
 
+    #: The receipt this task reviews. Used to surface the receipt's upload time
+    #: (``Receipt.created_at``) in the review UI and to order the queue by upload
+    #: order rather than by when the task itself was enqueued -- the two diverge
+    #: whenever a receipt sits ``pending`` before the worker reaches it, is
+    #: reprocessed, or has its task reopened.
+    receipt: Mapped[Receipt] = relationship()
+
 
 # --------------------------------------------------------------------------- #
 # 6.8 users (added with the review API, P4.T3)

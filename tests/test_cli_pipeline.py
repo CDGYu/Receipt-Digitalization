@@ -44,8 +44,6 @@ The load-bearing behaviours pinned down below (ADR-0013):
 
 from __future__ import annotations
 
-import hashlib
-import inspect
 import io
 import itertools
 import random
@@ -82,13 +80,11 @@ from receipts.extract.schema import (  # noqa: E402
     TriageResult,
 )
 from receipts.extract.schema import LineItem as ExtractedLineItem  # noqa: E402
-from receipts.ingest.dedupe import compute_phash, phash_distance  # noqa: E402
 from receipts.ingest.ingest import ReceiptJob  # noqa: E402
 from receipts.ingest.storage import LocalStorage, make_image_key  # noqa: E402
 from receipts.persist.models import Base, Receipt, ReviewState, ReviewTask  # noqa: E402
 from receipts.persist.repository import (  # noqa: E402
     create_pending_receipt,
-    find_duplicate_by_phash,
     save_extraction,
 )
 from receipts.persist.session import make_engine, make_session_factory  # noqa: E402
@@ -768,31 +764,20 @@ def _reprocess(session_factory, storage, settings, receipt_id, *, force=False, s
     )
 
 
-def test_a_receipt_whose_run_failed_is_never_matched_as_a_dedupe_original(
+def test_a_second_upload_of_a_failed_receipts_image_is_extracted_in_full(
     session_factory, storage, settings
 ):
-    """The empty-`image_phash` gap, from the CLI side (ADR-0013).
+    """A re-upload of an already-seen image is a full receipt (Option C).
 
-    A receipt whose stage failed carries `image_phash = ""` -- the perceptual
-    hash is only computed at `preprocess`, so a run that died at `load` never
-    produced one -- and `find_duplicate_by_phash` skips rows with an empty
-    hash outright (`int("", 16)` would raise, and an unhashed receipt is not
-    comparable to anything). So a *second* upload of the very same image is
-    not recognised as a duplicate of the failed one: it is extracted in full,
-    at full model cost, and both rows survive.
+    Duplicates are allowed: no dedupe short-circuits a matching image. Here the
+    first run failed (so it carries no extraction and an empty `image_phash`),
+    and a second upload of the *identical* image is processed normally -- it is
+    extracted in full, at full model cost, and both rows survive independently.
+    `reprocess` is the command that hits this routinely, because re-running a
+    receipt that failed is what it is for.
 
-    That is the correct trade -- a missed duplicate is recoverable, a wrong
-    merge is not -- but it is undocumented behaviour with a real cost, and
-    nothing pinned it. `reprocess` is the command that hits it routinely,
-    because re-running a receipt that failed is what it is for.
-
-    Both receipts are handed one byte-identical blob explicitly, because the
-    fixture is distinct-by-default now and byte-identity is what gives this
-    test teeth. Without it the second receipt could not match the failed one
-    even if the failed run *had* stored a hash, so the test would certify
-    nothing. With it, that mutation is exactly what this test refuses:
-    measured in review, a failed row carrying its own hash is matched under
-    the shared blob and unmatched under distinct ones.
+    Both receipts are handed one byte-identical blob explicitly, so this is the
+    strongest form of the case: even a pixel-perfect re-upload is not merged.
     """
     blob = _png_bytes(seed=0)
     failed_id = _pending_receipt(session_factory, storage, data=blob)
@@ -818,122 +803,49 @@ def test_a_receipt_whose_run_failed_is_never_matched_as_a_dedupe_original(
     assert second_row.image_phash != ""
 
 
-def test_reprocessing_a_duplicate_linked_original_never_empties_it(
+def test_reprocessing_an_original_that_has_a_re_upload_keeps_both_intact(
     session_factory, storage, settings
 ):
-    """The dedupe skip, from the CLI side (ADR-0013).
+    """Duplicates are allowed, so re-uploads and reprocesses never collide.
 
-    Once a copy B has been linked to original A, re-running A means running
-    dedupe over a table that already contains A's own image under B. Without
-    the guards, A was marked a duplicate *of its own copy*: emptied of its
-    amounts, flipped to `rejected`, and -- because both rows are then
-    `rejected` -- dropped out of the default export along with B, taking the
-    transaction out of the ledger with nothing left pointing at it.
-
-    Two independent defences stop this, and ADR-0013 records that neither is
-    load-bearing alone: `pipeline._find_duplicate_image` skips dedupe entirely
-    for a receipt already holding its own extraction (`_ALREADY_EXTRACTED`),
-    and `repository.find_duplicate_by_phash` drops candidates whose
-    `duplicate_of` is the receipt being run. This test pins the guarantee they
-    jointly provide, which is the thing an operator actually depends on.
-
-    The copy is handed the original's exact bytes explicitly, because the
-    fixture is distinct-by-default now: the byte-identical second image is
-    this test's premise -- it is what makes the copy a dedupe duplicate at
-    all, and so what lets it run with an empty client script, dedupe having
-    short-circuited extraction before the VLM is ever called.
+    An image is uploaded twice (A then B, byte-identical) and each becomes its
+    own independent `auto_approved` receipt -- neither is `rejected`, neither
+    carries a `duplicate_of`. Re-running A then leaves both rows exactly as they
+    were: full amounts, no link, no rejection. Previously B was linked to A as a
+    duplicate and a reprocess of A risked being marked a duplicate of its own
+    copy; with dedupe removed there is nothing to collide.
     """
     blob = _png_bytes(seed=0)
     original_id = _pending_receipt(session_factory, storage, data=blob)
     assert _reprocess(session_factory, storage, settings, original_id) == EXIT_OK
 
+    # A second, byte-identical upload -- extracted in full now, not short-circuited.
     copy_id = _pending_receipt(session_factory, storage, data=blob)
-    assert _reprocess(session_factory, storage, settings, copy_id, script=[]) == EXIT_OK
+    assert _reprocess(session_factory, storage, settings, copy_id) == EXIT_OK
 
     with session_factory() as session:
         copy_row = session.get(Receipt, copy_id)
         original_row = session.get(Receipt, original_id)
-    # Precondition: the copy really was recognised and linked to the original.
-    assert copy_row.status is ReceiptStatus.REJECTED
-    assert copy_row.duplicate_of == original_id
+    # Both are independent, real receipts.
+    assert copy_row.status is ReceiptStatus.AUTO_APPROVED
+    assert copy_row.duplicate_of is None
+    assert copy_row.total == D("224.00")
     assert original_row.status is ReceiptStatus.AUTO_APPROVED
+    assert original_row.duplicate_of is None
 
-    # Now re-run the original. --force, because it is auto_approved.
+    # Re-run the original. --force, because it is auto_approved.
     code = _reprocess(session_factory, storage, settings, original_id, force=True)
 
     with session_factory() as session:
         reprocessed = session.get(Receipt, original_id)
+        copy_after = session.get(Receipt, copy_id)
     assert code == EXIT_OK
-    # The original is still the original: not rejected, not linked to its own
-    # copy, and still carrying its money.
     assert reprocessed.status is ReceiptStatus.AUTO_APPROVED
     assert reprocessed.duplicate_of is None
     assert reprocessed.total == D("224.00")
-
-
-def test_reprocess_skips_dedupe_for_a_receipt_that_already_holds_its_own_extraction(
-    session_factory, storage, settings
-):
-    """The `_ALREADY_EXTRACTED` skip on its own, isolated from the repository's
-    ``duplicate_of`` exclusion.
-
-    The test above cannot separate the two defences: the copy it builds *is*
-    linked to the original, so the repository-side exclusion alone would save
-    it. The state below is one only the pipeline-side skip covers -- two
-    receipts holding the same image, both `auto_approved`, neither linked to
-    the other. That is reachable today: two workers running the same image
-    concurrently both read `image_phash = ""` on every candidate row at dedupe
-    time, so neither sees the other, and both go on to extract and approve.
-
-    Re-running either of them must not turn it into a duplicate of the other.
-    Whichever is reprocessed already holds an extraction *of its own image*,
-    so dedupe has nothing to tell it -- and running it anyway would empty the
-    row, flip it to `rejected`, and drop the transaction out of the export.
-    """
-    original_id = _pending_receipt(session_factory, storage)
-    assert _reprocess(session_factory, storage, settings, original_id) == EXIT_OK
-    with session_factory() as session:
-        phash = session.get(Receipt, original_id).image_phash
-    assert phash != ""
-
-    # The concurrent twin: same image hash, auto_approved, duplicate_of NULL.
-    twin_job = _job(storage)
-    with session_factory() as session:
-        save_extraction(session, twin_job, _good(), ValidationReport(), D("0.95"),
-                        ReceiptStatus.AUTO_APPROVED, image_phash=phash)
-        session.commit()
-
-    code = _reprocess(session_factory, storage, settings, original_id, force=True)
-
-    with session_factory() as session:
-        row = session.get(Receipt, original_id)
-    assert code == EXIT_OK
-    assert row.status is ReceiptStatus.AUTO_APPROVED
-    assert row.duplicate_of is None
-    assert row.total == D("224.00")
-
-
-def test_fixture_images_are_distinct_beyond_the_dedupe_threshold() -> None:
-    """The premise of every multi-receipt test in this module, pinned.
-
-    Byte-identical fixture blobs share a sha256 AND a dHash -- a uniform
-    bitmap hashes to the same 64 zero bits at any shade -- so receipts
-    processed concurrently race into ``find_duplicate_by_phash``'s
-    near-duplicate window, and whichever commits first makes the others
-    ``REJECTED`` duplicates. That race is this module's diagnosed
-    intermittent failure, and distinct bytes alone are not enough: dedupe is
-    perceptual, so the images must sit pairwise beyond the threshold, which
-    is read off the real function rather than restated here.
-    """
-    threshold = inspect.signature(find_duplicate_by_phash).parameters["threshold"].default
-    blobs = [_png_bytes(seed=seed) for seed in range(12)]
-
-    assert len({hashlib.sha256(blob).digest() for blob in blobs}) == len(blobs)
-
-    hashes = [compute_phash(Image.open(io.BytesIO(blob))) for blob in blobs]
-    for i, first in enumerate(hashes):
-        for j, second in enumerate(hashes[i + 1 :], start=i + 1):
-            assert phash_distance(first, second) > threshold, (i, j, first, second)
+    # The copy is untouched by the reprocess of the original.
+    assert copy_after.status is ReceiptStatus.AUTO_APPROVED
+    assert copy_after.duplicate_of is None
 
 
 def test_an_uncontained_batch_failure_prints_a_redacted_reason(

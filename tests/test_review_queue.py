@@ -136,10 +136,20 @@ def _task(
     ``opened_at`` defaults to ``CURRENT_TIMESTAMP``, which SQLite resolves only
     to the second, so tie-breaking tests set it explicitly rather than hoping
     two inserts land in different seconds.
+
+    **The task's receipt is stamped with the same timestamp.** The queue orders
+    by the receipt's upload time (``Receipt.created_at``), not by ``opened_at``
+    (see :func:`~receipts.review.queue._claim_stmt`), so a test that sets
+    ``opened_at`` to fix the queue order must move the receipt's ``created_at``
+    in lockstep or the ordering key it thinks it is setting has no effect. Both
+    are set here so ``opened_at`` remains a single, faithful handle on "which
+    task sorts first" for every test that already uses it that way.
     """
-    task = enqueue_review(session, _receipt(session).id, reason, priority)
+    receipt = _receipt(session)
+    task = enqueue_review(session, receipt.id, reason, priority)
     if opened_at is not None:
         task.opened_at = opened_at
+        receipt.created_at = opened_at
         session.flush()
     return task
 
@@ -1070,10 +1080,14 @@ def test_list_tasks_includes_the_callers_own_closed_task(engine: sa.Engine) -> N
         assert rows[0].state is ReviewState.DONE
 
 
-def test_list_tasks_orders_by_priority_then_opened_at(engine: sa.Engine) -> None:
+def test_list_tasks_orders_by_priority_then_upload_time(engine: sa.Engine) -> None:
     """The same total order :func:`_claim_stmt` uses, so the first row of a
     ``state=open`` page is the row :func:`next_task` would hand out next.
-    ``opened_at`` is set explicitly because SQLite resolves
+
+    Within a priority band the tiebreak is the receipt's upload time
+    (``Receipt.created_at``); ``_task`` stamps both ``opened_at`` and the
+    receipt's ``created_at`` from the value below, so the timestamps double as
+    the upload order. Set explicitly because SQLite resolves
     ``CURRENT_TIMESTAMP`` only to the second.
     """
     with Session(engine) as session:
@@ -1084,6 +1098,40 @@ def test_list_tasks_orders_by_priority_then_opened_at(engine: sa.Engine) -> None
         rows = list_tasks(session)
 
         assert [row.id for row in rows] == [urgent.id, middle.id, latest.id]
+
+
+def test_list_tasks_orders_by_upload_time_not_task_open_time(engine: sa.Engine) -> None:
+    """The order follows when the receipt was **uploaded**, not when its task
+    was enqueued.
+
+    This is the behaviour the "Uploaded" column and the queue order were
+    changed to guarantee. The two timestamps are made to disagree on purpose:
+    the receipt uploaded *first* (earlier ``created_at``) has its task enqueued
+    *later* (later ``opened_at``) -- the ordinary case of a receipt that sat
+    ``pending`` in a backlog before the worker reached it. The queue must hand
+    it out first regardless, because the reviewer works receipts in upload
+    order. Ordering on ``opened_at`` (the old behaviour) would invert these.
+    """
+    with Session(engine) as session:
+        # Uploaded first, but its task was enqueued last.
+        early_upload = _receipt(session)
+        early_upload.created_at = datetime(2026, 8, 5, 9, 0, tzinfo=UTC)
+        first = enqueue_review(session, early_upload.id, "quick verify", 1)
+        first.opened_at = datetime(2026, 8, 5, 15, 0, tzinfo=UTC)
+
+        # Uploaded second, but its task was enqueued first.
+        late_upload = _receipt(session)
+        late_upload.created_at = datetime(2026, 8, 5, 12, 0, tzinfo=UTC)
+        second = enqueue_review(session, late_upload.id, "quick verify", 1)
+        second.opened_at = datetime(2026, 8, 5, 10, 0, tzinfo=UTC)
+        session.flush()
+
+        rows = list_tasks(session)
+        assert [row.id for row in rows] == [first.id, second.id]
+
+        # And the claim path agrees with the list.
+        claimed = next_task(session, "ada")
+        assert claimed is not None and claimed.id == first.id
 
 
 def test_list_tasks_filters_by_state(engine: sa.Engine) -> None:

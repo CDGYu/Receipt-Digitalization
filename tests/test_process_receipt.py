@@ -1037,94 +1037,71 @@ def test_report_and_score_describe_the_same_normalized_extraction(
 # --------------------------------------------------------------------------- #
 
 
-def test_duplicate_image_is_linked_without_spending_a_model_call(
+def test_a_re_uploaded_image_becomes_its_own_receipt(
     session_factory, storage, settings, existing_row
 ):
+    """Option C: duplicates are allowed, so a re-upload is a full receipt.
+
+    The pipeline no longer short-circuits a matching image to a ``rejected``
+    duplicate row. A user who forgets a receipt was already processed and
+    re-uploads the identical photo gets a second, independent receipt that is
+    extracted and routed on its own confidence -- which means the model DOES run
+    for it (the old contract that "a re-upload costs nothing beyond the hash" is
+    the trade this policy gives up).
+    """
     data = _png_bytes()
     first = _run(existing_row(_job(storage, data)), _Client([_triage(), _good()]),
                  session_factory, storage, settings)
+    assert first.status is ReceiptStatus.AUTO_APPROVED
 
     second_job = existing_row(_job(storage, data))
-    second_client = _Client([])  # any model call would raise
-    second = _run(second_job, second_client, session_factory, storage, settings)
+    # A full extraction is expected this time -- no dedupe short-circuit.
+    second = _run(second_job, _Client([_triage(), _good()]),
+                  session_factory, storage, settings)
 
-    assert second_client.calls == []
-    assert second.duplicate_of == first.receipt_id
-    assert second.status is ReceiptStatus.REJECTED
+    assert second.duplicate_of is None
+    assert second.status is ReceiptStatus.AUTO_APPROVED
 
     with session_factory() as session:
         row = session.get(Receipt, second_job.id)
-        assert row.duplicate_of == first.receipt_id
-        # The *row* is terminal, not just the returned result -- over a pending
-        # row that means save_extraction's update branch actually applied the
-        # rejected status rather than leaving the upload's `pending`.
-        assert row.status is ReceiptStatus.REJECTED
+        assert row.duplicate_of is None
+        assert row.status is ReceiptStatus.AUTO_APPROVED
+        # It is a real, independent extraction, not an empty rejected row.
+        assert row.total == D("224.00")
+        assert len(row.line_items) == 2
+        # The phash is still stored on every row so the check could be
+        # reinstated later without a backfill.
         assert row.image_phash
-        # A duplicate is terminal and must not clutter the review queue.
-        assert session.scalars(select(ReviewTask)).all() == []
 
 
-def test_reprocessing_a_receipt_that_already_has_a_duplicate_keeps_it_intact(
+def test_a_semantically_identical_receipt_is_stored_independently(
     session_factory, storage, settings
 ):
-    """``A`` processed, ``B`` uploaded as the same image, then ``A`` re-run.
+    """Two different photos of the same purchase are two receipts (Option C).
 
-    Dedupe used to exclude only ``job.id``, and it ran even for a receipt that
-    already held an extraction -- so the reprocessed original matched the copy
-    pointing *at* it and was itself marked a duplicate of it: ``A`` became
-    ``rejected`` with no total, no merchant and no line items, ``duplicate_of =
-    B``. That is the ``A <-> B`` cycle ``mark_duplicate``'s docstring promises
-    cannot happen, and since both rows are then ``rejected`` **both** drop out
-    of ``GET /export/xlsx`` by default: the transaction leaves the ledger with
-    nothing left pointing at it.
+    Same merchant + date + total no longer merges into a ``rejected`` duplicate.
+    Both rows stand on their own; the ledger/export may hold two rows for one
+    purchase, which is the accepted trade for never blocking a re-upload.
     """
-    data = _png_bytes()
-    original = _job(storage, data)
+    original = _job(storage, _png_bytes())
     first = _run(original, _Client([_triage(), _good()]), session_factory, storage, settings)
     assert first.status is ReceiptStatus.AUTO_APPROVED
 
-    copy = _run(_job(storage, data), _Client([]), session_factory, storage, settings)
-    assert copy.duplicate_of == original.id
+    # A perceptually different image (so this is the *semantic* path, not the
+    # image path) that extracts to the same merchant + date + total.
+    second_job = _job(storage, _png_bytes(seed=99))
+    second = _run(second_job, _Client([_triage(), _good()]),
+                  session_factory, storage, settings)
 
-    again = _run(original, _Client([_triage(), _good()]), session_factory, storage, settings)
-
-    assert again.status is ReceiptStatus.AUTO_APPROVED
-    assert again.duplicate_of is None
+    assert second.duplicate_of is None
+    assert second.status is ReceiptStatus.AUTO_APPROVED
     with session_factory() as session:
-        receipt = session.get(Receipt, original.id)
-        assert receipt.status is ReceiptStatus.AUTO_APPROVED
-        assert receipt.duplicate_of is None
-        assert receipt.total == D("224.00")
-        assert receipt.merchant_name_raw == "SUPERMART INC."
-        assert len(receipt.line_items) == 2
-        # The copy is untouched, and the chain still runs copy -> original.
-        assert session.get(Receipt, copy.receipt_id).duplicate_of == original.id
-
-
-def test_reprocessing_a_duplicate_re_establishes_the_same_link(
-    session_factory, storage, settings
-):
-    """The other side of the skip rule: a ``rejected`` row is still deduped.
-
-    ``rejected`` is the pipeline's own marking for a copy, not an extraction of
-    that receipt's own content, so re-running one must find the original again
-    (and spend no model call) rather than skip dedupe and extract over the link.
-    """
-    data = _png_bytes()
-    original = _job(storage, data)
-    _run(original, _Client([_triage(), _good()]), session_factory, storage, settings)
-
-    copy_job = _job(storage, data)
-    _run(copy_job, _Client([]), session_factory, storage, settings)
-
-    client = _Client([])  # any model call would raise
-    again = _run(copy_job, client, session_factory, storage, settings)
-
-    assert client.calls == []
-    assert again.status is ReceiptStatus.REJECTED
-    assert again.duplicate_of == original.id
-    with session_factory() as session:
-        assert session.get(Receipt, copy_job.id).duplicate_of == original.id
+        row = session.get(Receipt, second_job.id)
+        assert row.duplicate_of is None
+        assert row.status is not ReceiptStatus.REJECTED
+        assert row.total == D("224.00")
+        # The original is equally untouched.
+        assert session.get(Receipt, original.id).duplicate_of is None
 
 
 # --------------------------------------------------------------------------- #
@@ -1231,19 +1208,6 @@ def test_preprocess_failure_reaches_needs_review(
     result = _run(job, _Client([]), session_factory, storage, settings)
 
     _assert_terminal_needs_review(result, session_factory, "preprocess")
-
-
-def test_dedupe_failure_reaches_needs_review(
-    session_factory, storage, settings, monkeypatch, existing_row
-):
-    def boom(*args, **kwargs):
-        raise RuntimeError("phash index offline")
-
-    monkeypatch.setattr(pipeline_module, "find_duplicate_by_phash", boom)
-    job = existing_row(_job(storage))
-    result = _run(job, _Client([]), session_factory, storage, settings)
-
-    _assert_terminal_needs_review(result, session_factory, "dedupe")
 
 
 def test_triage_failure_reaches_needs_review(
@@ -1598,11 +1562,10 @@ def test_passing_no_sink_changes_nothing(tmp_path, settings) -> None:
     through the one function every receipt goes through.
 
     **Each run gets its own database and blob store.** Sharing one would not
-    hold the sink as the only difference: `_png_bytes` is deterministic, so the
-    two jobs carry byte-identical images and the second run would take the
-    dedupe short-circuit and come back `rejected` without ever extracting. The
-    comparison would then measure accumulated database state instead of the
-    sink, and would fail identically with no sink passed at all.
+    hold the sink as the only difference: the comparison would then measure
+    accumulated database state (two rows, review-queue entries, merchant
+    counts) instead of the sink. Isolated worlds keep the sink the only thing
+    that varies between the two runs.
     """
     def run(label, progress):
         world = tmp_path / label

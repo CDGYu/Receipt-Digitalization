@@ -43,6 +43,7 @@ function task(over: Partial<ReviewTask>): ReviewTask {
     priority: 5,
     assigned_to: null,
     state: 'open',
+    uploaded_at: '2026-08-25T09:00:00+00:00',
     opened_at: '2026-08-25T09:30:00+00:00',
     closed_at: null,
     ...over,

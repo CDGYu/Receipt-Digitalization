@@ -88,6 +88,7 @@ const TASK: ReviewTask = {
   priority: 1,
   assigned_to: 'alice',
   state: 'in_progress',
+  uploaded_at: '2026-07-14T09:15:00+00:00',
   opened_at: '2026-07-14T09:40:00+00:00',
   closed_at: null,
 }

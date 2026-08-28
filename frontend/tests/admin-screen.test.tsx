@@ -39,6 +39,7 @@ const HELD: ReviewTask = {
   priority: 1,
   assigned_to: 'carol',
   state: 'in_progress',
+  uploaded_at: '2026-08-06T08:30:00+00:00',
   opened_at: '2026-08-06T09:00:00+00:00',
   closed_at: null,
 }
@@ -61,6 +62,7 @@ const UNCLAIMED: ReviewTask = {
   priority: 2,
   assigned_to: null,
   state: 'open',
+  uploaded_at: '2026-08-06T09:30:00+00:00',
   opened_at: '2026-08-06T10:00:00+00:00',
   closed_at: null,
 }

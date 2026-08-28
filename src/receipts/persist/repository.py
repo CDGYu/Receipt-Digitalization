@@ -1168,14 +1168,17 @@ def mark_duplicate(session: Session, new_id: uuid.UUID, existing_id: uuid.UUID) 
     row left to follow the chain to. Refusing the link keeps the original intact
     for the caller to report instead.
 
-    **:func:`find_duplicate_by_content` cannot lead here when it is passed the
-    ``exclude_id`` this is then called with** -- which is what
-    :func:`~receipts.pipeline._find_duplicate_content`, its only caller, does.
-    It excludes candidates on this very :func:`resolves_back_to` predicate, so the semantic
-    path never offers a target this then rejects -- which is what keeps the
-    refusal an invariant on that path rather than an ordinary outcome of
-    reprocessing. Said of that one caller only: :func:`find_duplicate_by_phash`
-    filters direct back-links in SQL and does not walk the chain.
+    **The pipeline no longer calls this.** Duplicate rejection was removed
+    (Option C -- duplicates are allowed), so ``process_receipt`` no longer links
+    or rejects anything; this function and :func:`find_duplicate_by_content` /
+    :func:`find_duplicate_by_phash` are retained as reusable infrastructure so
+    the check can be reinstated without a rewrite. The acyclicity contract below
+    still holds for any future caller. When ``find_duplicate_by_content`` is
+    passed the receipt's own ``exclude_id``, it excludes candidates on this same
+    :func:`resolves_back_to` predicate, so it never offers a target this would
+    then refuse -- which keeps the refusal an invariant rather than an ordinary
+    outcome of reprocessing. :func:`find_duplicate_by_phash` filters direct
+    back-links in SQL and does not walk the chain.
 
     Flushes; does not commit.
     """

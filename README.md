@@ -118,7 +118,7 @@ against that set. Without it you are guessing.
 
 ```mermaid
 flowchart TD
-    A[Upload / folder watch] --> B[Ingest: dedupe, store]
+    A[Upload / folder watch] --> B[Ingest: store]
     B --> C[Preprocess: deskew, quality check, split tall receipts]
     C --> D[Pass 1 — Triage]
     D --> D1{Readable receipt?}
@@ -143,6 +143,15 @@ flowchart TD
     O --> Q
     Q --> R[Excel export]
 ```
+
+> **Duplicates are allowed.** The pipeline does **not** reject a re-uploaded
+> image or a repeat of the same purchase. A user who forgets a receipt was
+> already processed and uploads it again gets a second, independent receipt that
+> is extracted and routed on its own confidence. The trade: an accidental
+> re-upload costs a full extraction (the perceptual hash no longer
+> short-circuits the model call), and the ledger/export may hold two rows for
+> one purchase. `image_phash` is still stored on every row, so image dedupe
+> could be reinstated later without a backfill.
 
 ### The three model passes, explained
 
@@ -416,7 +425,7 @@ optimisation).
 
 Full signatures for all of these are in spec §14.
 
-- `ingest/` — upload, PDF rasterising, perceptual-hash dedupe, blob storage
+- `ingest/` — upload, PDF rasterising, perceptual hashing (stored, not used to reject — duplicates are allowed), blob storage
 - `preprocess/` — deskew, bounds detection, quality assessment, tall-receipt splitting
 - `normalize/` — date, number, currency, and text canonicalisation
 - `score/` — confidence scoring and routing (penalty table is in spec §12)

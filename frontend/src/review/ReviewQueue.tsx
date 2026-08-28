@@ -18,7 +18,8 @@ import styles from './ReviewQueue.module.css'
  * ## Two calls, joined here
  *
  * `GET /review/tasks` carries the queue's own columns -- `reason`, `priority`,
- * `state`, `opened_at` -- and **no receipt content at all**: `_task_summary`
+ * `state`, `uploaded_at` (the receipt's upload time, shown in the "Uploaded"
+ * column) and `opened_at` -- and **no receipt content at all**: `_task_summary`
  * returns ids and queue metadata. Merchant, total and confidence come from
  * `GET /receipts`, which is `require_user` and whose `receipt_summary` docstring
  * calls itself "just enough for a reviewer to triage a queue". So the two are
@@ -57,10 +58,10 @@ import styles from './ReviewQueue.module.css'
  *
  * ## Order
  *
- * Untouched. `list_tasks` orders by `priority, opened_at, id`, the same total
- * order `_claim_stmt` uses, so the first backlog row here is genuinely the row
- * `GET /review/next` would hand out next. Re-sorting in the browser would make
- * the list disagree with the queue.
+ * Untouched. `list_tasks` orders by `priority, Receipt.created_at, id` (the
+ * receipt's upload time), the same total order `_claim_stmt` uses, so the first
+ * backlog row here is genuinely the row `GET /review/next` would hand out next.
+ * Re-sorting in the browser would make the list disagree with the queue.
  */
 
 /** ISO 8601 to a stable, locale-independent minute.
@@ -71,7 +72,7 @@ import styles from './ReviewQueue.module.css'
  *  relative "2h ago" either -- that needs `Date.now()` at render time, which is
  *  a value React did not schedule the render for and a moving target in tests.
  */
-function openedAt(iso: string): string {
+function uploadedAt(iso: string): string {
   return iso.slice(0, 16).replace('T', ' ')
 }
 
@@ -269,7 +270,7 @@ function QueueTable({
               Confidence
             </th>
             <th scope="col">Why</th>
-            <th scope="col">Opened</th>
+            <th scope="col">Uploaded</th>
             {/* A visible word, not `className="sr-only"` -- **this app defines
                 no such class**, so that span rendered in full while claiming to
                 be hidden. Seen in a browser; `grep -rn "sr-only" src
@@ -304,7 +305,7 @@ function QueueTable({
                 )}
               </td>
               <td className={styles.reason}>{task.reason}</td>
-              <td className={styles.opened}>{openedAt(task.opened_at)}</td>
+              <td className={styles.opened}>{uploadedAt(task.uploaded_at)}</td>
               <td className={styles.action}>
                 <button
                   type="button"
