@@ -231,8 +231,12 @@ def test_main_forwards_the_cli_options_and_reports_a_written_artifact(
             },
         )
     ]
+    # The path is built with ``Path`` so the separator matches the OS the test
+    # runs on -- ``\`` on Windows, ``/`` on Linux/CI. Hard-coding either one
+    # makes the test pass on one platform and fail on the other.
+    expected_target = Path("results-fixture") / "impact-comparison.json"
     assert capsys.readouterr().out == (
-        "Wrote results-fixture\\impact-comparison.json\nImproved: True\n"
+        f"Wrote {expected_target}\nImproved: True\n"
     )
 
 
