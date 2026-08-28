@@ -259,8 +259,11 @@ figure, never blockers — and **ISSUE-034 is now the caveat that matters** (2h)
 
 **Still open:** **ISSUE-004** (structural — a rule no gate holds, recorded
 rather than fixable; its own entry opens "There is no code change that closes
-this") and **ISSUE-010** (all that remains is the collapsed-table
-`border-radius`, a repo-wide question nobody has ruled on).
+this"). *(**ISSUE-010 was listed here as open until 2026-08-28 and it was
+not** — its collapsed-table `border-radius` was ruled and fixed 2026-08-25, the
+radius moved to `.scroller` and pinned tree-wide in `stylesheets.test.ts`. The
+register's Status line said RESOLVED while this line still said open; the source
+won.)*
 
 **Closed 2026-08-25, and none of them cost what this section estimated:**
 **ISSUE-007** (`d7e985a` — the "needs a contract decision first" was given and
@@ -767,7 +770,7 @@ is a pointer; where it and an entry disagree, the entry wins.**
 | ISSUE-007 | `PROMPT_VERSION` is unenforced; reverting it passes the whole suite. **Its easiest green is the defect.** | **RESOLVED 2026-08-25** at `d7e985a` — results keyed `{date}-{prompt_version}-{prompt_bundle_hash}`, so an un-bumped prompt can no longer overwrite a run's artefact |
 | ISSUE-008 | `xlsx._purchases` and `rules._purchased` are identical predicates with nothing binding them. | **RESOLVED 2026-08-25** at `07d96ef` — an agreement test in neither module's suite; the two copies stay separate, because ADR-0010's decoupling is why the second exists |
 | ISSUE-009 | `CorrectionPatch`'s docstring no longer describes the contract it validates; OpenAPI omits `buyer.*` and `is_template_row`. | **RESOLVED 2026-08-25** at `ee4858d` — `buyer.*` and `is_template_row` published, plus a pin asserting the schema **equals** the correctable set, both directions |
-| ISSUE-010 | `/app/receipts` **has now been opened**, in three engines. The download **works**; the predicted defect was refuted. One real finding (the gutter) is fixed. | **OPEN, narrowed** — only the collapsed-table `border-radius`, a repo-wide question |
+| ISSUE-010 | `/app/receipts` **has now been opened**, in three engines. The download **works**; the predicted defect was refuted. Two real findings (the gutter, the collapsed-table `border-radius`) are fixed. | **RESOLVED 2026-08-25** at `85ca42f` — radius moved to `.scroller`, pinned tree-wide |
 | ISSUE-011 | A measured-false `class="undefined"` spelling survives in **three** test files (four sentences). | **RESOLVED 2026-08-25** at `07d96ef` |
 | **ISSUE-012** | **The per-rung counts never reach the committed results JSON.** They reach the printed report and the return value; `run_eval` writes the file before it returns and `run_baseline` folds them in after. | **RESOLVED 2026-08-25** at `1637058` — `run_eval` gained a `finalize` hook called **before** the write, so the committed artefact records which rung produced it |
 | **ISSUE-013** | **`extract_rung_counts` is keyed by `model_id`, but ADR-0047 defines a tier as `(model, use_tools)`** — so two rungs on one model with opposed tools flags are two tiers and one count, and the escalation goes invisible in the figure that exists to expose it. | **RESOLVED 2026-08-25** at `b51fb1d` — counts keyed by tier `(model, use_tools)`, bound to `run_repeats.rung_identity` by an injectivity test |
@@ -879,10 +882,14 @@ them:
    with no total put the rule between the code and the mark. `Value` gained
    `align` (default `start`) and `.notExtractedEnd`. **`kind` is not the axis** —
    `StatTiles` and `ConfidenceRail` both render numeric kinds left-aligned.
-4. **Confirmed ignored, and STILL OPEN.** The `border-radius` on a
-   `border-collapse: collapse` table renders square. Pre-existing as a pattern —
-   `TaskTable` and `LineItemsTable` both do it — so it is a repo-wide question
-   nobody has ruled on. **This is all that is left of ISSUE-010.**
+4. **Confirmed ignored, then RULED AND FIXED 2026-08-25 at `85ca42f`.** The
+   `border-radius` on a `border-collapse: collapse` table rendered square.
+   Pre-existing as a pattern — `TaskTable` and `LineItemsTable` both did it — so
+   it was a repo-wide question; the ruling moved the radius and border to the
+   `.scroller` wrapper across all three tables and pinned it tree-wide in
+   `stylesheets.test.ts`. **ISSUE-010 is now fully resolved.** *(This line said
+   "STILL OPEN … nobody has ruled on it" until 2026-08-28, after the register's
+   Status line already recorded the fix.)*
 
 **Two things this pass found by following this section's own instructions, both
 still true and both unfixed:** there is **no admin in the seed**
