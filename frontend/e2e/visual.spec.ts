@@ -11,7 +11,7 @@ import type { Browser, Locator, Page, Route } from '@playwright/test'
 // so an amount needs `as Money`; that is the cost, and it is the same pattern
 // tests/patch.test.ts and tests/review-screen.test.tsx already use.
 import type { Metrics } from '../src/api/admin'
-import type { ConfidenceReason, Finding, LineItem, Money, ReceiptDetail, ReviewTask } from '../src/api/types'
+import type { ConfidenceReason, Finding, LineItem, Money, ReceiptDetail, ReceiptSummary, ReviewTask } from '../src/api/types'
 
 /** The browser pass: put every surface on a real screen and record what it looks
  *  like -- plan Task 5, ADR-0027's "a browser pass is part of done".
@@ -373,6 +373,19 @@ function metrics(overrides: Partial<Metrics> = {}): Metrics {
     queue: { open: 9, in_progress: 2, done: 74, total: 85, by_priority: { '0': 1, '1': 5, '2': 3 } },
     thresholds: { auto_approve: '0.85', review: '0.60' },
     ...overrides,
+  }
+}
+
+function summaryOf(receipt: ReceiptDetail): ReceiptSummary {
+  return {
+    id: receipt.id,
+    status: receipt.status,
+    confidence: receipt.confidence,
+    merchant_name_raw: receipt.merchant_name_raw,
+    txn_date: receipt.txn_date,
+    currency: receipt.currency,
+    total: receipt.totals.total,
+    created_at: receipt.created_at,
   }
 }
 
@@ -1096,6 +1109,22 @@ async function stubbedReview(page: Page, receipt: unknown): Promise<Stubs> {
   return s
 }
 
+/** A stubbed Results screen with one row opened into the detail panel. */
+async function stubbedReceiptDetail(page: Page, receipt: ReceiptDetail): Promise<Stubs> {
+  const s = await baseStubs(page, { username: 'dana', role: 'admin' })
+  await s.on('receipt-list', '**/export/receipts*', (route) =>
+    json(route, 200, { items: [summaryOf(receipt)], has_more: false }),
+  )
+  await s.on('receipt', '**/receipts/*', (route) => json(route, 200, receipt))
+  await imageStubs(s)
+  await page.goto('/app/receipts')
+  await expect(page.getByRole('table')).toBeVisible()
+  await page.getByRole('button', { name: 'View' }).click()
+  await expect(page.getByLabel('Receipt detail')).toBeVisible()
+  await expect(page.locator('img[alt="Receipt"]')).toBeVisible()
+  return s
+}
+
 const formSection = (page: Page): Locator =>
   page.locator('section').filter({ has: page.getByRole('heading', { name: 'Receipt', exact: true }) })
 
@@ -1229,6 +1258,38 @@ test('the review screen with null fields, beside real zeros', async ({ browser }
         }
       })
     }
+  }
+})
+
+test('the Results detail panel keeps the editor beside a loaded image', async ({
+  browser,
+}, testInfo) => {
+  test.setTimeout(120_000)
+  const baseURL = baseURLOf(testInfo.project.use)
+  for (const theme of THEMES) {
+    await withPage(browser, baseURL, WIDE, theme, async (page) => {
+      const receipt = fullReceipt({ status: 'reviewed' })
+      const s = await stubbedReceiptDetail(page, receipt)
+      const panel = page.getByLabel('Receipt detail')
+      const form = formSection(page)
+
+      const panelBox = await panel.boundingBox()
+      const formBox = await form.boundingBox()
+      expect(panelBox, 'the receipt detail panel must have a browser layout box').not.toBeNull()
+      expect(formBox, 'the receipt form must have a browser layout box').not.toBeNull()
+      expect(
+        Math.round(formBox!.width),
+        'the loaded image must not squeeze the correction form into an unusable rail',
+      ).toBeGreaterThanOrEqual(320)
+      expect(
+        Math.round(formBox!.x + formBox!.width),
+        'the correction form must stay inside the panel rather than being pushed off-screen',
+      ).toBeLessThanOrEqual(Math.round(panelBox!.x + panelBox!.width) + 1)
+
+      s.expectHits('auth/me', 'receipt-list', 'receipt', 'image/link', 'image/blob')
+      await shot(page, 'receipts-detail-loaded-image', WIDE, theme, panel)
+      record('receipts-detail-loaded-image', WIDE, theme, await measure(page))
+    })
   }
 })
 

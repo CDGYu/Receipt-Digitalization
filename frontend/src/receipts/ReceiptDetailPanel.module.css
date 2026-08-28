@@ -25,7 +25,7 @@
   flex-direction: column;
   gap: var(--space-lg);
   box-sizing: border-box;
-  width: min(64rem, 100vw);
+  width: 75vw;
   padding: var(--space-2xl);
   overflow-y: auto;
   border-left: 1px solid var(--color-border);
@@ -102,16 +102,52 @@
   color: var(--color-muted-foreground);
 }
 
+/* The photo is allowed to shrink; the correction column gets the remaining
+ * width. A flex row let the loaded image's intrinsic width become the row's
+ * demand and squeeze the variables into a sliver; capping the image column
+ * also lets the line-items table use the space up to the photo's edge. The
+ * image column is proportional to the widened drawer, so the photo grows with
+ * the view rather than staying thumbnail-sized. */
 .body {
-  display: flex;
-  gap: var(--space-2xl);
+  display: grid;
+  grid-template-columns: minmax(20rem, 32%) minmax(0, 1fr);
+  gap: var(--space-lg);
   align-items: flex-start;
+  min-width: 0;
+}
+
+.body > * {
+  min-width: 0;
+}
+
+.body > :first-child {
+  position: sticky;
+  top: var(--space-2xl);
+  align-self: start;
+  max-height: calc(100vh - var(--space-2xl) - var(--space-2xl));
+  overflow-y: auto;
 }
 
 .side {
   display: flex;
-  flex: 1 1 28rem;
   flex-direction: column;
   gap: var(--space-lg);
   min-width: 0;
+}
+
+@media (max-width: 56rem) {
+  .panel {
+    width: 100vw;
+    padding: var(--space-xl);
+  }
+
+  .body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .body > :first-child {
+    position: static;
+    max-height: none;
+    overflow-y: hidden;
+  }
 }

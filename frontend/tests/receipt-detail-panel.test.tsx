@@ -162,4 +162,18 @@ describe('the results detail panel', () => {
     expect(props.onClose).toHaveBeenCalled()
     expect(props.patchReceipt).not.toHaveBeenCalled()
   })
+
+  it('reserves an editable column when the receipt image has loaded', () => {
+    const here = dirname(fileURLToPath(import.meta.url))
+    const css = readFileSync(
+      join(here, '..', 'src', 'receipts', 'ReceiptDetailPanel.module.css'),
+      'utf8',
+    ).replace(/\/\*[\s\S]*?\*\//g, '')
+
+    expect(css).toContain('grid-template-columns: minmax(20rem, 32%) minmax(0, 1fr);')
+    expect(css).toContain('.body > *')
+    expect(css).toContain('min-width: 0;')
+    expect(css).toContain('@media (max-width: 56rem)')
+    expect(css).toContain('grid-template-columns: minmax(0, 1fr);')
+  })
 })

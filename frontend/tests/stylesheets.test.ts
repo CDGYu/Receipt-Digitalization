@@ -392,8 +392,15 @@ const CENSUS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
     '.failure': 'margin, padding, border, border-radius, color, font-family, font-size',
     '.saved': 'margin, font-family, font-size, color',
     '.loading': 'margin, font-family, font-size, color',
-    '.body': 'display: flex, gap, align-items: flex-start',
-    '.side': 'display: flex, flex, flex-direction: column, gap, min-width',
+    '.body': 'display: grid, grid-template-columns, gap, align-items: flex-start, min-width',
+    '.body > *': 'min-width',
+    '.body > :first-child':
+      'position: sticky, top, align-self: start, max-height, overflow-y: auto',
+    '.side': 'display: flex, flex-direction: column, gap, min-width',
+    '@media (max-width: 56rem) .panel': 'width, padding',
+    '@media (max-width: 56rem) .body': 'grid-template-columns',
+    '@media (max-width: 56rem) .body > :first-child':
+      'position: static, max-height: none, overflow-y: hidden',
   },
   'receipts/ReceiptsScreen.module.css': {
     '.screen':
