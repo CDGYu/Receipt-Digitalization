@@ -12,14 +12,77 @@ resume — so picking it up later does not mean re-deriving the diagnosis.
 completed", which stopped being true that day. Citations name the issue number,
 not the heading.)*
 
-**Status:** OPEN, NARROWED — **step 6 is DONE, 2026-08-22 (ADR-0049).** Steps 7
-(grow the golden set) and 8 (calibrate) remain, and step 7 now gates more than
-the model does — see the measurement below.
-**Owner action required:** yes — but **not the provider choice this issue
-recommends.** See the ruling immediately below.
+**Status:** OPEN, NARROWED — **steps 6 and 7 DONE; step 8 (calibrate) RUN and
+its answer is negative.** Step 6 (first baseline) 2026-08-22 (ADR-0049); step 7
+(grow the golden set) 2026-08-30 (89 receipts); step 8 ran 2026-08-30 and found
+**no threshold reaches the target** — see the 2026-08-30 measurement below. The
+blocker has moved off code and data entirely: it is now model comprehension.
+**Owner action required:** yes — a decision on the path forward (stronger model,
+or accept review-heavy operation), **not** the provider choice this issue
+originally recommends. See the ruling below.
 **Discovered:** 2026-07-28. **Blocks:** the first real accuracy numbers (spec §16),
 threshold calibration (P3.T6 / P8), and any prompt/rule change that should be
 re-evaluated.
+
+> ## MEASUREMENT, 2026-08-30 — STEP 7 DONE, STEP 8 RUN, and the answer is: this model cannot be auto-approved on this corpus
+>
+> **The golden set is now 89 receipts** (grown from 3; P0.T1 done), all
+> schema-valid and clean under the production rules. The first real baseline over
+> the full set was run **cloud-only, one rung**, `gemma4:cloud` for triage and
+> extract, `use_tools=true`, no fallback — the same config as the 2026-08-22 run
+> below, now at scale. **3 repeats, 89 receipts, `n_failed` 0.** Committed under
+> `eval/results/2026-08-30-cloud-89/`.
+>
+> | metric | min | median | max | n |
+> |---|---|---|---|---|
+> | `transcription_accuracy` | 28.44% | 28.64% | 28.72% | 3 |
+> | `critical_field_accuracy` | 7.87% | 8.99% | 10.11% | 3 |
+> | `auto_approval_precision` | 8.70% | 9.09% | 13.04% | 3 |
+> | `auto_approval_rate` | 24.72% | 25.84% | 25.84% | 3 |
+> | `line_item_f1` | 13.36% | 13.42% | 13.72% | 3 |
+>
+> **`receipts calibrate --target 0.85` recommends NOTHING.** No threshold on the
+> curve reaches even the relaxed 85% auto-approval-precision target (owner ruling
+> 2026-08-30 lowered it from 99% to 85–90%); the highest precision anywhere on
+> the curve is ~11% at threshold 0.65. The command's refusal is the correct
+> answer, not a failure of the command.
+>
+> **Why, and it is not the threshold or the golden-set size.** The confidence
+> scorer hands ~26% of receipts high confidence, but ~90% of those are
+> critically wrong — *confidently-wrong* extractions (wrong merchant/date the
+> validator cannot flag as an ERROR). Moving the threshold cannot separate right
+> from wrong when the wrong extractions carry no penalisable signal. Two measured
+> contributors: (1) `gemma4:cloud` is non-deterministic at `temperature=0` (the
+> same receipt swings between critical-correct and critically-wrong across
+> repeats — r025 was F1 1.0 on a standalone probe yet scored merchant wrong in
+> repeat-01); (2) the corpus is genuinely hard for a 2.5B-class-adjacent cloud
+> model (HEIC phone photos, handwritten notes, diverse BIR formats). The router
+> does the safe thing: ~74% route to review rather than auto-approving.
+>
+> **Repair does not rescue it.** A `--max-attempts 2` run
+> (`eval/results/2026-08-30-cloud-89-repair/`, 0 failures) lands inside the
+> 3-repeat noise band on every metric — repair re-asks about arithmetic that
+> fails validation, but the dominant failure is confidently-wrong critical fields
+> validation never flags, so repair rarely triggers on the thing that is wrong.
+>
+> **Self-consistency (P7) and merchant few-shot (P6) could NOT be measured here**
+> — the eval path is hermetic by design (ISSUE-034): `build_eval_pipeline` hard-
+> codes `consistency=None` and takes no session, and `tests/test_eval_prompt_
+> conditioning.py` guards against threading either through. Turning those into
+> runnable experiments is its own design task.
+>
+> **A bug was fixed to get here:** `pipeline.DEFAULT_IMAGE_SUFFIXES` (and
+> `scripts/try_one_receipt.py`) searched only `.jpg/.jpeg/.png/.webp`, so all 78
+> HEIC golden images failed to load on the first attempt. Added `.heic`/`.heif`
+> to mirror `image_ops._SUPPORTED_SUFFIXES`. The corrected run has 0 load
+> failures. Committed on branch `eval/golden-set-89-and-baseline` (`abb698a`).
+>
+> **What "done" now needs, and it is not on this repo's side:** a vision model
+> that reads this corpus well enough for *some* confidence threshold to clear
+> 85%. Candidate levers, none a calibrate re-run — a stronger cloud model, or
+> wiring P6/P7 into eval (a design change) and measuring whether they lift a
+> model that is closer to the target to begin with. Weight-fitting (P8.T1) and
+> LoRA (P9.T1) remain blocked on an empty `corrections` table regardless.
 
 > ## MEASUREMENT, 2026-08-22 — STEP 6 IS DONE, and the number is a spread
 >
