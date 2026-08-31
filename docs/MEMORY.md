@@ -117,7 +117,7 @@ moves, and this file has carried a wrong issue count before.
 **No count of refreshes is written here** — it is a number that moves without its
 sentence changing, which is review standard 5.
 
-**Freshness anchor `7b74402`** — the last commit that is not this handoff pair.
+**Freshness anchor `f268e5d`** — the last commit that is not this handoff pair.
 **It is written twice below — here and inside the command.** Moving one and not
 the other is what happened on an earlier refresh, and the gate caught it because
 it parses the anchor out of the *command*.
@@ -138,7 +138,7 @@ nothing else: a stamp cannot name the commit that writes it. The test is a
 command, not a commit and not a count:
 
 ```
-git log --oneline 21f8215..main -- ":(top,exclude)docs/MEMORY.md" ":(top,exclude)docs/NEXT_SESSION_PROMPT.md"
+git log --oneline f268e5d..main -- ":(top,exclude)docs/MEMORY.md" ":(top,exclude)docs/NEXT_SESSION_PROMPT.md"
 git log --oneline refs/remotes/origin/main..main   # what a push would send
 git ls-remote --heads origin main                  # authoritative on what is pushed
 git branch --no-merged main                        # named FOUR on 2026-08-25

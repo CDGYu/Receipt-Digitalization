@@ -18,6 +18,16 @@ two of the six findings the last session was handed were false.** One instructed
 it to "fix" a correct sentence in an Accepted ADR to match a wrong measurement.
 **Verify a finding before acting on it — including every finding in this file.**
 
+**2026-08-31 — Docker is gone and CI no longer builds an image.** The
+`Dockerfile`, `docker-compose.yml` and `.dockerignore` were removed; the system
+runs natively on the host (`docs/DEPLOYMENT.md`, "no containers"). The `image`
+job was dropped from `.github/workflows/ci.yml` at `f268e5d` — it built the now
+absent Dockerfile and could only fail. **ADR-0036 ("one image, two commands")
+now describes a shape the repo no longer has**; it is left standing as the
+record of what was decided, not as a live instruction — reconcile it (supersede
+or annotate) when you next touch the deployment docs. The freshness anchor below
+is re-pointed at `f268e5d`, the last commit that is not this pair.
+
 ---
 
 # THE TASK LIST — what is actually left, in order
