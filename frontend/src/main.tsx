@@ -30,7 +30,7 @@ import '@fontsource/fira-code/500.css'
 import '@fontsource/archivo/600.css'
 import '@fontsource/archivo/700.css'
 import './styles/tokens.css'
-import { StrictMode, useEffect, useSyncExternalStore } from 'react'
+import { StrictMode, useEffect, useState, useSyncExternalStore } from 'react'
 import { createRoot } from 'react-dom/client'
 import { AdminScreen } from './admin/AdminScreen'
 import { ErrorBoundary } from './ErrorBoundary'
@@ -38,6 +38,7 @@ import { currentRoute } from './route'
 import { currentIdentity, hydrateIdentity, isSignedIn, setSignedIn, subscribe } from './session'
 import { HomeScreen } from './home/HomeScreen'
 import { LoginPage } from './login/LoginPage'
+import { RegisterPage } from './register/RegisterPage'
 import { Nav } from './Nav'
 import navStyles from './Nav.module.css'
 import { ProcessingListScreen } from './processing/ProcessingListScreen'
@@ -106,6 +107,12 @@ function App() {
   // `useSyncExternalStore` re-renders forever if `getSnapshot` allocates, which
   // is why `setIdentity` compares before it stores.
   const identity = useSyncExternalStore(subscribe, currentIdentity)
+  // Which signed-out screen to show. Local component state, not a route: signup
+  // is a modeless toggle on the login card, not a URL a browser bookmarks or a
+  // deep-link the backend's history fallback has to serve. It only matters while
+  // `signedIn` is false, and it resets to `false` on every fresh mount, which is
+  // the wanted default -- the first screen a signed-out visitor sees is sign-in.
+  const [showRegister, setShowRegister] = useState(false)
 
   useEffect(() => {
     if (!signedIn) {
@@ -118,7 +125,17 @@ function App() {
   }, [signedIn])
 
   if (!signedIn) {
-    return <LoginPage onSignedIn={() => setSignedIn(true)} />
+    return showRegister ? (
+      <RegisterPage
+        onSignedIn={() => setSignedIn(true)}
+        onShowLogin={() => setShowRegister(false)}
+      />
+    ) : (
+      <LoginPage
+        onSignedIn={() => setSignedIn(true)}
+        onShowRegister={() => setShowRegister(true)}
+      />
+    )
   }
   // Read once into a local and switched on twice, rather than called per branch:
   // two `currentRoute()` calls would be two reads of `window.location.pathname`
@@ -143,11 +160,13 @@ function App() {
         // is gated there.
         <HomeScreen />
       ) : route === 'queue' ? (
-        // No `identity`: the rows a reviewer may see are decided by the API.
-        // `list_tasks` scopes a reviewer to open tasks plus their own (ADR-0026)
-        // and an admin to everything, so a role check drawn here would be a
-        // second, weaker copy of a rule the server already enforces.
-        <ReviewQueue />
+        // `identity` is passed for ONE thing: the "Resume" action shows only on
+        // an `in_progress` row this account actually holds (`assigned_to`), so a
+        // task is not offered for resume to someone it is not the job of. It is
+        // NOT a substitute for the API scope -- `list_tasks` still decides which
+        // rows a reviewer may see at all (open plus their own, ADR-0026); this is
+        // the finer per-row gate on the resume button on top of that.
+        <ReviewQueue identity={identity} />
       ) : route === 'upload' ? (
         // No `identity`: nothing on this screen is decided by who is asking.
         // `POST /upload` takes `require_upload`, which is the API key or ANY
