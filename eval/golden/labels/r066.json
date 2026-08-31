@@ -1,0 +1,57 @@
+{
+  "merchant": {
+    "name": "JONITZ GLASS AND ALUMINUM SERVICES",
+    "branch": null,
+    "address": "184 B Phase 2 Aguirre Avenue, B.F. Homes 1720 City of Paranaque, NCR, Fourth District, Philippines",
+    "tax_id": "346-155-017-00000",
+    "phone": null
+  },
+  "buyer": {
+    "name": "Mr. Jeff",
+    "tax_id": null
+  },
+  "receipt": {
+    "number": "0000419",
+    "date": "2026-03-10",
+    "date_raw": "March 10, 2026",
+    "time": null,
+    "currency": "PHP",
+    "decimal_convention": "point",
+    "cashier": null,
+    "terminal": null
+  },
+  "line_items": [
+    {
+      "position": 0,
+      "description_raw": "Blind Rivet 1/8 x 1/2",
+      "sku": null,
+      "qty": "30",
+      "unit": "pcs",
+      "unit_price": null,
+      "line_total": "60.00",
+      "modifiers": [],
+      "bbox": null,
+      "is_template_row": false
+    }
+  ],
+  "totals": {
+    "subtotal": null,
+    "tax": null,
+    "tax_breakdown": [],
+    "discount": null,
+    "total": "60.00",
+    "tender": null,
+    "change": null,
+    "prices_include_tax": null
+  },
+  "payment": { "method": null, "card_last4": null },
+  "meta": {
+    "is_handwritten": true,
+    "is_refund": false,
+    "legibility": "fair",
+    "ambiguous_fields": ["line_items[0].unit_price"],
+    "unreadable_regions": [],
+    "receipt_is_inconsistent": false,
+    "notes": "JONITZ GLASS AND ALUMINUM SERVICES INVOICE No. 0000419 (NON-VAT), pre-printed form with handwritten values. Customer Mr. Jeff. One line: 'Blind Rivet 1/8 x 1/2', Qty 30 pcs, Amount 60; TOTAL AMOUNT DUE 60. The Unit Price cell is written but not confidently legible (the qty x unit_price would need ~2.00 to reach 60) -> unit_price null. NON-VAT so no VAT breakdown. Footnote 'THIS DOCUMENT IS NOT VALID FOR CLAIM OF INPUT TAX.'"
+  }
+}

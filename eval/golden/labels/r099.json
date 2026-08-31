@@ -1,0 +1,47 @@
+{
+  "merchant": {
+    "name": "SOUTH GROCER - B.F. AGUIRRE",
+    "branch": "BY: GRAND UNION SUPERMARKET, INC.",
+    "address": "238 & 240 Aguirre Ave., BF Paranaque City",
+    "tax_id": "000-123-826-018",
+    "phone": "(02)8356-45-73"
+  },
+  "buyer": { "name": null, "tax_id": null },
+  "receipt": {
+    "number": "02263906",
+    "date": "2026-05-10",
+    "date_raw": "05/10/2026",
+    "time": "11:15",
+    "currency": "PHP",
+    "decimal_convention": "point",
+    "cashier": null,
+    "terminal": "POS02-SN:41-BXAP6"
+  },
+  "line_items": [
+    { "position": 0, "description_raw": "D/ELENA SAR OLVE OIL", "sku": null, "qty": "1", "unit": null, "unit_price": "197.30", "line_total": "197.30", "modifiers": [], "bbox": null, "is_template_row": false },
+    { "position": 1, "description_raw": "ROMAINE LETTUCE (GF)", "sku": null, "qty": "1", "unit": null, "unit_price": "120.30", "line_total": "120.30", "modifiers": [], "bbox": null, "is_template_row": false }
+  ],
+  "totals": {
+    "subtotal": "296.46",
+    "tax": "21.14",
+    "tax_breakdown": [
+      { "label": "VATable", "base": "176.16", "rate": "0.12", "amount": "21.14" },
+      { "label": "VAT-Exempt", "base": "120.30", "rate": "0.00", "amount": "0.00" }
+    ],
+    "discount": null,
+    "total": "317.60",
+    "tender": "500.00",
+    "change": "182.40",
+    "prices_include_tax": true
+  },
+  "payment": { "method": "CASH", "card_last4": null },
+  "meta": {
+    "is_handwritten": false,
+    "is_refund": false,
+    "legibility": "good",
+    "ambiguous_fields": [],
+    "unreadable_regions": [],
+    "receipt_is_inconsistent": false,
+    "notes": "SOUTH GROCER thermal POS, POS02. Mixed: D/ELENA SAR OLVE OIL 197.30 (V) + ROMAINE LETTUCE (GF) 120.30 (E, VAT-exempt); 2 items = 317.60 Total Due. VATable 176.16 + VAT 21.14 = 197.30, plus VAT-Exempt 120.30 = 317.60. Cash 500.00, Change 182.40. Buyer block blank -> null."
+  }
+}

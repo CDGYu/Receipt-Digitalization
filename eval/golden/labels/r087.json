@@ -1,0 +1,73 @@
+{
+  "merchant": {
+    "name": "SWEET MANITA BAKE HOUSE",
+    "branch": null,
+    "address": "228 Aguirre Ave. BF Homes Paranaque",
+    "tax_id": "264-517-310-000",
+    "phone": null
+  },
+  "buyer": {
+    "name": "Raymond Vicente Braganza",
+    "tax_id": null
+  },
+  "receipt": {
+    "number": "007277",
+    "date": "2026-05-05",
+    "date_raw": "Tue 5 May 2026",
+    "time": "15:53",
+    "currency": "PHP",
+    "decimal_convention": "point",
+    "cashier": "Kaye",
+    "terminal": null
+  },
+  "line_items": [
+    {
+      "position": 0,
+      "description_raw": "BEEF BELLY TAPSILOG - Regular",
+      "sku": null,
+      "qty": "1",
+      "unit": null,
+      "unit_price": "385.00",
+      "line_total": "385.00",
+      "modifiers": [
+        { "label": "Snr/PWD relief (200) net of Service charge (+50)", "amount": "-150.00" }
+      ],
+      "bbox": null,
+      "is_template_row": false
+    },
+    {
+      "position": 1,
+      "description_raw": "DARK CHOCOLATE GODDESS - Slice",
+      "sku": null,
+      "qty": "1",
+      "unit": null,
+      "unit_price": "315.00",
+      "line_total": "315.00",
+      "modifiers": [],
+      "bbox": null,
+      "is_template_row": false
+    }
+  ],
+  "totals": {
+    "subtotal": "700.00",
+    "tax": "0.00",
+    "tax_breakdown": [
+      { "label": "VAT Exempt Sales", "base": "500.00", "rate": "0.00", "amount": "0.00" }
+    ],
+    "discount": "150.00",
+    "total": "550.00",
+    "tender": "1000.00",
+    "change": "450.00",
+    "prices_include_tax": true
+  },
+  "payment": { "method": "CASH", "card_last4": null },
+  "meta": {
+    "is_handwritten": false,
+    "is_refund": false,
+    "legibility": "fair",
+    "ambiguous_fields": [],
+    "unreadable_regions": [],
+    "receipt_is_inconsistent": false,
+    "notes": "SWEET MANITA BAKE HOUSE thermal SALES INVOICE 007277, Order Method Dine In. Two lines: BEEF BELLY TAPSILOG (Regular) @385x1 = 385.00; DARK CHOCOLATE GODDESS (Slice) @315x1 = 315.00. Subtotal 700.00. Senior/PWD treatment: VAT Exempt Sales 500.00, VAT Amount 0.00, Snr/PWD Discount 125.00 (totals.discount), VAT Exemption 75.00, plus a Service charge 50.00, giving TOTAL 550.00 (700 - 125 - 75 + 50 = 550). Cash 1,000, Change 450, Qty 2. Customer Raymond Vicente Braganza. A Senior/PWD-discounted dine-in sample. POS provider UPOS PH."
+  }
+}

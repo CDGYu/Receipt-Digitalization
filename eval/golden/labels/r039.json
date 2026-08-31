@@ -1,0 +1,74 @@
+{
+  "merchant": {
+    "name": "SOUTH GROCER - B.F. AGUIRRE",
+    "branch": "BY: GRAND UNION SUPERMARKET, INC.",
+    "address": "238 & 240 Aguirre Ave., BF Paranaque City",
+    "tax_id": "000-123-826-018",
+    "phone": "(02)8356-45-73"
+  },
+  "buyer": {
+    "name": null,
+    "tax_id": null
+  },
+  "receipt": {
+    "number": "02261074",
+    "date": "2026-04-17",
+    "date_raw": "04/17/2026",
+    "time": "16:54",
+    "currency": "PHP",
+    "decimal_convention": "point",
+    "cashier": null,
+    "terminal": "POS02-SN:41-BXAP6"
+  },
+  "line_items": [
+    {
+      "position": 0,
+      "description_raw": "LETTUCE GREEN ICE",
+      "sku": null,
+      "qty": "1",
+      "unit": null,
+      "unit_price": "54.60",
+      "line_total": "54.60",
+      "modifiers": [],
+      "bbox": null,
+      "is_template_row": false
+    },
+    {
+      "position": 1,
+      "description_raw": "TOMATO (ORG OPT)",
+      "sku": null,
+      "qty": "1",
+      "unit": null,
+      "unit_price": "26.20",
+      "line_total": "26.20",
+      "modifiers": [],
+      "bbox": null,
+      "is_template_row": false
+    }
+  ],
+  "totals": {
+    "subtotal": "80.80",
+    "tax": "0.00",
+    "tax_breakdown": [
+      { "label": "VAT-Exempt", "base": "80.80", "rate": "0.00", "amount": "0.00" }
+    ],
+    "discount": null,
+    "total": "80.80",
+    "tender": "500.00",
+    "change": "419.20",
+    "prices_include_tax": true
+  },
+  "payment": {
+    "method": "CASH",
+    "card_last4": null
+  },
+  "meta": {
+    "is_handwritten": false,
+    "is_refund": false,
+    "legibility": "good",
+    "ambiguous_fields": [],
+    "unreadable_regions": [],
+    "receipt_is_inconsistent": false,
+    "notes": "SOUTH GROCER thermal POS, POS02. Two VAT-exempt produce lines: LETTUCE GREEN ICE 54.60 (E), TOMATO (ORG OPT) 26.20 (E); 2 items = 80.80 Total Due. Cash 500.00, Change 419.20. VAT-Exempt 80.80, VAT 0.00. Handwritten 'Recorded' note at top. Customer block blank -> buyer null."
+  }
+}

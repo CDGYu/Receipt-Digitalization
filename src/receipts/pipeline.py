@@ -96,7 +96,13 @@ log = logging.getLogger(__name__)
 ProgressSink = Callable[[ProgressEvent], None]
 
 #: Extensions the eval adapter searches, in order, to match a label by stem.
-DEFAULT_IMAGE_SUFFIXES: tuple[str, ...] = (".jpg", ".jpeg", ".png", ".webp")
+#: Mirrors ``preprocess.image_ops._SUPPORTED_SUFFIXES`` (which ``load_image``
+#: accepts) so a golden image in any format the loader can open is found --
+#: HEIC/HEIF included, since phone photos of receipts are routinely HEIC and the
+#: golden set carries them.
+DEFAULT_IMAGE_SUFFIXES: tuple[str, ...] = (
+    ".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif",
+)
 
 _MIN_LINE_ITEM_OCR_TOKEN_OVERLAP = 0.6
 _MIN_OCR_LINE_VERTICAL_OVERLAP = 0.5

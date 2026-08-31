@@ -1,0 +1,56 @@
+{
+  "merchant": {
+    "name": "SOUTH GROCER - B.F. AGUIRRE",
+    "branch": "BY: GRAND UNION SUPERMARKET, INC.",
+    "address": "238 & 240 Aguirre Ave., BF Paranaque City",
+    "tax_id": "000-123-826-018",
+    "phone": "(02)8356-45-73"
+  },
+  "buyer": { "name": null, "tax_id": null },
+  "receipt": {
+    "number": "02263383",
+    "date": "2026-05-07",
+    "date_raw": "05/07/2026",
+    "time": "14:08",
+    "currency": "PHP",
+    "decimal_convention": "point",
+    "cashier": null,
+    "terminal": "POS02-SN:41-BXAP6"
+  },
+  "line_items": [
+    {
+      "position": 0,
+      "description_raw": "TOMATO NATIVE (LW)",
+      "sku": null,
+      "qty": "1",
+      "unit": null,
+      "unit_price": "26.15",
+      "line_total": "26.15",
+      "modifiers": [],
+      "bbox": null,
+      "is_template_row": false
+    }
+  ],
+  "totals": {
+    "subtotal": "26.15",
+    "tax": "0.00",
+    "tax_breakdown": [
+      { "label": "VAT-Exempt", "base": "26.15", "rate": "0.00", "amount": "0.00" }
+    ],
+    "discount": null,
+    "total": "26.15",
+    "tender": "100.00",
+    "change": "73.85",
+    "prices_include_tax": true
+  },
+  "payment": { "method": "CASH", "card_last4": null },
+  "meta": {
+    "is_handwritten": false,
+    "is_refund": false,
+    "legibility": "good",
+    "ambiguous_fields": [],
+    "unreadable_regions": [],
+    "receipt_is_inconsistent": false,
+    "notes": "SOUTH GROCER thermal POS, POS02. Single VAT-exempt line TOMATO NATIVE (LW) 26.15 (E) = Total Due 26.15. Cash 100.00, Change 73.85. VAT-Exempt 26.15, VAT 0.00. Buyer block blank -> null."
+  }
+}

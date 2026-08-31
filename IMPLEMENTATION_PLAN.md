@@ -105,20 +105,27 @@ Rationale: nothing downstream can be measured without an evaluation harness and 
 
 ### Task P0.T1 — Golden set (M0) `[data]`
 
-> **STATUS 2026-08-23 — NOT DONE, and it is the project's bottleneck.** Three
-> labels on disk, all `handwritten`, against a 60% `printed_clean` target. This
-> is ISSUE-001 step 7 Task 3; it needs a person and a camera and no code removes
-> it. `eval/golden/README.md` is the procedure.
+> **STATUS 2026-08-30 — DONE. 89 labelled receipts committed.** Grew from 3 to
+> 89 across two labelling sessions (user supplied the photos). All 89 validate
+> clean under the production rules (`test_the_real_corpus_validates_as_production_does`)
+> and score an empty extraction below the eval floor
+> (`test_an_extraction_that_read_nothing_scores_near_zero`); labels and images
+> pair 1:1 by stem. Composition skews to `printed_clean` (62) with 23
+> `handwritten`, 3 `printed_degraded`, 1 `adversarial` — a reflection of the
+> receipts actually available, not the §15 target mix. 23 held out (~26%). The
+> `>= 50` count is met; the deeper caveat below (a >=99% precision claim needs
+> the *hundreds*) still stands and was borne out by the first real baseline
+> (P3.T6 status note).
 
 
 **Files:** `eval/golden/labels/{id}.json`, `eval/golden/images/{id}.*`
 
-- [ ] Collect >= 50 real receipts at the target mix: 60% printed/clean, 15% printed/degraded, 20% handwritten, 5% adversarial.
-- [ ] Hand-label each into the `ReceiptExtraction` schema (spec §7); save as `eval/golden/labels/{id}.json`.
-- [ ] Hold out 20-30% as a calibration set; do not inspect it until Phase 3.
-- [ ] Commit labels (images are git-ignored per `.gitignore`).
+- [x] Collect >= 50 real receipts — **89 committed** (2026-08-30). Mix skews `printed_clean`; the §15 target ratios were not hit because the supplied receipts were mostly clean printed POS and handwritten notes, with few faded-thermal and only one adversarial. Recorded rather than forced.
+- [x] Hand-label each into the `ReceiptExtraction` schema (spec §7); saved as `eval/golden/labels/{id}.json` — all 89 schema-valid.
+- [x] Hold out ~26% as a calibration set (`manifest.json` `holdout: true`, 23 of 89). *(Not kept un-inspected: the same labeller wrote and reconciled every one. That purity was already spent when the set was three, and honesty about it beats a claim the history contradicts.)*
+- [x] Commit labels (images are git-ignored per `.gitignore` — the `.heic`/`.jpg` source photos stay local).
 
-**Acceptance:** `eval/golden/labels/` contains >= 50 schema-valid JSON files (a loader test parses each into `ReceiptExtraction` with no error).
+**Acceptance:** MET — `eval/golden/labels/` contains 89 schema-valid JSON files; the loader test parses each into `ReceiptExtraction` with no error.
 
 > Note (statistics): a >=99% precision target cannot be *validated* on a held-out set of ~20-30. Treat 99% as aspirational until the calibration set reaches the hundreds (the `corrections` table will supply this over time). Track the precision confidence interval, not just the point estimate.
 >
@@ -398,23 +405,49 @@ The rules and the repair loop exist. This phase wires them into the pipeline and
 
 ### Task P3.T6 — Calibration `[algorithm]`
 
-> **STATUS 2026-08-23 — machinery BUILT, acceptance NOT MET.** `receipts calibrate`
-> exists and is wired. **No calibration report is committed and none can be**:
-> the threshold must be chosen from a held-out split, and the golden set is three
-> receipts. Blocked on P0.T1 / ISSUE-001 step 7.
+> **STATUS 2026-08-30 — a REAL baseline finally exists, and it says the system
+> cannot auto-approve this corpus at any threshold.** The blocker (a live capable
+> model) cleared: `gemma4:cloud` via Ollama Cloud is signed in and reachable, and
+> a 3-repeat, 89-receipt cloud-only run completed with **0 failures** — committed
+> under `eval/results/2026-08-30-cloud-89/`. That is the first genuine measurement
+> in the project's history.
+>
+> **The finding: auto-approval precision is ~9% (spread 8.7–13.0% over 3 repeats)
+> and there is NO threshold on the curve that reaches even 85%** — the highest
+> point anywhere on the curve is ~11% (at 0.65). `receipts calibrate --target 0.85`
+> recommends **nothing**, correctly. Transcription accuracy is ~28.6%,
+> critical-field accuracy ~9%. So the target being relaxed from 99% to 85–90%
+> (owner ruling 2026-08-30) does not change the outcome: the gap is an order of
+> magnitude, not a threshold tweak.
+>
+> **Why, and it is not the threshold.** The confidence scorer hands ~23 of 89
+> receipts high confidence (>=0.85), but ~90% of those are critically wrong —
+> confident-wrong extractions the score does not catch. Two contributing causes,
+> both measured: (1) `gemma4:cloud` is **non-deterministic at temperature 0**
+> (ISSUE-001) — the same receipt swings between fully-correct and critically-wrong
+> across runs (r025 was critical-correct with F1 1.0 on a standalone probe, yet
+> scored merchant.name wrong in repeat-01); (2) the corpus is genuinely hard for
+> this model (HEIC phone photos, handwritten notes, diverse formats). The good
+> news the run also establishes: the router mostly does the safe thing — ~74% of
+> receipts route to review rather than auto-approving, which is correct when the
+> model reads this poorly.
+>
+> **Bug fixed to get here:** `pipeline.DEFAULT_IMAGE_SUFFIXES` (and
+> `scripts/try_one_receipt.py`) searched only `.jpg/.jpeg/.png/.webp`, so all 78
+> HEIC golden images failed to load with `FileNotFoundError` on the first run
+> attempt. Added `.heic`/`.heif` to mirror `image_ops._SUPPORTED_SUFFIXES` (which
+> `load_image` already accepts). The corrected run has 0 file-load failures.
+>
+> **What remains (and is now a model/weights problem, not a code or data one):**
+> P8.T1's weight-fitting needs `corrections` rows (still empty), and closing this
+> acceptance needs a model that reads this corpus well enough for *some* threshold
+> to clear the target. Candidate next steps, none of them a calibrate re-run:
+> try a stronger cloud model, condition the prompt with merchant few-shots (P6),
+> or enable self-consistency voting (P7) to damp the temperature-0 non-determinism
+> before trusting a confidence number.
 
-- [ ] Implement `receipts calibrate` using `calibration_curve` (P0.T2) over the held-out set; print the precision/throughput curve; set `AUTO_APPROVE_THRESHOLD` to the lowest threshold holding precision >= target. Commit results.
-  > **HALF BUILT, and the halves fail for different reasons — audited
-  > 2026-08-25.** The command exists: `cmd_calibrate` (`cli.py`), registered as
-  > `calibrate` and dispatched, printing threshold / auto-approve rate /
-  > precision from `calibration_curve` and recommending the lowest threshold
-  > that reaches `--target`. **It recommends; it does not set.** And "over the
-  > held-out set … commit results" needs a real eval run, which the box at
-  > P8.T1 already records as impossible here (ADR-0039). *(The handoff pair
-  > listed this as one of three boxes for work that is built. That reading
-  > came from the symbol existing. The box asks for a number to be chosen from
-  > data and written down, and no such number exists.)*
-**Acceptance:** calibration report committed; threshold chosen from data (with the sample-size caveat noted).
+- [x] `receipts calibrate` implemented and RUN over the 89-receipt baseline; the precision/throughput curve is printed and the results are committed (`eval/results/2026-08-30-cloud-89/`). It **recommends no threshold** because none reaches the target — the correct refusal, not a failure of the command. The `--set` flag (added 2026-08-30) can persist a recommended threshold to `.env`, but there is nothing safe to set here. `AUTO_APPROVE_THRESHOLD` is therefore left at its `0.85` default.
+**Acceptance:** PARTIALLY MET — a calibration report is committed and the curve is chosen from real data (89 receipts, 3 repeats, spread recorded). The other half — "a threshold that holds precision >= target" — is **NOT met and cannot be by calibration alone**: no threshold reaches 85% on this model+corpus. Reopened as a model/prompt problem (P6/P7), not a calibration one.
 
 ### Task P3.T7 — Complete the XLSX workbook (all four sheets, §13) `[backend]`
 **Files:** Modify `src/receipts/export/xlsx.py`; `tests/test_xlsx.py`
@@ -637,9 +670,9 @@ and the two that never did were indistinguishable from outside.)*
   > rather than kept, since a redundant guard makes the real one untestable.
   > **The acceptance is still unmet and this does not touch it**: it needs a
   > real model run, which ADR-0039 rules out here.
-- [ ] Re-run `calibrate`; commit results. **Cannot be done on this box.** It needs a real model run, and ADR-0039 measures ~1896s/receipt CPU-only against a three-receipt golden set.
+- [ ] Re-run `calibrate`; commit results. **BLOCKED BY DESIGN, not by hardware — re-assessed 2026-08-30.** The old blocker (no capable model, tiny golden set) is gone: `gemma4:cloud` is live and the golden set is 89. But the eval harness **cannot exercise self-consistency at all**: `build_eval_pipeline`'s `pipeline_fn` hard-codes `score_confidence(..., consistency=None)` (`pipeline.py`), and `run_receipt`/`build_eval_pipeline` take no consistency parameter. Only `process_receipt` (the worker path) calls `run_consistency`. So a "consistency on vs off" before/after cannot be produced through `receipts eval` / `run_repeats` without threading consistency into the eval path — and `tests/test_eval_prompt_conditioning.py` plus ISSUE-034's hermetic ruling deliberately guard the eval entry points against exactly that kind of production-mirroring change. Turning the P7 acceptance into a runnable experiment is therefore its own design task (give the eval path a way to run consistency, without breaking hermeticity), not a `calibrate` re-run. Left OFF and unmeasured.
 
-**Acceptance:** handwritten auto-approval rate/precision recorded before and after. **NOT MET, and it is the reason the flag defaults OFF.** Nobody has measured whether this improves precision. ISSUE-034's hermetic ruling means the eval path measures a different prompt than production sends, so the before/after would need that settled first, and ISSUE-001 step 7 needs the golden set to be more than three handwritten receipts before the number would mean anything.
+**Acceptance:** handwritten auto-approval rate/precision recorded before and after — **NOT MET, and now blocked on wiring rather than data.** The base baseline already shows auto-approval precision ~9% with consistency off; whether consistency lifts it is unmeasurable until the eval path can run it. Given the base precision is an order of magnitude under target, self-consistency (which damps run-to-run variance) is unlikely to close that gap alone — the ceiling looks like model comprehension, not vote stability.
 
 ---
 
@@ -647,15 +680,21 @@ and the two that never did were indistinguishable from outside.)*
 
 ### Task P8.T1 — Fit confidence weights from data (review fix)
 
-> **STATUS 2026-08-25 — NOT STARTED, and the blocker is measured rather than
-> assumed: `corrections` has ZERO rows.** Counted against the local
-> `receipts.db` on 2026-08-25: `corrections` 0, `extraction_runs` 0, `receipts`
-> 1. There are no labelled outcomes to fit weights on — not few, none. A
-> logistic model over an empty table is not a smaller version of this task.
+> **STATUS 2026-08-30 — STILL BLOCKED ON `corrections`, and P0.T1 no longer
+> covers for it.** The golden set is now 89 (P0.T1 done), so the old "it is
+> P0.T1 plus reviewers" framing is half-retired: the *reviewers* half is the
+> whole blocker now. `corrections` fills only when a human corrects a real
+> receipt on the review screen, and nothing in this session put a row there —
+> the golden labels are truth files, not `corrections` rows. There are still
+> zero labelled review outcomes to fit weights on; a logistic model over an
+> empty table is not a smaller version of this task.
 >
-> **No code removes this.** It is P0.T1 (the golden set, 3 of 50) plus reviewers
-> actually correcting receipts, and the `corrections` table fills only when a
-> human uses the review screen on real data.
+> **And the baseline makes weight-fitting moot for now anyway:** the confidence
+> scorer's *inputs* on this corpus are dominated by confidently-wrong critical
+> fields the validator never flags (see P3.T6). Re-weighting penalties cannot
+> separate right from wrong when the wrong extractions carry no penalisable
+> signal. The lever is model comprehension (a stronger model / better prompt),
+> not weight tuning.
 
 - [ ] Once the `corrections` set is large enough, fit the penalty weights (or a logistic model) on labelled outcomes instead of hand-tuning; keep `explain_confidence` interpretable. Backtest against held-out data; update `config/rules.yaml`.
 - [ ] Re-calibrate the threshold. Commit results.
@@ -684,7 +723,7 @@ and the two that never did were indistinguishable from outside.)*
 > quietly, because it re-scopes what "done" means for the acceptance criteria.
 
 - [x] Document the interval alongside the point estimate — `19c3b22`. Wilson, not the normal approximation, which on 3-of-3 gives `1.0 +/- 1.96*sqrt(0/3)` = **[100%, 100%]** and would make a perfect run look like the criterion was met. Printed by `format_report` and committed in the results JSON.
-- [ ] Expand the held-out set (from `corrections`) until a >= 99% precision claim has an acceptable confidence interval. **Blocked: `corrections` is empty and no code fills it** — it needs reviewers correcting real receipts.
+- [ ] Expand the held-out set (from `corrections`) until a precision claim has an acceptable confidence interval. **Still blocked: `corrections` is empty and no code fills it** — it needs reviewers correcting real receipts. The golden set grew to 89 (a *labels* set, not a `corrections` set), which sharpens the interval on a hypothetical high-precision run but does nothing while the measured precision is ~9%: a confidence interval around 9% is not the thing this box is about. The target was also relaxed 99% -> 85–90% (owner ruling 2026-08-30), which lowers the sample size a *future* clean run would need, but the current model does not produce clean-enough extractions for set size to be the binding constraint.
 
 ---
 
@@ -692,24 +731,20 @@ and the two that never did were indistinguishable from outside.)*
 
 ### Task P9.T1 — Self-hosted model benchmark + optional LoRA
 
-> **STATUS 2026-08-25 — NOT STARTED, and BOTH of its halves are blocked, each
-> for its own reason.** Note first that the ground shifted: the 2026-08-14
-> ruling is **Ollama only, no hosted APIs**, so this is no longer a cost
-> comparison against a hosted baseline — the box's "if within a couple of points
-> of hosted" compares against a thing this project no longer has.
+> **STATUS 2026-08-30 — the benchmark half is effectively DONE; the LoRA half is
+> still blocked on `corrections`.** The ground shifted twice: (1) the golden set
+> is now 89 (P0.T1 done), and (2) `gemma4:cloud` runs through the
+> `openai_compat` client — so the committed 89-receipt baseline
+> (`eval/results/2026-08-30-cloud-89/`) *is* an open-model benchmark on the
+> golden set via `openai_compat`. What the box asked for exists; what it does not
+> give is a *second* model to compare against, which needs another reachable
+> model and is a cost/scope call, not a code task.
 >
-> **The benchmark half** needs the golden set: **3 of 50** (P0.T1), and a run
-> costs ~1896s/receipt CPU-only on this box (ADR-0039). A comparison over three
-> handwritten receipts would produce a number whose interval is [43.85%, 100%]
-> — see P8.T2 — which cannot separate two models.
->
-> **The LoRA half** says "with enough `corrections`": measured 2026-08-25, that
-> table has **zero rows**.
->
-> Neither is a code task today. Both are P0.T1 and a person with a camera.
+> **The LoRA half** is unchanged: it needs `corrections` rows to fine-tune on,
+> and that table is still empty (see P8.T1). No code fills it.
 
-- [ ] Benchmark an open model via `openai_compat` on the golden set. **Blocked on P0.T1 (3 of 50) and on the hosted baseline this comparison was written against no longer existing.**
-- [ ] With enough `corrections`, evaluate a LoRA fine-tune. Commit the comparison. **Blocked: `corrections` has zero rows.**
+- [x] Benchmark an open model via `openai_compat` on the golden set — **DONE via the 89-receipt `gemma4:cloud` baseline** (`eval/results/2026-08-30-cloud-89/`, run through the `openai_compat` client against the local Ollama proxy). Headline: ~28.6% transcription, ~9% auto-approval precision. A head-to-head against a *second* model is not done (needs another reachable model; scope call).
+- [ ] With enough `corrections`, evaluate a LoRA fine-tune. Commit the comparison. **Still blocked: `corrections` has zero rows** and no code fills it — needs real reviewer corrections.
 
 ---
 
@@ -744,13 +779,13 @@ and the two that never did were indistinguishable from outside.)*
 ticked by inspection, because what they claim is a measurement nobody has taken
 — that is the honest state, not an oversight.)*
 
-- [ ] Golden set of >= 50 labelled receipts committed — **3 of 50** (P0.T1).
-      **50 closes this box and still cannot validate the >= 99% precision
-      criterion below.** Measured 2026-08-25 (P8.T2): at *perfect* precision the
-      95% interval is [43.85%, 100%] on 3 receipts, [96.30%, 100%] on 100, and
-      does not clear 99% until roughly a thousand. These two rows are a
-      collection target and an evidence threshold, and they are two different
-      numbers — ticking the first does not earn the second.
+- [x] Golden set of >= 50 labelled receipts committed — **89 committed**
+      (2026-08-30, P0.T1). The collection target is met. The evidence-threshold
+      caveat below is unchanged and was borne out: the first real 89-receipt
+      baseline measured ~9% auto-approval precision, so a >=85% (let alone >=99%)
+      claim is not validatable on this model+corpus regardless of set size. The
+      count row and the precision row remain two different things; this ticks the
+      count only.
 - [x] `receipts ingest` handles JPEG, PNG, HEIC, PDF — **all four, as of
       2026-08-25** at `55f9847`. A PDF becomes one receipt per page.
       *(This row was ticked in the 2026-08-23 audit and the tick was wrong --
@@ -763,25 +798,42 @@ ticked by inspection, because what they claim is a measurement nobody has taken
       rules"; the count has moved and is not written down here on purpose. It is
       asserted in `tests/test_rules.py`, which is where a count can be kept
       honest.)*
-- [ ] Repair loop demonstrably improves golden-set accuracy — **unmeasurable
-      today.** The loop ships and best-attempt selection is pinned, but
-      "demonstrably improves" is a measurement over a golden set of three.
-- [ ] Confidence threshold calibrated to >= 99% auto-approval precision (with a
-      documented confidence interval) — blocked on the golden set (P3.T6 / P8).
-      **The "documented confidence interval" half is DONE** at `19c3b22`: every
-      report now prints the 95% Wilson interval beside the rate and commits it
-      to the results JSON. **The calibration half is blocked on evidence, and
-      the size needed is now known** — roughly a thousand clean receipts, not
-      the 50 P0.T1 collects. Measured, at perfect precision: 3 receipts give
-      [43.85%, 100%] and 300 give [98.74%, 100%].
+- [ ] Repair loop demonstrably improves golden-set accuracy — **MEASURED
+      2026-08-30, and it does NOT (on this model+corpus).** Ran `--max-attempts 2`
+      over the 89-receipt golden set (`eval/results/2026-08-30-cloud-89-repair/`,
+      0 failures) against the `max_attempts=1` baseline
+      (`eval/results/2026-08-30-cloud-89/`). Every metric lands inside the
+      baseline's own 3-repeat noise band: transcription 28.7% (baseline median
+      28.6%, spread 28.4–28.7%), auto-approval precision 10.0% (baseline
+      8.7–13.0%), line-item F1 14.7% (baseline 13.4%); critical-field accuracy
+      was 6.7% vs 9.0%, *lower*, which is temperature-0 non-determinism not a
+      repair regression. **Why repair doesn't help here:** it re-asks the model
+      about numbers that fail arithmetic validation, but the dominant failure on
+      this corpus is *confidently-wrong critical fields* (wrong merchant/date the
+      validator cannot flag as an error), so repair rarely triggers on the thing
+      that is actually wrong. The loop ships and best-attempt selection is
+      pinned; "demonstrably improves" is simply false for `gemma4:cloud` on these
+      receipts. Left unticked because the acceptance says *improves*.
+- [ ] Confidence threshold calibrated to auto-approval precision target (with a
+      documented confidence interval) — **measured 2026-08-30 and NOT met.** The
+      "documented confidence interval" half is DONE at `19c3b22`. The calibration
+      half is now blocked on the *model*, not on evidence: the first real
+      89-receipt baseline gives ~9% auto-approval precision (spread 8.7–13.0%),
+      and no threshold on the curve reaches even the relaxed 85% target (owner
+      ruling 2026-08-30 lowered it from 99% to 85–90%). See P3.T6. The blocker
+      moved from "not enough receipts" to "this model reads this corpus too
+      poorly for any threshold to separate right from wrong."
 - [x] Review UI allows a full correction in under 60 seconds — pinned at **10s**,
       tighter than asked, by a scripted run. **Never trialled with a human**, and
       the test says so.
 - [x] Every correction writes to `corrections`
 - [x] XLSX export produces all four sheets with correct formatting
-- [x] `receipts eval` runs clean; results committed —
-      `eval/results/2026-08-22-cloud-only/`, five repeats. **Read ISSUE-017
-      before quoting the figure**: it is a spread across receipts, not repeats.
+- [x] `receipts eval` runs clean; results committed — **the 89-receipt baseline
+      at `eval/results/2026-08-30-cloud-89/` (3 repeats, 0 failures) supersedes
+      the earlier 3-receipt `2026-08-22-cloud-only/` run.** **Read ISSUE-017
+      before quoting any single figure**: the meaningful variance is across
+      receipts, and the per-repeat spread is in the aggregate. The headline is
+      sobering, not flattering: ~28.6% transcription, ~9% auto-approval precision.
 - [x] No receipt can reach a non-terminal state
 - [x] No `float` anywhere in the money path
 - [x] **(added) No financial-data API route is reachable unauthenticated**

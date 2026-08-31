@@ -1,0 +1,120 @@
+{
+  "merchant": {
+    "name": null,
+    "branch": null,
+    "address": null,
+    "tax_id": null,
+    "phone": null
+  },
+  "buyer": {
+    "name": "HEY LUCKY CAFE",
+    "tax_id": null
+  },
+  "receipt": {
+    "number": "6021741",
+    "date": "2026-02-20",
+    "date_raw": "02/20/26",
+    "time": null,
+    "currency": "PHP",
+    "decimal_convention": "point",
+    "cashier": null,
+    "terminal": null
+  },
+  "line_items": [
+    {
+      "position": 0,
+      "description_raw": "OATMEAL CHOCO",
+      "sku": null,
+      "qty": "8",
+      "unit": null,
+      "unit_price": "35.00",
+      "line_total": "280.00",
+      "modifiers": [],
+      "bbox": null,
+      "is_template_row": false
+    },
+    {
+      "position": 1,
+      "description_raw": "S'MORES",
+      "sku": null,
+      "qty": "6",
+      "unit": null,
+      "unit_price": "35.00",
+      "line_total": "210.00",
+      "modifiers": [],
+      "bbox": null,
+      "is_template_row": false
+    },
+    {
+      "position": 2,
+      "description_raw": "CHOCOCHIP",
+      "sku": null,
+      "qty": "7",
+      "unit": null,
+      "unit_price": "35.00",
+      "line_total": "245.00",
+      "modifiers": [],
+      "bbox": null,
+      "is_template_row": false
+    },
+    {
+      "position": 3,
+      "description_raw": "BISCOFF",
+      "sku": null,
+      "qty": "4",
+      "unit": null,
+      "unit_price": "35.00",
+      "line_total": "140.00",
+      "modifiers": [],
+      "bbox": null,
+      "is_template_row": false
+    },
+    {
+      "position": 4,
+      "description_raw": "RED VELVET",
+      "sku": null,
+      "qty": "3",
+      "unit": null,
+      "unit_price": "35.00",
+      "line_total": "105.00",
+      "modifiers": [],
+      "bbox": null,
+      "is_template_row": false
+    },
+    {
+      "position": 5,
+      "description_raw": "REVEL BAR",
+      "sku": null,
+      "qty": "6",
+      "unit": null,
+      "unit_price": "26.00",
+      "line_total": "156.00",
+      "modifiers": [],
+      "bbox": null,
+      "is_template_row": false
+    }
+  ],
+  "totals": {
+    "subtotal": null,
+    "tax": null,
+    "tax_breakdown": [],
+    "discount": null,
+    "total": "1136.00",
+    "tender": null,
+    "change": null,
+    "prices_include_tax": null
+  },
+  "payment": {
+    "method": null,
+    "card_last4": null
+  },
+  "meta": {
+    "is_handwritten": true,
+    "is_refund": false,
+    "legibility": "fair",
+    "ambiguous_fields": [],
+    "unreadable_regions": [],
+    "receipt_is_inconsistent": false,
+    "notes": "Generic blank handwritten sales pad (no merchant name/TIN printed - only a THANK YOU COME AGAIN footer and No. 6021741). 'Sold to HEY LUCKY CAFE, BF Homes' is the BUYER. Six lines of baked goods: 8x OATMEAL CHOCO @35=280, 6x S'MORES @35=210, 7x CHOCOCHIP @35=245, 4x BISCOFF @35=140, 3x RED VELVET @35=105, 6x REVEL BAR @26=156; sum=1136.00 matches the written TOTAL 1,136.00. A 'Consume before 03/07/26' note is on the pad; no VAT breakdown. Merchant is null because the pad prints no seller identity."
+  }
+}

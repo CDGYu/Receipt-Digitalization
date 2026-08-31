@@ -1,0 +1,96 @@
+{
+  "merchant": {
+    "name": "SMART COMMUNICATIONS, INC.",
+    "branch": null,
+    "address": "Smart Tower, 6799 Ayala Avenue, Makati City 1226",
+    "tax_id": "001-901-673-00000",
+    "phone": null
+  },
+  "buyer": {
+    "name": "MARIA KATRINA PAJARILLO",
+    "tax_id": null
+  },
+  "receipt": {
+    "number": "1621721714",
+    "date": "2026-04-30",
+    "date_raw": "April 30, 2026",
+    "time": null,
+    "currency": "PHP",
+    "decimal_convention": "point",
+    "cashier": null,
+    "terminal": null
+  },
+  "line_items": [
+    {
+      "position": 0,
+      "description_raw": "Previous Invoice balance",
+      "sku": null,
+      "qty": null,
+      "unit": null,
+      "unit_price": null,
+      "line_total": "1018.25",
+      "modifiers": [],
+      "bbox": null,
+      "is_template_row": false
+    },
+    {
+      "position": 1,
+      "description_raw": "Plan Charges - Signature S+",
+      "sku": null,
+      "qty": null,
+      "unit": null,
+      "unit_price": null,
+      "line_total": "972.24",
+      "modifiers": [],
+      "bbox": null,
+      "is_template_row": false
+    },
+    {
+      "position": 2,
+      "description_raw": "Entertainment Add-On",
+      "sku": null,
+      "qty": null,
+      "unit": null,
+      "unit_price": null,
+      "line_total": "169.00",
+      "modifiers": [],
+      "bbox": null,
+      "is_template_row": false
+    },
+    {
+      "position": 3,
+      "description_raw": "Others",
+      "sku": null,
+      "qty": null,
+      "unit": null,
+      "unit_price": null,
+      "line_total": "-122.99",
+      "modifiers": [],
+      "bbox": null,
+      "is_template_row": false
+    }
+  ],
+  "totals": {
+    "subtotal": null,
+    "tax": "0.00",
+    "tax_breakdown": [],
+    "discount": null,
+    "total": "2036.50",
+    "tender": null,
+    "change": null,
+    "prices_include_tax": true
+  },
+  "payment": {
+    "method": null,
+    "card_last4": null
+  },
+  "meta": {
+    "is_handwritten": false,
+    "is_refund": false,
+    "legibility": "good",
+    "ambiguous_fields": [],
+    "unreadable_regions": [],
+    "receipt_is_inconsistent": false,
+    "notes": "SMART COMMUNICATIONS Billing Invoice (telco bill), machine-printed, page 1 of 3, billing period Apr 1-30 2026. 'Total amount to pay P2,036.50' = Previous Charges 1,018.25 + current charges 1,018.25; recorded total is 2,036.50 (the amount due on the document). Current-charge lines: Plan Signature S+ 972.24, Entertainment Add-On 169.00, Others -122.99, Device/Call/Data Booster 0.00; these sum to 1,018.25. Current-charge VAT breakdown: Vatable 758.26, Octable (OCT) 169.00, Non-taxable 90.99, VAT 0.00. Customer MARIA KATRINA PAJARILLO (No TIN provided) is the buyer/account holder; account/mobile numbers not transcribed (PII, no schema field). Handwritten 'May 7 26' and 'Gcash + Maya, Ref: 5040586874200, pd.' note payment - method left null as it names two channels ambiguously."
+  }
+}

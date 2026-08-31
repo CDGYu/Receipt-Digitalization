@@ -1,0 +1,96 @@
+{
+  "merchant": {
+    "name": "BERRY GOODS",
+    "branch": null,
+    "address": "Park West, 7th Ave., cor 36th Street, BGC, Taguig City",
+    "tax_id": null,
+    "phone": "+63 917 840 5971"
+  },
+  "buyer": {
+    "name": "Hey Lucky Cafe Corp.",
+    "tax_id": null
+  },
+  "receipt": {
+    "number": "0294",
+    "date": "2026-02-11",
+    "date_raw": "11 February 2026",
+    "time": null,
+    "currency": "PHP",
+    "decimal_convention": "point",
+    "cashier": null,
+    "terminal": null
+  },
+  "line_items": [
+    {
+      "position": 0,
+      "description_raw": "Frozen Strawberries (1kg pack)",
+      "sku": null,
+      "qty": "1",
+      "unit": null,
+      "unit_price": "260.00",
+      "line_total": "260.00",
+      "modifiers": [],
+      "bbox": null,
+      "is_template_row": false
+    },
+    {
+      "position": 1,
+      "description_raw": "Frozen Broccoli (1kg pack)",
+      "sku": null,
+      "qty": "1",
+      "unit": null,
+      "unit_price": "195.00",
+      "line_total": "195.00",
+      "modifiers": [],
+      "bbox": null,
+      "is_template_row": false
+    },
+    {
+      "position": 2,
+      "description_raw": "Frozen Spinach Balls (1kg pack)",
+      "sku": null,
+      "qty": "1",
+      "unit": null,
+      "unit_price": "185.00",
+      "line_total": "185.00",
+      "modifiers": [],
+      "bbox": null,
+      "is_template_row": false
+    },
+    {
+      "position": 3,
+      "description_raw": "Frozen Mixed Veggies B (1kg pack)",
+      "sku": null,
+      "qty": "1",
+      "unit": null,
+      "unit_price": "200.00",
+      "line_total": "200.00",
+      "modifiers": [],
+      "bbox": null,
+      "is_template_row": false
+    }
+  ],
+  "totals": {
+    "subtotal": null,
+    "tax": null,
+    "tax_breakdown": [],
+    "discount": null,
+    "total": "840.00",
+    "tender": null,
+    "change": null,
+    "prices_include_tax": null
+  },
+  "payment": {
+    "method": "GCASH",
+    "card_last4": null
+  },
+  "meta": {
+    "is_handwritten": false,
+    "is_refund": false,
+    "legibility": "good",
+    "ambiguous_fields": [],
+    "unreadable_regions": [],
+    "receipt_is_inconsistent": false,
+    "notes": "BERRY GOODS INVOICE No. 0294 (machine-printed, clean, informal - no printed TIN, no VAT breakdown). Four lines: Frozen Strawberries 260, Frozen Broccoli 195, Frozen Spinach Balls 185, Frozen Mixed Veggies B 200; sum = 840.00 matches the printed Grand Total P840.00. 'Hey Lucky Cafe Corp.' (240 A. Aguirre Avenue, BF Homes, Paranaque City) is the BUYER (Issued To). The invoice prints a personal bank account and GCash number under BANK DETAILS (the vendor's payment details) - deliberately NOT transcribed into any field; there is no schema field for it and it is third-party financial PII. A handwritten note 'Gcash March 31, 2026' records payment by GCash, so payment.method = GCASH."
+  }
+}

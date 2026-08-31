@@ -1,0 +1,56 @@
+{
+  "merchant": {
+    "name": "BEAN BLOCK COFFEE ROASTERS",
+    "branch": null,
+    "address": "Stall A 311 El Grande Street B.F. Homes 1720 City of Paranaque NCR, Fourth District Philippines",
+    "tax_id": "620-589-900-00001",
+    "phone": null
+  },
+  "buyer": { "name": null, "tax_id": null },
+  "receipt": {
+    "number": "008414",
+    "date": "2026-05-16",
+    "date_raw": "16-05-2026 11:07:31",
+    "time": "11:07",
+    "currency": "PHP",
+    "decimal_convention": "point",
+    "cashier": "Bean Block PQ Staff",
+    "terminal": null
+  },
+  "line_items": [
+    {
+      "position": 0,
+      "description_raw": "Local/Sultan Kudarat Daguma/1Kg Whole Beans",
+      "sku": null,
+      "qty": "1",
+      "unit": null,
+      "unit_price": "1710.00",
+      "line_total": "1710.00",
+      "modifiers": [ { "label": "-5.0% incl.", "amount": null } ],
+      "bbox": null,
+      "is_template_row": false
+    }
+  ],
+  "totals": {
+    "subtotal": "1526.79",
+    "tax": "183.21",
+    "tax_breakdown": [
+      { "label": "VAT (12%) incl.", "base": "1526.79", "rate": "0.12", "amount": "183.21" }
+    ],
+    "discount": null,
+    "total": "1710.00",
+    "tender": null,
+    "change": null,
+    "prices_include_tax": true
+  },
+  "payment": { "method": "GCASH", "card_last4": null },
+  "meta": {
+    "is_handwritten": false,
+    "is_refund": false,
+    "legibility": "good",
+    "ambiguous_fields": [],
+    "unreadable_regions": [],
+    "receipt_is_inconsistent": false,
+    "notes": "BEAN BLOCK COFFEE ROASTERS thermal SALES INVOICE, Receipt No. 008414 (same merchant/TIN as r012/r017/r030/r072). One line: 1 x Local/Sultan Kudarat Daguma/1Kg Whole Beans P1710.00 with a '-5.0% incl.' note (null-amount modifier). Subtotal 1710.00; VATable 1526.79 + VAT (12% incl.) 183.21 = 1710.00 Total (tax-inclusive). Payment GCash. Sale date/time from footer 16-05-2026 11:07:31. Customer block blank -> buyer null."
+  }
+}

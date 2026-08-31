@@ -1,0 +1,187 @@
+{
+  "merchant": {
+    "name": "SOUTH GROCER - B.F. AGUIRRE",
+    "branch": "BY: GRAND UNION SUPERMARKET, INC.",
+    "address": "238 & 240 Aguirre Ave., BF Paranaque City",
+    "tax_id": "000-123-826-018",
+    "phone": "(02)8356-45-73"
+  },
+  "buyer": {
+    "name": "RAYMOND VICENTE BRAGANZA",
+    "tax_id": null
+  },
+  "receipt": {
+    "number": "05163225",
+    "date": "2026-04-24",
+    "date_raw": "04/24/2026",
+    "time": "11:09",
+    "currency": "PHP",
+    "decimal_convention": "point",
+    "cashier": null,
+    "terminal": "POS05-SN:41-BXAL3"
+  },
+  "line_items": [
+    {
+      "position": 0,
+      "description_raw": "PF PORK KATSU 500G",
+      "sku": null,
+      "qty": "1",
+      "unit": null,
+      "unit_price": "205.00",
+      "line_total": "205.00",
+      "modifiers": [],
+      "bbox": null,
+      "is_template_row": false
+    },
+    {
+      "position": 1,
+      "description_raw": "PF SF CHI/TOCINO220G",
+      "sku": null,
+      "qty": "1",
+      "unit": null,
+      "unit_price": "99.00",
+      "line_total": "99.00",
+      "modifiers": [],
+      "bbox": null,
+      "is_template_row": false
+    },
+    {
+      "position": 2,
+      "description_raw": "PF SF CHI/TOCINO220G",
+      "sku": null,
+      "qty": "1",
+      "unit": null,
+      "unit_price": "99.00",
+      "line_total": "99.00",
+      "modifiers": [],
+      "bbox": null,
+      "is_template_row": false
+    },
+    {
+      "position": 3,
+      "description_raw": "PF SF CHI/TOCINO220G",
+      "sku": null,
+      "qty": "1",
+      "unit": null,
+      "unit_price": "99.00",
+      "line_total": "99.00",
+      "modifiers": [],
+      "bbox": null,
+      "is_template_row": false
+    },
+    {
+      "position": 4,
+      "description_raw": "PF BLESS CH TCINO220",
+      "sku": null,
+      "qty": "1",
+      "unit": null,
+      "unit_price": "95.00",
+      "line_total": "95.00",
+      "modifiers": [],
+      "bbox": null,
+      "is_template_row": false
+    },
+    {
+      "position": 5,
+      "description_raw": "PF BLESS CH TCINO220",
+      "sku": null,
+      "qty": "1",
+      "unit": null,
+      "unit_price": "95.00",
+      "line_total": "95.00",
+      "modifiers": [],
+      "bbox": null,
+      "is_template_row": false
+    },
+    {
+      "position": 6,
+      "description_raw": "PF BLESS CH TCINO220",
+      "sku": null,
+      "qty": "1",
+      "unit": null,
+      "unit_price": "95.00",
+      "line_total": "95.00",
+      "modifiers": [],
+      "bbox": null,
+      "is_template_row": false
+    },
+    {
+      "position": 7,
+      "description_raw": "MARBY BEEF LUMPIA-C",
+      "sku": null,
+      "qty": "1",
+      "unit": null,
+      "unit_price": "117.00",
+      "line_total": "117.00",
+      "modifiers": [],
+      "bbox": null,
+      "is_template_row": false
+    },
+    {
+      "position": 8,
+      "description_raw": "MARBY SHRMP LUMPIA-C",
+      "sku": null,
+      "qty": "1",
+      "unit": null,
+      "unit_price": "104.00",
+      "line_total": "104.00",
+      "modifiers": [],
+      "bbox": null,
+      "is_template_row": false
+    },
+    {
+      "position": 9,
+      "description_raw": "MARBY SHRMP LUMPIA-C",
+      "sku": null,
+      "qty": "1",
+      "unit": null,
+      "unit_price": "104.00",
+      "line_total": "104.00",
+      "modifiers": [],
+      "bbox": null,
+      "is_template_row": false
+    },
+    {
+      "position": 10,
+      "description_raw": "MARBY SHRMP LUMPIA-C",
+      "sku": null,
+      "qty": "1",
+      "unit": null,
+      "unit_price": "104.00",
+      "line_total": "104.00",
+      "modifiers": [],
+      "bbox": null,
+      "is_template_row": false
+    }
+  ],
+  "totals": {
+    "subtotal": "1085.71",
+    "tax": "130.29",
+    "tax_breakdown": [
+      {
+        "label": "VAT",
+        "base": "1085.71",
+        "rate": "0.12",
+        "amount": "130.29"
+      }
+    ],
+    "discount": null,
+    "total": "1216.00",
+    "tender": "1216.00",
+    "change": "0.00",
+    "prices_include_tax": true
+  },
+  "payment": {
+    "method": "PAYMAYA CC + CASH",
+    "card_last4": null
+  },
+  "meta": {
+    "is_handwritten": false,
+    "is_refund": false,
+    "legibility": "good",
+    "ambiguous_fields": [],
+    "unreadable_regions": [],
+    "receipt_is_inconsistent": false,
+    "notes": "SOUTH GROCER thermal POS, POS05, 11 VATable (V) frozen-food lines: PORK KATSU 205, 3x SF CHI/TOCINO 99, 3x BLESS CH TCINO 95, BEEF LUMPIA 117, 3x SHRMP LUMPIA 104; sum = 1216.00 matches Total Due 1,216.00. VATable 1085.71 + VAT 130.29 = 1216.00. SPLIT payment: PayMaya CC 216.00 (Trace 004601) + Cash 1,000.00, Change 0.00 -> tender recorded as total 1216.00, method noted as combined. Buyer RAYMOND VICENTE BRAGANZA (greencard loyalty 1790050002 not transcribed)."
+  }
+}

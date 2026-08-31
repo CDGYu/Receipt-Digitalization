@@ -1,0 +1,49 @@
+{
+  "merchant": {
+    "name": "SOUTHEASTASIA RETAIL, INC.",
+    "branch": null,
+    "address": "Daang Hari Road Almanza Dos Las Pinas",
+    "tax_id": "008-909-992-007",
+    "phone": null
+  },
+  "buyer": {
+    "name": "LISA SANCHEZ",
+    "tax_id": null
+  },
+  "receipt": {
+    "number": "09259030",
+    "date": "2026-04-20",
+    "date_raw": "04/20/2026 20:14",
+    "time": "20:14",
+    "currency": "PHP",
+    "decimal_convention": "point",
+    "cashier": null,
+    "terminal": "POS09-SN:41-BCPKV"
+  },
+  "line_items": [],
+  "totals": {
+    "subtotal": "3423.26",
+    "tax": "410.79",
+    "tax_breakdown": [
+      { "label": "VATable", "base": "3423.26", "rate": "0.12", "amount": "410.79" }
+    ],
+    "discount": null,
+    "total": "3834.05",
+    "tender": "3834.05",
+    "change": null,
+    "prices_include_tax": true
+  },
+  "payment": {
+    "method": "PAYMAYA",
+    "card_last4": null
+  },
+  "meta": {
+    "is_handwritten": false,
+    "is_refund": false,
+    "legibility": "poor",
+    "ambiguous_fields": ["line_items"],
+    "unreadable_regions": ["most line-item descriptions and amounts"],
+    "receipt_is_inconsistent": false,
+    "notes": "SOUTHEASTASIA RETAIL, INC. (Landers) long thermal SALES INVOICE, POS09, S.I.# 09259030, 04/20/2026 20:14. Header states 22 Item(s), Total Due 3,834.05, paid PayMaya. VATable 3,423.26 + VAT 410.79 = 3834.05 (tax-inclusive). Buyer Cust Name LISA ... SANCHEZ (membership number not transcribed). LINE ITEMS DELIBERATELY LEFT EMPTY: the ~22 grocery lines are faded and overprinted with 'On Sale @Reg' rows and a diagonal pen strike, and most descriptions/amounts cannot be read with confidence. Per the golden-set rule that a wrong value is worse than a missing one, individual lines are omitted rather than guessed; this is recorded in ambiguous_fields/unreadable_regions. The reliable header totals are captured. A degraded-print, many-line adversarial sample."
+  }
+}

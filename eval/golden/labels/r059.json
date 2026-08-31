@@ -1,0 +1,74 @@
+{
+  "merchant": {
+    "name": "SOUTH GROCER - B.F. AGUIRRE",
+    "branch": "BY: GRAND UNION SUPERMARKET, INC.",
+    "address": "238 & 240 Aguirre Ave., BF Paranaque City",
+    "tax_id": "000-123-826-018",
+    "phone": "(02)8356-45-73"
+  },
+  "buyer": {
+    "name": null,
+    "tax_id": null
+  },
+  "receipt": {
+    "number": "02257014",
+    "date": "2026-03-14",
+    "date_raw": "03/14/2026",
+    "time": "11:32",
+    "currency": "PHP",
+    "decimal_convention": "point",
+    "cashier": null,
+    "terminal": "POS02-SN:41-BXAP6"
+  },
+  "line_items": [
+    {
+      "position": 0,
+      "description_raw": "LM PC C/MNSI KSL0120",
+      "sku": null,
+      "qty": "1",
+      "unit": null,
+      "unit_price": "18.75",
+      "line_total": "18.75",
+      "modifiers": [],
+      "bbox": null,
+      "is_template_row": false
+    },
+    {
+      "position": 1,
+      "description_raw": "LM PC C/MNSI KSL0120",
+      "sku": null,
+      "qty": "1",
+      "unit": null,
+      "unit_price": "18.75",
+      "line_total": "18.75",
+      "modifiers": [],
+      "bbox": null,
+      "is_template_row": false
+    }
+  ],
+  "totals": {
+    "subtotal": "33.48",
+    "tax": "4.02",
+    "tax_breakdown": [
+      { "label": "VAT", "base": "33.48", "rate": "0.12", "amount": "4.02" }
+    ],
+    "discount": null,
+    "total": "37.50",
+    "tender": "100.00",
+    "change": "62.50",
+    "prices_include_tax": true
+  },
+  "payment": {
+    "method": "CASH",
+    "card_last4": null
+  },
+  "meta": {
+    "is_handwritten": false,
+    "is_refund": false,
+    "legibility": "good",
+    "ambiguous_fields": [],
+    "unreadable_regions": [],
+    "receipt_is_inconsistent": false,
+    "notes": "SOUTH GROCER thermal POS, POS02. Two VATable lines 2x LM PC C/MNSI KSL0120 @18.75 = 37.50 Total Due. VATable 33.48 + VAT 4.02 = 37.50. Cash 100.00, Change 62.50. Customer block blank -> buyer null."
+  }
+}

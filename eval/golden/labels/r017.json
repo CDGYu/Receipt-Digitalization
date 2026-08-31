@@ -1,0 +1,72 @@
+{
+  "merchant": {
+    "name": "BEAN BLOCK COFFEE ROASTERS",
+    "branch": null,
+    "address": "Stall A 311 El Grande Street B.F. Homes 1720 City of Paranaque NCR, Fourth District Philippines",
+    "tax_id": "620-589-900-00001",
+    "phone": null
+  },
+  "buyer": {
+    "name": null,
+    "tax_id": null
+  },
+  "receipt": {
+    "number": "007371",
+    "date": null,
+    "date_raw": null,
+    "time": null,
+    "currency": "PHP",
+    "decimal_convention": "point",
+    "cashier": "Bean Block PQ Staff",
+    "terminal": null
+  },
+  "line_items": [
+    {
+      "position": 0,
+      "description_raw": "Local/Sultan Kudarat Daguma/500g Whole Beans",
+      "sku": null,
+      "qty": "1",
+      "unit": null,
+      "unit_price": "855.00",
+      "line_total": "855.00",
+      "modifiers": [
+        {
+          "label": "-5.0% incl.",
+          "amount": null
+        }
+      ],
+      "bbox": null,
+      "is_template_row": false
+    }
+  ],
+  "totals": {
+    "subtotal": "763.39",
+    "tax": "91.61",
+    "tax_breakdown": [
+      {
+        "label": "VAT (12%) incl.",
+        "base": "763.39",
+        "rate": "0.12",
+        "amount": "91.61"
+      }
+    ],
+    "discount": null,
+    "total": "855.00",
+    "tender": "1000.00",
+    "change": "145.00",
+    "prices_include_tax": true
+  },
+  "payment": {
+    "method": "CASH",
+    "card_last4": null
+  },
+  "meta": {
+    "is_handwritten": false,
+    "is_refund": false,
+    "legibility": "good",
+    "ambiguous_fields": [],
+    "unreadable_regions": [],
+    "receipt_is_inconsistent": false,
+    "notes": "BEAN BLOCK COFFEE ROASTERS thermal SALES INVOICE, Receipt No. 007371 (machine-printed, clean). Same merchant/TIN (620-589-900-00001) as r012 (Bean Block Ventures Inc). Single line: 1 x Local/Sultan Kudarat Daguma/500g Whole Beans, P855.00 with a '(-5.0% incl.)' note recorded as a modifier with null amount (the discount is already folded into the 855 and no separate peso figure is printed). Subtotal 855.00; VATable Sales 763.39 + VAT (12%) incl. 91.61 = 855.00 Total (tax-inclusive); Cash Received 1000.00, Change 145.00. No date is printed in the body (POS footer shows an ISSUED date of the permit, not the sale) -> receipt.date null. Customer Name blank -> buyer null. POS provider: Kintoz IT Solutions."
+  }
+}

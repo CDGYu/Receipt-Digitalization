@@ -1,0 +1,57 @@
+{
+  "merchant": {
+    "name": "BF FEDERATION OF HOMEOWNERS ASSOCIATION, INC.",
+    "branch": null,
+    "address": "37 Pilar Banzon Street, B.F. Homes, 1720 Paranaque City, NCR, Fourth District, Philippines",
+    "tax_id": "457-102-839-00000",
+    "phone": "8807-5084"
+  },
+  "buyer": {
+    "name": "HEY LUCKY CAFE & CORP",
+    "tax_id": null
+  },
+  "receipt": {
+    "number": "0057093",
+    "date": "2026-04-20",
+    "date_raw": "04/20/2026",
+    "time": null,
+    "currency": "PHP",
+    "decimal_convention": "point",
+    "cashier": null,
+    "terminal": null
+  },
+  "line_items": [
+    {
+      "position": 0,
+      "description_raw": "ADVANCE 4W 1 MONTH VALID",
+      "sku": null,
+      "qty": null,
+      "unit": null,
+      "unit_price": null,
+      "line_total": "50.00",
+      "modifiers": [],
+      "bbox": null,
+      "is_template_row": false
+    }
+  ],
+  "totals": {
+    "subtotal": "50.00",
+    "tax": "0.00",
+    "tax_breakdown": [],
+    "discount": null,
+    "total": "50.00",
+    "tender": null,
+    "change": null,
+    "prices_include_tax": true
+  },
+  "payment": { "method": null, "card_last4": null },
+  "meta": {
+    "is_handwritten": false,
+    "is_refund": false,
+    "legibility": "good",
+    "ambiguous_fields": [],
+    "unreadable_regions": [],
+    "receipt_is_inconsistent": false,
+    "notes": "BF FEDERATION OF HOMEOWNERS ASSOCIATION, INC. SERVICE INVOICE No. 0057093 (dot-matrix / continuous-form, machine-printed). One service line: 'ADVANCE 4W / 1 MONTH VALID' amount 50.00 (a parking/access sticker fee); qty/unit_price blank on the form. 'Fifty & 00/100'. Total Sales (VAT Inclusive) 50.00, Less: VAT 0.00, Amount Net of VAT 50.00, Total Amount Due 50.00 - VATable and VAT-Exempt boxes blank/circled, treated as tax 0.00. Buyer HEY LUCKY CAFE & CORP (240 Aguirre Ave. BF Homes). Authorized rep Antonia Cayunda."
+  }
+}

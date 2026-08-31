@@ -1,0 +1,67 @@
+{
+  "merchant": {
+    "name": "Google",
+    "branch": null,
+    "address": null,
+    "tax_id": null,
+    "phone": null
+  },
+  "buyer": {
+    "name": null,
+    "tax_id": null
+  },
+  "receipt": {
+    "number": "5552760710",
+    "date": null,
+    "date_raw": null,
+    "time": null,
+    "currency": "USD",
+    "decimal_convention": "point",
+    "cashier": null,
+    "terminal": null
+  },
+  "line_items": [
+    {
+      "position": 0,
+      "description_raw": "Google Workspace Business Standard",
+      "sku": null,
+      "qty": "1",
+      "unit": null,
+      "unit_price": "12.00",
+      "line_total": "12.00",
+      "modifiers": [],
+      "bbox": null,
+      "is_template_row": false
+    }
+  ],
+  "totals": {
+    "subtotal": "12.00",
+    "tax": "0.00",
+    "tax_breakdown": [
+      {
+        "label": "VAT (0%)",
+        "base": "12.00",
+        "rate": "0.00",
+        "amount": "0.00"
+      }
+    ],
+    "discount": null,
+    "total": "12.00",
+    "tender": null,
+    "change": null,
+    "prices_include_tax": false
+  },
+  "payment": {
+    "method": null,
+    "card_last4": null
+  },
+  "meta": {
+    "is_handwritten": false,
+    "is_refund": false,
+    "legibility": "good",
+    "ambiguous_fields": [],
+    "unreadable_regions": [],
+    "receipt_is_inconsistent": false,
+    "notes": "Google Tax Invoice, invoice number 5552760710, machine-printed. CURRENCY IS USD, not PHP - a deliberate non-PHP sample. Single line: Google Workspace Business Standard, Commitment, Interval Apr 1 - Apr 30, Qty 1, Amount $12.00. Subtotal in USD $12.00, VAT (0%) $0.00, Total in USD $12.00 (a struck-through $0.00 sits above the circled $12.00 total). No printed invoice date in the header rows shown -> receipt.date null. Handwritten annotation 'P1,600 April 2 May Bill' is a local note about the peso-equivalent payment and is kept in notes, not converted into any field (the invoice itself is in USD)."
+  }
+}

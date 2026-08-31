@@ -1,0 +1,54 @@
+{
+  "merchant": {
+    "name": "M3RG HARDWARE AND CONSTRUCTION SUPPLY",
+    "branch": null,
+    "address": "308 Aguirre Ave., B.F. Homes 1720 City of Paranaque NCR, Fourth District Philippines",
+    "tax_id": "298-378-414-00000",
+    "phone": "+639178725788"
+  },
+  "buyer": { "name": null, "tax_id": null },
+  "receipt": {
+    "number": "19445",
+    "date": "2026-03-11",
+    "date_raw": "3/11/26",
+    "time": "13:47",
+    "currency": "PHP",
+    "decimal_convention": "point",
+    "cashier": null,
+    "terminal": null
+  },
+  "line_items": [
+    {
+      "position": 0,
+      "description_raw": "Pull Chain Socket",
+      "sku": null,
+      "qty": "3",
+      "unit": "pcs",
+      "unit_price": "80.00",
+      "line_total": "240.00",
+      "modifiers": [],
+      "bbox": null,
+      "is_template_row": false
+    }
+  ],
+  "totals": {
+    "subtotal": null,
+    "tax": null,
+    "tax_breakdown": [],
+    "discount": null,
+    "total": "240.00",
+    "tender": null,
+    "change": null,
+    "prices_include_tax": true
+  },
+  "payment": { "method": null, "card_last4": null },
+  "meta": {
+    "is_handwritten": true,
+    "is_refund": false,
+    "legibility": "good",
+    "ambiguous_fields": [],
+    "unreadable_regions": [],
+    "receipt_is_inconsistent": false,
+    "notes": "M3RG HARDWARE AND CONSTRUCTION SUPPLY SALES INVOICE No. 19445 (VAT-reg), pre-printed form with handwritten values, stamped PAID 11 MAR 2026 13:47. One line: 3 pcs Pull Chain Socket @ 80 = 240; TOTAL AMOUNT DUE 240 (3x80=240 reconciles). The VAT summary boxes are blank on the form. Sold-to blank -> buyer null."
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "merchant": {
+    "name": "SOUTH GROCER - B.F. AGUIRRE",
+    "branch": "BY: GRAND UNION SUPERMARKET, INC.",
+    "address": "238 & 240 Aguirre Ave., BF Paranaque City",
+    "tax_id": "000-123-826-018",
+    "phone": "(02)8356-45-73"
+  },
+  "buyer": { "name": null, "tax_id": null },
+  "receipt": {
+    "number": "03226218",
+    "date": "2026-05-10",
+    "date_raw": "05/10/2026",
+    "time": "13:56",
+    "currency": "PHP",
+    "decimal_convention": "point",
+    "cashier": null,
+    "terminal": "POS03-SN:41-BXAX7"
+  },
+  "line_items": [
+    { "position": 0, "description_raw": "GEMSUN LRGE EGGS12-C", "sku": null, "qty": "1", "unit": null, "unit_price": "149.00", "line_total": "149.00", "modifiers": [], "bbox": null, "is_template_row": false }
+  ],
+  "totals": {
+    "subtotal": "149.00",
+    "tax": "0.00",
+    "tax_breakdown": [ { "label": "VAT-Exempt", "base": "149.00", "rate": "0.00", "amount": "0.00" } ],
+    "discount": null,
+    "total": "149.00",
+    "tender": "200.00",
+    "change": "51.00",
+    "prices_include_tax": true
+  },
+  "payment": { "method": "CASH", "card_last4": null },
+  "meta": {
+    "is_handwritten": false,
+    "is_refund": false,
+    "legibility": "good",
+    "ambiguous_fields": [],
+    "unreadable_regions": [],
+    "receipt_is_inconsistent": false,
+    "notes": "SOUTH GROCER thermal POS, POS03. Single VAT-exempt line GEMSUN LRGE EGGS12-C 149.00 (E) = Total Due 149.00. Cash 200.00, Change 51.00. VAT-Exempt 149.00, VAT 0.00. Buyer block blank -> null."
+  }
+}

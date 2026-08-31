@@ -1,0 +1,44 @@
+{
+  "merchant": {
+    "name": "SOUTH GROCER - B.F. AGUIRRE",
+    "branch": "BY: GRAND UNION SUPERMARKET, INC.",
+    "address": "238 & 240 Aguirre Ave., BF Paranaque City",
+    "tax_id": "000-123-826-018",
+    "phone": "(02)8356-45-73"
+  },
+  "buyer": { "name": "RAYMOND VICENTE BRAGANZA", "tax_id": null },
+  "receipt": {
+    "number": "02257148",
+    "date": "2026-03-15",
+    "date_raw": "03/15/2026",
+    "time": "12:10",
+    "currency": "PHP",
+    "decimal_convention": "point",
+    "cashier": null,
+    "terminal": "POS02-SN:41-BXAP6"
+  },
+  "line_items": [
+    { "position": 0, "description_raw": "NATURES S/DISTILL10L", "sku": null, "qty": "1", "unit": null, "unit_price": "91.00", "line_total": "91.00", "modifiers": [], "bbox": null, "is_template_row": false },
+    { "position": 1, "description_raw": "NATURES S/DISTILL10L", "sku": null, "qty": "1", "unit": null, "unit_price": "91.00", "line_total": "91.00", "modifiers": [], "bbox": null, "is_template_row": false }
+  ],
+  "totals": {
+    "subtotal": "162.50",
+    "tax": "19.50",
+    "tax_breakdown": [ { "label": "VAT", "base": "162.50", "rate": "0.12", "amount": "19.50" } ],
+    "discount": null,
+    "total": "182.00",
+    "tender": "500.00",
+    "change": "318.00",
+    "prices_include_tax": true
+  },
+  "payment": { "method": "CASH", "card_last4": null },
+  "meta": {
+    "is_handwritten": false,
+    "is_refund": false,
+    "legibility": "good",
+    "ambiguous_fields": [],
+    "unreadable_regions": [],
+    "receipt_is_inconsistent": false,
+    "notes": "SOUTH GROCER thermal POS, POS02. Two VATable lines 2x NATURES S/DISTILL10L @91.00 = 182.00 Total Due. VATable 162.50 + VAT 19.50 = 182.00. Cash 500.00, Change 318.00. Buyer RAYMOND VICENTE BRAGANZA (greencard, not transcribed)."
+  }
+}

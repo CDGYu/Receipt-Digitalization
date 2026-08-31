@@ -1,0 +1,57 @@
+{
+  "merchant": {
+    "name": "imageMAX",
+    "branch": "Leicester Enterprise",
+    "address": "76-C Aguirre Ave., BF Homes, Paranaque City",
+    "tax_id": "226-842-411-000",
+    "phone": "(632) 501-0323 / 0917-8167004"
+  },
+  "buyer": {
+    "name": "HEY LUCKY CAFE & Co",
+    "tax_id": null
+  },
+  "receipt": {
+    "number": "4615",
+    "date": "2026-04-25",
+    "date_raw": "4-25-26",
+    "time": null,
+    "currency": "PHP",
+    "decimal_convention": "point",
+    "cashier": null,
+    "terminal": null
+  },
+  "line_items": [
+    {
+      "position": 0,
+      "description_raw": "Calling Card",
+      "sku": null,
+      "qty": "1",
+      "unit": null,
+      "unit_price": "650.00",
+      "line_total": "650.00",
+      "modifiers": [],
+      "bbox": null,
+      "is_template_row": false
+    }
+  ],
+  "totals": {
+    "subtotal": "650.00",
+    "tax": null,
+    "tax_breakdown": [],
+    "discount": null,
+    "total": "650.00",
+    "tender": null,
+    "change": null,
+    "prices_include_tax": null
+  },
+  "payment": { "method": null, "card_last4": null },
+  "meta": {
+    "is_handwritten": true,
+    "is_refund": false,
+    "legibility": "fair",
+    "ambiguous_fields": [],
+    "unreadable_regions": [],
+    "receipt_is_inconsistent": false,
+    "notes": "imageMAX (Leicester Enterprise) SALES INVOICE No. 4615, pre-printed form with handwritten values, NON-VAT (TIN 226-842-411-000). Customer HEY LUCKY CAFE & Co, Date 4-25-26. One line: Qty 1, Calling Card, Amount 650; Total 650. NON-VAT so no VAT breakdown (tax null). Footnote 'THIS DOCUMENT IS NOT VALID FOR CLAIMING INPUT TAXES.' imageMAX is the issuing MERCHANT; Hey Lucky Cafe is the buyer/customer."
+  }
+}

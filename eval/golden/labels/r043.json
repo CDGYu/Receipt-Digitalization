@@ -1,0 +1,64 @@
+{
+  "merchant": {
+    "name": "SAMA CAFE+DINER",
+    "branch": "Owned and Operated By SILVERLAKE FOODIES OPC",
+    "address": "231-C Aguirre Ave B.F. Homes 1720 City of Paranaque NCR, Fourth District Philippines",
+    "tax_id": "778-157-117-00001",
+    "phone": null
+  },
+  "buyer": {
+    "name": "Raymond Vicente E. Braganza",
+    "tax_id": null
+  },
+  "receipt": {
+    "number": "084147",
+    "date": "2026-04-10",
+    "date_raw": "Fri 10 Apr 2026",
+    "time": null,
+    "currency": "PHP",
+    "decimal_convention": "point",
+    "cashier": "Luis Reginales",
+    "terminal": null
+  },
+  "line_items": [
+    {
+      "position": 0,
+      "description_raw": "Sourdough",
+      "sku": null,
+      "qty": "1",
+      "unit": null,
+      "unit_price": "220.00",
+      "line_total": "220.00",
+      "modifiers": [
+        { "label": "PWD discount", "amount": "-62.86" }
+      ],
+      "bbox": null,
+      "is_template_row": false
+    }
+  ],
+  "totals": {
+    "subtotal": "220.00",
+    "tax": "0.00",
+    "tax_breakdown": [
+      { "label": "VAT Exempt Sales", "base": "157.14", "rate": "0.00", "amount": "0.00" }
+    ],
+    "discount": "62.86",
+    "total": "157.14",
+    "tender": null,
+    "change": null,
+    "prices_include_tax": true
+  },
+  "payment": {
+    "method": "CARD",
+    "card_last4": null
+  },
+  "meta": {
+    "is_handwritten": false,
+    "is_refund": false,
+    "legibility": "good",
+    "ambiguous_fields": [],
+    "unreadable_regions": [],
+    "receipt_is_inconsistent": false,
+    "notes": "SAMA CAFE+DINER (Silverlake Foodies OPC) thermal SALES INVOICE 084147, Order Method Take Out. One line: Sourdough @220x1 with a 62.86 PWD discount -> line nets 157.14 (recorded as a -62.86 PWD modifier). Subtotal 220.00. Under Senior/PWD treatment the item becomes VAT Exempt (157.14) with VAT Amount 0.00; Snr/PWD Discount 39.29 (totals.discount) and VAT Exemption 23.57 are the split of the 62.86 relief. TOTAL 157.14. Payment Card, Qty 1. Customer Raymond Vicente E. Braganza. A PWD-discount VAT-edge sample. POS provider Kintoz IT Solutions."
+  }
+}

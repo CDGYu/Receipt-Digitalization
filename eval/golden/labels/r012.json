@@ -1,0 +1,60 @@
+{
+  "merchant": {
+    "name": "BEAN BLOCK VENTURES INC.",
+    "branch": null,
+    "address": "Stall A 311, El Grande Street, B.F. Homes 1720 City of Paranaque, NCR Fourth District, Philippines",
+    "tax_id": "620-589-900-00001",
+    "phone": null
+  },
+  "buyer": {
+    "name": null,
+    "tax_id": null
+  },
+  "receipt": {
+    "number": "0186",
+    "date": "2026-04-23",
+    "date_raw": "04-23-26",
+    "time": null,
+    "currency": "PHP",
+    "decimal_convention": "point",
+    "cashier": null,
+    "terminal": null
+  },
+  "line_items": [
+    {
+      "position": 0,
+      "description_raw": "Coffee beans",
+      "sku": null,
+      "qty": null,
+      "unit": null,
+      "unit_price": null,
+      "line_total": null,
+      "modifiers": [],
+      "bbox": null,
+      "is_template_row": false
+    }
+  ],
+  "totals": {
+    "subtotal": null,
+    "tax": null,
+    "tax_breakdown": [],
+    "discount": null,
+    "total": "1743.75",
+    "tender": null,
+    "change": null,
+    "prices_include_tax": null
+  },
+  "payment": {
+    "method": null,
+    "card_last4": null
+  },
+  "meta": {
+    "is_handwritten": true,
+    "is_refund": false,
+    "legibility": "fair",
+    "ambiguous_fields": [],
+    "unreadable_regions": [],
+    "receipt_is_inconsistent": false,
+    "notes": "BIR OFFICIAL RECEIPT (pre-printed form, narrative style), photographed rotated 90 degrees. The 'Particulars/Amount' grid is entirely blank; only the narrative body is filled: 'Received from ___ engaged in the business style of ___ ... the sum of One thousand seven hundred forty three & 75/100 pesos (P 1743.75) in partial/full payment for Coffee beans', address at Paranaque. So there is one line item 'Coffee beans' with no qty/unit_price and total 1743.75. The written amount in words ('one thousand seven hundred forty three') plus the '.75' box gives 1743.75. No VAT breakdown is filled. BEAN BLOCK VENTURES INC. is the issuing MERCHANT; the Received-from (buyer) line is blank."
+  }
+}

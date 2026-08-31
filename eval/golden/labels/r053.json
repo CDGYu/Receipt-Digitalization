@@ -1,0 +1,60 @@
+{
+  "merchant": {
+    "name": null,
+    "branch": null,
+    "address": null,
+    "tax_id": null,
+    "phone": null
+  },
+  "buyer": {
+    "name": "Hey Lucky Cafe",
+    "tax_id": null
+  },
+  "receipt": {
+    "number": "005641",
+    "date": "2026-03-19",
+    "date_raw": "03-19-2026",
+    "time": null,
+    "currency": "PHP",
+    "decimal_convention": "point",
+    "cashier": null,
+    "terminal": null
+  },
+  "line_items": [
+    {
+      "position": 0,
+      "description_raw": "Grounds",
+      "sku": null,
+      "qty": "3",
+      "unit": null,
+      "unit_price": null,
+      "line_total": "192.00",
+      "modifiers": [],
+      "bbox": null,
+      "is_template_row": false
+    }
+  ],
+  "totals": {
+    "subtotal": null,
+    "tax": null,
+    "tax_breakdown": [],
+    "discount": null,
+    "total": "192.00",
+    "tender": null,
+    "change": null,
+    "prices_include_tax": null
+  },
+  "payment": {
+    "method": "CASH",
+    "card_last4": null
+  },
+  "meta": {
+    "is_handwritten": true,
+    "is_refund": false,
+    "legibility": "fair",
+    "ambiguous_fields": [],
+    "unreadable_regions": [],
+    "receipt_is_inconsistent": false,
+    "notes": "Generic blank handwritten sales pad No. 005641, photographed upside down. 'Sold to Hey Lucky Cafe, 240 Aguirre', Date 03-19-2026. One line: qty 3, article 'Grounds' (coffee grounds), amount 192; TOTAL 192, marked 'Cash pd'. No unit_price written separately. Merchant null (pad prints no seller identity)."
+  }
+}

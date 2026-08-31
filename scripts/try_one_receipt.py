@@ -72,7 +72,7 @@ def main() -> int:
     max_edge = args.max_edge or settings.max_image_edge_px
 
     image = None
-    for suffix in (".jpg", ".jpeg", ".png", ".webp"):
+    for suffix in (".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif"):
         candidate = GOLDEN / "images" / f"{args.receipt_id}{suffix}"
         if candidate.is_file():
             image = candidate

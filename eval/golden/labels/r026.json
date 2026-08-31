@@ -1,0 +1,67 @@
+{
+  "merchant": {
+    "name": "SOUTH GROCER - B.F. AGUIRRE",
+    "branch": "BY: GRAND UNION SUPERMARKET, INC.",
+    "address": "238 & 240 Aguirre Ave., BF Paranaque City",
+    "tax_id": "000-123-826-018",
+    "phone": "(02)8356-45-73"
+  },
+  "buyer": {
+    "name": null,
+    "tax_id": null
+  },
+  "receipt": {
+    "number": "03224942",
+    "date": "2026-04-22",
+    "date_raw": "04/22/2026",
+    "time": "16:56",
+    "currency": "PHP",
+    "decimal_convention": "point",
+    "cashier": null,
+    "terminal": "POS03-SN:41-BXAX7"
+  },
+  "line_items": [
+    {
+      "position": 0,
+      "description_raw": "GLDEN FRSH GREEN ICE",
+      "sku": null,
+      "qty": "1",
+      "unit": null,
+      "unit_price": "79.90",
+      "line_total": "79.90",
+      "modifiers": [],
+      "bbox": null,
+      "is_template_row": false
+    }
+  ],
+  "totals": {
+    "subtotal": "79.90",
+    "tax": "0.00",
+    "tax_breakdown": [
+      {
+        "label": "VAT-Exempt",
+        "base": "79.90",
+        "rate": "0.00",
+        "amount": "0.00"
+      }
+    ],
+    "discount": null,
+    "total": "79.90",
+    "tender": "500.00",
+    "change": "420.10",
+    "prices_include_tax": true
+  },
+  "payment": {
+    "method": "CASH",
+    "card_last4": null
+  },
+  "meta": {
+    "is_handwritten": false,
+    "is_refund": false,
+    "legibility": "good",
+    "ambiguous_fields": [],
+    "unreadable_regions": [],
+    "receipt_is_inconsistent": false,
+    "notes": "SOUTH GROCER thermal POS, POS03. Single VAT-exempt line GLDEN FRSH GREEN ICE 79.90 (E). Total Due 79.90, Cash 500.00, Change 420.10. VATable 0, VAT-Exempt 79.90, VAT 0.00. Customer block blank -> buyer null."
+  }
+}

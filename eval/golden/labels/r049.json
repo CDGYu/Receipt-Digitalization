@@ -1,0 +1,74 @@
+{
+  "merchant": {
+    "name": "SOUTH GROCER - B.F. AGUIRRE",
+    "branch": "BY: GRAND UNION SUPERMARKET, INC.",
+    "address": "238 & 240 Aguirre Ave., BF Paranaque City",
+    "tax_id": "000-123-826-018",
+    "phone": "(02)8356-45-73"
+  },
+  "buyer": {
+    "name": "RAYMOND VICENTE BRAGANZA",
+    "tax_id": null
+  },
+  "receipt": {
+    "number": "05159308",
+    "date": "2026-03-27",
+    "date_raw": "03/27/2026",
+    "time": "14:30",
+    "currency": "PHP",
+    "decimal_convention": "point",
+    "cashier": null,
+    "terminal": "POS05-SN:41-BXAL3"
+  },
+  "line_items": [
+    {
+      "position": 0,
+      "description_raw": "MISSION FOODS O&C270",
+      "sku": null,
+      "qty": "1",
+      "unit": null,
+      "unit_price": "152.00",
+      "line_total": "152.00",
+      "modifiers": [],
+      "bbox": null,
+      "is_template_row": false
+    },
+    {
+      "position": 1,
+      "description_raw": "MISSION FOODS O&C270",
+      "sku": null,
+      "qty": "1",
+      "unit": null,
+      "unit_price": "152.00",
+      "line_total": "152.00",
+      "modifiers": [],
+      "bbox": null,
+      "is_template_row": false
+    }
+  ],
+  "totals": {
+    "subtotal": "271.43",
+    "tax": "32.57",
+    "tax_breakdown": [
+      { "label": "VAT", "base": "271.43", "rate": "0.12", "amount": "32.57" }
+    ],
+    "discount": null,
+    "total": "304.00",
+    "tender": "304.00",
+    "change": null,
+    "prices_include_tax": true
+  },
+  "payment": {
+    "method": "PAYMAYA CC",
+    "card_last4": null
+  },
+  "meta": {
+    "is_handwritten": false,
+    "is_refund": false,
+    "legibility": "good",
+    "ambiguous_fields": [],
+    "unreadable_regions": [],
+    "receipt_is_inconsistent": false,
+    "notes": "SOUTH GROCER thermal POS, POS05. Two VATable lines 2x MISSION FOODS O&C270 @152.00 = 304.00 Total Due. VATable 271.43 + VAT 32.57 = 304.00. Paid PayMaya CC 304.00 (Trace 003056). Buyer RAYMOND VICENTE BRAGANZA (greencard, not transcribed). A handwritten 'BCRP' initials annotation on the receipt body."
+  }
+}

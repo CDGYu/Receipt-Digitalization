@@ -1,0 +1,50 @@
+{
+  "merchant": {
+    "name": "SOUTHEASTASIA RETAIL, INC.",
+    "branch": null,
+    "address": "Daang Hari Road Almanza Dos Las Pinas",
+    "tax_id": "008-909-992-007",
+    "phone": null
+  },
+  "buyer": {
+    "name": "MARIA KATRINA PAJARILLO",
+    "tax_id": null
+  },
+  "receipt": {
+    "number": "15153239",
+    "date": "2026-05-15",
+    "date_raw": "05/15/2026",
+    "time": "14:14",
+    "currency": "PHP",
+    "decimal_convention": "point",
+    "cashier": "ISRAEL GLEIMARIE",
+    "terminal": "POS15-SN:41-BCPKY"
+  },
+  "line_items": [
+    { "position": 0, "description_raw": "CHOVISRIRACHA250ML", "sku": "156928", "qty": "5", "unit": null, "unit_price": "159.95", "line_total": "799.75", "modifiers": [], "bbox": null, "is_template_row": false },
+    { "position": 1, "description_raw": "FOUNDERSPEACHLVS0256", "sku": "140613", "qty": "2", "unit": null, "unit_price": "154.75", "line_total": "309.50", "modifiers": [], "bbox": null, "is_template_row": false },
+    { "position": 2, "description_raw": "CHOVICAESARSCE250ML", "sku": "156923", "qty": "10", "unit": null, "unit_price": "159.95", "line_total": "1599.50", "modifiers": [], "bbox": null, "is_template_row": false },
+    { "position": 3, "description_raw": "MinuteMaidOrnge240ml", "sku": "145576", "qty": "1", "unit": null, "unit_price": "475.95", "line_total": "475.95", "modifiers": [], "bbox": null, "is_template_row": false },
+    { "position": 4, "description_raw": "CenturyChunkVatri705g", "sku": null, "qty": "1", "unit": null, "unit_price": "555.95", "line_total": "555.95", "modifiers": [], "bbox": null, "is_template_row": false }
+  ],
+  "totals": {
+    "subtotal": "3339.87",
+    "tax": "400.76",
+    "tax_breakdown": [ { "label": "VAT", "base": "3339.87", "rate": "0.12", "amount": "400.76" } ],
+    "discount": null,
+    "total": "3740.65",
+    "tender": "3740.65",
+    "change": null,
+    "prices_include_tax": true
+  },
+  "payment": { "method": "PAYMAYA", "card_last4": null },
+  "meta": {
+    "is_handwritten": false,
+    "is_refund": false,
+    "legibility": "fair",
+    "ambiguous_fields": [],
+    "unreadable_regions": [],
+    "receipt_is_inconsistent": false,
+    "notes": "SOUTHEASTASIA RETAIL (Landers) thermal SALES INVOICE 15153239, POS15, cashier Israel Gleimarie. Five 'On Sale' lines: 5x CHOVISRIRACHA250ML @159.95 = 799.75, 2x FOUNDERSPEACHLVS0256 @154.75 = 309.50, 10x CHOVICAESARSCE250ML @159.95 = 1599.50, MinuteMaidOrnge240ml 475.95, CenturyChunkVatri705g 555.95; sum = 3740.65 EXACTLY matches Total Due (unlike the illegible r033, this one reconciles). Header '19 Item(s)' counts individual units. VATable 3,339.87 + VAT 400.76 = 3740.63 (~3740.65, rounding). Total Savings 849.40. PayMaya. Buyer MARIA KATRINA PAJARILLO. SKU codes captured where printed."
+  }
+}

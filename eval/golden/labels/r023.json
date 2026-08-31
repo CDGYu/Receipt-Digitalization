@@ -1,0 +1,67 @@
+{
+  "merchant": {
+    "name": "COFFAI CORPORATION",
+    "branch": null,
+    "address": "Unit 204-207 2/F Brickton Bldg, B11 L8 Bethlehem St., Moonwalk 1709 City of Paranaque, NCR, Fourth District, Philippines",
+    "tax_id": "502-269-138-00000",
+    "phone": "09778208888 / 028 8558 7308"
+  },
+  "buyer": {
+    "name": "Hey lucky cafe & co",
+    "tax_id": null
+  },
+  "receipt": {
+    "number": "0002545",
+    "date": "2026-05-09",
+    "date_raw": "May 09, 2026",
+    "time": null,
+    "currency": "PHP",
+    "decimal_convention": "point",
+    "cashier": null,
+    "terminal": null
+  },
+  "line_items": [
+    {
+      "position": 0,
+      "description_raw": "FULLCREAM MILK-1L-LEMOO",
+      "sku": "FM-1L",
+      "qty": "11",
+      "unit": null,
+      "unit_price": "90.00",
+      "line_total": "990.00",
+      "modifiers": [],
+      "bbox": null,
+      "is_template_row": false
+    }
+  ],
+  "totals": {
+    "subtotal": "883.93",
+    "tax": "106.07",
+    "tax_breakdown": [
+      {
+        "label": "12% VAT",
+        "base": "883.93",
+        "rate": "0.12",
+        "amount": "106.07"
+      }
+    ],
+    "discount": null,
+    "total": "990.00",
+    "tender": null,
+    "change": null,
+    "prices_include_tax": true
+  },
+  "payment": {
+    "method": null,
+    "card_last4": null
+  },
+  "meta": {
+    "is_handwritten": false,
+    "is_refund": false,
+    "legibility": "good",
+    "ambiguous_fields": [],
+    "unreadable_regions": [],
+    "receipt_is_inconsistent": false,
+    "notes": "Coffai Corporation DELIVERY RECEIPT, D.R. No. 0002545 (a third distinct Coffai DR alongside r015=0001975 and r019=0002272). Date May 09, 2026, Sales Personnel CHOSUN G., Channel REORDER, Client Tag CAFE/COFFEE SHOP. Single line FM-1L FULLCREAM MILK-1L-LEMOO qty 11 x 90.00 = 990.00; Subtotal 883.93 + 12% VAT 106.07 = 990.00 Total Amount Due (tax-inclusive), Less: Discount blank. 'Hey lucky cafe & co' (240 aguirre ave Bf homes paranaque) is the BUYER (Ship To). Footnote 'THIS DOCUMENT IS NOT VALID FOR CLAIM ANY INPUT TAXES.'"
+  }
+}

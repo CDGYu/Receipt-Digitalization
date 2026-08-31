@@ -1,0 +1,67 @@
+{
+  "merchant": {
+    "name": "Coffai Corporation",
+    "branch": null,
+    "address": "Unit 204-207 2/F Brickton Bldg, B11 L8 Bethlehem St., Moonwalk 1709 City of Paranaque, NCR, Fourth District, Philippines",
+    "tax_id": "502-269-138-00000",
+    "phone": "09778208888 / 028 8558 7308"
+  },
+  "buyer": {
+    "name": "Hey lucky cafe & co",
+    "tax_id": null
+  },
+  "receipt": {
+    "number": "0002272",
+    "date": null,
+    "date_raw": null,
+    "time": null,
+    "currency": "PHP",
+    "decimal_convention": "point",
+    "cashier": null,
+    "terminal": null
+  },
+  "line_items": [
+    {
+      "position": 0,
+      "description_raw": "FULLCREAM MILK-1L-LEMOO",
+      "sku": "FM-1L",
+      "qty": "11",
+      "unit": null,
+      "unit_price": "90.00",
+      "line_total": "990.00",
+      "modifiers": [],
+      "bbox": null,
+      "is_template_row": false
+    }
+  ],
+  "totals": {
+    "subtotal": "883.93",
+    "tax": "106.07",
+    "tax_breakdown": [
+      {
+        "label": "12% VAT",
+        "base": "883.93",
+        "rate": "0.12",
+        "amount": "106.07"
+      }
+    ],
+    "discount": null,
+    "total": "990.00",
+    "tender": null,
+    "change": null,
+    "prices_include_tax": true
+  },
+  "payment": {
+    "method": null,
+    "card_last4": null
+  },
+  "meta": {
+    "is_handwritten": false,
+    "is_refund": false,
+    "legibility": "good",
+    "ambiguous_fields": ["receipt.date"],
+    "unreadable_regions": [],
+    "receipt_is_inconsistent": false,
+    "notes": "Coffai Corporation DELIVERY RECEIPT, photographed UPSIDE DOWN. DR Number 0002272 - a DIFFERENT delivery receipt from r015 (DR 0001975) though the line and totals match, so it is its own receipt, not a duplicate frame. Single line FM-1L FULLCREAM MILK-1L-LEMOO qty 11 x 90.00 = 990.00; Subtotal 883.93 + 12% VAT 106.07 = 990.00 (tax-inclusive). The Date field on the form is blank -> receipt.date null. 'Hev lucky cafe & co' is the BUYER (Issued To). A partial 'April 9 2026' appears near the DR header but is not clearly the sale date; left out rather than guessed."
+  }
+}

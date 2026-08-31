@@ -1,0 +1,60 @@
+{
+  "merchant": {
+    "name": null,
+    "branch": null,
+    "address": null,
+    "tax_id": null,
+    "phone": null
+  },
+  "buyer": {
+    "name": "Hey lucky cafe",
+    "tax_id": null
+  },
+  "receipt": {
+    "number": "0011315",
+    "date": "2026-04-29",
+    "date_raw": "04/29/26",
+    "time": null,
+    "currency": "PHP",
+    "decimal_convention": "point",
+    "cashier": null,
+    "terminal": null
+  },
+  "line_items": [
+    {
+      "position": 0,
+      "description_raw": "6 Pounds",
+      "sku": null,
+      "qty": "6",
+      "unit": null,
+      "unit_price": null,
+      "line_total": "270.00",
+      "modifiers": [],
+      "bbox": null,
+      "is_template_row": false
+    }
+  ],
+  "totals": {
+    "subtotal": null,
+    "tax": null,
+    "tax_breakdown": [],
+    "discount": null,
+    "total": "270.00",
+    "tender": null,
+    "change": null,
+    "prices_include_tax": null
+  },
+  "payment": {
+    "method": null,
+    "card_last4": null
+  },
+  "meta": {
+    "is_handwritten": true,
+    "is_refund": false,
+    "legibility": "fair",
+    "ambiguous_fields": [],
+    "unreadable_regions": [],
+    "receipt_is_inconsistent": false,
+    "notes": "Generic blank handwritten sales pad (no printed merchant identity), No. 0011315, photographed rotated 90 degrees. 'Sold to Hey lucky cafe, 240 Aguirre' is the BUYER. One line: qty 6, article '6 Pounds' (the description literally reads '6 Pounds' - likely 6 lbs of coffee), amount 270; the AMOUNT column shows 270 and TOTAL 270. No unit_price is written separately, so unit_price is null. Merchant null because the pad prints no seller."
+  }
+}

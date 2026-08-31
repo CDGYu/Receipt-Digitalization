@@ -1,0 +1,56 @@
+{
+  "merchant": {
+    "name": "CALTEX",
+    "branch": "Southgate Servicenter Inc.",
+    "address": "Pres. Ave. Cor. J. Elizalde St. BF Homes NCR, Paranaque City",
+    "tax_id": "001-503-401-000",
+    "phone": null
+  },
+  "buyer": { "name": null, "tax_id": null },
+  "receipt": {
+    "number": "2-0000033462",
+    "date": "2026-05-16",
+    "date_raw": "16/05/26 10:52",
+    "time": "10:52",
+    "currency": "PHP",
+    "decimal_convention": "point",
+    "cashier": null,
+    "terminal": "POS 2"
+  },
+  "line_items": [
+    {
+      "position": 0,
+      "description_raw": "V SlvTechron (Pump 11)",
+      "sku": null,
+      "qty": null,
+      "unit": "LTR",
+      "unit_price": "90.49",
+      "line_total": "500.00",
+      "modifiers": [
+        { "label": "DISCOUNT", "amount": "-27.64" }
+      ],
+      "bbox": null,
+      "is_template_row": false
+    }
+  ],
+  "totals": {
+    "subtotal": "421.75",
+    "tax": "50.61",
+    "tax_breakdown": [ { "label": "VAT", "base": "421.75", "rate": "0.12", "amount": "50.61" } ],
+    "discount": null,
+    "total": "472.36",
+    "tender": "472.36",
+    "change": null,
+    "prices_include_tax": true
+  },
+  "payment": { "method": "MAYA", "card_last4": null },
+  "meta": {
+    "is_handwritten": false,
+    "is_refund": false,
+    "legibility": "good",
+    "ambiguous_fields": [],
+    "unreadable_regions": [],
+    "receipt_is_inconsistent": false,
+    "notes": "CALTEX (Southgate Servicenter Inc., same dealer as r037/r057) fuel thermal SALES INVOICE. One line: Pump 11, V SlvTechron, 5.53 LTR @ 90.49/LTR = 500.00 gross, with a DISCOUNT of -27.64 (recorded as a line modifier and as totals.discount 27.64). Total Amount 472.36, Maya (Manual) 472.36. Vatable 421.75 + VAT 50.61 = 472.36 (tax-inclusive, net of discount). SI No 2-0000033462, Date 16/05/26 10:52, POS 2. Supplier Chevron. Buyer block blank -> null. A fuel receipt WITH a discount line - useful arithmetic edge."
+  }
+}

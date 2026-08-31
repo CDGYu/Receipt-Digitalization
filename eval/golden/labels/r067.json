@@ -1,0 +1,102 @@
+{
+  "merchant": {
+    "name": "STARBUILD II HARDWARE",
+    "branch": null,
+    "address": "Blk 1 Lot 2 National Highway Villa Carolina 1 Tunasan 1773 City of Muntinlupa NCR, Fourth District Philippines",
+    "tax_id": "225-863-549-00001",
+    "phone": null
+  },
+  "buyer": { "name": null, "tax_id": null },
+  "receipt": {
+    "number": "23470",
+    "date": "2026-03-10",
+    "date_raw": "3-10-26",
+    "time": null,
+    "currency": "PHP",
+    "decimal_convention": "point",
+    "cashier": null,
+    "terminal": null
+  },
+  "line_items": [
+    {
+      "position": 0,
+      "description_raw": "#10 Plascon",
+      "sku": null,
+      "qty": "1",
+      "unit": "box",
+      "unit_price": null,
+      "line_total": "1500.00",
+      "modifiers": [],
+      "bbox": null,
+      "is_template_row": false
+    },
+    {
+      "position": 1,
+      "description_raw": "Molding 3/4",
+      "sku": null,
+      "qty": "6",
+      "unit": null,
+      "unit_price": null,
+      "line_total": "590.00",
+      "modifiers": [],
+      "bbox": null,
+      "is_template_row": false
+    },
+    {
+      "position": 2,
+      "description_raw": "6 holes panel board",
+      "sku": null,
+      "qty": "1",
+      "unit": null,
+      "unit_price": null,
+      "line_total": "880.00",
+      "modifiers": [],
+      "bbox": null,
+      "is_template_row": false
+    },
+    {
+      "position": 3,
+      "description_raw": "Breaker 30 amp",
+      "sku": null,
+      "qty": "3",
+      "unit": null,
+      "unit_price": null,
+      "line_total": "1050.00",
+      "modifiers": [],
+      "bbox": null,
+      "is_template_row": false
+    },
+    {
+      "position": 4,
+      "description_raw": "Breaker 40 amp",
+      "sku": null,
+      "qty": "2",
+      "unit": null,
+      "unit_price": null,
+      "line_total": "700.00",
+      "modifiers": [],
+      "bbox": null,
+      "is_template_row": false
+    }
+  ],
+  "totals": {
+    "subtotal": null,
+    "tax": null,
+    "tax_breakdown": [],
+    "discount": null,
+    "total": "9465.00",
+    "tender": null,
+    "change": null,
+    "prices_include_tax": true
+  },
+  "payment": { "method": null, "card_last4": null },
+  "meta": {
+    "is_handwritten": true,
+    "is_refund": false,
+    "legibility": "poor",
+    "ambiguous_fields": ["line_items"],
+    "unreadable_regions": ["several lower line-item amounts and descriptions"],
+    "receipt_is_inconsistent": false,
+    "notes": "STARBUILD II HARDWARE handwritten SALES INVOICE No. 23470 (VAT-reg), a long dense hardware list. TOTAL SALES (VAT Inclusive) / TOTAL AMOUNT DUE 9465 is clearly printed and recorded. Only the FIRST FIVE lines are transcribed with confidence (#10 Plascon 1 box 1500, Molding 3/4 x6 590, 6 holes panel board 880, Breaker 30 amp x3 1050, Breaker 40 amp x2 700). About ten further small lines (E-tape, No more nail, paint brush, thinner, roller, pencil, paint tray, blade, skimcoat, etc.) are written but their amounts are not legible with confidence and the readable subset does NOT sum to 9465, so the remaining lines are omitted rather than guessed (flagged in ambiguous_fields/unreadable_regions). Per the golden-set rule, a wrong value is worse than a missing one. A many-line handwritten hardware invoice - degraded/adversarial."
+  }
+}

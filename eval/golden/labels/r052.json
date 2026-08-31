@@ -1,0 +1,60 @@
+{
+  "merchant": {
+    "name": "OCEANUS Water",
+    "branch": null,
+    "address": null,
+    "tax_id": null,
+    "phone": "09770770666"
+  },
+  "buyer": {
+    "name": "Hey Lucky Cafe",
+    "tax_id": null
+  },
+  "receipt": {
+    "number": null,
+    "date": null,
+    "date_raw": "31 Mar",
+    "time": null,
+    "currency": "PHP",
+    "decimal_convention": "point",
+    "cashier": null,
+    "terminal": null
+  },
+  "line_items": [
+    {
+      "position": 0,
+      "description_raw": "PURIFIED WATER",
+      "sku": null,
+      "qty": null,
+      "unit": null,
+      "unit_price": null,
+      "line_total": "235.00",
+      "modifiers": [],
+      "bbox": null,
+      "is_template_row": false
+    }
+  ],
+  "totals": {
+    "subtotal": null,
+    "tax": null,
+    "tax_breakdown": [],
+    "discount": null,
+    "total": "235.00",
+    "tender": null,
+    "change": null,
+    "prices_include_tax": null
+  },
+  "payment": {
+    "method": "CASH",
+    "card_last4": null
+  },
+  "meta": {
+    "is_handwritten": true,
+    "is_refund": false,
+    "legibility": "fair",
+    "ambiguous_fields": ["line_items[0].qty"],
+    "unreadable_regions": [],
+    "receipt_is_inconsistent": false,
+    "notes": "OCEANUS Water pre-printed order slip filled by hand, photographed upside down. Customer 'Hey Lucky Cafe, 240 Aguirre', Date 31 Mar. The item grid lists water types (Purified/Hydrogen Rich/Alkaline/Magnetized/etc); only PURIFIED WATER is filled with a total of 235, and the grid TOTAL is 235. Qty column mark is unclear -> qty null. Payment CASH is circled; a handwritten annotation splits it 'Cafe P100 / Haute P135' (= 235). Year not shown -> receipt.date null (date_raw '31 Mar'). Other water-type rows are pre-printed but blank (not itemised as purchases)."
+  }
+}

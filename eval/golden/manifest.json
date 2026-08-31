@@ -1,13 +1,447 @@
 {
-  "r001": { "category": "handwritten", "holdout": false, "withheld": [] },
-  "r002": { "category": "handwritten", "holdout": false, "withheld": [] },
-  "r003": { "category": "handwritten", "holdout": true, "withheld": [] },
-  "r004": { "category": "handwritten", "holdout": false, "withheld": [] },
-  "r005": { "category": "handwritten", "holdout": false, "withheld": [] },
-  "r006": { "category": "printed_clean", "holdout": false, "withheld": [] },
-  "r007": { "category": "handwritten", "holdout": false, "withheld": [] },
-  "r008": { "category": "handwritten", "holdout": true, "withheld": [] },
-  "r009": { "category": "printed_degraded", "holdout": false, "withheld": [] },
-  "r010": { "category": "handwritten", "holdout": false, "withheld": [] },
-  "r011": { "category": "handwritten", "holdout": true, "withheld": [] }
+  "r001": {
+    "category": "handwritten",
+    "holdout": false,
+    "withheld": []
+  },
+  "r002": {
+    "category": "handwritten",
+    "holdout": false,
+    "withheld": []
+  },
+  "r003": {
+    "category": "handwritten",
+    "holdout": true,
+    "withheld": []
+  },
+  "r004": {
+    "category": "handwritten",
+    "holdout": false,
+    "withheld": []
+  },
+  "r005": {
+    "category": "handwritten",
+    "holdout": false,
+    "withheld": []
+  },
+  "r006": {
+    "category": "printed_clean",
+    "holdout": false,
+    "withheld": []
+  },
+  "r007": {
+    "category": "handwritten",
+    "holdout": false,
+    "withheld": []
+  },
+  "r008": {
+    "category": "handwritten",
+    "holdout": true,
+    "withheld": []
+  },
+  "r009": {
+    "category": "printed_degraded",
+    "holdout": false,
+    "withheld": []
+  },
+  "r010": {
+    "category": "handwritten",
+    "holdout": false,
+    "withheld": []
+  },
+  "r011": {
+    "category": "handwritten",
+    "holdout": false,
+    "withheld": []
+  },
+  "r012": {
+    "category": "handwritten",
+    "holdout": false,
+    "withheld": []
+  },
+  "r014": {
+    "category": "handwritten",
+    "holdout": false,
+    "withheld": []
+  },
+  "r015": {
+    "category": "printed_clean",
+    "holdout": false,
+    "withheld": []
+  },
+  "r016": {
+    "category": "printed_clean",
+    "holdout": true,
+    "withheld": []
+  },
+  "r017": {
+    "category": "printed_clean",
+    "holdout": false,
+    "withheld": []
+  },
+  "r018": {
+    "category": "printed_clean",
+    "holdout": false,
+    "withheld": []
+  },
+  "r019": {
+    "category": "printed_clean",
+    "holdout": true,
+    "withheld": []
+  },
+  "r020": {
+    "category": "printed_clean",
+    "holdout": false,
+    "withheld": []
+  },
+  "r021": {
+    "category": "printed_clean",
+    "holdout": false,
+    "withheld": []
+  },
+  "r022": {
+    "category": "printed_clean",
+    "holdout": true,
+    "withheld": []
+  },
+  "r023": {
+    "category": "printed_clean",
+    "holdout": false,
+    "withheld": []
+  },
+  "r024": {
+    "category": "handwritten",
+    "holdout": false,
+    "withheld": []
+  },
+  "r025": {
+    "category": "printed_clean",
+    "holdout": false,
+    "withheld": []
+  },
+  "r026": {
+    "category": "printed_clean",
+    "holdout": false,
+    "withheld": []
+  },
+  "r027": {
+    "category": "printed_clean",
+    "holdout": true,
+    "withheld": []
+  },
+  "r028": {
+    "category": "printed_clean",
+    "holdout": false,
+    "withheld": []
+  },
+  "r030": {
+    "category": "printed_clean",
+    "holdout": false,
+    "withheld": []
+  },
+  "r031": {
+    "category": "printed_clean",
+    "holdout": true,
+    "withheld": []
+  },
+  "r032": {
+    "category": "printed_clean",
+    "holdout": false,
+    "withheld": []
+  },
+  "r033": {
+    "category": "printed_degraded",
+    "holdout": false,
+    "withheld": []
+  },
+  "r035": {
+    "category": "printed_clean",
+    "holdout": false,
+    "withheld": []
+  },
+  "r036": {
+    "category": "printed_clean",
+    "holdout": true,
+    "withheld": []
+  },
+  "r037": {
+    "category": "printed_clean",
+    "holdout": false,
+    "withheld": []
+  },
+  "r038": {
+    "category": "printed_clean",
+    "holdout": false,
+    "withheld": []
+  },
+  "r039": {
+    "category": "printed_clean",
+    "holdout": false,
+    "withheld": []
+  },
+  "r040": {
+    "category": "printed_clean",
+    "holdout": true,
+    "withheld": []
+  },
+  "r041": {
+    "category": "printed_degraded",
+    "holdout": false,
+    "withheld": []
+  },
+  "r042": {
+    "category": "printed_clean",
+    "holdout": false,
+    "withheld": []
+  },
+  "r043": {
+    "category": "printed_clean",
+    "holdout": false,
+    "withheld": []
+  },
+  "r045": {
+    "category": "printed_clean",
+    "holdout": true,
+    "withheld": []
+  },
+  "r049": {
+    "category": "printed_clean",
+    "holdout": false,
+    "withheld": []
+  },
+  "r052": {
+    "category": "handwritten",
+    "holdout": false,
+    "withheld": []
+  },
+  "r053": {
+    "category": "handwritten",
+    "holdout": false,
+    "withheld": []
+  },
+  "r054": {
+    "category": "printed_clean",
+    "holdout": false,
+    "withheld": []
+  },
+  "r055": {
+    "category": "printed_clean",
+    "holdout": true,
+    "withheld": []
+  },
+  "r056": {
+    "category": "printed_clean",
+    "holdout": false,
+    "withheld": []
+  },
+  "r057": {
+    "category": "printed_clean",
+    "holdout": false,
+    "withheld": []
+  },
+  "r058": {
+    "category": "handwritten",
+    "holdout": false,
+    "withheld": []
+  },
+  "r059": {
+    "category": "printed_clean",
+    "holdout": true,
+    "withheld": []
+  },
+  "r060": {
+    "category": "printed_clean",
+    "holdout": false,
+    "withheld": []
+  },
+  "r061": {
+    "category": "printed_clean",
+    "holdout": false,
+    "withheld": []
+  },
+  "r062": {
+    "category": "printed_clean",
+    "holdout": false,
+    "withheld": []
+  },
+  "r063": {
+    "category": "printed_clean",
+    "holdout": true,
+    "withheld": []
+  },
+  "r064": {
+    "category": "printed_clean",
+    "holdout": false,
+    "withheld": []
+  },
+  "r065": {
+    "category": "handwritten",
+    "holdout": false,
+    "withheld": []
+  },
+  "r066": {
+    "category": "handwritten",
+    "holdout": false,
+    "withheld": []
+  },
+  "r067": {
+    "category": "handwritten",
+    "holdout": true,
+    "withheld": []
+  },
+  "r069": {
+    "category": "handwritten",
+    "holdout": false,
+    "withheld": []
+  },
+  "r070": {
+    "category": "printed_clean",
+    "holdout": false,
+    "withheld": []
+  },
+  "r071": {
+    "category": "handwritten",
+    "holdout": true,
+    "withheld": []
+  },
+  "r072": {
+    "category": "printed_clean",
+    "holdout": false,
+    "withheld": []
+  },
+  "r074": {
+    "category": "printed_clean",
+    "holdout": false,
+    "withheld": []
+  },
+  "r075": {
+    "category": "printed_clean",
+    "holdout": true,
+    "withheld": []
+  },
+  "r076": {
+    "category": "printed_clean",
+    "holdout": false,
+    "withheld": []
+  },
+  "r077": {
+    "category": "printed_clean",
+    "holdout": false,
+    "withheld": []
+  },
+  "r078": {
+    "category": "handwritten",
+    "holdout": false,
+    "withheld": []
+  },
+  "r079": {
+    "category": "printed_clean",
+    "holdout": true,
+    "withheld": []
+  },
+  "r080": {
+    "category": "printed_clean",
+    "holdout": false,
+    "withheld": []
+  },
+  "r081": {
+    "category": "printed_clean",
+    "holdout": false,
+    "withheld": []
+  },
+  "r082": {
+    "category": "printed_clean",
+    "holdout": false,
+    "withheld": []
+  },
+  "r083": {
+    "category": "handwritten",
+    "holdout": true,
+    "withheld": []
+  },
+  "r084": {
+    "category": "printed_clean",
+    "holdout": false,
+    "withheld": []
+  },
+  "r085": {
+    "category": "adversarial",
+    "holdout": false,
+    "withheld": []
+  },
+  "r086": {
+    "category": "printed_clean",
+    "holdout": false,
+    "withheld": []
+  },
+  "r087": {
+    "category": "printed_clean",
+    "holdout": true,
+    "withheld": []
+  },
+  "r088": {
+    "category": "printed_clean",
+    "holdout": false,
+    "withheld": []
+  },
+  "r091": {
+    "category": "printed_clean",
+    "holdout": true,
+    "withheld": []
+  },
+  "r092": {
+    "category": "printed_clean",
+    "holdout": false,
+    "withheld": []
+  },
+  "r093": {
+    "category": "printed_clean",
+    "holdout": false,
+    "withheld": []
+  },
+  "r094": {
+    "category": "printed_clean",
+    "holdout": false,
+    "withheld": []
+  },
+  "r095": {
+    "category": "printed_clean",
+    "holdout": true,
+    "withheld": []
+  },
+  "r097": {
+    "category": "printed_clean",
+    "holdout": false,
+    "withheld": []
+  },
+  "r098": {
+    "category": "printed_clean",
+    "holdout": false,
+    "withheld": []
+  },
+  "r099": {
+    "category": "printed_clean",
+    "holdout": true,
+    "withheld": []
+  },
+  "r100": {
+    "category": "printed_clean",
+    "holdout": false,
+    "withheld": []
+  },
+  "r101": {
+    "category": "printed_clean",
+    "holdout": false,
+    "withheld": []
+  },
+  "r103": {
+    "category": "printed_clean",
+    "holdout": true,
+    "withheld": []
+  },
+  "r105": {
+    "category": "handwritten",
+    "holdout": false,
+    "withheld": []
+  }
 }

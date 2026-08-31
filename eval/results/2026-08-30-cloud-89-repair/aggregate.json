@@ -1,0 +1,320 @@
+{
+  "run_id": "2026-08-30-cloud-89-repair",
+  "n_repeats": 1,
+  "n_repeats_requested": 1,
+  "n_failed": 0,
+  "config": {
+    "prompt_version": "1.1.0",
+    "prompt_bundle_hash": "528cd19c6e5b0f2d",
+    "prompt_conditioning": {
+      "merchant_hints": false,
+      "few_shots": false
+    },
+    "default_currency": "PHP",
+    "vlm_timeout_s": 300,
+    "triage": {
+      "model_id": "gemma4:cloud",
+      "use_tools": true
+    },
+    "extract_rungs": [
+      {
+        "model_id": "gemma4:cloud",
+        "use_tools": true
+      },
+      {
+        "model_id": "gemma4:cloud",
+        "use_tools": true
+      }
+    ],
+    "max_attempts": 2
+  },
+  "repeats": [
+    {
+      "index": 1,
+      "results_file": "repeat-01/2026-09-01-1.1.0-528cd19c6e5b0f2d.json",
+      "counts": {
+        "receipts": 89,
+        "auto_approved": 20,
+        "critical_correct": 6,
+        "auto_approved_correct": 2,
+        "failed": 0
+      },
+      "metrics": {
+        "auto_approval_precision": 0.1,
+        "auto_approval_rate": 0.2247191011235955,
+        "critical_field_accuracy": 0.06741573033707865,
+        "transcription_accuracy": 0.287204171680706,
+        "transcription_accuracy_core": 0.2638717632552404,
+        "transcription_accuracy_line_items": 0.330654420206659,
+        "self_report_agreement": 0.6525821596244131,
+        "hallucinated_fields": 1228,
+        "correctly_empty_fields": 1340,
+        "structural_mismatch_fields": 1754,
+        "line_item_precision": 0.13426966292134832,
+        "line_item_recall": 0.20131086142322094,
+        "line_item_f1": 0.14660327188417074,
+        "cost_per_receipt": null,
+        "p50_latency_s": null,
+        "p95_latency_s": null
+      },
+      "extract_rung_counts": {
+        "gemma4:cloud +tools": 89
+      },
+      "failures": []
+    }
+  ],
+  "spread": {
+    "auto_approval_precision": {
+      "min": 0.1,
+      "max": 0.1,
+      "median": 0.1,
+      "n": 1,
+      "n_null": 0,
+      "values": [
+        0.1
+      ]
+    },
+    "auto_approval_rate": {
+      "min": 0.2247191011235955,
+      "max": 0.2247191011235955,
+      "median": 0.2247191011235955,
+      "n": 1,
+      "n_null": 0,
+      "values": [
+        0.2247191011235955
+      ]
+    },
+    "critical_field_accuracy": {
+      "min": 0.06741573033707865,
+      "max": 0.06741573033707865,
+      "median": 0.06741573033707865,
+      "n": 1,
+      "n_null": 0,
+      "values": [
+        0.06741573033707865
+      ]
+    },
+    "transcription_accuracy": {
+      "min": 0.287204171680706,
+      "max": 0.287204171680706,
+      "median": 0.287204171680706,
+      "n": 1,
+      "n_null": 0,
+      "values": [
+        0.287204171680706
+      ]
+    },
+    "transcription_accuracy_core": {
+      "min": 0.2638717632552404,
+      "max": 0.2638717632552404,
+      "median": 0.2638717632552404,
+      "n": 1,
+      "n_null": 0,
+      "values": [
+        0.2638717632552404
+      ]
+    },
+    "transcription_accuracy_line_items": {
+      "min": 0.330654420206659,
+      "max": 0.330654420206659,
+      "median": 0.330654420206659,
+      "n": 1,
+      "n_null": 0,
+      "values": [
+        0.330654420206659
+      ]
+    },
+    "self_report_agreement": {
+      "min": 0.6525821596244131,
+      "max": 0.6525821596244131,
+      "median": 0.6525821596244131,
+      "n": 1,
+      "n_null": 0,
+      "values": [
+        0.6525821596244131
+      ]
+    },
+    "hallucinated_fields": {
+      "min": 1228,
+      "max": 1228,
+      "median": 1228,
+      "n": 1,
+      "n_null": 0,
+      "values": [
+        1228
+      ]
+    },
+    "correctly_empty_fields": {
+      "min": 1340,
+      "max": 1340,
+      "median": 1340,
+      "n": 1,
+      "n_null": 0,
+      "values": [
+        1340
+      ]
+    },
+    "structural_mismatch_fields": {
+      "min": 1754,
+      "max": 1754,
+      "median": 1754,
+      "n": 1,
+      "n_null": 0,
+      "values": [
+        1754
+      ]
+    },
+    "line_item_precision": {
+      "min": 0.13426966292134832,
+      "max": 0.13426966292134832,
+      "median": 0.13426966292134832,
+      "n": 1,
+      "n_null": 0,
+      "values": [
+        0.13426966292134832
+      ]
+    },
+    "line_item_recall": {
+      "min": 0.20131086142322094,
+      "max": 0.20131086142322094,
+      "median": 0.20131086142322094,
+      "n": 1,
+      "n_null": 0,
+      "values": [
+        0.20131086142322094
+      ]
+    },
+    "line_item_f1": {
+      "min": 0.14660327188417074,
+      "max": 0.14660327188417074,
+      "median": 0.14660327188417074,
+      "n": 1,
+      "n_null": 0,
+      "values": [
+        0.14660327188417074
+      ]
+    },
+    "cost_per_receipt": {
+      "min": null,
+      "max": null,
+      "median": null,
+      "n": 0,
+      "n_null": 1,
+      "values": [
+        null
+      ]
+    },
+    "p50_latency_s": {
+      "min": null,
+      "max": null,
+      "median": null,
+      "n": 0,
+      "n_null": 1,
+      "values": [
+        null
+      ]
+    },
+    "p95_latency_s": {
+      "min": null,
+      "max": null,
+      "median": null,
+      "n": 0,
+      "n_null": 1,
+      "values": [
+        null
+      ]
+    }
+  },
+  "spread_omitted": [],
+  "scored_receipts": [
+    "r001",
+    "r002",
+    "r003",
+    "r004",
+    "r005",
+    "r006",
+    "r007",
+    "r008",
+    "r009",
+    "r010",
+    "r011",
+    "r012",
+    "r014",
+    "r015",
+    "r016",
+    "r017",
+    "r018",
+    "r019",
+    "r020",
+    "r021",
+    "r022",
+    "r023",
+    "r024",
+    "r025",
+    "r026",
+    "r027",
+    "r028",
+    "r030",
+    "r031",
+    "r032",
+    "r033",
+    "r035",
+    "r036",
+    "r037",
+    "r038",
+    "r039",
+    "r040",
+    "r041",
+    "r042",
+    "r043",
+    "r045",
+    "r049",
+    "r052",
+    "r053",
+    "r054",
+    "r055",
+    "r056",
+    "r057",
+    "r058",
+    "r059",
+    "r060",
+    "r061",
+    "r062",
+    "r063",
+    "r064",
+    "r065",
+    "r066",
+    "r067",
+    "r069",
+    "r070",
+    "r071",
+    "r072",
+    "r074",
+    "r075",
+    "r076",
+    "r077",
+    "r078",
+    "r079",
+    "r080",
+    "r081",
+    "r082",
+    "r083",
+    "r084",
+    "r085",
+    "r086",
+    "r087",
+    "r088",
+    "r091",
+    "r092",
+    "r093",
+    "r094",
+    "r095",
+    "r097",
+    "r098",
+    "r099",
+    "r100",
+    "r101",
+    "r103",
+    "r105"
+  ]
+}

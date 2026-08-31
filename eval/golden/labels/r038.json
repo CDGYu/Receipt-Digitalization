@@ -1,0 +1,77 @@
+{
+  "merchant": {
+    "name": "The Wired Human Beings Inc.",
+    "branch": null,
+    "address": "North Concha Cruz Corner J. Elizalde",
+    "tax_id": "600-208-649-00000",
+    "phone": null
+  },
+  "buyer": {
+    "name": "KATRINA BRAGANZA",
+    "tax_id": null
+  },
+  "receipt": {
+    "number": "127296",
+    "date": "2026-04-11",
+    "date_raw": "Sat 11 Apr 2026",
+    "time": "15:23",
+    "currency": "PHP",
+    "decimal_convention": "point",
+    "cashier": "Nicole",
+    "terminal": null
+  },
+  "line_items": [
+    {
+      "position": 0,
+      "description_raw": "OJ ESPRESSO TONIC",
+      "sku": null,
+      "qty": "1",
+      "unit": null,
+      "unit_price": "250.00",
+      "line_total": "250.00",
+      "modifiers": [
+        { "label": "Snr/PWD relief (48.21) net of Service charge (+46.43) and rounding", "amount": "-30.71" }
+      ],
+      "bbox": null,
+      "is_template_row": false
+    },
+    {
+      "position": 1,
+      "description_raw": "HEY LOVE++ SPANISH LATTE",
+      "sku": null,
+      "qty": "1",
+      "unit": null,
+      "unit_price": "270.00",
+      "line_total": "270.00",
+      "modifiers": [],
+      "bbox": null,
+      "is_template_row": false
+    }
+  ],
+  "totals": {
+    "subtotal": "520.00",
+    "tax": "0.00",
+    "tax_breakdown": [
+      { "label": "VATable Sales", "base": "223.21", "rate": "0.12", "amount": "26.79" },
+      { "label": "VAT Exempt Sales", "base": "192.86", "rate": "0.00", "amount": "0.00" }
+    ],
+    "discount": "30.71",
+    "total": "489.29",
+    "tender": null,
+    "change": null,
+    "prices_include_tax": true
+  },
+  "payment": {
+    "method": "CARD",
+    "card_last4": null
+  },
+  "meta": {
+    "is_handwritten": false,
+    "is_refund": false,
+    "legibility": "fair",
+    "ambiguous_fields": [],
+    "unreadable_regions": [],
+    "receipt_is_inconsistent": false,
+    "notes": "The Wired Human Beings Inc (cafe) thermal INVOICE 127296. Two CAFE lines: OJ ESPRESSO TONIC @250x1 = 250.00; HEY LOVE++ SPANISH LATTE @270x1 with a 77.14 PWD discount -> line nets 192.86 (recorded as a -77.14 PWD modifier on the 270 line). Subtotal 520.00 (250+270). Tax breakdown: VATable 223.21 (VAT 26.79) + VAT Exempt 192.86 (the PWD-discounted item). Snr/PWD Discount 48.21 recorded as totals.discount; a Service charge 46.43 is also printed. TOTAL 489.29. Payment Card, Total Qty 2. Customer KATRINA BRAGANZA. This is a Senior/PWD-discounted cafe sale - a good tax-edge sample. POS provider Kintoz IT Solutions."
+  }
+}

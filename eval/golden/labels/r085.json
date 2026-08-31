@@ -1,0 +1,57 @@
+{
+  "merchant": {
+    "name": "CALTEX",
+    "branch": "Southgate Servicenter, Inc.",
+    "address": "Pres Ave cor J Elizalde St, BF Homes, Paranaque City",
+    "tax_id": null,
+    "phone": null
+  },
+  "buyer": { "name": null, "tax_id": null },
+  "receipt": {
+    "number": "0823880912",
+    "date": "2026-05-15",
+    "date_raw": "05/15/26 12:57",
+    "time": "12:57",
+    "currency": "PHP",
+    "decimal_convention": "point",
+    "cashier": null,
+    "terminal": "08152567-02"
+  },
+  "line_items": [
+    {
+      "position": 0,
+      "description_raw": "SlvTechron (Pump 8)",
+      "sku": null,
+      "qty": "3.132",
+      "unit": "Liters",
+      "unit_price": "90.49",
+      "line_total": "283.41",
+      "modifiers": [],
+      "bbox": null,
+      "is_template_row": false
+    }
+  ],
+  "totals": {
+    "subtotal": null,
+    "tax": null,
+    "tax_breakdown": [],
+    "discount": null,
+    "total": "283.41",
+    "tender": "283.41",
+    "change": null,
+    "prices_include_tax": null
+  },
+  "payment": {
+    "method": "MAYA QR",
+    "card_last4": null
+  },
+  "meta": {
+    "is_handwritten": false,
+    "is_refund": false,
+    "legibility": "good",
+    "ambiguous_fields": [],
+    "unreadable_regions": [],
+    "receipt_is_inconsistent": false,
+    "notes": "CALTEX (Southgate Servicenter, Inc.) Maya QR payment/loyalty slip - it PRINTS 'THIS IS NOT AN OFFICIAL RECEIPT', so it is a payment confirmation, not the BIR sales invoice. One fuel line: pump 8, SlvTechron, 3.132 Liters @ 90.49 = 283.41 (reconciles). Total 283.41, Maya QR 283.41. NO VAT breakdown is printed (not an OR), so subtotal/tax are null - deliberately not back-computed. Loyalty block (GoRewardsClassic, Card # ..., Earned 0.60, New Balance 51.78) is NOT transcribed (loyalty PII, no schema field). Date/Time 05/15/26 12:57, Trans ID 19144076. A good 'not an official receipt' edge sample."
+  }
+}

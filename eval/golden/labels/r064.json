@@ -1,0 +1,62 @@
+{
+  "merchant": {
+    "name": "CITIHARDWARE",
+    "branch": "Owned and Operated by CITIHARDWARE BACOLOD, INC.",
+    "address": "National Road Tunasan 1773 City of Muntinlupa NCR, Fourth District",
+    "tax_id": "005-919-438-00029",
+    "phone": null
+  },
+  "buyer": {
+    "name": "JEFF",
+    "tax_id": null
+  },
+  "receipt": {
+    "number": "000014298",
+    "date": "2026-03-10",
+    "date_raw": "2026-03-10 10:05:56 AM",
+    "time": "10:05",
+    "currency": "PHP",
+    "decimal_convention": "point",
+    "cashier": null,
+    "terminal": null
+  },
+  "line_items": [
+    {
+      "position": 0,
+      "description_raw": "OUTLET FOCUS AIRCON WIDE WHITE",
+      "sku": "10071880",
+      "qty": "1",
+      "unit": "PC",
+      "unit_price": "200.00",
+      "line_total": "200.00",
+      "modifiers": [],
+      "bbox": null,
+      "is_template_row": false
+    }
+  ],
+  "totals": {
+    "subtotal": "178.57",
+    "tax": "21.43",
+    "tax_breakdown": [
+      { "label": "VAT", "base": "178.57", "rate": "0.12", "amount": "21.43" }
+    ],
+    "discount": null,
+    "total": "200.00",
+    "tender": "200.00",
+    "change": null,
+    "prices_include_tax": true
+  },
+  "payment": {
+    "method": "DEBIT CARD",
+    "card_last4": null
+  },
+  "meta": {
+    "is_handwritten": false,
+    "is_refund": false,
+    "legibility": "good",
+    "ambiguous_fields": [],
+    "unreadable_regions": [],
+    "receipt_is_inconsistent": false,
+    "notes": "CITIHARDWARE (Citihardware Bacolod, Inc.) thermal SALES INVOICE, SI No. 000014298. Single line: SKU 10071880 OUTLET FOCUS AIRCON WIDE WHITE, 1 PC @ 200.00 = 200.00. VATable 178.57 + VAT 21.43 = 200.00 Total (tax-inclusive). Paid Debit Card 200.00 (BDO Unibank); no card last-4 printed -> card_last4 null. Customer JEFF (no TIN). Date/Time 2026-03-10 10:05:56. POS supplier Toril LCY Trading Corporation."
+  }
+}

@@ -1,0 +1,74 @@
+{
+  "merchant": {
+    "name": "ONE STOP MART INC.",
+    "branch": null,
+    "address": "BF Homes Paranaque City",
+    "tax_id": "000-413-27-0000",
+    "phone": null
+  },
+  "buyer": {
+    "name": null,
+    "tax_id": null
+  },
+  "receipt": {
+    "number": "219335",
+    "date": "2026-04-10",
+    "date_raw": "04/10/2026",
+    "time": "09:46",
+    "currency": "PHP",
+    "decimal_convention": "point",
+    "cashier": "MARILOU",
+    "terminal": null
+  },
+  "line_items": [
+    {
+      "position": 0,
+      "description_raw": "GROCERY",
+      "sku": null,
+      "qty": "1",
+      "unit": null,
+      "unit_price": "78.25",
+      "line_total": "78.25",
+      "modifiers": [],
+      "bbox": null,
+      "is_template_row": false
+    },
+    {
+      "position": 1,
+      "description_raw": "CAN GOODS",
+      "sku": null,
+      "qty": "1",
+      "unit": null,
+      "unit_price": "80.50",
+      "line_total": "80.50",
+      "modifiers": [],
+      "bbox": null,
+      "is_template_row": false
+    }
+  ],
+  "totals": {
+    "subtotal": "141.74",
+    "tax": "17.01",
+    "tax_breakdown": [
+      { "label": "TAX", "base": "141.74", "rate": "0.12", "amount": "17.01" }
+    ],
+    "discount": null,
+    "total": "158.75",
+    "tender": "200.00",
+    "change": "41.25",
+    "prices_include_tax": true
+  },
+  "payment": {
+    "method": "CASH",
+    "card_last4": null
+  },
+  "meta": {
+    "is_handwritten": false,
+    "is_refund": false,
+    "legibility": "fair",
+    "ambiguous_fields": [],
+    "unreadable_regions": [],
+    "receipt_is_inconsistent": false,
+    "notes": "ONE STOP MART INC. thermal invoice No. 219335, cashier MARILOU (same merchant as r040). Two department lines: GROCERY 78.25, CAN GOODS 80.50; SUB TTL 158.75. NET SALE 141.74 + TAX TL 17.01 = TOTAL 158.75 (tax-inclusive). Cash TD 200.00, Change 41.25, Item 2. This POS prints department names, not product names. POS provider Future Logic Corporation. Buyer block blank -> null."
+  }
+}

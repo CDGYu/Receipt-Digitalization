@@ -1,0 +1,62 @@
+{
+  "merchant": {
+    "name": "SOUTH GROCER - B.F. AGUIRRE",
+    "branch": "BY: GRAND UNION SUPERMARKET, INC.",
+    "address": "238 & 240 Aguirre Ave., BF Paranaque City",
+    "tax_id": "000-123-826-018",
+    "phone": "(02)8356-45-73"
+  },
+  "buyer": {
+    "name": "D. IROJAN",
+    "tax_id": null
+  },
+  "receipt": {
+    "number": "05158322",
+    "date": "2026-03-20",
+    "date_raw": "03/20/2026",
+    "time": "13:56",
+    "currency": "PHP",
+    "decimal_convention": "point",
+    "cashier": null,
+    "terminal": "POS05-SN:41-BXAL3"
+  },
+  "line_items": [
+    {
+      "position": 0,
+      "description_raw": "CLARA OLE TOM/SCE1KL",
+      "sku": null,
+      "qty": "1",
+      "unit": null,
+      "unit_price": "79.25",
+      "line_total": "79.25",
+      "modifiers": [],
+      "bbox": null,
+      "is_template_row": false
+    }
+  ],
+  "totals": {
+    "subtotal": "70.76",
+    "tax": "8.49",
+    "tax_breakdown": [
+      { "label": "VAT", "base": "70.76", "rate": "0.12", "amount": "8.49" }
+    ],
+    "discount": null,
+    "total": "79.25",
+    "tender": "79.25",
+    "change": null,
+    "prices_include_tax": true
+  },
+  "payment": {
+    "method": "PAYMAYA CC",
+    "card_last4": null
+  },
+  "meta": {
+    "is_handwritten": false,
+    "is_refund": false,
+    "legibility": "fair",
+    "ambiguous_fields": [],
+    "unreadable_regions": [],
+    "receipt_is_inconsistent": false,
+    "notes": "SOUTH GROCER thermal POS, POS05, slightly faded. Single VATable line CLARA OLE TOM/SCE1KL 79.25 = Total Due 79.25. VATable 70.76 + VAT 8.49 = 79.25. Paid PayMaya CC 79.25 (Trace 002680). Buyer here is a DIFFERENT greencard customer, Cust Name reads 'D. IROJAN' (greencard 1790016793, not transcribed) - not the Braganza on the other South Grocer receipts."
+  }
+}

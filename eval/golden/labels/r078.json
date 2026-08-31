@@ -1,0 +1,51 @@
+{
+  "merchant": { "name": null, "branch": null, "address": null, "tax_id": null, "phone": null },
+  "buyer": {
+    "name": "Hey Lucky Cafe",
+    "tax_id": null
+  },
+  "receipt": {
+    "number": "0011288",
+    "date": "2026-04-30",
+    "date_raw": "04-30-2026",
+    "time": null,
+    "currency": "PHP",
+    "decimal_convention": "point",
+    "cashier": null,
+    "terminal": null
+  },
+  "line_items": [
+    {
+      "position": 0,
+      "description_raw": "Rounds",
+      "sku": null,
+      "qty": "6",
+      "unit": null,
+      "unit_price": null,
+      "line_total": "270.00",
+      "modifiers": [],
+      "bbox": null,
+      "is_template_row": false
+    }
+  ],
+  "totals": {
+    "subtotal": null,
+    "tax": null,
+    "tax_breakdown": [],
+    "discount": null,
+    "total": "270.00",
+    "tender": null,
+    "change": null,
+    "prices_include_tax": null
+  },
+  "payment": { "method": null, "card_last4": null },
+  "meta": {
+    "is_handwritten": true,
+    "is_refund": false,
+    "legibility": "fair",
+    "ambiguous_fields": [],
+    "unreadable_regions": [],
+    "receipt_is_inconsistent": false,
+    "notes": "Generic blank handwritten sales pad No. 0011288 (same style as r024), Date 04-30-2026. 'Sold to Hey Lucky Cafe, 240 Aguirre' is the BUYER. One line: qty 6, 'Rounds' (coffee rounds), amount 270; TOTAL 270. A scrawled annotation 'MOTU/TBM DELIVER' spans the middle rows (a delivery note), not a line item. No unit_price written. Merchant null (no seller identity printed)."
+  }
+}

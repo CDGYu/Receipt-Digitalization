@@ -1,0 +1,122 @@
+{
+  "merchant": {
+    "name": "BEAN BLOCK COFFEE ROASTERS",
+    "branch": null,
+    "address": "Stall A 311 El Grande Street B.F. Homes 1720 City of Paranaque NCR, Fourth District Philippines",
+    "tax_id": "620-589-900-00001",
+    "phone": null
+  },
+  "buyer": {
+    "name": null,
+    "tax_id": null
+  },
+  "receipt": {
+    "number": "007605",
+    "date": null,
+    "date_raw": null,
+    "time": null,
+    "currency": "PHP",
+    "decimal_convention": "point",
+    "cashier": "Bean Block PQ Staff",
+    "terminal": null
+  },
+  "line_items": [
+    {
+      "position": 0,
+      "description_raw": "Local/Sultan Kudarat Daguma/250g Whole Beans",
+      "sku": null,
+      "qty": "1",
+      "unit": null,
+      "unit_price": "427.50",
+      "line_total": "427.50",
+      "modifiers": [{ "label": "-5.00% incl.", "amount": null }],
+      "bbox": null,
+      "is_template_row": false
+    },
+    {
+      "position": 1,
+      "description_raw": "Local/Sultan Kudarat Daguma/250g Whole Beans",
+      "sku": null,
+      "qty": "1",
+      "unit": null,
+      "unit_price": "427.50",
+      "line_total": "427.50",
+      "modifiers": [{ "label": "-5.00% incl.", "amount": null }],
+      "bbox": null,
+      "is_template_row": false
+    },
+    {
+      "position": 2,
+      "description_raw": "Local/Sultan Kudarat Daguma/250g Whole Beans",
+      "sku": null,
+      "qty": "1",
+      "unit": null,
+      "unit_price": "427.50",
+      "line_total": "427.50",
+      "modifiers": [{ "label": "-5.0% incl.", "amount": null }],
+      "bbox": null,
+      "is_template_row": false
+    },
+    {
+      "position": 3,
+      "description_raw": "Local/Sultan Kudarat Daguma/250g Whole Beans",
+      "sku": null,
+      "qty": "1",
+      "unit": null,
+      "unit_price": "427.50",
+      "line_total": "427.50",
+      "modifiers": [{ "label": "-5.0% incl.", "amount": null }],
+      "bbox": null,
+      "is_template_row": false
+    },
+    {
+      "position": 4,
+      "description_raw": "Spanish Latte/Iced/12oz Full Cream Milk Bronzed Caramel",
+      "sku": null,
+      "qty": "1",
+      "unit": null,
+      "unit_price": "100.00",
+      "line_total": "100.00",
+      "modifiers": [],
+      "bbox": null,
+      "is_template_row": false
+    },
+    {
+      "position": 5,
+      "description_raw": "Americano/Iced/12oz Colombia Supremo",
+      "sku": null,
+      "qty": "1",
+      "unit": null,
+      "unit_price": "100.00",
+      "line_total": "100.00",
+      "modifiers": [],
+      "bbox": null,
+      "is_template_row": false
+    }
+  ],
+  "totals": {
+    "subtotal": "1705.38",
+    "tax": "204.62",
+    "tax_breakdown": [
+      { "label": "VAT (12%) incl.", "base": "1705.38", "rate": "0.12", "amount": "204.62" }
+    ],
+    "discount": null,
+    "total": "1910.00",
+    "tender": "1910.00",
+    "change": "0.00",
+    "prices_include_tax": true
+  },
+  "payment": {
+    "method": "CASH",
+    "card_last4": null
+  },
+  "meta": {
+    "is_handwritten": false,
+    "is_refund": false,
+    "legibility": "good",
+    "ambiguous_fields": [],
+    "unreadable_regions": [],
+    "receipt_is_inconsistent": false,
+    "notes": "BEAN BLOCK COFFEE ROASTERS thermal SALES INVOICE, Receipt No. 007605 (same merchant/TIN as r012, r017). Six lines: 4x Local/Sultan Kudarat Daguma/250g Whole Beans @427.50 each (each with a '-5% incl.' note recorded as a null-amount modifier), 1x Spanish Latte/Iced/12oz 100.00, 1x Americano/Iced/12oz 100.00; 4x427.50 + 100 + 100 = 1910.00. Subtotal 1910.00; VATable 1705.38 + VAT (12% incl.) 204.62 = 1910.00 (tax-inclusive); Cash 1910.00, Change 0.00. No sale date printed in body -> receipt.date null. Customer block blank -> buyer null. POS provider Kintoz IT Solutions."
+  }
+}

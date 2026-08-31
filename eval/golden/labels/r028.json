@@ -1,0 +1,79 @@
+{
+  "merchant": {
+    "name": "MR DIY",
+    "branch": "BRICOLAGE PHILIPPINES INC. - Metro Star Mall",
+    "address": "Metrostar Mall Aguirre Avenue B.F. Homes City Of Paranaque NCR, Fourth District",
+    "tax_id": "010-057-617-00333",
+    "phone": null
+  },
+  "buyer": {
+    "name": null,
+    "tax_id": null
+  },
+  "receipt": {
+    "number": "0000-0000056745",
+    "date": "2026-04-20",
+    "date_raw": "04/20/2026",
+    "time": "18:02",
+    "currency": "PHP",
+    "decimal_convention": "point",
+    "cashier": "MARIEL BANTACULO",
+    "terminal": "SH01 SS026 T03"
+  },
+  "line_items": [
+    {
+      "position": 0,
+      "description_raw": "OMNI SURFACE MOUNTED CONVENIENCE SWITCH K3D09 - 1/120",
+      "sku": "3300194",
+      "qty": "1",
+      "unit": null,
+      "unit_price": "44.00",
+      "line_total": "44.00",
+      "modifiers": [],
+      "bbox": null,
+      "is_template_row": false
+    },
+    {
+      "position": 1,
+      "description_raw": "SWING TYPE PLUG 10A 250V IN BLISTER PACK K3H07 - 1/200",
+      "sku": "4806028712903",
+      "qty": "2",
+      "unit": null,
+      "unit_price": "39.00",
+      "line_total": "78.00",
+      "modifiers": [],
+      "bbox": null,
+      "is_template_row": false
+    }
+  ],
+  "totals": {
+    "subtotal": "108.93",
+    "tax": "13.07",
+    "tax_breakdown": [
+      {
+        "label": "VAT",
+        "base": "108.93",
+        "rate": "0.12",
+        "amount": "13.07"
+      }
+    ],
+    "discount": null,
+    "total": "122.00",
+    "tender": "122.00",
+    "change": null,
+    "prices_include_tax": true
+  },
+  "payment": {
+    "method": "MAYA ONE - QR",
+    "card_last4": null
+  },
+  "meta": {
+    "is_handwritten": false,
+    "is_refund": false,
+    "legibility": "good",
+    "ambiguous_fields": [],
+    "unreadable_regions": [],
+    "receipt_is_inconsistent": false,
+    "notes": "MR DIY (Bricolage Philippines Inc.) thermal SALES INVOICE. Two lines: OMNI SURFACE MOUNTED CONVENIENCE SWITCH 1 x 44.00 = 44.00; SWING TYPE PLUG 10A 250V 2 x 39.00 = 78.00. Item(s) 2, Qty(s) 3. Subtotal 122.00; VATable Sales 108.93 + VAT AMT 13.07 = 122.00 Total (tax-inclusive). Paid Maya One - QR 122.00. Customer block blank -> buyer null. POS provider ABZTRAK INC."
+  }
+}
