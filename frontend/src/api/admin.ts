@@ -97,6 +97,32 @@ export function fetchMe(): Promise<Identity> {
   return request('/auth/me')
 }
 
+/** The role values the backend's `ROLES` accepts, for the registration dropdown.
+ *
+ * Hardcoded rather than fetched: the backend has no route that lists them and
+ * `Identity.role` is a bare `string` on purpose (see above), so there is no
+ * shared enum to import. These two literals mirror `ROLE_REVIEWER`/`ROLE_ADMIN`
+ * in `src/receipts/persist/users.py`; the server validates the value regardless,
+ * so a drift here is a 400 the form surfaces, not a silent bad account.
+ */
+export const ROLES = ['reviewer', 'admin'] as const
+
+/** Create an account and sign it in. **Returns the same body as login.**
+ *
+ * `POST /auth/register` validates the role, creates the user, and sets the
+ * session in one call, so a caller that awaits this is already signed in -- the
+ * frontend treats a resolved promise exactly like a resolved login. A duplicate
+ * username, an empty field, or an unrecognised role is a 400 carrying the
+ * server's own message, which `request` turns into an `ApiError` the form shows.
+ */
+export function register(body: {
+  username: string
+  password: string
+  role: string
+}): Promise<Identity> {
+  return request('/auth/register', { method: 'POST', body: JSON.stringify(body) })
+}
+
 /** One page of the review queue. **Both roles get 200 with different rows.**
  *
  * `GET /review/tasks` is guarded by `require_user`, not `require_role`: an

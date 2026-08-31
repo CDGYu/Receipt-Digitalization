@@ -378,6 +378,10 @@ const CENSUS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
       'align-self: start, min-height, min-width, padding, border, border-radius, background, color, font-family, font-size, font-weight, line-height, cursor: pointer, transition',
     '.button:hover:not(:disabled)': 'border-color',
     '.button:disabled': 'opacity, cursor: not-allowed',
+    '.link':
+      'align-self: start, min-height, padding, border: none, background: none, color, font-family, font-size, cursor: pointer, text-align: left',
+    '.link:hover:not(:disabled)': 'text-decoration: underline',
+    '.link:disabled': 'opacity, cursor: not-allowed',
   },
   'receipts/ReceiptDetailPanel.module.css': {
     '.panel':

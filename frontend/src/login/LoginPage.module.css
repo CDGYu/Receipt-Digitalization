@@ -196,3 +196,31 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+/* The toggle between sign-in and sign-up. A `<button type="button">`, not an
+ * `<a>`: it changes an in-page view and navigates nothing, so it must not be a
+ * link a browser could open in a new tab to a route that does not exist. Painted
+ * as a quiet text button -- no fill, no border -- so it reads as secondary to the
+ * primary action above it while still meeting §6's 44px target and keeping the
+ * global focus ring from `tokens.css` (no `outline: none`). */
+.link {
+  align-self: start;
+  min-height: 44px;
+  padding: var(--space-sm) 0;
+  border: none;
+  background: none;
+  color: var(--color-primary);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  cursor: pointer;
+  text-align: left;
+}
+
+.link:hover:not(:disabled) {
+  text-decoration: underline;
+}
+
+.link:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

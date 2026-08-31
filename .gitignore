@@ -73,6 +73,13 @@ Thumbs.db
 # SDD scratch (subagent-driven-development ledger)
 .superpowers/
 
+# Bundled portable Redis for the one-click launcher (vendor/redis/) is TRACKED
+# on purpose: it is what lets `Start Receipt Review.bat` work with zero install
+# on a machine that has no Redis. It is the tporadowski Redis-for-Windows
+# 5.0.14.1 build. Its *runtime* data (dump/logs) is written under var/redis,
+# which the `var/` rule above already ignores -- so nothing Redis writes at run
+# time is ever committed, only the binary itself.
+
 # local baseline run output
 baseline_run.log
 smoke_*.log

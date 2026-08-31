@@ -2,7 +2,13 @@ import { useState, type FormEvent } from 'react'
 import { ApiError, request } from '../api/client'
 import styles from './LoginPage.module.css'
 
-export function LoginPage({ onSignedIn }: { onSignedIn: () => void }) {
+export function LoginPage({
+  onSignedIn,
+  onShowRegister,
+}: {
+  onSignedIn: () => void
+  onShowRegister: () => void
+}) {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -52,6 +58,14 @@ export function LoginPage({ onSignedIn }: { onSignedIn: () => void }) {
       {error !== null && <p className={styles.error} role="alert">{error}</p>}
       <button className={styles.button} type="submit" disabled={busy}>
         Sign in
+      </button>
+      <button
+        className={styles.link}
+        type="button"
+        onClick={onShowRegister}
+        disabled={busy}
+      >
+        Need an account? Create one
       </button>
     </form>
   )

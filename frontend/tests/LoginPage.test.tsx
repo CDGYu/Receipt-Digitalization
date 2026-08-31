@@ -34,7 +34,7 @@ describe('LoginPage', () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, { username: 'alice', role: 'reviewer' }))
     vi.stubGlobal('fetch', fetchMock)
 
-    render(<LoginPage onSignedIn={() => {}} />)
+    render(<LoginPage onSignedIn={() => {}} onShowRegister={() => {}} />)
     await signIn()
 
     // The shape `_LoginBody` in src/receipts/review/auth.py actually parses.
@@ -54,7 +54,7 @@ describe('LoginPage', () => {
     )
     const onSignedIn = vi.fn()
 
-    render(<LoginPage onSignedIn={onSignedIn} />)
+    render(<LoginPage onSignedIn={onSignedIn} onShowRegister={() => {}} />)
     await signIn()
 
     expect(onSignedIn).toHaveBeenCalledOnce()
@@ -68,7 +68,7 @@ describe('LoginPage', () => {
     )
     const onSignedIn = vi.fn()
 
-    render(<LoginPage onSignedIn={onSignedIn} />)
+    render(<LoginPage onSignedIn={onSignedIn} onShowRegister={() => {}} />)
     await signIn()
 
     // A failure the reviewer can read, on screen -- not a console log, and not
@@ -87,7 +87,7 @@ describe('LoginPage', () => {
     // must still put words on the screen.
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')))
 
-    render(<LoginPage onSignedIn={() => {}} />)
+    render(<LoginPage onSignedIn={() => {}} onShowRegister={() => {}} />)
     await signIn()
 
     expect(screen.getByRole('alert').textContent).toBe('could not sign in')

@@ -30,7 +30,7 @@ from pydantic import BaseModel
 from starlette.middleware.sessions import SessionMiddleware
 
 from config.settings import Settings
-from receipts.persist.users import get_user, verify_credentials
+from receipts.persist.users import ROLES, create_user, get_user, verify_credentials
 
 from .signing import sign_url, verify_signature
 
@@ -159,9 +159,46 @@ class _LoginBody(BaseModel):
     password: str
 
 
+class _RegisterBody(BaseModel):
+    username: str
+    password: str
+    role: str
+
+
 def build_auth_router() -> APIRouter:
-    """``POST /auth/login``, ``GET /auth/me`` and ``POST /auth/logout``."""
+    """``POST /auth/register``, ``POST /auth/login``, ``GET /auth/me`` and ``POST /auth/logout``."""
     router = APIRouter()
+
+    @router.post("/auth/register", status_code=201)
+    def register(body: _RegisterBody, request: Request) -> dict[str, str]:
+        """Self-service signup: create an account, then sign it in.
+
+        The role arrives from the client, so it is validated against ``ROLES``
+        here before ``create_user`` sees it -- an unknown role is a 400, not a
+        500 from the ``ValueError`` deeper in. ``create_user`` also raises
+        ``ValueError`` on an empty username, an empty password, or a duplicate;
+        all of those map to 400 with the message the model layer chose, so the
+        one place that owns the rule owns the wording too.
+
+        On success the new session is set immediately -- registering and then
+        being asked to sign in again would be a pointless second round trip --
+        and the body matches ``POST /auth/login`` so the frontend's signed-in
+        path needs no new shape.
+        """
+        if body.role not in ROLES:
+            raise HTTPException(
+                status_code=400,
+                detail=f"unknown role {body.role!r}; expected one of {sorted(ROLES)}",
+            )
+        session_factory = request.app.state.session_factory
+        with session_factory() as session:
+            try:
+                user = create_user(session, body.username, body.password, body.role)
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
+            session.commit()
+            request.session[_SESSION_KEY] = user.username
+            return {"username": user.username, "role": user.role}
 
     @router.post("/auth/login")
     def login(body: _LoginBody, request: Request) -> dict[str, str]:
