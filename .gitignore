@@ -38,6 +38,11 @@ var/
 .coverage
 htmlcov/
 
+# Playwright-MCP browser-debug scratch (console logs + page snapshots). These are
+# throwaway artefacts of a browser pass, not review write-ups -- those live under
+# semantic-review/. Tracked by accident from 2026-08-28 to 2026-08-31, then removed.
+.playwright-mcp/
+
 # Secrets & local env
 .env
 .env.*
