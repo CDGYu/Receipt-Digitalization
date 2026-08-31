@@ -1,0 +1,60 @@
+{
+  "merchant": {
+    "name": "BIG BOSS OIL PRODUCTS, INC.",
+    "branch": null,
+    "address": "Lot 13 & 14 E. Rodriguez Jr. Ave. Saint Ignatius 1110 Quezon City NCR, Second District Philippines",
+    "tax_id": "010-447-532-00007",
+    "phone": null
+  },
+  "buyer": {
+    "name": "IDEAL SOURCE",
+    "tax_id": null
+  },
+  "receipt": {
+    "number": "49416",
+    "date": "2026-03-14",
+    "date_raw": "3-14-26",
+    "time": null,
+    "currency": "PHP",
+    "decimal_convention": "point",
+    "cashier": null,
+    "terminal": null
+  },
+  "line_items": [
+    {
+      "position": 0,
+      "description_raw": "Diesel",
+      "sku": null,
+      "qty": "11.800",
+      "unit": null,
+      "unit_price": "84.75",
+      "line_total": null,
+      "modifiers": [],
+      "bbox": null,
+      "is_template_row": false
+    }
+  ],
+  "totals": {
+    "subtotal": null,
+    "tax": null,
+    "tax_breakdown": [],
+    "discount": null,
+    "total": "1800.00",
+    "tender": null,
+    "change": null,
+    "prices_include_tax": null
+  },
+  "payment": {
+    "method": null,
+    "card_last4": null
+  },
+  "meta": {
+    "is_handwritten": true,
+    "is_refund": false,
+    "legibility": "poor",
+    "ambiguous_fields": ["line_items[0].line_total", "line_items[0].qty"],
+    "unreadable_regions": ["line amount column"],
+    "receipt_is_inconsistent": false,
+    "notes": "BIR SALES INVOICE: pre-printed form, sparse and messy handwriting (poor). Values are scattered across the article grid rather than aligned to columns: 'Diesel' with unit price 84.75 and qty read as 11.800, but the per-line AMOUNT cell is not clearly filled, so line_total is null. The only clear peso figure is 1800 written by the TOTAL AMOUNT DUE / Add: VAT area, recorded as total. The summary block (Total Sales / Net of VAT / VAT) is blank -> subtotal and tax null. Note qty x unit_price (11.8 x 84.75 = 1000.05) does not match the 1800 total, but the printed values are transcribed as-is rather than reconciled; the mismatch is a reading-confidence issue (flagged in ambiguous_fields), not a stated receipt inconsistency. 'IDEAL SOURCE' is the BUYER (Sold to). Footer TIN 126-957-547-00000 (RDM Printing Services) is the printer's."
+  }
+}

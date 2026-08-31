@@ -1945,7 +1945,7 @@ what remain open.**
 
 ### 1.5 Test-shape debt from the same milestone
 
-- **`receipt-form.test.tsx` pins the row highlight through
+- **`receipt-form.test.tsx` pins the row highlight through                                                  
   `rows[1].style.background`** — the *mechanism*, not the behaviour — which
   actively blocks moving the paint to a class.
 - **`getByText(/carol/)` in the release round-trip is vacuous**: scoped to

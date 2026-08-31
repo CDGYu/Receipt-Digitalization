@@ -1,0 +1,60 @@
+{
+  "merchant": {
+    "name": "PETRON",
+    "branch": "ABS PETROLEUM OPC",
+    "address": "J. Sumulong Highway Sitio Bulak, Bagumbayan Teresa Rizal",
+    "tax_id": "619-736-789-000",
+    "phone": null
+  },
+  "buyer": {
+    "name": "IDEAL SOURCE",
+    "tax_id": null
+  },
+  "receipt": {
+    "number": "0000945307",
+    "date": "2026-03-17",
+    "date_raw": "03/17/2026",
+    "time": "14:20",
+    "currency": "PHP",
+    "decimal_convention": "point",
+    "cashier": "BHEA MAYRILLE LETROJO",
+    "terminal": null
+  },
+  "line_items": [
+    {
+      "position": 0,
+      "description_raw": "Diesel Max",
+      "sku": null,
+      "qty": "10.72",
+      "unit": null,
+      "unit_price": "93.30",
+      "line_total": "1000.00",
+      "modifiers": [],
+      "bbox": null,
+      "is_template_row": false
+    }
+  ],
+  "totals": {
+    "subtotal": "892.86",
+    "tax": "107.14",
+    "tax_breakdown": [],
+    "discount": null,
+    "total": "1000.00",
+    "tender": "1000.00",
+    "change": null,
+    "prices_include_tax": true
+  },
+  "payment": {
+    "method": "CASH",
+    "card_last4": null
+  },
+  "meta": {
+    "is_handwritten": false,
+    "is_refund": false,
+    "legibility": "good",
+    "ambiguous_fields": [],
+    "unreadable_regions": [],
+    "receipt_is_inconsistent": false,
+    "notes": "Petron thermal POS SALES INVOICE, machine-printed, clean. 'Diesel Max (P : 04)' product code 04 kept out of description. qty 10.72 x 93.30 = 1000.42 vs printed 1,000.00 amount (fuel pumps round to a target peso amount). VATable Sales 892.86 + VAT 107.14 = 1000.00 (tax-inclusive). 'IDEAL SOURCE' is the BUYER (Name line), not the merchant. Footer TIN 007-345-312-00000 belongs to SMARTPETRO INC (the POS accreditation holder), not the dealer."
+  }
+}

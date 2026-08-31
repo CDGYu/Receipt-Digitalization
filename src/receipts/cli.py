@@ -568,6 +568,20 @@ def _add_calibrate(sub: argparse._SubParsersAction) -> None:
         "--target", type=_decimal, default=Decimal("0.99"),
         help="minimum acceptable auto-approval precision (default: %(default)s)",
     )
+    parser.add_argument(
+        "--set", dest="set_threshold", action="store_true",
+        help=(
+            "persist the recommended threshold to AUTO_APPROVE_THRESHOLD in the "
+            "env file (--env-file, default .env). Writes ONLY when a threshold "
+            "is recommended -- i.e. one that clears all three gates -- so this "
+            "flag can never set the auto-approve gate to a value the command "
+            "would refuse to recommend. Writes nothing when none is recommended."
+        ),
+    )
+    parser.add_argument(
+        "--env-file", default=".env",
+        help="the env file --set writes AUTO_APPROVE_THRESHOLD to (default: %(default)s)",
+    )
 
 
 def _add_sweep(sub: argparse._SubParsersAction) -> None:
@@ -1290,6 +1304,50 @@ def _approved_counts(results: list[Any], threshold: Decimal) -> tuple[int, int]:
     return len(approved), sum(1 for r in approved if r.critical_correct)
 
 
+#: The env var :func:`cmd_calibrate` ``--set`` persists the chosen threshold to.
+#: The same name ``config.settings.Settings`` binds to ``auto_approve_threshold``
+#: (case-insensitive), which is what ``route()`` gates on -- so a value written
+#: here is the value the running system routes on after its next
+#: ``get_settings()`` (a fresh ``Settings()``, not a process-wide singleton).
+_THRESHOLD_ENV_KEY = "AUTO_APPROVE_THRESHOLD"
+
+
+def _write_env_threshold(env_path: Path, threshold: Decimal) -> None:
+    """Set ``AUTO_APPROVE_THRESHOLD`` to ``threshold`` in ``env_path``, in place.
+
+    Replaces an existing ``AUTO_APPROVE_THRESHOLD=`` line (the FIRST one, matched
+    ignoring surrounding whitespace and case, since pydantic-settings reads the
+    key case-insensitively) and leaves every other line -- comments, ordering,
+    the rest of the config -- exactly as it was. Appends the line when the key is
+    absent, and creates the file when it does not exist.
+
+    The value is ``str(threshold)`` -- the ``Decimal``'s own text, e.g. ``0.85``
+    -- never a ``float``: this key round-trips back through
+    ``Settings.auto_approve_threshold`` as a ``Decimal``, and a ``float`` here
+    would reintroduce the rounding drift the whole money path exists to avoid.
+    """
+    line = f"{_THRESHOLD_ENV_KEY}={threshold}"
+
+    existing = env_path.read_text(encoding="utf-8") if env_path.exists() else ""
+    lines = existing.splitlines()
+
+    for index, current in enumerate(lines):
+        stripped = current.strip()
+        # Match `KEY=...` (optionally spaced) case-insensitively; leave a
+        # commented `# AUTO_APPROVE_THRESHOLD=...` alone -- it is documentation,
+        # not a live setting, and rewriting it would make the file lie.
+        key_part = stripped.split("=", 1)[0].strip() if "=" in stripped else ""
+        if key_part.casefold() == _THRESHOLD_ENV_KEY.casefold():
+            lines[index] = line
+            break
+    else:
+        lines.append(line)
+
+    # Preserve a trailing newline: an env file ends with one, and a rewrite that
+    # dropped it would show as a spurious last-line diff.
+    env_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
 def _unreadable_results(results_path: Path, detail: str) -> str:
     """The stderr line for a results file :func:`cmd_calibrate` cannot read."""
     return (
@@ -1638,6 +1696,18 @@ def cmd_calibrate(args: argparse.Namespace, *, results_dir: Path | None = None) 
             f"recommended threshold: {threshold} "
             f"({correct} of {approved} auto-approved receipt(s) critical-correct)"
         )
+        # --set persists ONLY here, inside the branch that found a recommendation
+        # -- so it can never write a value the three gates above rejected. The
+        # "recommending none" path returns before reaching this, leaving the env
+        # file untouched, which is why a --set that clears nothing is a no-op
+        # rather than an error the operator has to guard against.
+        if getattr(args, "set_threshold", False):
+            env_path = Path(args.env_file)
+            _write_env_threshold(env_path, threshold)
+            print(
+                f"set {_THRESHOLD_ENV_KEY}={threshold} in {env_path} "
+                "(takes effect on the next process start)"
+            )
         code = EXIT_OK
 
     print(

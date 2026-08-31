@@ -1,0 +1,60 @@
+{
+  "merchant": {
+    "name": "L.B. RAMOS PETROLEUM CORP.",
+    "branch": "HEBRON",
+    "address": "Marigman Extension, San Roque, City of Antipolo Rizal",
+    "tax_id": "009-812-482-00010",
+    "phone": null
+  },
+  "buyer": {
+    "name": "Ideal Source",
+    "tax_id": null
+  },
+  "receipt": {
+    "number": "42967",
+    "date": "2026-03-17",
+    "date_raw": "3/17/26",
+    "time": null,
+    "currency": "PHP",
+    "decimal_convention": "point",
+    "cashier": null,
+    "terminal": null
+  },
+  "line_items": [
+    {
+      "position": 0,
+      "description_raw": "Diesel",
+      "sku": null,
+      "qty": null,
+      "unit": null,
+      "unit_price": "103.50",
+      "line_total": "1000.00",
+      "modifiers": [],
+      "bbox": null,
+      "is_template_row": false
+    }
+  ],
+  "totals": {
+    "subtotal": "892.86",
+    "tax": "107.14",
+    "tax_breakdown": [],
+    "discount": null,
+    "total": "1000.00",
+    "tender": null,
+    "change": null,
+    "prices_include_tax": true
+  },
+  "payment": {
+    "method": null,
+    "card_last4": null
+  },
+  "meta": {
+    "is_handwritten": true,
+    "is_refund": false,
+    "legibility": "fair",
+    "ambiguous_fields": [],
+    "unreadable_regions": [],
+    "receipt_is_inconsistent": false,
+    "notes": "BIR SALES INVOICE: pre-printed form, handwritten values. L.B. Ramos HEBRON, Antipolo branch (TIN ...00010). Single line 'Diesel' with unit cost 103.50 and amount 1,000; the Quantity column was left blank on the paper, so qty is null. Total Sales (VAT Inclusive) 1,000; Amount Net of VAT 892.86 + Add: VAT 107.14 = 1000 (tax-inclusive). 'Ideal Source' is the BUYER (Registered Name / Sold To)."
+  }
+}

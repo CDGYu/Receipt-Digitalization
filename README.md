@@ -486,32 +486,31 @@ python -m pytest            # no count here either; pyproject sets pythonpath=sr
 
 ### Running the whole system
 
-`pip install` + `pytest` above is the library. To bring up the five services --
-Postgres, Redis, the API (which serves the built frontend), the RQ worker and
-Ollama -- follow **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) §6**, an ordered
-runbook from an empty machine to a receipt processed end to end.
+`pip install` + `pytest` above is the library. To bring up the whole system --
+a database, Redis, Ollama, the API (which can serve the built frontend) and the
+RQ worker, all running natively on the host -- follow
+**[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) §6**, an ordered runbook from an
+empty machine to a receipt processed end to end.
 
-Do not follow a shortened copy of it from here. The runbook is nine steps
+Do not follow a shortened copy of it from here. The runbook is ten steps
 because several of them fail quietly if skipped or reordered -- the model pull
-does not fail at `up`, it fails at the first receipt -- and a second, shorter
+does not fail at startup, it fails at the first receipt -- and a second, shorter
 copy in this file would drift from it within a week.
 
 Three things from it worth knowing before you start:
 
-- **Migrations are a deliberate operator step**, not part of the boot path.
-  `docker compose exec api alembic upgrade head`, run once, by a person. An
-  entrypoint that migrated would have every replica race on startup.
-- **Ollama is published on `localhost:11435`**, not 11434, so it cannot collide
-  with a Windows-native Ollama. Inside the compose network it is still
-  `ollama:11434`, which is why `VLM_BASE_URL` reads that way. If you have both
-  daemons, they have different models installed -- run `docker ps` before
-  concluding which one answered you.
-- **There is no default account and no signup screen.** `docker compose exec -it
-  api receipts users add <name> --role admin`, password read from stdin.
+- **Migrations are a deliberate step**, not part of the boot path. `python -m
+  alembic upgrade head`, run once, by a person. A boot path that migrated would
+  have every process race on startup.
+- **Ollama runs natively on `localhost:11434`** (its default), which is what
+  `VLM_BASE_URL` reads. Run `ollama serve` and `ollama pull
+  granite3.2-vision:2b` before the first receipt.
+- **There is no default account and no signup screen.** `receipts users add
+  <name> --role admin`, password read from stdin.
 
-`.env.example` is the tracked template for every variable `docker-compose.yml`
-interpolates, each with the default it already applies. Copying it to `.env`
-changes no behaviour; it exists so the knobs are discoverable.
+`.env.example` is the tracked template: copy it to `.env` and set the three
+required values (`DATABASE_URL`, `REDIS_URL`, `SESSION_SECRET`). Every other
+knob has a working default, documented at its field in `config/settings.py`.
 
 ---
 

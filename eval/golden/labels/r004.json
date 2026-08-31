@@ -1,0 +1,60 @@
+{
+  "merchant": {
+    "name": "MYBOSSING GAS STATION",
+    "branch": null,
+    "address": "(Near Sta Lucia Mall) Felix Avenue Brgy., San Isidro, Cainta Rizal",
+    "tax_id": "220-012-030-001",
+    "phone": null
+  },
+  "buyer": {
+    "name": "Ideal Source",
+    "tax_id": null
+  },
+  "receipt": {
+    "number": "105071",
+    "date": "2026-03-31",
+    "date_raw": "03.31.26",
+    "time": null,
+    "currency": "PHP",
+    "decimal_convention": "point",
+    "cashier": null,
+    "terminal": null
+  },
+  "line_items": [
+    {
+      "position": 0,
+      "description_raw": "DIESEL",
+      "sku": null,
+      "qty": "7.752",
+      "unit": null,
+      "unit_price": "129.00",
+      "line_total": "1000.00",
+      "modifiers": [],
+      "bbox": null,
+      "is_template_row": false
+    }
+  ],
+  "totals": {
+    "subtotal": null,
+    "tax": null,
+    "tax_breakdown": [],
+    "discount": null,
+    "total": "1000.00",
+    "tender": null,
+    "change": null,
+    "prices_include_tax": null
+  },
+  "payment": {
+    "method": null,
+    "card_last4": null
+  },
+  "meta": {
+    "is_handwritten": true,
+    "is_refund": false,
+    "legibility": "fair",
+    "ambiguous_fields": [],
+    "unreadable_regions": [],
+    "receipt_is_inconsistent": false,
+    "notes": "BIR SALES INVOICE: pre-printed form, handwritten values. Single filled line: DIESEL, qty 7.752 x 129.00 = 1000.01 vs written amount 1000 (corroborates). The summary block (Total Sales VAT Inclusive / Less: VAT / Amount Net of VAT / Add: VAT / VATable / VAT-Exempt / Zero-Rated / VAT Amount) is entirely blank; only TOTAL AMOUNT DUE (P 1000) is filled, so subtotal/tax are null. 'IDEAL SOURCE' is the BUYER (Sold to). Merchant proprietor 'Rizza Rose K. Ko-Prop.' printed under the name. Footer names RDM Printing Services (printer), TIN 126-957-547-000 Non Vat is the printer's."
+  }
+}

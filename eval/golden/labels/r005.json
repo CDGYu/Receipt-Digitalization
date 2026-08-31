@@ -1,0 +1,60 @@
+{
+  "merchant": {
+    "name": "SERV CENTRAL, INC.",
+    "branch": null,
+    "address": "Lots 10, 11, 12 Blk. 3 Congressional Ave., Pasong Tamo, Quezon City",
+    "tax_id": "205-741-640-162",
+    "phone": null
+  },
+  "buyer": {
+    "name": "IDEAL SOURCE",
+    "tax_id": null
+  },
+  "receipt": {
+    "number": "31216",
+    "date": null,
+    "date_raw": null,
+    "time": null,
+    "currency": "PHP",
+    "decimal_convention": "point",
+    "cashier": null,
+    "terminal": null
+  },
+  "line_items": [
+    {
+      "position": 0,
+      "description_raw": "DSL-2",
+      "sku": null,
+      "qty": "17.046",
+      "unit": null,
+      "unit_price": "117.35",
+      "line_total": "2000.00",
+      "modifiers": [],
+      "bbox": null,
+      "is_template_row": false
+    }
+  ],
+  "totals": {
+    "subtotal": "1785.71",
+    "tax": "214.29",
+    "tax_breakdown": [],
+    "discount": null,
+    "total": "2000.00",
+    "tender": null,
+    "change": null,
+    "prices_include_tax": true
+  },
+  "payment": {
+    "method": "CASH",
+    "card_last4": null
+  },
+  "meta": {
+    "is_handwritten": true,
+    "is_refund": false,
+    "legibility": "fair",
+    "ambiguous_fields": [],
+    "unreadable_regions": [],
+    "receipt_is_inconsistent": false,
+    "notes": "BIR SALES INVOICE: pre-printed form, handwritten values. CASH box ticked. Date line is blank on the paper -> receipt.date and date_raw null. Single line: DSL-2 (diesel), qty 17.046 x 117.35 = 2000.35 vs written amount 2000.00. Vatable Sales 1785.71 + VAT Amount 214.29 = 2000.00 (tax-inclusive). 'IDEAL SOURCE' is the BUYER (Sold to). The sequential twin of r003 (Serv Central No. 31217). Footer names A & C Printers (printer), TIN 223-885-849-002-VAT is the printer's."
+  }
+}

@@ -989,3 +989,170 @@ def test_calibrate_on_a_malformed_json_file_fails_cleanly(tmp_path, capsys):
 
     assert code == EXIT_FAILED
     assert "not valid JSON" in capsys.readouterr().err
+
+
+# --------------------------------------------------------------------------- #
+# calibrate --set (persist the recommended threshold to the env file)
+# --------------------------------------------------------------------------- #
+
+
+def _env_threshold(env_path: Path) -> str | None:
+    """The value of the AUTO_APPROVE_THRESHOLD line in ``env_path``, or ``None``.
+
+    Parsed rather than substring-matched so a test can tell "the key was set to
+    0.8" from "the string 0.8 appears somewhere in the file", and so a duplicate
+    key is caught -- the loop returns the last occurrence, and a separate count
+    assertion pins that there is exactly one.
+    """
+    if not env_path.exists():
+        return None
+    value: str | None = None
+    for line in env_path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if "=" not in stripped:
+            continue
+        key, _, val = stripped.partition("=")
+        if key.strip().casefold() == "auto_approve_threshold":
+            value = val.strip()
+    return value
+
+
+def test_calibrate_set_writes_the_recommended_threshold_to_the_env_file(tmp_path, capsys):
+    """``--set`` persists the same value the command recommends -- 0.8 here,
+    the lowest threshold clearing the 0.99 target over the six 0.90 receipts.
+    """
+    _write_results(tmp_path, receipts=10, results=(
+        _results(("0.90", True), count=6) + _results(("0.70", False), count=4)
+    ))
+    env_path = tmp_path / ".env"
+
+    code = cmd_calibrate(
+        build_parser().parse_args(
+            ["calibrate", "--target", "0.99", "--set", "--env-file", str(env_path)]),
+        results_dir=tmp_path)
+
+    assert code == EXIT_OK
+    assert _env_threshold(env_path) == "0.8"
+    assert "set AUTO_APPROVE_THRESHOLD=0.8" in capsys.readouterr().out
+
+
+def test_calibrate_set_writes_nothing_when_no_threshold_is_recommended(tmp_path, capsys):
+    """The fail-dangerous case: when the command recommends nothing it must not
+    touch the gate. A pre-existing env file is left byte-for-byte unchanged, so
+    ``--set`` can never *lower* the threshold to a value the gates rejected.
+    """
+    _write_results(tmp_path, receipts=2, results=[
+        {"receipt_id": "r001", "confidence": "0.90", "critical_correct": False,
+         "transcription_correct": 0, "transcription_total": 1,
+         "self_report_correct": 0, "self_report_total": 0,
+         "hallucinated": 0, "correctly_empty": 0, "structural_mismatch": 0,
+         "field_results": {}},
+        {"receipt_id": "r002", "confidence": "0.95", "critical_correct": False,
+         "transcription_correct": 0, "transcription_total": 1,
+         "self_report_correct": 0, "self_report_total": 0,
+         "hallucinated": 0, "correctly_empty": 0, "structural_mismatch": 0,
+         "field_results": {}},
+    ])
+    env_path = tmp_path / ".env"
+    original = "VLM_PROVIDER=ollama\nAUTO_APPROVE_THRESHOLD=0.85\n"
+    env_path.write_text(original, encoding="utf-8")
+
+    code = cmd_calibrate(
+        build_parser().parse_args(
+            ["calibrate", "--target", "0.99", "--set", "--env-file", str(env_path)]),
+        results_dir=tmp_path)
+
+    assert code == EXIT_FAILED
+    # Untouched: the gate is not lowered to something the command would refuse.
+    assert env_path.read_text(encoding="utf-8") == original
+
+
+def test_calibrate_set_replaces_an_existing_line_without_duplicating_it(tmp_path):
+    """An existing AUTO_APPROVE_THRESHOLD line is rewritten in place, not
+    appended alongside -- otherwise two lines would set the same key and the
+    later one would silently win. Other lines and a commented form are left be.
+    """
+    _write_results(tmp_path, receipts=10, results=(
+        _results(("0.90", True), count=6) + _results(("0.70", False), count=4)
+    ))
+    env_path = tmp_path / ".env"
+    env_path.write_text(
+        "VLM_PROVIDER=ollama\n"
+        "AUTO_APPROVE_THRESHOLD=0.85\n"
+        "# AUTO_APPROVE_THRESHOLD=0.99 was the old value\n"
+        "REDIS_URL=redis://localhost:6379/0\n",
+        encoding="utf-8",
+    )
+
+    code = cmd_calibrate(
+        build_parser().parse_args(
+            ["calibrate", "--target", "0.99", "--set", "--env-file", str(env_path)]),
+        results_dir=tmp_path)
+
+    text = env_path.read_text(encoding="utf-8")
+    lines = text.splitlines()
+    assert code == EXIT_OK
+    assert _env_threshold(env_path) == "0.8"
+    # Exactly one live setting of the key -- the commented line does not count.
+    live = [ln for ln in lines if ln.strip().startswith("AUTO_APPROVE_THRESHOLD=")]
+    assert live == ["AUTO_APPROVE_THRESHOLD=0.8"]
+    # The unrelated lines and the comment survive.
+    assert "VLM_PROVIDER=ollama" in lines
+    assert "REDIS_URL=redis://localhost:6379/0" in lines
+    assert "# AUTO_APPROVE_THRESHOLD=0.99 was the old value" in lines
+
+
+def test_calibrate_set_creates_the_env_file_when_absent(tmp_path):
+    """``--set`` against a path with no file creates it carrying just the key."""
+    _write_results(tmp_path, receipts=10, results=(
+        _results(("0.90", True), count=6) + _results(("0.70", False), count=4)
+    ))
+    env_path = tmp_path / "fresh.env"
+    assert not env_path.exists()
+
+    code = cmd_calibrate(
+        build_parser().parse_args(
+            ["calibrate", "--target", "0.99", "--set", "--env-file", str(env_path)]),
+        results_dir=tmp_path)
+
+    assert code == EXIT_OK
+    assert env_path.exists()
+    assert _env_threshold(env_path) == "0.8"
+
+
+def test_calibrate_without_set_writes_no_env_file(tmp_path):
+    """The default is unchanged: a plain ``calibrate`` recommends and prints,
+    and touches no env file at all.
+    """
+    _write_results(tmp_path, receipts=10, results=(
+        _results(("0.90", True), count=6) + _results(("0.70", False), count=4)
+    ))
+    env_path = tmp_path / ".env"
+
+    code = cmd_calibrate(
+        build_parser().parse_args(["calibrate", "--target", "0.99"]),
+        results_dir=tmp_path)
+
+    assert code == EXIT_OK
+    assert not env_path.exists()
+
+
+def test_calibrate_set_persists_a_value_settings_reads_back_as_that_decimal(tmp_path):
+    """End-to-end: a written env file, loaded through ``Settings``, yields the
+    recommended threshold as a ``Decimal`` -- the value ``route()`` gates on.
+    This is the point of ``--set``, and it pins that the key name and format
+    match what pydantic-settings binds to ``auto_approve_threshold``.
+    """
+    _write_results(tmp_path, receipts=10, results=(
+        _results(("0.90", True), count=6) + _results(("0.70", False), count=4)
+    ))
+    env_path = tmp_path / ".env"
+
+    cmd_calibrate(
+        build_parser().parse_args(
+            ["calibrate", "--target", "0.99", "--set", "--env-file", str(env_path)]),
+        results_dir=tmp_path)
+
+    settings = Settings(_env_file=str(env_path))
+    assert settings.auto_approve_threshold == D("0.8")
+    assert isinstance(settings.auto_approve_threshold, D)

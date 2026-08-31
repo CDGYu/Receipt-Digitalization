@@ -1,0 +1,60 @@
+{
+  "merchant": {
+    "name": "PETRON",
+    "branch": "EEO Gasoline Station (Eloidio Eliseo G. Ouines)",
+    "address": "Mapalad Sta Rosa Nueva Ecija",
+    "tax_id": "415-886-932-000",
+    "phone": null
+  },
+  "buyer": {
+    "name": "IDEAL SOURCE",
+    "tax_id": null
+  },
+  "receipt": {
+    "number": "0002172193",
+    "date": "2026-03-27",
+    "date_raw": "03/27/2026",
+    "time": "13:44",
+    "currency": "PHP",
+    "decimal_convention": "point",
+    "cashier": "ARMANDO H. ESPERON",
+    "terminal": null
+  },
+  "line_items": [
+    {
+      "position": 0,
+      "description_raw": "Diesel Max",
+      "sku": null,
+      "qty": "16.46",
+      "unit": null,
+      "unit_price": "121.50",
+      "line_total": "2000.00",
+      "modifiers": [],
+      "bbox": null,
+      "is_template_row": false
+    }
+  ],
+  "totals": {
+    "subtotal": "1785.71",
+    "tax": "214.29",
+    "tax_breakdown": [],
+    "discount": null,
+    "total": "2000.00",
+    "tender": "2000.00",
+    "change": null,
+    "prices_include_tax": true
+  },
+  "payment": {
+    "method": "CASH",
+    "card_last4": null
+  },
+  "meta": {
+    "is_handwritten": false,
+    "is_refund": false,
+    "legibility": "fair",
+    "ambiguous_fields": [],
+    "unreadable_regions": [],
+    "receipt_is_inconsistent": false,
+    "notes": "Petron thermal POS SALES INVOICE, machine-printed but faded (fair) - a lightly degraded print. 'Diesel Max (P : 03)' code 03 kept out of description. Date reads 03/27/2026. qty 16.46 x 121.50 = 1999.89 vs printed 2,000.00. VATable 1,785.71 + VAT 214.29 = 2000.00 (tax-inclusive). 'IDEAL SOURCE' is the BUYER. Footer TIN 007-068-922-00000 belongs to WI-AIR PHILIPPINES INC (POS accreditation holder), not the dealer."
+  }
+}

@@ -1,5 +1,13 @@
 {
   "r001": { "category": "handwritten", "holdout": false, "withheld": [] },
   "r002": { "category": "handwritten", "holdout": false, "withheld": [] },
-  "r003": { "category": "handwritten", "holdout": true, "withheld": [] }
+  "r003": { "category": "handwritten", "holdout": true, "withheld": [] },
+  "r004": { "category": "handwritten", "holdout": false, "withheld": [] },
+  "r005": { "category": "handwritten", "holdout": false, "withheld": [] },
+  "r006": { "category": "printed_clean", "holdout": false, "withheld": [] },
+  "r007": { "category": "handwritten", "holdout": false, "withheld": [] },
+  "r008": { "category": "handwritten", "holdout": true, "withheld": [] },
+  "r009": { "category": "printed_degraded", "holdout": false, "withheld": [] },
+  "r010": { "category": "handwritten", "holdout": false, "withheld": [] },
+  "r011": { "category": "handwritten", "holdout": true, "withheld": [] }
 }

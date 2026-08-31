@@ -25,6 +25,7 @@ that later looks like a model error.
 from __future__ import annotations
 
 import logging
+import os
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
@@ -521,17 +522,28 @@ def run_worker(
     """
     connection = make_redis(url=url, settings=settings)
     try:
-        from rq import Queue, Worker
+        from rq import Queue, SimpleWorker, Worker
     except ImportError as exc:  # pragma: no cover - depends on the environment
         raise RuntimeError(
             "The queue needs the optional 'worker' extra: pip install -e '.[worker]' "
             "(installs rq and redis)."
         ) from exc
 
-    worker = Worker(
+    # RQ's default Worker forks a work-horse per job (`os.fork`), which does not
+    # exist on Windows -- a forking worker there dies with `AttributeError:
+    # module 'os' has no attribute 'fork'` the moment it dequeues. SimpleWorker
+    # runs the job in the worker process instead, which is RQ's own answer for
+    # platforms without fork. The job's own `job_timeout` still bounds it; what
+    # is lost is process isolation between jobs, which a single local worker
+    # does not need. Everywhere fork exists, keep the isolating default.
+    worker_cls = SimpleWorker if not hasattr(os, "fork") else Worker
+
+    worker = worker_cls(
         [Queue(name, connection=connection) for name in queues], connection=connection
     )
-    log.info("Worker starting on queues %s", ", ".join(queues))
+    log.info(
+        "Worker starting on queues %s (%s)", ", ".join(queues), worker_cls.__name__
+    )
     worker.work(burst=burst)
 
 

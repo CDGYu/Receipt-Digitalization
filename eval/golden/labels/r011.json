@@ -1,0 +1,60 @@
+{
+  "merchant": {
+    "name": "L.B. RAMOS PETROLEUM CORP.",
+    "branch": "HEBRON",
+    "address": "Old J.P. Rizal St., Calumpang, City of Marikina",
+    "tax_id": "009-812-482-00016",
+    "phone": null
+  },
+  "buyer": {
+    "name": "IDEAL SOURCE",
+    "tax_id": null
+  },
+  "receipt": {
+    "number": "27149",
+    "date": "2026-05-04",
+    "date_raw": "05/04/26",
+    "time": null,
+    "currency": "PHP",
+    "decimal_convention": "point",
+    "cashier": null,
+    "terminal": null
+  },
+  "line_items": [
+    {
+      "position": 0,
+      "description_raw": "DIESEL",
+      "sku": null,
+      "qty": "12.30",
+      "unit": null,
+      "unit_price": "81.30",
+      "line_total": "1000.00",
+      "modifiers": [],
+      "bbox": null,
+      "is_template_row": false
+    }
+  ],
+  "totals": {
+    "subtotal": "892.86",
+    "tax": "107.14",
+    "tax_breakdown": [],
+    "discount": null,
+    "total": "1000.00",
+    "tender": null,
+    "change": null,
+    "prices_include_tax": true
+  },
+  "payment": {
+    "method": null,
+    "card_last4": null
+  },
+  "meta": {
+    "is_handwritten": true,
+    "is_refund": false,
+    "legibility": "fair",
+    "ambiguous_fields": [],
+    "unreadable_regions": [],
+    "receipt_is_inconsistent": false,
+    "notes": "BIR SALES INVOICE: pre-printed form, handwritten values. L.B. Ramos HEBRON, Marikina branch (TIN ...00016). Single line DIESEL, qty 12.30 x 81.30 = 999.99 vs written 1,000 (corroborates). Net 892.86 on the 'Total Sales (VAT Inclusive)' line, Add: VAT 107.14, Total Amount Due 1,000; 892.86 + 107.14 = 1000.00 (tax-inclusive). 'IDEAL SOURCE' is the BUYER."
+  }
+}
