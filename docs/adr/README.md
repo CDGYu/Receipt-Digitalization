@@ -41,7 +41,7 @@ Accepted; supersede it with a new ADR rather than editing history.
 | [0033](0033-the-handoff-pair-goes-last-and-alone.md) | The handoff pair goes last and alone, and a correction goes to every copy | Accepted |
 | [0034](0034-the-shared-page-bound.md) | The shared page bound | Accepted |
 | [0035](0035-the-asgi-entry-point.md) | The ASGI entry point, and what it refuses to start on | Accepted |
-| [0036](0036-one-image-two-commands.md) | One image, two commands | Accepted |
+| [0036](0036-one-image-two-commands.md) | One image, two commands | **Superseded 2026-08-31** — Docker was removed on an owner ruling; the service runs natively on the host (`docs/DEPLOYMENT.md`). The `python -m receipts.worker` entry point survives |
 | [0037](0037-ci-runs-the-gate-runner.md) | CI runs, and it runs the gate runner | Accepted |
 | [0038](0038-the-theme-control.md) | The theme control, and one key in browser storage | **Superseded 2026-08-25** — the chooser was removed on an owner ruling; ADR-0027's dark theme survives, driven by the OS |
 | [0039](0039-the-local-path-is-a-liveness-check.md) | The local path is a liveness check, not a measurement | Accepted |
@@ -116,7 +116,12 @@ one image runs both halves (`api` takes the default `CMD`, the worker overrides
 it), the image builds the review UI itself so a stale `dist` cannot ship,
 migrations are a documented operator step rather than an entrypoint, and the
 whole thing was verified by building and running it. `docs/DEPLOYMENT.md` is the
-guide.
+guide. **Superseded 2026-08-31**: Docker was removed on an owner ruling, so the
+image, compose file and `.dockerignore` are gone and the service runs natively
+on the host; the paragraph above is the record of what the image did, and
+`docs/DEPLOYMENT.md` now documents the host runbook instead. The operator-step
+migration rule and the `python -m receipts.worker` command both survive the
+removal.
 **0037** is the one to read before touching CI: the workflow runs
 `scripts/verify.py` rather than re-listing gates (the previous one drifted three
 gates out of date and ran none of the frontend ones), it fires on every branch

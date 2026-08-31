@@ -9,6 +9,17 @@ it ADR-0017's Context claim that this repository "cannot use" a CI workflow
 Derived 2026-08-11 against `feat/ci-workflow`. **Re-derive rather than quote**
 (ADR-0028 rule 1).
 
+> **Correction 2026-08-31 — the `image` job is gone, this ADR's core decision is not.**
+> Docker was removed on an owner ruling (ADR-0036 is superseded), so the second
+> job this workflow ran — build the image, assert it refuses to boot unconfigured,
+> check the console script — was deleted from `.github/workflows/ci.yml` at
+> `f268e5d`. Two things below rot with it and are **kept as the record of what ran
+> on 2026-08-11**, not rewritten (ADR-0032 §2): decision 3's "3.13 is what
+> ADR-0036's image ships" (3.13 is now simply the top of the supported range), and
+> the finding "The `image` job passed outright". **The decision itself stands:**
+> CI fires on every push and runs `scripts/verify.py`, the five-gate list, on 3.11
+> and 3.13. Only the image job left.
+
 ## Context
 
 GitHub Actions ran here once. `.github/workflows/ci.yml` was added in `5ef37ad`,

@@ -1,6 +1,17 @@
 # ADR 0036 — One image, two commands
 
-**Status:** Accepted (2026-08-11)
+**Status:** **SUPERSEDED 2026-08-31** by an owner ruling: Docker is not wanted.
+The `Dockerfile`, `docker-compose.yml` and `.dockerignore` this ADR describes
+were deleted, and the service now runs **natively on the host** — see
+`docs/DEPLOYMENT.md` ("no containers") and its §6 runbook. The
+`.github/workflows/ci.yml` `image` job that built and booted the artefact was
+removed at `f268e5d`. Everything below describes an image that was built, run and
+verified (2026-08-11) and has since been removed; it is kept because the
+*reasoning* is still the reasoning — the one-artefact-vs-drift trade, the
+UI-build-in-the-image argument, migrations as an operator step, and the
+`python -m receipts.worker` entry point (which survives the removal and is still
+how a worker is run). **What is superseded is the packaging shape, not the
+service's boot contract** (ADR-0035) or the gate runner (ADR-0017).
 **Builds on:** ADR-0035 (the ASGI entry point, which deliberately left
 containerisation undecided), ADR-0004 (portable persistence and docker Postgres),
 ADR-0014 (optional dependencies stay out of every import path)
