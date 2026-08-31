@@ -1103,13 +1103,42 @@ pre-printed `Lt.`s); this entry is the only record of the ruling against it.
 
 ## ISSUE-004 — Nothing checks a label against its photograph, and per-label rot is open by design
 
-**Status:** OPEN — structural, not a defect to fix. Recorded so the pins are
-not mistaken for something they are not.
+**Status:** OPEN — structural, not a defect to fix, and STILL open after the
+golden set reached 89. Recorded so the pins are not mistaken for something they
+are not.
 **Owner action required:** no.
 **Discovered:** 2026-08-18, when a printed-order defect in `r001.json` and
 `r002.json` was caught by a human reading a plan against the images — not by
 any test. **Pre-existing:** since the golden set existed. **Blocks:** nothing;
 it bounds what green means.
+
+> ## UPDATE 2026-08-30 — the corpus reached the size that makes step 3 the real instrument
+>
+> The golden set grew to **89 receipts** (ISSUE-001 step 7 done), past the
+> 50–100 target the "How to resume" step 3 below is conditioned on. That does
+> **not** close this entry — nothing here was a code defect — but it changes
+> what is available:
+>
+> - **The residual is unchanged in kind, larger in scale.** The measurement
+>   below ("blanking r001 ... 1236 passed") was taken against the **3-label**
+>   set; it is stale as a *count* (the suite and the per-label pins now run over
+>   89 labels) but exact as a *property*: a single label's content rotting alone
+>   still passes, because no test compares a label to its photograph and none
+>   can (`eval/golden/images/` is gitignored). Re-deriving the exact new
+>   mutation count was **not** done — it would rot again on the next label added,
+>   which is the ADR-0028 trap this entry already fell into once (see the
+>   struck-through 1228 note below).
+> - **Step 3 is now actionable rather than hypothetical.** "If the corpus ever
+>   reaches its 50–100 target, a second labeller independently re-reading a
+>   sample is the only real instrument" — it has reached it. That second read has
+>   **not** happened: the same labeller wrote and reconciled all 89 (recorded
+>   honestly in `IMPLEMENTATION_PLAN.md` P0.T1), so the instrument this entry
+>   names as the only real one is still unused.
+> - **The 89-receipt baseline is indirect evidence, not the check.** The
+>   2026-08-30 run (ISSUE-001) scored the model against these labels; a
+>   systematically mis-transcribed label would depress that receipt's score, but
+>   a model reading this corpus at ~28% transcription cannot distinguish a bad
+>   label from a bad read. So the run does not audit the labels either.
 
 ### What is wrong
 
@@ -2306,11 +2335,42 @@ twice. There is no per-call measurement in this repository.
 
 ## ISSUE-017 — The baseline's variance is across receipts, not across repeats
 
-**Status:** OPEN — a finding, not a bug. It changes how every accuracy figure in
-this project must be read.
+**Status:** OPEN — a finding, not a bug, and CONFIRMED at scale. It changes how
+every accuracy figure in this project must be read.
 **Owner action required:** no. **Discovered:** 2026-08-22, ISSUE-001 step 6.
 **Pre-existing:** yes, and invisible until a real run existed.
 **Blocks:** any single-figure accuracy claim.
+
+> ## CONFIRMED 2026-08-30 — the 89-receipt run makes the finding stronger, not weaker
+>
+> The 3-receipt table below said the across-receipt spread (85 points) dwarfs
+> the across-repeat spread (±1.4 points). The full 89-receipt baseline
+> (`eval/results/2026-08-30-cloud-89/`, 3 repeats) confirms it and widens it.
+> Derived from the committed per-repeat files
+> (`results[].transcription_correct / transcription_total` per `receipt_id`),
+> not asserted:
+>
+> | axis | 3 receipts (2026-08-22) | 89 receipts (2026-08-30) |
+> |---|---|---|
+> | across-**receipt** transcription (median per receipt) | 11% – 96% | **5.1% – 96.8%** |
+> | across-**repeat** within one receipt | ±1.4 pts | **median 0.0 pts, max 15.8** |
+>
+> So the spread across receipts is now **~92 points**; the spread across repeats
+> is **zero for the median receipt**. Growing the corpus did exactly what this
+> entry predicted: it did not shrink the across-receipt spread — it revealed more
+> of it (89 receipts strung between a 5% floor and a 97% ceiling), while repeats
+> stayed nearly identical. The lowest three receipts (r027 5.1%, r036 5.2%,
+> r020 5.9%) and the highest three (r014 91.9%, r002 95.8%, r016 96.8%) are two
+> different populations, not noise around one mean.
+>
+> **The remedy this entry named — "grow the golden set" (ISSUE-001 step 7) — is
+> DONE, and it did not make a single-figure claim defensible.** The reason has
+> shifted: it is no longer that three receipts cannot represent the spread (89
+> now show it plainly), it is that the spread is *intrinsic* — the model reads
+> some receipt types well and others not at all, so any mean over the corpus
+> describes no receipt. Report the distribution (or the per-category breakdown),
+> never the average. ISSUE-034's hinted-vs-unhinted caveat below is unaffected
+> and still composes with this one.
 
 ### What is wrong
 
