@@ -270,7 +270,7 @@ def ensure_account(settings: Any) -> bool:
     try:
         from sqlalchemy.exc import OperationalError
 
-        from receipts.persist.models import Base, User
+        from receipts.persist.models import Base
         from receipts.persist.session import make_engine, make_session_factory
         from receipts.persist.users import ROLE_ADMIN, create_user, list_users
     except Exception as exc:  # pragma: no cover - environment problem

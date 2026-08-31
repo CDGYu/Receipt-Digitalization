@@ -587,27 +587,27 @@ const CENSUS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
     '.section': 'display: flex, flex-direction: column, gap',
     // Was `.heading`, renamed when the h1 took that name.
     '.sectionHeading': 'font-size, font-weight, margin',
-    '.scroller': 'overflow-x: auto',
-    '.table': 'border-collapse: collapse, width',
-    '.table th, .table td':
-      'box-sizing: border-box, border-bottom, padding, text-align: left, vertical-align: top',
-    '.table th': 'font-weight, white-space: nowrap',
-    // **Was a bare `.numeric`, which LOST to `.table th, .table td` above.**
-    // (0,1,0) against (0,1,1): the money and confidence columns rendered
-    // left-aligned under their own headers while every gate stayed green. The
-    // census could not see it -- the declaration was present the whole time --
-    // and jsdom has no layout. A browser could, at a glance.
-    '.table th.numeric, .table td.numeric':
+    '.scroller': 'max-width, overflow-x: auto, border, border-radius',
+    '.table':
+      'width, min-width, border-collapse: collapse, background, font-family, font-size, line-height',
+    '.head th':
+      'padding, border-bottom, color, font-size, font-weight, letter-spacing, text-align: left, text-transform: uppercase, white-space: nowrap',
+    '.row > td': 'padding, border-top, vertical-align: top',
+    // **Was a bare `.numeric`.** Keep the selector tied to the same header and
+    // row classes that carry the Admin table shell, so right-aligned money
+    // survives future table polish.
+    '.head th.numeric, .row > td.numeric':
       'text-align: right, font-variant-numeric: tabular-nums, white-space: nowrap',
     // The confidence column carries a `Chip` now, so it reads left like a label
     // rather than aligning right like the money column -- only the no-wrap is
-    // declared, the left alignment is inherited from `.table th, .table td`.
+    // declared; the left alignment is inherited from ordinary table cells.
     '.confidence': 'white-space: nowrap',
-    '.reason': 'color',
-    '.opened': 'white-space: nowrap, font-variant-numeric: tabular-nums',
+    '.reason': 'min-width',
+    '.opened': 'font-family, white-space: nowrap, font-variant-numeric: tabular-nums',
     '.mine': 'background',
     '.action': 'white-space: nowrap',
-    '.empty': 'color, margin',
+    '.empty':
+      'margin, padding, border, border-radius, background, color, font-family, font-size, text-align: center',
     '.error': 'color, margin',
     '.unknown': 'color',
   },

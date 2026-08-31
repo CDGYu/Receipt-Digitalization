@@ -2,7 +2,6 @@ import { cleanup, render, screen, waitFor, within } from '@testing-library/react
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ReviewQueue } from '../src/review/ReviewQueue'
-import type { Identity } from '../src/api/admin'
 import type { Money, ReceiptSummary, ReviewTask } from '../src/api/types'
 
 afterEach(() => {
@@ -102,21 +101,13 @@ function aQueue() {
   } as Record<string, readonly [number, unknown]>
 }
 
-/** The signed-in reviewer these fixtures belong to: `aQueue`'s in-progress row
- *  is `assigned_to: 'alice'`, so the resume section is scoped to this account.
- *  Passed explicitly rather than left to `currentIdentity()` -- the session
- *  module holds no identity under test, and the "Resume" button now shows only
- *  on a row this account holds. */
-const ALICE: Identity = { username: 'alice', role: 'reviewer' }
-
 async function renderQueue(
   routes: Record<string, readonly [number, unknown]>,
   navigate = vi.fn(),
-  identity: Identity | null = ALICE,
 ) {
   const fetchMock = stubApi(routes)
   vi.stubGlobal('fetch', fetchMock)
-  render(<ReviewQueue navigate={navigate} identity={identity} />)
+  render(<ReviewQueue navigate={navigate} />)
   await screen.findByRole('heading', { name: 'Receipts waiting for review' })
   return { fetchMock, navigate }
 }
@@ -178,31 +169,6 @@ describe('the review queue list', () => {
     expect(mine).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Resume' })).toBeTruthy()
     expect(screen.getByText('Costa')).toBeTruthy()
-  })
-
-  it('offers no Resume for an in-progress task held by someone else', async () => {
-    // The ownership gate: `t-mine` is `assigned_to: 'alice'`, so signing in as
-    // bob must leave the resume section empty rather than offer a task that is
-    // not bob's job. The row's receipt (Costa) is scoped to `needs_review`, so
-    // it does not appear in the open backlog either -- there is simply nothing
-    // for bob to resume. The open backlog is unaffected: it stays claimable.
-    await renderQueue(aQueue(), vi.fn(), { username: 'bob', role: 'reviewer' })
-
-    expect(screen.queryByRole('heading', { name: 'Already in your hands' })).toBeNull()
-    expect(screen.queryByRole('button', { name: 'Resume' })).toBeNull()
-    // The shared backlog is still there and still claimable by anyone.
-    expect(screen.getAllByRole('button', { name: 'Review' }).length).toBe(2)
-  })
-
-  it('offers no Resume when the identity has not arrived yet', async () => {
-    // `identity` is `null` while `/auth/me` is in flight. A null username cannot
-    // be proven to own any in-progress row, so the resume section stays empty
-    // rather than flash a task that might belong to someone else.
-    await renderQueue(aQueue(), vi.fn(), null)
-
-    expect(screen.queryByRole('heading', { name: 'Already in your hands' })).toBeNull()
-    expect(screen.queryByRole('button', { name: 'Resume' })).toBeNull()
-    expect(screen.getAllByRole('button', { name: 'Review' }).length).toBe(2)
   })
 
   it('shows no row at all for a closed task, in either section', async () => {

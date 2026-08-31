@@ -160,13 +160,12 @@ function App() {
         // is gated there.
         <HomeScreen />
       ) : route === 'queue' ? (
-        // `identity` is passed for ONE thing: the "Resume" action shows only on
-        // an `in_progress` row this account actually holds (`assigned_to`), so a
-        // task is not offered for resume to someone it is not the job of. It is
-        // NOT a substitute for the API scope -- `list_tasks` still decides which
-        // rows a reviewer may see at all (open plus their own, ADR-0026); this is
-        // the finer per-row gate on the resume button on top of that.
-        <ReviewQueue identity={identity} />
+        // No `identity`: the queue splits its rows by state alone -- every
+        // `in_progress` row is offered as a resume and every `open` row as
+        // backlog. `list_tasks` already scopes a reviewer to open rows plus
+        // their own in any state (ADR-0026), so who may see a row is decided at
+        // the API, not by a prop here.
+        <ReviewQueue />
       ) : route === 'upload' ? (
         // No `identity`: nothing on this screen is decided by who is asking.
         // `POST /upload` takes `require_upload`, which is the API key or ANY

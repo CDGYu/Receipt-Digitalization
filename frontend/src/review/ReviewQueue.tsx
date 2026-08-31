@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
 import { fetchTasks } from '../api/admin'
-import type { Identity } from '../api/admin'
 import { ApiError } from '../api/client'
 import { claimTask } from '../api/review'
 import { fetchReceipts } from '../api/receipts'
-import { currentIdentity } from '../session'
 import type { ReceiptSummary, ReviewTask } from '../api/types'
+import { Button } from '../ui/Button'
 import { ConfidenceChip } from '../ui/ConfidenceChip'
 import styles from './ReviewQueue.module.css'
 
@@ -38,13 +37,10 @@ import styles from './ReviewQueue.module.css'
  * `list_tasks` scopes a reviewer to `state == OPEN` **plus their own rows in any
  * state** (ADR-0026). Asking for `state=open` would therefore hide the task this
  * reviewer is already holding, which is the one row they most need to see. So
- * the fetch is unfiltered and the split happens at RENDER: the resume section is
- * the caller's OWN `in_progress` rows (`state == 'in_progress'` AND
- * `assigned_to == <caller>`), `open` rows are the backlog, and everything else
- * -- a `done` row of the caller's own history, or an `in_progress` row held by
- * someone else that an admin might see -- matches neither section and so shows
- * no action button. "Resume" appears only on a job that is genuinely this
- * account's; the shared open backlog stays claimable by anyone via "Review".
+ * the fetch is unfiltered and the split happens at RENDER, by exact state:
+ * `in_progress` rows go to the top as a resume and `open` rows are the backlog.
+ * A `done` row -- their own history, which the same scope also returns --.
+ * matches neither and so appears nowhere, because this list is work to pick up.
  *
  * **Two exact-state filters, not one `!== 'done'` filter.** There was a
  * `filter(task => task.state !== 'done')` here first, and it was dead: the two
@@ -95,26 +91,12 @@ export interface ReviewQueueProps {
    *  observe the destination without a jsdom navigation, which jsdom refuses
    *  and reports as an unhandled error rather than a failed assertion. */
   readonly navigate?: (url: string) => void
-  /** Who is signed in, so the "Already in your hands" section shows only tasks
-   *  this account actually holds.
-   *
-   *  Optional and defaulting to the session module's cached identity, so
-   *  production callers (`main.tsx`) need pass nothing while a test can inject a
-   *  reviewer directly. `null` -- identity not yet answered, or genuinely absent
-   *  -- means no `in_progress` row can be proven to belong to the caller, so the
-   *  resume section is empty rather than showing a task that might be someone
-   *  else's. The backend already scopes a reviewer to their own rows plus the
-   *  open backlog (ADR-0026), so this is a UI belt on top of that, not the gate. */
-  readonly identity?: Identity | null
 }
 
 /** Where a claimed task is reviewed. Claiming leaves this screen for that one. */
 const REVIEW_PATH = '/app/review'
 
-export function ReviewQueue({
-  navigate,
-  identity = currentIdentity(),
-}: ReviewQueueProps = {}) {
+export function ReviewQueue({ navigate }: ReviewQueueProps = {}) {
   const [rows, setRows] = useState<readonly Row[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   /** The task whose claim is in flight: drives the clicked row's own label and
@@ -211,20 +193,7 @@ export function ReviewQueue({
     )
   }
 
-  // `mine` is scoped by OWNERSHIP, not by state alone: an `in_progress` row is
-  // only "already in your hands" when `assigned_to` is the signed-in account.
-  // The backend already returns a reviewer only their own rows plus the open
-  // backlog (ADR-0026), so in normal operation every `in_progress` row here is
-  // already theirs -- but an admin viewing this screen, or a stale identity,
-  // could carry a row held by someone else, and a "Resume" on that would claim
-  // a task away from its holder. Gating on the username keeps the resume section
-  // strictly the caller's own work. A row that is `in_progress` but not the
-  // caller's falls through to neither section and shows no action button, which
-  // is the "does not show up if it is not this account's job" the screen wants.
-  const username = identity?.username ?? null
-  const mine = rows.filter(
-    (row) => row.task.state === 'in_progress' && row.task.assigned_to === username,
-  )
+  const mine = rows.filter((row) => row.task.state === 'in_progress')
   const backlog = rows.filter((row) => row.task.state === 'open')
 
   return (
@@ -293,7 +262,7 @@ function QueueTable({
   return (
     <div className={styles.scroller}>
       <table className={styles.table}>
-        <thead>
+        <thead className={styles.head}>
           <tr>
             <th scope="col">Merchant</th>
             <th scope="col" className={styles.numeric}>
@@ -315,7 +284,7 @@ function QueueTable({
         </thead>
         <tbody>
           {rows.map(({ task, receipt }) => (
-            <tr key={task.id} className={highlight ? styles.mine : undefined}>
+            <tr key={task.id} className={highlight ? `${styles.row} ${styles.mine}` : styles.row}>
               <td>
                 {receipt === null ? (
                   <span className={styles.unknown}>receipt not on this page</span>
@@ -344,13 +313,13 @@ function QueueTable({
               <td className={styles.reason}>{task.reason}</td>
               <td className={styles.opened}>{uploadedAt(task.uploaded_at)}</td>
               <td className={styles.action}>
-                <button
-                  type="button"
+                <Button
+                  variant="secondary"
                   onClick={() => onOpen(task.id)}
                   disabled={busyTaskId !== null}
                 >
                   {busyTaskId === task.id ? 'Opening...' : action}
-                </button>
+                </Button>
               </td>
             </tr>
           ))}
