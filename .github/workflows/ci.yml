@@ -29,9 +29,9 @@ jobs:
       # broke and 3.13 is unknown" is a worse answer than knowing both.
       fail-fast: false
       matrix:
-        # 3.11 is the floor `requires-python` declares; 3.13 is what ADR-0036's
-        # image ships. The development interpreter is 3.14.4 and is deliberately
-        # not here -- it is the one exercised locally every day.
+        # 3.11 is the floor `requires-python` declares; 3.13 is the upper end
+        # of the supported range. The development interpreter is 3.14.4 and is
+        # deliberately not here -- it is the one exercised locally every day.
         python-version: ["3.11", "3.13"]
 
     steps:
@@ -51,7 +51,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: pip
 
-      # Node 22 matches the Dockerfile's `node:22-slim` builder stage.
+      # Node 22 is the frontend build's supported major.
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
@@ -108,38 +108,8 @@ jobs:
       - name: Run the gates
         run: python scripts/verify.py
 
-  image:
-    name: image
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-        # Matched to the `gates` job deliberately: two jobs checking out
-        # differently is a difference a future reader has to explain.
-        with:
-          fetch-depth: 0
-
-      # The Dockerfile is an artefact nothing else exercises. Without this it is
-      # known-good only on the day somebody last built it by hand, and the first
-      # sign of a break would be a deployment.
-      - name: Build the image
-        run: docker build -t receipts:ci .
-
-      # Boot behaviour, not just build success. An unconfigured container must
-      # REFUSE and name what is missing (ADR-0035); an image that started here
-      # would mean the boot contract had been lost.
-      #
-      # The container exits non-zero by design, and that is fine: in `cmd |
-      # grep`, the pipeline's status is grep's, so the assertion is "the output
-      # contained this", not "the container succeeded". Both greps were run
-      # against the real image locally before this was written.
-      - name: The image refuses to start unconfigured
-        run: |
-          docker run --rm receipts:ci 2>&1 | grep -q "refuses to start"
-          docker run --rm receipts:ci 2>&1 | grep -q "DATABASE_URL is not set"
-
-      # The console script is installed system-wide in the image, which is the
-      # measurement that closed the section 1.6 question (ADR-0035's closing
-      # note). If it stops resolving, the packaging really did break this time.
-      - name: The console script resolves in the image
-        run: docker run --rm receipts:ci receipts --help
+  # The `image` job that built the Dockerfile and asserted its boot contract was
+  # removed on 2026-08-31 along with the Dockerfile, docker-compose.yml and
+  # .dockerignore: the system runs natively on the host now (see docs/DEPLOYMENT.md,
+  # "no containers"). Nothing here builds a container, so the job could only ever
+  # fail on `open Dockerfile: no such file or directory`.
