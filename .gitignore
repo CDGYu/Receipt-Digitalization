@@ -37,6 +37,7 @@ var/
 .ruff_cache/
 .coverage
 htmlcov/
+.learnings
 
 # Playwright-MCP browser-debug scratch (console logs + page snapshots). These are
 # throwaway artefacts of a browser pass, not review write-ups -- those live under
