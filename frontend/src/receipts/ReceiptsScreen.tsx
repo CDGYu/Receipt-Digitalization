@@ -380,6 +380,7 @@ export function ReceiptsScreen({ identity }: ReceiptsScreenProps) {
     setExportFailure(null)
     try {
       await downloadExportWorkbook()
+      await load(filters)
     } catch (caught) {
       setExportFailure(messageOf(caught, 'the export did not reach the API'))
     } finally {

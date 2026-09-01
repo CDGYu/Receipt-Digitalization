@@ -128,8 +128,7 @@
 }
 
 /* The id the server gave it -- the handle for everything else in the system.
- * Monospaced for the reason `FindingsPanel.module.css`'s `.ruleId` records: a
- * stored identifier that a human reads out is not prose. */
+ * Monospaced because a stored identifier that a human reads out is not prose. */
 .receiptId {
   margin: 0;
   overflow-wrap: anywhere;

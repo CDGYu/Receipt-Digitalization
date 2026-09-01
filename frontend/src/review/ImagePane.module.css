@@ -25,6 +25,8 @@
  * `--color-surface`, so what is left showing `--color-surface-sunken` is exactly
  * the region the image, the loading line and the failure block occupy. */
 .pane {
+  display: flex;
+  flex-direction: column;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   background: var(--color-surface-sunken);
@@ -68,21 +70,39 @@
   border-color: var(--color-ring);
 }
 
-/* Fit to width by default (§5.5). `max-width: 100%` is what makes that true of
- * the *rendered* box; the zoom transform then scales that box without changing
- * the layout, which is why zooming in does not reflow the page around it.
- *
- * `margin: <space> auto` is what centres it and insets it from the pane's edge,
- * in place of the padding a stage element would have carried. A block-level
- * replaced element has a definite used width, so `auto` side margins really do
- * centre it. */
+.viewer {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 18rem;
+  min-width: 0;
+  padding: var(--space-lg);
+  overflow: hidden;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.viewerDragging {
+  cursor: grabbing;
+}
+
+.panLayer {
+  width: fit-content;
+  max-width: 100%;
+  margin: 0 auto;
+  transform-origin: center center;
+  will-change: transform;
+}
+
+/* Fit to width by default (§5.5). The viewer owns the inset and clipping, while
+ * this stage remains the shared coordinate plane for the photograph and boxes. */
 .stage {
   position: relative;
   display: block;
   width: fit-content;
-  max-width: calc(100% - 2 * var(--space-lg));
-  margin: var(--space-lg) auto;
-  transform-origin: center top;
+  max-width: 100%;
+  transform-origin: center center;
+  will-change: transform;
 }
 
 .image {

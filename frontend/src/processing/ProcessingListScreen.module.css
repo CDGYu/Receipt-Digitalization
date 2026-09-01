@@ -166,8 +166,7 @@
 }
 
 /* The id, the handle the receipt always has even before a merchant is read.
- * Monospaced because a stored identifier read by a human is not prose -- the
- * rule `FindingsPanel`'s `.ruleId` and `ProcessingView`'s `.receiptId` share. */
+ * Monospaced because a stored identifier read by a human is not prose. */
 .rowId {
   flex: none;
   color: var(--color-muted-foreground);

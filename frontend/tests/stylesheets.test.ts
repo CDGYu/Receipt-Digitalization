@@ -146,9 +146,8 @@ interface Rule {
  *
  *  What this is **not** is a CSS parser. It assumes a value carries no braces
  *  and no semicolons, which holds for every file in the tree -- the only
- *  `content` values are `'+'` and `'\2212'`, both in `FindingsPanel`, and
- *  `MoneyInput`'s `content: '$'` is inside a comment -- and is not claimed
- *  beyond them. **No count is stated here on purpose:** this said "these
+ *  `content` value is `MoneyInput`'s `content: '$'` inside a comment -- and is
+ *  not claimed beyond that. **No count is stated here on purpose:** this said "these
  *  sixteen files" while the tree held 22, and a count in prose rots on the next
  *  stylesheet somebody adds. The claim is about every file, checked by
  *  re-reading the `content` declarations, not about a number.
@@ -472,41 +471,18 @@ const CENSUS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
     '.reasonText': 'min-width',
     '.penalty': 'flex: none, font-family, font-variant-numeric: tabular-nums, white-space: nowrap',
   },
-  'review/FindingsPanel.module.css': {
-    '.panel': 'border, border-radius, background, box-shadow, padding',
-    '.heading': 'margin, font-family, font-size, font-weight, line-height',
-    '.note': 'margin, color, font-size',
-    '.empty': 'margin, color, font-size',
-    '.list': 'margin, padding, list-style: none',
-    '.finding': 'padding, border-top, font-size, line-height',
-    '.finding:first-child': 'border-top: none, padding-top',
-    '.disclosure': 'display: block',
-    '.summary':
-      'display: flex, flex-wrap: wrap, align-items: baseline, gap, list-style: none, cursor: pointer',
-    '.summary::-webkit-details-marker': 'display: none',
-    '.summary::after': 'flex: none, margin-left: auto, color, content',
-    '.disclosure[open] > .summary::after': 'content',
-    '.context':
-      'margin, padding, max-width, overflow-x: auto, border-radius, background, color, font-family, font-size, line-height, white-space: pre-wrap',
-    '.noContext': 'margin, color, font-size',
-    '.ruleId': 'flex: none, font-family, font-size, font-weight',
-    '.severity':
-      'flex: none, font-style: normal, font-size, font-weight, letter-spacing, text-transform: uppercase',
-    '.error': 'color',
-    '.warn': 'color',
-    '.info': 'color',
-    '.resolved': 'flex: none, color, font-size',
-    '.historyHeading': 'margin-top, padding-top, border-top',
-    '.notRechecked': 'margin, color, font-size, line-height',
-    '.notRecheckedIds': 'font-family, font-weight',
-  },
   'review/ImagePane.module.css': {
-    '.pane': 'border, border-radius, background, overflow: hidden',
+    '.pane': 'display: flex, flex-direction: column, border, border-radius, background, overflow: hidden',
     '.toolbar': 'display: flex, flex-wrap: wrap, gap, padding, border-bottom, background',
     '.button':
       'min-height, min-width, padding, border, border-radius, background, color, font-family, font-size, font-weight, line-height, cursor: pointer, transition',
     '.button:hover': 'border-color',
-    '.stage': 'position: relative, display: block, width: fit-content, max-width, margin, transform-origin',
+    '.viewer':
+      'position: relative, flex, min-height, min-width, padding, overflow: hidden, cursor: grab, touch-action: none, user-select: none',
+    '.viewerDragging': 'cursor: grabbing',
+    '.panLayer': 'width: fit-content, max-width, margin, transform-origin, will-change: transform',
+    '.stage':
+      'position: relative, display: block, width: fit-content, max-width, transform-origin, will-change: transform',
     '.image': 'display: block, width, max-width, height: auto',
     '.highlights': 'position: absolute, inset, pointer-events: none',
     '.highlight':
@@ -642,7 +618,7 @@ const CENSUS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
     '.screen > *': 'grid-column, min-width',
     '.screen > h1': 'grid-column, margin, font-family, font-size, font-weight, line-height',
     '.screen > div':
-      'grid-column, grid-row, align-self: start, position: sticky, top, max-height, overflow: auto',
+      'grid-column, grid-row, align-self: start, position: sticky, top, max-height, overflow: hidden',
     '.notice':
       'box-sizing: border-box, display: flex, flex-direction: column, align-items: flex-start, gap, max-width, margin, padding, font-family, color',
     '.noticeFailed': 'justify-content: center, min-height, border, border-radius, background',
@@ -928,7 +904,7 @@ describe('the census reads what is there, not what it hopes for', () => {
     // an exact count is what makes "found nothing" and "found one" both fail.
     // It is expected to move whenever a stylesheet is added, and the census
     // entry that must accompany it is the other half of the same step.
-    expect(files.length, 'no stylesheets found -- the whole census is vacuous').toBe(25)
+    expect(files.length, 'no stylesheets found -- the whole census is vacuous').toBe(24)
     let rules = 0
     let declarations = 0
     for (const file of files) {
@@ -1180,12 +1156,9 @@ function soleToken(value: string): string | null {
  *  a raised panel.
  *
  *  **`--color-surface-raised` joined this list on 2026-08-24, because a browser
- *  found what its absence hid.** The Editorial refresh gave `FindingsPanel`'s
- *  `.panel` a raised background, which moved severity text onto a surface no
- *  check covered: `--color-severity-error` measured **4.39:1 on it in dark**,
- *  under design §6's floor, with all five gates green. The fix darkened dark
- *  `--color-surface-raised` to `#161925`; that pair is **4.65:1** now and the
- *  surface is inside the bound, so it cannot drift back unnoticed.
+ *  found what its absence hid.** Raised panels can paint semantic text on a
+ *  surface the default page checks do not cover, so the surface is inside the
+ *  bound and cannot drift back unnoticed.
  *
  *  **`--color-surface-active` and `--color-surface-sunken` are still outside**,
  *  and that is a gap rather than a clean bound -- the same gap that hid the one
@@ -1362,7 +1335,7 @@ describe('a rounded corner is declared where a browser can honour it', () => {
    *
    * The fix is not to delete the radius. `--radius-lg` is a design token
    * (`tokens.css`) and seven other surfaces round with it -- StatTiles,
-   * LoginPage, ConfidenceRail, FindingsPanel, ImagePane among them -- so
+   * LoginPage, ConfidenceRail, ImagePane among them -- so
    * rounded surfaces are the system's norm and the tables were meant to be
    * rounded. The radius moves to `.scroller`, which already exists on all
    * three, already sets `overflow-x: auto`, and is therefore already a

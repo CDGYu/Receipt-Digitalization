@@ -42,6 +42,10 @@ function statusLabel(status: string): string {
   return status === 'needs_review' ? 'needs reviews' : status
 }
 
+function stageLabel(stage: string): string {
+  return stage === 'persist' ? 'finish' : stage
+}
+
 /** Ask again every so often, until the caller stops it. The default `poll`.
  *
  * A seam rather than a `setInterval` written into the effect, so the tests drive
@@ -277,14 +281,14 @@ export function ProcessingView({
         <ol className={styles.list}>
           {past.map((name) => (
             <li className={styles.past} key={name}>
-              {name}
+              {stageLabel(name)}
             </li>
           ))}
           {/* `null` renders as nothing rather than as an empty row (ADR-0027
               decision 5) -- for the stage, and for the detail inside it. */}
           {stage === null ? null : (
             <li className={styles.active}>
-              <span className={styles.stage}>{stage}</span>
+              <span className={styles.stage}>{stageLabel(stage)}</span>
               {narration.details.length === 0 ? null : (
                 <ol className={styles.details}>
                   {narration.details.map((said, index) => (

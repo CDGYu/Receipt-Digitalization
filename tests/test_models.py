@@ -31,6 +31,7 @@ from receipts.persist import (
     ExtractionRun,
     LineItem,
     Merchant,
+    ProcessedReceipt,
     Receipt,
     ReviewTask,
     ValidationFinding,
@@ -50,6 +51,8 @@ EXPECTED_TABLES = {
     # Added with `d5b8c31e7a04`: the printed tax breakdown, one row per band,
     # a positioned child of `receipts` exactly as `line_items` is.
     "tax_bands",
+    # Added with the export archive: one marker per receipt already downloaded.
+    "processed_receipts",
 }
 
 
@@ -250,5 +253,6 @@ def test_public_api_exports_all_seven_models() -> None:
         ValidationFinding,
         Correction,
         ReviewTask,
+        ProcessedReceipt,
     ):
         assert issubclass(model, Base)

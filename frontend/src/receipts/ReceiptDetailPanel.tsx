@@ -5,7 +5,6 @@ import {
   patchReceipt as defaultPatchReceipt,
 } from '../api/review'
 import { ConfidenceRail } from '../review/ConfidenceRail'
-import { FindingsPanel } from '../review/FindingsPanel'
 import { ImagePane } from '../review/ImagePane'
 import { LineItemsTable } from '../review/LineItemsTable'
 import { ReceiptForm } from '../review/ReceiptForm'
@@ -150,11 +149,6 @@ export function ReceiptDetailPanel({
             <ConfidenceRail
               confidence={detail.confidence}
               reasons={detail.confidence_reasons}
-            />
-            <FindingsPanel
-              findings={detail.findings}
-              currentFindings={detail.current_findings}
-              notRechecked={detail.not_rechecked}
             />
             <ReceiptForm fields={fields} onChange={onChange} />
             <LineItemsTable items={detail.line_items} fields={fields} onChange={onChange} />

@@ -60,6 +60,7 @@ from ..persist.repository import (
     create_pending_receipt,
     get_findings,
     get_receipt,
+    mark_receipts_processed,
     query_receipts,
 )
 from ..persist.users import ROLE_ADMIN
@@ -1218,6 +1219,7 @@ def _install_write_routes(app: FastAPI) -> None:
                 secret=settings.session_secret,
                 image_url_ttl_s=settings.export_image_url_ttl_s,
             )
+            receipt_ids = [receipt.id for receipt in rows]
 
         tmpdir = tempfile.mkdtemp(prefix="receipts-export-")
         try:
@@ -1226,6 +1228,10 @@ def _install_write_routes(app: FastAPI) -> None:
             content = out_path.read_bytes()
         finally:
             shutil.rmtree(tmpdir, ignore_errors=True)
+
+        with request.app.state.session_factory() as session:
+            mark_receipts_processed(session, receipt_ids, processed_by=admin.username)
+            session.commit()
 
         return Response(
             content=content,

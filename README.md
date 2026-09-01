@@ -44,7 +44,7 @@ everything else. So the real failure mode is not a missing value — it is a
 
 ---
 
-## The solution, in one sentence
+## The solution
 
 **Build the system to know which of its own extractions to doubt.** Optimize for
 *auto-approval precision*, not raw extraction accuracy — because a system that
@@ -91,19 +91,6 @@ many get auto-approved. Everything below follows from that choice.
 3. **Repair** (only when validation finds errors) — The model gets its own
    previous output *plus the specific numbers that do not reconcile*:
 
-   ```
-   [R021] Line 1 'CHKN BRST 1KG': qty(2) x unit_price(125) = 250,
-          but line_total was extracted as 185.
-   [R022] subtotal(847.50) + tax(101.70) - discount(0) = 949.20,
-          but total was extracted as 847.50.
-   ```
-
-   Naming the exact figures is what makes repair work — "please check your math"
-   does almost nothing. And a load-bearing instruction: *do not alter numbers to
-   force the arithmetic.* Real receipts genuinely fail to add up (cash rounding,
-   manual overrides, promos), so the model keeps the printed values and a flag
-   is set instead.
-
 ### Deterministic validation, not another model call
 
 Between extract and repair sits ordinary arithmetic — **28 pure-function rules,
@@ -137,78 +124,6 @@ and a reason.
 **Nothing is ever silently dropped.** Every receipt reaches a terminal state; if
 any stage throws, the receipt is marked `needs_review` with the failing stage as
 the reason.
-
----
-
-## Why these choices (the traps avoided)
-
-- **`Decimal` everywhere in the money path — never `float`.** A stray float
-  creates tolerance failures that look like model errors. A schema test asserts
-  no field is typed `float`.
-- **Tolerance is bounded in cents, not proportional.** A "safe-feeling" 0.5%
-  tolerance excuses a `945.20`-for-`949.20` misread. The rule uses `rel =
-  0.0002` and scales the floor with line count only where error genuinely
-  accumulates.
-- **Rules must stay silent when they should.** R052 drops summary rows
-  (`SUBTOTAL`, `VAT`) but must not delete real products like `TOTAL WINE CO
-  MERLOT` — so it uses exact match after normalization, and the tests pin the
-  *silent* case, not just the firing case.
-- **Structured output via tool-use, not "reply in JSON."** The provider
-  constrains generation to the schema, so malformed output is rare rather than a
-  routine retry.
-- **Repair keeps the *best* attempt**, ranked `(error_count, warn_count,
-  null_count)` — not the last, because a repair on a poor image sometimes makes
-  things worse.
-- **Only errors trigger repair; warnings lower confidence instead.** An
-  unparseable response triggers a re-extract, not a repair.
-- **Consistency runs are never cached** — a cache hit would manufacture false
-  agreement.
-- **Excel is an output format, never the source of truth** — exports read from
-  the database.
-
----
-
-## What's in the box
-
-A staged pipeline — ingest → preprocess → triage → extract → normalize →
-validate → repair → score → route → persist → export — fronted by a FastAPI
-review service with an async job queue and a keyboard-first review UI.
-
-| Area | Location | What it does |
-|---|---|---|
-| Extraction | `src/receipts/extract/` | Schema, prompts, tool-schema prep, tolerant parsing, the three-pass orchestrator, and VLM clients (Anthropic, OpenAI-compatible, and an offline fake) |
-| Validation | `src/receipts/validate/` | The 28 rules, the runner, findings/repair rendering, tunable config |
-| Pipeline | `src/receipts/pipeline.py`, `worker.py` | The end-to-end runners and the RQ queue worker |
-| Persistence | `src/receipts/persist/` | SQLAlchemy models + repository (Postgres in prod, SQLite in dev) |
-| Review | `src/receipts/review/`, `frontend/` | Review API and the React review UI |
-| Export | `src/receipts/export/` | The Excel workbook (receipt-level and line-item sheets) |
-| Evaluation | `eval/` | The accuracy harness, metrics, and baseline runners |
-| Config | `config/rules.yaml`, `config/settings.py` | Tolerances/thresholds and runtime settings |
-
-The whole pipeline is exercised **offline** by a fake VLM client that replays
-scripted responses — the test suite runs with no network access and zero API
-cost. Run it with `python -m pytest` (pyproject sets `pythonpath=src`,
-`testpaths=tests`).
-
----
-
-## Data: benchmark with public sets, calibrate with your own
-
-Three jobs, three sources:
-
-- **Benchmarking** (model A vs. B): public datasets — CORD, MC-OCR, SROIE, and
-  others. Check each licence; several are research-only.
-- **Calibration** (where the confidence threshold goes): **your own receipts,
-  and nothing else.** No public set has your merchants, capture conditions,
-  currency, or tax conventions.
-- **Handwriting**: no public receipt dataset exists — you collect your own, and
-  sample *writers*, not merchants.
-
-The dataset that ends up mattering most is your own `corrections` table: every
-human edit in the review queue writes a row, and within months it captures
-precisely your failure modes. It pays out as merchant hints (immediately),
-verified few-shot examples (weeks), and fine-tuning (months, only as a cost
-optimization).
 
 ---
 

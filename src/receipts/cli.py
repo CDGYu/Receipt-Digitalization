@@ -1117,6 +1117,7 @@ def cmd_export(
     """
     try:
         from .export.xlsx import export_workbook
+        from .persist.repository import mark_receipts_processed
         from .review.serializers import build_export_rows, query_export_receipts
     except ModuleNotFoundError as exc:
         if not _is_missing_pipeline_extra(exc):
@@ -1156,6 +1157,7 @@ def cmd_export(
             session, receipts, secret=settings.session_secret,
             image_url_ttl_s=settings.export_image_url_ttl_s,
         )
+        receipt_ids = [receipt.id for receipt in receipts]
 
     try:
         export_workbook(extractions, out_path, rows=export_rows)
@@ -1166,6 +1168,9 @@ def cmd_export(
         # here, rather than a traceback out of openpyxl's writer.
         print(f"error: could not write {out_path}: {exc}", file=sys.stderr)
         return EXIT_FAILED
+    with session_factory() as session:
+        mark_receipts_processed(session, receipt_ids, processed_by=None)
+        session.commit()
     print(f"wrote {out_path} ({len(receipts)} receipts)")
     return EXIT_OK
 

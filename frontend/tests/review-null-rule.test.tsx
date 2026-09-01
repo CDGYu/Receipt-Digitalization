@@ -4,12 +4,11 @@ import { fileURLToPath } from 'node:url'
 import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import { ConfidenceRail } from '../src/review/ConfidenceRail'
-import { FindingsPanel } from '../src/review/FindingsPanel'
 import { ImagePane } from '../src/review/ImagePane'
 import { LineItemsTable } from '../src/review/LineItemsTable'
 import { ReceiptForm } from '../src/review/ReceiptForm'
 import type { FieldMap } from '../src/review/patch'
-import type { Finding, LineItem, Money } from '../src/api/types'
+import type { LineItem, Money } from '../src/api/types'
 
 // `globals: true` is deliberately absent from vite.config.ts, so
 // `@testing-library/react` never installs its auto-cleanup hook and every render
@@ -334,17 +333,16 @@ function declarationsIn(css: string, selector: string): Map<string, string> {
   return found
 }
 
-describe('every class these three components reference exists in its stylesheet', () => {
+describe('every class these two components reference exists in its stylesheet', () => {
   // `tests/value.test.tsx` runs this guard over `Value`, `Button`, `Chip` and
   // `MoneyInput`, and it cannot be extended to cover the three components below
   // without editing it. So the same property is stated again here, for the
-  // stylesheets §5.2/§5.3/§5.4 just grew: under `css: false` a `.module.css`
+  // stylesheets §5.2/§5.3 just grew: under `css: false` a `.module.css`
   // import is a proxy whose keys echo back, so `styles.scrolller` ships
   // unpainted and every rendering test in this file still passes.
   // Nothing here paints anything; a missing class is invisible to the DOM.
   const GUARDED = [
     { tsx: 'ConfidenceRail.tsx', css: 'ConfidenceRail.module.css' },
-    { tsx: 'FindingsPanel.tsx', css: 'FindingsPanel.module.css' },
     { tsx: 'LineItemsTable.tsx', css: 'LineItemsTable.module.css' },
   ] as const
 
@@ -448,7 +446,6 @@ describe("the review screen's image slot stays the only direct <div>", () => {
     // the invariant is "exactly one", and a rule that matched *nothing* would
     // leave the pane unplaced just as silently.
     const panels = [
-      ['FindingsPanel', <FindingsPanel key="f" findings={[]} currentFindings={[]} notRechecked={[]} />],
       ['ConfidenceRail', <ConfidenceRail key="c" confidence={null} reasons={null} />],
       ['ReceiptForm', <ReceiptForm key="r" fields={NOTHING_EXTRACTED} onChange={() => {}} />],
       [
@@ -538,68 +535,5 @@ describe('design section 5.3 -- the confidence band is never colour alone', () =
       expect(rendered.getByText(word), `${score} landed in the wrong band`).toBeDefined()
       rendered.unmount()
     }
-  })
-})
-
-describe('design section 5.4 -- the findings are a disclosure list', () => {
-  const FINDINGS: Finding[] = [
-    {
-      rule_id: 'R020',
-      severity: 'error',
-      message: 'subtotal + tax does not equal total',
-      context: { expected: '97.43', actual: '96.00' },
-      resolved_by_repair: false,
-    },
-    {
-      rule_id: 'R101',
-      severity: 'warn',
-      message: 'merchant name is low confidence',
-      context: null,
-      resolved_by_repair: true,
-    },
-  ]
-
-  it('collapses each finding to a summary a reviewer can open', () => {
-    const { container } = render(<FindingsPanel findings={FINDINGS} currentFindings={[]} notRechecked={[]} />)
-
-    const disclosures = [...container.querySelectorAll('details')]
-    expect(disclosures).toHaveLength(FINDINGS.length)
-    for (const disclosure of disclosures) {
-      // Collapsed by default: a panel that opens every finding is the list it
-      // replaced, one element heavier.
-      expect(disclosure.open).toBe(false)
-      expect(disclosure.querySelector('summary')).not.toBeNull()
-    }
-  })
-
-  it('keeps the rule id, the severity word and the message in the collapsed row', () => {
-    // What the reviewer scans without opening anything. `review-screen.test.tsx`
-    // finds `R020` by text on the loaded screen, and it must go on finding it.
-    const { container } = render(<FindingsPanel findings={FINDINGS} currentFindings={[]} notRechecked={[]} />)
-
-    const summaries = [...container.querySelectorAll('summary')].map((s) => s.textContent ?? '')
-    expect(summaries[0]).toContain('R020')
-    expect(summaries[0]).toContain('error')
-    expect(summaries[0]).toContain('subtotal + tax does not equal total')
-    expect(summaries[1]).toContain('resolved by repair')
-  })
-
-  it('discloses the context payload, which nothing rendered before', () => {
-    const { container } = render(<FindingsPanel findings={FINDINGS} currentFindings={[]} notRechecked={[]} />)
-
-    const [withContext, withoutContext] = [...container.querySelectorAll('details')]
-    expect(withContext.textContent).toContain('97.43')
-    expect(withContext.textContent).toContain('96.00')
-    // `context` is `unknown` and is `null` for most findings. A disclosure that
-    // opens onto nothing is worse than none, so that row says so.
-    expect(withoutContext.textContent).toMatch(/no further detail/i)
-  })
-
-  it('says so, once, when there is nothing to disclose', () => {
-    const { container } = render(<FindingsPanel findings={[]} currentFindings={[]} notRechecked={[]} />)
-
-    expect(container.querySelectorAll('details')).toHaveLength(0)
-    // Both sections say "No findings." when empty.
-    expect(screen.getAllByText('No findings.')).toHaveLength(2)
   })
 })

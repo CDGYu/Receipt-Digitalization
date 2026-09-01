@@ -20,12 +20,9 @@
  *
  * ADR-0027 §2 reserves error red / warn amber / info blue and bans *decorative*
  * use. A confidence band is not decoration: it is a judgement about whether the
- * numbers on this screen can be trusted, which is the same category of signal as
- * a finding's severity, and it is the one this panel exists to deliver. The high
- * band takes `--color-positive` rather than a fourth colour, for the same
- * reason. Info blue is left alone -- it belongs to `FindingsPanel`, and a third
- * blue beside `--color-ring` and `--color-surface-active` would compete with the
- * focus ring on the form next to it. */
+ * numbers on this screen can be trusted, and it is the one this panel exists to
+ * deliver. The high band takes `--color-positive` rather than a fourth colour,
+ * for the same reason. */
 
 .rail {
   border: 1px solid var(--color-border);

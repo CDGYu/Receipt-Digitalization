@@ -85,6 +85,7 @@ from pathlib import Path
 
 import pytest
 from openpyxl import load_workbook
+from sqlalchemy import select
 
 from config.settings import Settings
 from eval.metrics import EvalReport, FieldBreakdown
@@ -103,7 +104,7 @@ from receipts.extract.schema import LineItem as ExtractLineItem
 from receipts.extract.schema import Merchant as ExtractMerchant
 from receipts.extract.schema import ReceiptExtraction, ReceiptMeta, Totals
 from receipts.ingest.ingest import ReceiptJob
-from receipts.persist.models import Base, Merchant
+from receipts.persist.models import Base, Merchant, ProcessedReceipt
 from receipts.persist.repository import save_extraction
 from receipts.persist.session import make_engine, make_session_factory
 from receipts.score.confidence import ReceiptStatus
@@ -202,6 +203,32 @@ def test_export_writes_a_workbook_with_all_four_sheets(tmp_path, session_factory
 
     assert code == EXIT_OK
     assert load_workbook(out).sheetnames == ["Receipts", "LineItems", "Needs Review", "Summary"]
+
+
+def test_export_marks_written_receipts_processed(tmp_path, session_factory, settings):
+    receipt_id = _auto_approved_receipt(session_factory)
+    first = tmp_path / "first.xlsx"
+    second = tmp_path / "second.xlsx"
+
+    code = cmd_export(
+        build_parser().parse_args(["export", "--out", str(first)]),
+        session_factory=session_factory,
+        settings=settings,
+    )
+
+    assert code == EXIT_OK
+    with session_factory() as session:
+        processed = list(session.scalars(select(ProcessedReceipt)))
+    assert [row.receipt_id for row in processed] == [receipt_id]
+
+    again = cmd_export(
+        build_parser().parse_args(["export", "--out", str(second)]),
+        session_factory=session_factory,
+        settings=settings,
+    )
+
+    assert again == EXIT_OK
+    assert _receipt_ids_in(second) == set()
 
 
 def test_export_excludes_pending_and_rejected_unless_asked(tmp_path, session_factory, settings):

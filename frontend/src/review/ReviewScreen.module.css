@@ -3,11 +3,11 @@
  * ## Why the layout is written as child selectors
  *
  * The claimed screen is one `<main>` whose children are, in order: the merchant
- * heading, the image pane, the findings panel, the confidence rail, the receipt
- * form, the line-items table, then the submit state's messages and buttons. None
+ * heading, the image pane, the confidence rail, the receipt form, the line-items
+ * table, then the submit state's messages and buttons. None
  * of those is wrapped, and this task may not wrap them -- `className` only, plus
  * four enumerated edits, and "if a component needs restructuring to be styleable,
- * stop and report". Nor can a class be passed down: `ImagePane`, `FindingsPanel`,
+ * stop and report". Nor can a class be passed down: `ImagePane`,
  * `ConfidenceRail`, `ReceiptForm` and `LineItemsTable` take no `className` prop,
  * and giving them one is an API change, not a styling one.
  *
@@ -20,9 +20,9 @@
  *                      `section`, `aside`, `table` or `button`. Verified by
  *                      reading each component's root element.
  *
- * **The `span 4` on the image is counted, not guessed.** Four children after the
- * heading are unconditional -- findings, rail, form, table -- and the submit
- * tail always renders a fifth: `.outcome` whenever the reviewer has something
+ * **The `span 4` on the image is counted, not guessed.** Three children after
+ * the heading are unconditional -- rail, form, table -- and the submit tail
+ * always renders a fourth: `.outcome` whenever the reviewer has something
  * to be told, and the Approve button whenever the submit is still open. Between
  * them those two conditions cover every submit state -- `idle` and `busy` render
  * Approve, `lost` and `held` render the region, and `failed` renders both -- so
@@ -79,7 +79,9 @@
  *
  * `align-self: start` is what gives sticky something to move within: without it
  * the grid item stretches to fill its four-row area and has nowhere to travel.
- * The height cap keeps a tall scan from filling more than a viewport. */
+ * The height cap keeps a tall scan from filling more than a viewport. The
+ * ImagePane viewer owns clipping and panning internally, so this grid item must
+ * not add a second scroll surface around the same picture. */
 .screen > div {
   grid-column: 1;
   grid-row: 2 / span 4;
@@ -87,7 +89,7 @@
   position: sticky;
   top: var(--space-lg);
   max-height: calc(100vh - 2 * var(--space-lg));
-  overflow: auto;
+  overflow: hidden;
 }
 
 /* The loading, empty and failed phases render a different `<main>` with no

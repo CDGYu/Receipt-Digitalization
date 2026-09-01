@@ -71,6 +71,8 @@ EXPECTED_TABLES = {
     # A child of `receipts` exactly as `line_items` is -- see that revision for
     # why it is a table and not a JSONB column.
     "tax_bands",
+    # Added with `8b2f0c9d4e11`: receipts already exported from the Results queue.
+    "processed_receipts",
 }
 
 #: A URL that is never connected to. Alembic's ``--sql`` (offline) mode resolves

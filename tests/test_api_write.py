@@ -53,6 +53,7 @@ from receipts.persist.models import (  # noqa: E402
     Base,
     Correction,
     Merchant,
+    ProcessedReceipt,
     Receipt,
     ReviewState,
     ReviewTask,
@@ -1135,6 +1136,36 @@ def test_export_refuses_rather_than_truncating(admin_client, monkeypatch):
     response = admin_client.get("/export/xlsx")
     assert response.status_code == 400
     assert "narrow" in response.text.lower()
+
+
+def test_export_archives_downloaded_receipts_and_cleans_results_list(
+    admin_client, session_factory
+):
+    before = _listed_receipt_ids(admin_client)
+
+    response = admin_client.get("/export/xlsx")
+
+    assert response.status_code == 200
+    assert before, "fixture must expose receipts before the export"
+    with session_factory() as session:
+        processed = list(session.scalars(select(ProcessedReceipt)))
+    assert {str(row.receipt_id) for row in processed} == before
+    assert {row.processed_by for row in processed} == {"bob"}
+    assert _listed_receipt_ids(admin_client) == set()
+
+
+def test_a_refused_export_does_not_clean_the_results_list(
+    admin_client, session_factory, monkeypatch
+):
+    before = _listed_receipt_ids(admin_client)
+    monkeypatch.setattr(api_module, "_EXPORT_MAX_ROWS", 1)
+
+    response = admin_client.get("/export/xlsx")
+
+    assert response.status_code == 400
+    with session_factory() as session:
+        assert list(session.scalars(select(ProcessedReceipt))) == []
+    assert _listed_receipt_ids(admin_client) == before
 
 
 def test_export_query_pages_without_repeating_or_skipping(
