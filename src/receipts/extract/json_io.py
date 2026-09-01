@@ -41,10 +41,6 @@ class JsonParseError(ValueError):
     """Raised when a response cannot be coerced into the target model."""
 
 
-# --------------------------------------------------------------------------- #
-# Schema preparation
-# --------------------------------------------------------------------------- #
-
 #: Pydantic's Decimal string branch. Matching on the pattern key is more robust
 #: than matching the regex text, which changes between pydantic versions.
 _DECIMAL_STRING_BRANCH_KEYS = {"pattern", "type"}
@@ -135,10 +131,6 @@ def build_tool_schema(model: type[BaseModel], *, strip_titles: bool = True) -> d
     schema.setdefault("type", "object")
     return schema
 
-
-# --------------------------------------------------------------------------- #
-# Response parsing
-# --------------------------------------------------------------------------- #
 
 _FENCE = re.compile(r"```(?:json)?\s*(.*?)```", re.DOTALL)
 _TRAILING_COMMA = re.compile(r",\s*([}\]])")

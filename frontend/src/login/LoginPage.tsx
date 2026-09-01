@@ -34,6 +34,13 @@ export function LoginPage({
 
   return (
     <form className={styles.form} onSubmit={submit}>
+      <img
+        className={styles.brandMark}
+        src="/logo-mark.svg"
+        alt="Receipt Digitalization"
+        width={48}
+        height={48}
+      />
       <h1 className={styles.heading}>Sign in</h1>
       <label className={styles.field}>
         Username

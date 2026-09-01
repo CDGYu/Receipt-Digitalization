@@ -1563,8 +1563,7 @@ def test_the_rebuilt_extraction_carries_the_buyer_and_the_template_flag(session_
 # The 400 texts the review UI's failure classifier encodes (error-recovery
 # milestone). The client matches quoted spans in these messages against the
 # paths and values it just sent, so the exact wording is load-bearing on the
-# other side of the wire. See
-# docs/superpowers/specs/2026-08-03-review-ui-error-recovery-design.md §1.3.
+# other side of the wire.
 # --------------------------------------------------------------------------- #
 
 

@@ -34,6 +34,27 @@
   background: var(--color-surface);
 }
 
+/* The brand lockup, sitting at the head of the bar and linking home. It is a
+ * plain `<a href>` for the same reason the nav links are (ADR-0027 decision 4):
+ * every route change in this app is a real document load, so a router-free
+ * anchor is correct. The rounded padding gives the focus ring from `tokens.css`
+ * something to sit against; no `outline` is set here so that global ring is not
+ * duplicated or deleted. The SVG's own height is capped so the lockup rides the
+ * bar at a fixed height regardless of the artwork's intrinsic 340x64 box. */
+.brand {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: var(--radius-sm);
+  text-decoration: none;
+}
+
+.brandMark {
+  display: block;
+  height: 28px;
+  width: auto;
+}
+
 /* `margin-right: auto` rather than a spacer element: the nav takes the left of
  * the bar and the controls are pushed to the right, and on a narrow window
  * `flex-wrap` above drops them to a second line instead of overflowing. */

@@ -144,6 +144,13 @@ function App() {
   return (
     <>
       <header className={navStyles.bar}>
+        {/* The brand lockup links home, the same destination `Nav`'s `Home`
+         * entry points at. It carries the product name as artwork, so the bar
+         * reads as this app rather than a generic shell -- the wordmark lives in
+         * the SVG, not in markup that would need translating. */}
+        <a className={navStyles.brand} href="/app/" aria-label="Receipt Digitalization — home">
+          <img className={navStyles.brandMark} src="/logo-lockup.svg" alt="Receipt Digitalization" />
+        </a>
         <Nav identity={identity} route={route} />
         <SignOutControl />
       </header>

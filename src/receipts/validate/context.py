@@ -19,10 +19,6 @@ import yaml
 
 from ..extract.schema import ConsistencyResult, TriageResult
 
-# --------------------------------------------------------------------------- #
-# Defaults
-# --------------------------------------------------------------------------- #
-
 DEFAULT_TOLERANCE = {"rel": Decimal("0.0002"), "floor": Decimal("0.02")}
 
 #: Per-rule tolerance overrides. Rules not listed use DEFAULT_TOLERANCE.
@@ -72,8 +68,6 @@ class RuleConfig:
     # behaviour switches
     require_line_items: bool = True
     strict_ocr_grounding: bool = False
-
-    # ------------------------------------------------------------------ #
 
     @classmethod
     def from_yaml(cls, path: str | Path) -> "RuleConfig":

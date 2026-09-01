@@ -300,6 +300,8 @@ const CENSUS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
   'Nav.module.css': {
     '.bar':
       'display: flex, flex-wrap: wrap, align-items: center, gap, padding, border-bottom, background',
+    '.brand': 'display: inline-flex, align-items: center, padding, border-radius, text-decoration: none',
+    '.brandMark': 'display: block, height, width: auto',
     '.nav': 'display: flex, flex-wrap: wrap, align-items: center, gap, margin-right: auto',
     '.link':
       'padding, border-bottom, color, font-family, font-size, font-weight, text-decoration: none, transition',
@@ -369,6 +371,7 @@ const CENSUS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
   'login/LoginPage.module.css': {
     '.form':
       'box-sizing: border-box, display: flex, flex-direction: column, gap, width, max-width, margin-inline: auto, margin-block, padding, border, border-radius, background, box-shadow, font-family, color',
+    '.brandMark': 'display: block, width, height',
     '.heading': 'margin, font-family, font-size, font-weight, line-height',
     '.field': 'display: flex, flex-direction: column, gap, min-width, color, font-family, font-size',
     '.input':

@@ -134,8 +134,8 @@ class FieldBreakdown:
     The old single scalar averaged three unlike quantities — what the model
     read, what it correctly left empty, and what it said about itself — and the
     last two dominate: an extraction containing *nothing* scored 42.50% / 37.50%
-    / 36.59% against the three golden labels. See
-    ``docs/superpowers/specs/2026-08-12-eval-field-accuracy-honesty-design.md``.
+    / 36.59% against the three golden labels, which is why field accuracy is
+    reported per class rather than as one scalar.
 
     Two axes decide a path's class. **Group** comes from the path string;
     **filled** is read from the *truth* side only. Reading "filled" from the
@@ -315,11 +315,6 @@ def critical_field_accuracy(
     # symmetric with the date field's null==null; a null vs a value still fails.
     total_ok = _money_agree(predicted.totals.total, truth.totals.total)
     return name_ok and date_ok and total_ok
-
-
-# --------------------------------------------------------------------------- #
-# Aggregates
-# --------------------------------------------------------------------------- #
 
 
 def wilson_interval(

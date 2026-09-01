@@ -87,6 +87,17 @@
  * "page title only" about `--text-2xl`, and nothing in `tokens.css` or the
  * design says it about `--text-3xl`, so rewriting would invent a claim about a
  * spec section instead of correcting one. */
+/* The brand mark, above the heading and the first thing on the first screen a
+ * reviewer sees. Fixed pixel box rather than a token size: it is artwork with
+ * an intrinsic 64x64 viewBox, not text on the type ramp, so it does not scale
+ * with `--text-*`. The `.form`'s column `gap` owns the space beneath it, same
+ * as it does for every other field, so no margin is set here. */
+.brandMark {
+  display: block;
+  width: 48px;
+  height: 48px;
+}
+
 .heading {
   margin: 0;
   font-family: var(--font-display);

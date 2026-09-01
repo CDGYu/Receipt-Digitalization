@@ -138,11 +138,6 @@ PROGRESS_TTL_S = 900
 PROGRESS_SOCKET_TIMEOUT_S = 2.0
 
 
-# --------------------------------------------------------------------------- #
-# Payload
-# --------------------------------------------------------------------------- #
-
-
 def job_to_payload(job: ReceiptJob) -> dict[str, str]:
     """A JSON-safe description of ``job`` for the queue.
 
@@ -196,11 +191,6 @@ def result_to_payload(result: ProcessResult) -> dict[str, Any]:
         "duplicate_of": None if result.duplicate_of is None else str(result.duplicate_of),
         "cost_usd": str(result.cost_usd),
     }
-
-
-# --------------------------------------------------------------------------- #
-# Dependencies
-# --------------------------------------------------------------------------- #
 
 
 @dataclass
@@ -301,11 +291,6 @@ def build_deps(settings: Settings | None = None) -> WorkerDeps:
             receipt_id, settings=settings
         ),
     )
-
-
-# --------------------------------------------------------------------------- #
-# The one job function
-# --------------------------------------------------------------------------- #
 
 
 def process_receipt_job(
