@@ -36,7 +36,7 @@ export function LoginPage({
     <form className={styles.form} onSubmit={submit}>
       <img
         className={styles.brandMark}
-        src="/logo-mark.svg"
+        src="/app/logo-mark.svg"
         alt="Receipt Digitalization"
         width={48}
         height={48}
