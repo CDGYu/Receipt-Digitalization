@@ -30,7 +30,10 @@
       "unit_price": "165.00",
       "line_total": "165.00",
       "modifiers": [
-        { "label": "PWD relief (12% VAT + 20% PWD)", "amount": "-47.14" }
+        {
+          "label": "PWD relief (12% VAT + 20% PWD)",
+          "amount": "-47.14"
+        }
       ],
       "bbox": null,
       "is_template_row": false
@@ -40,7 +43,12 @@
     "subtotal": "165.00",
     "tax": "0.00",
     "tax_breakdown": [
-      { "label": "VAT-Exempt", "base": "147.32", "rate": "0.00", "amount": "0.00" }
+      {
+        "label": "VAT-Exempt",
+        "base": "147.32",
+        "rate": "0.00",
+        "amount": "0.00"
+      }
     ],
     "discount": "47.14",
     "total": "117.86",
@@ -48,7 +56,10 @@
     "change": null,
     "prices_include_tax": true
   },
-  "payment": { "method": "PAYMAYA", "card_last4": null },
+  "payment": {
+    "method": "PAYMAYA",
+    "card_last4": null
+  },
   "meta": {
     "is_handwritten": false,
     "is_refund": false,
@@ -57,5 +68,6 @@
     "unreadable_regions": [],
     "receipt_is_inconsistent": false,
     "notes": "SOUTHEASTASIA RETAIL (Landers) thermal SALES INVOICE 57543199, DINE IN, cashier Jerwin Finca. One line: IcedSpanishLatte16oz 165.00. PWD treatment: Sales PWD 165.00, Less 12% VAT 17.68 (making it VAT-Exempt 147.32), PWD DISCOUNT 29.46 (totals.discount), TOTAL DUE 117.86 (165 - 17.68 - 29.46 = 117.86). Paid PayMaya 117.86 (Trace 007218). PWD Name MARIA KATRINA PAJARILLO (PWD ID 16461, ID/number not fully transcribed). A PWD-discount coffee sample."
-  }
+  },
+  "field_boxes": {}
 }

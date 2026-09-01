@@ -75,5 +75,6 @@
     "unreadable_regions": [],
     "receipt_is_inconsistent": false,
     "notes": "SOUTH GROCER (Grand Union Supermarket) thermal POS 'THIS SERVES AS SALES INVOICE', POS04. Two produce lines: ROMAINE LETTUCE (GF) 143.80, TOMATO NATIVE (LN) 32.30; both marked E (VAT-Exempt). 2 items = 176.10, Total Due 176.10, Cash 500.00, Change 323.90. VATable 0.00, VAT-Exempt 176.10, VAT 0.00 (fresh produce is VAT-exempt). Customer block blank -> buyer null. Same merchant as r018 (different POS lane/date)."
-  }
+  },
+  "field_boxes": {}
 }

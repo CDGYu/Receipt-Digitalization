@@ -213,6 +213,31 @@ class Receipt(Base):
     #: two would let the review UI tell a reviewer "no reasons" about a row that
     #: never captured them.
     confidence_reasons: Mapped[Any | None] = mapped_column(_jsonb(), nullable=True, default=None)
+    #: Where receipt-LEVEL fields sit on the image, as JSON keyed by the dotted
+    #: correction path the review UI edits them under -- ``{"merchant.name":
+    #: [x0, y0, x1, y1], ...}``, normalised 0-1, the same convention as
+    #: ``LineItem.bbox``. Filled by the OCR grounding pass (``pipeline.py``) for
+    #: the fields it can place unambiguously, so the review screen can highlight
+    #: a field's spot on the photo when a reviewer focuses it.
+    #:
+    #: NOT NULL with an empty-dict default rather than nullable: unlike
+    #: ``confidence_reasons``, there is no "not recorded" versus "nothing found"
+    #: distinction worth keeping -- a field the pass could not place simply has
+    #: no key, and a receipt processed with grounding off has an empty map, both
+    #: of which read as ``{}``. Line items keep their own ``bbox`` and are not
+    #: duplicated here. Not correctable: it is grounding geometry, absent from
+    #: ``_RECEIPT_FIELDS`` for the same reason ``line_items.bbox`` is absent from
+    #: ``_LINE_ITEM_FIELDS``.
+    #:
+    #: ``server_default="{}"`` alongside the Python-side ``default=dict``, for
+    #: the reason ``is_template_row`` carries one: both engines refuse ``ADD
+    #: COLUMN ... NOT NULL`` with no default once the table holds a row, so the
+    #: server default backfills every existing receipt with an empty map. Going
+    #: forward the Python default supplies ``{}`` for a row the pass never
+    #: touched. The literal ``"{}"`` is valid JSON on both SQLite and Postgres.
+    field_boxes: Mapped[Any] = mapped_column(
+        _jsonb(), nullable=False, default=dict, server_default="{}"
+    )
     status: Mapped[ReceiptStatus] = mapped_column(
         _token_enum(ReceiptStatus, name="receipt_status"),
         nullable=False,
@@ -276,6 +301,11 @@ class Receipt(Base):
         back_populates="receipt",
         cascade="all, delete-orphan",
         order_by="TaxBand.position",
+    )
+    processed_export: Mapped[ProcessedReceipt | None] = relationship(
+        back_populates="receipt",
+        cascade="all, delete-orphan",
+        uselist=False,
     )
 
     __table_args__ = (
@@ -509,6 +539,37 @@ class ReviewTask(Base):
     #: whenever a receipt sits ``pending`` before the worker reaches it, is
     #: reprocessed, or has its task reopened.
     receipt: Mapped[Receipt] = relationship()
+
+
+# --------------------------------------------------------------------------- #
+# 6.9 processed_receipts (export archive)
+# --------------------------------------------------------------------------- #
+
+
+class ProcessedReceipt(Base):
+    """One receipt that has already left the active Results export queue.
+
+    Exporting is the point where the operator has a workbook copy, so the row is
+    archived here and omitted from the Results/export scope on future default
+    exports. The original receipt and all child audit rows stay in place; this
+    table is a durable marker, not a destructive move.
+    """
+
+    __tablename__ = "processed_receipts"
+
+    id: Mapped[uuid.UUID] = mapped_column(sa.Uuid, primary_key=True, default=uuid.uuid4)
+    receipt_id: Mapped[uuid.UUID] = mapped_column(
+        sa.Uuid, ForeignKey("receipts.id", ondelete="CASCADE"), nullable=False, unique=True
+    )
+    processed_at: Mapped[datetime] = mapped_column(
+        sa.DateTime(timezone=True),
+        nullable=False,
+        server_default=sa.func.now(),
+        default=lambda: datetime.now(UTC),
+    )
+    processed_by: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
+
+    receipt: Mapped[Receipt] = relationship(back_populates="processed_export")
 
 
 # --------------------------------------------------------------------------- #

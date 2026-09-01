@@ -6,7 +6,10 @@
     "tax_id": "225-863-549-00001",
     "phone": null
   },
-  "buyer": { "name": null, "tax_id": null },
+  "buyer": {
+    "name": null,
+    "tax_id": null
+  },
   "receipt": {
     "number": "23470",
     "date": "2026-03-10",
@@ -89,14 +92,22 @@
     "change": null,
     "prices_include_tax": true
   },
-  "payment": { "method": null, "card_last4": null },
+  "payment": {
+    "method": null,
+    "card_last4": null
+  },
   "meta": {
     "is_handwritten": true,
     "is_refund": false,
     "legibility": "poor",
-    "ambiguous_fields": ["line_items"],
-    "unreadable_regions": ["several lower line-item amounts and descriptions"],
+    "ambiguous_fields": [
+      "line_items"
+    ],
+    "unreadable_regions": [
+      "several lower line-item amounts and descriptions"
+    ],
     "receipt_is_inconsistent": false,
     "notes": "STARBUILD II HARDWARE handwritten SALES INVOICE No. 23470 (VAT-reg), a long dense hardware list. TOTAL SALES (VAT Inclusive) / TOTAL AMOUNT DUE 9465 is clearly printed and recorded. Only the FIRST FIVE lines are transcribed with confidence (#10 Plascon 1 box 1500, Molding 3/4 x6 590, 6 holes panel board 880, Breaker 30 amp x3 1050, Breaker 40 amp x2 700). About ten further small lines (E-tape, No more nail, paint brush, thinner, roller, pencil, paint tray, blade, skimcoat, etc.) are written but their amounts are not legible with confidence and the readable subset does NOT sum to 9465, so the remaining lines are omitted rather than guessed (flagged in ambiguous_fields/unreadable_regions). Per the golden-set rule, a wrong value is worse than a missing one. A many-line handwritten hardware invoice - degraded/adversarial."
-  }
+  },
+  "field_boxes": {}
 }

@@ -44,14 +44,20 @@
     "change": null,
     "prices_include_tax": null
   },
-  "payment": { "method": null, "card_last4": null },
+  "payment": {
+    "method": null,
+    "card_last4": null
+  },
   "meta": {
     "is_handwritten": true,
     "is_refund": false,
     "legibility": "fair",
-    "ambiguous_fields": ["line_items[0].unit_price"],
+    "ambiguous_fields": [
+      "line_items[0].unit_price"
+    ],
     "unreadable_regions": [],
     "receipt_is_inconsistent": false,
     "notes": "JONITZ GLASS AND ALUMINUM SERVICES INVOICE No. 0000419 (NON-VAT), pre-printed form with handwritten values. Customer Mr. Jeff. One line: 'Blind Rivet 1/8 x 1/2', Qty 30 pcs, Amount 60; TOTAL AMOUNT DUE 60. The Unit Price cell is written but not confidently legible (the qty x unit_price would need ~2.00 to reach 60) -> unit_price null. NON-VAT so no VAT breakdown. Footnote 'THIS DOCUMENT IS NOT VALID FOR CLAIM OF INPUT TAX.'"
-  }
+  },
+  "field_boxes": {}
 }

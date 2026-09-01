@@ -83,6 +83,7 @@ const RECEIPT: ReceiptDetail = {
   findings: [],
   current_findings: [],
   not_rechecked: [],
+  field_boxes: {},
 }
 
 type Recorder = (path: string, value: string | null) => void

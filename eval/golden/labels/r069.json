@@ -6,7 +6,10 @@
     "tax_id": "298-378-414-00000",
     "phone": "+639178725788"
   },
-  "buyer": { "name": null, "tax_id": null },
+  "buyer": {
+    "name": null,
+    "tax_id": null
+  },
   "receipt": {
     "number": "19445",
     "date": "2026-03-11",
@@ -41,7 +44,10 @@
     "change": null,
     "prices_include_tax": true
   },
-  "payment": { "method": null, "card_last4": null },
+  "payment": {
+    "method": null,
+    "card_last4": null
+  },
   "meta": {
     "is_handwritten": true,
     "is_refund": false,
@@ -50,5 +56,6 @@
     "unreadable_regions": [],
     "receipt_is_inconsistent": false,
     "notes": "M3RG HARDWARE AND CONSTRUCTION SUPPLY SALES INVOICE No. 19445 (VAT-reg), pre-printed form with handwritten values, stamped PAID 11 MAR 2026 13:47. One line: 3 pcs Pull Chain Socket @ 80 = 240; TOTAL AMOUNT DUE 240 (3x80=240 reconciles). The VAT summary boxes are blank on the form. Sold-to blank -> buyer null."
-  }
+  },
+  "field_boxes": {}
 }

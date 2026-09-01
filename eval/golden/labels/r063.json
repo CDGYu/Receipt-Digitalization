@@ -44,7 +44,10 @@
     "change": null,
     "prices_include_tax": true
   },
-  "payment": { "method": null, "card_last4": null },
+  "payment": {
+    "method": null,
+    "card_last4": null
+  },
   "meta": {
     "is_handwritten": false,
     "is_refund": false,
@@ -53,5 +56,6 @@
     "unreadable_regions": [],
     "receipt_is_inconsistent": false,
     "notes": "BF FEDERATION OF HOMEOWNERS ASSOCIATION, INC. SERVICE INVOICE No. 0057093 (dot-matrix / continuous-form, machine-printed). One service line: 'ADVANCE 4W / 1 MONTH VALID' amount 50.00 (a parking/access sticker fee); qty/unit_price blank on the form. 'Fifty & 00/100'. Total Sales (VAT Inclusive) 50.00, Less: VAT 0.00, Amount Net of VAT 50.00, Total Amount Due 50.00 - VATable and VAT-Exempt boxes blank/circled, treated as tax 0.00. Buyer HEY LUCKY CAFE & CORP (240 Aguirre Ave. BF Homes). Authorized rep Antonia Cayunda."
-  }
+  },
+  "field_boxes": {}
 }

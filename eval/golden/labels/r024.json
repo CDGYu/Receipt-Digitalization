@@ -56,5 +56,6 @@
     "unreadable_regions": [],
     "receipt_is_inconsistent": false,
     "notes": "Generic blank handwritten sales pad (no printed merchant identity), No. 0011315, photographed rotated 90 degrees. 'Sold to Hey lucky cafe, 240 Aguirre' is the BUYER. One line: qty 6, article '6 Pounds' (the description literally reads '6 Pounds' - likely 6 lbs of coffee), amount 270; the AMOUNT column shows 270 and TOTAL 270. No unit_price is written separately, so unit_price is null. Merchant null because the pad prints no seller."
-  }
+  },
+  "field_boxes": {}
 }

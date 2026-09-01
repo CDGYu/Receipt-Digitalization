@@ -179,6 +179,17 @@ export interface ReceiptDetail {
    *  receipts do not say. */
   prices_include_tax: boolean | null
   line_items: LineItem[]
+  /** Where the whitelisted receipt-level fields sit on the image, keyed by the
+   *  same dotted path the review form edits them under (`merchant.name`, ...).
+   *  Filled by the OCR grounding pass for the fields it can place; a field it
+   *  could not place has no key, so the review screen draws no box for it.
+   *
+   *  **Always an object, `{}` when nothing was placed** -- `receipt_detail`
+   *  (review/serializers.py) writes the key unconditionally, so no missing-key
+   *  guard is needed. Not correctable: grounding geometry, absent from
+   *  `_RECEIPT_FIELDS`, the receipt-level twin of `LineItem.bbox`. Render, do
+   *  not edit. */
+  field_boxes: Record<string, NormalizedBBox>
   findings: Finding[]
   /** Findings re-computed from the receipt as it stands now, after any
    *  corrections. Only rules whose subject is the receipt's content (not the

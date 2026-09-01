@@ -77,6 +77,7 @@ const RECEIPT: ReceiptDetail = {
   findings: [],
   current_findings: [],
   not_rechecked: [],
+  field_boxes: {},
 }
 
 describe('buildPatch', () => {

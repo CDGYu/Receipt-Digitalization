@@ -6,7 +6,10 @@
     "tax_id": "000-123-826-018",
     "phone": "(02)8356-45-73"
   },
-  "buyer": { "name": null, "tax_id": null },
+  "buyer": {
+    "name": null,
+    "tax_id": null
+  },
   "receipt": {
     "number": "03225458",
     "date": "2026-04-29",
@@ -18,19 +21,40 @@
     "terminal": "POS03-SN:41-BXAX7"
   },
   "line_items": [
-    { "position": 0, "description_raw": "CALLA FLORAL FRSH130", "sku": null, "qty": "1", "unit": null, "unit_price": "11.00", "line_total": "11.00", "modifiers": [], "bbox": null, "is_template_row": false }
+    {
+      "position": 0,
+      "description_raw": "CALLA FLORAL FRSH130",
+      "sku": null,
+      "qty": "1",
+      "unit": null,
+      "unit_price": "11.00",
+      "line_total": "11.00",
+      "modifiers": [],
+      "bbox": null,
+      "is_template_row": false
+    }
   ],
   "totals": {
     "subtotal": "9.82",
     "tax": "1.18",
-    "tax_breakdown": [ { "label": "VAT", "base": "9.82", "rate": "0.12", "amount": "1.18" } ],
+    "tax_breakdown": [
+      {
+        "label": "VAT",
+        "base": "9.82",
+        "rate": "0.12",
+        "amount": "1.18"
+      }
+    ],
     "discount": null,
     "total": "11.00",
     "tender": "200.00",
     "change": "189.00",
     "prices_include_tax": true
   },
-  "payment": { "method": "CASH", "card_last4": null },
+  "payment": {
+    "method": "CASH",
+    "card_last4": null
+  },
   "meta": {
     "is_handwritten": false,
     "is_refund": false,
@@ -39,5 +63,6 @@
     "unreadable_regions": [],
     "receipt_is_inconsistent": false,
     "notes": "SOUTH GROCER thermal POS, POS03. Single VATable line CALLA FLORAL FRSH130 11.00 = Total Due 11.00. VATable 9.82 + VAT 1.18 = 11.00. Cash 200.00, Change 189.00. Buyer block blank -> null. A small-value edge sample."
-  }
+  },
+  "field_boxes": {}
 }

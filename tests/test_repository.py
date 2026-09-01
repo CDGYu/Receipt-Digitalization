@@ -951,7 +951,10 @@ def test_every_text_column_save_extraction_writes_is_redacted(engine: sa.Engine)
     # receipts -> merchant_name_raw, buyer_name_raw, buyer_tax_id,
     # receipt_number, date_raw, payment_method, image_key,
     # processed_image_key, image_phash;
-    # receipts JSON -> confidence_reasons;
+    # receipts JSON -> confidence_reasons, field_boxes (the latter added
+    # 2026-09-01; it is grounding geometry, never model text, so it carries no
+    # PAN -- but it is a JSON column on ``receipts`` and the walk below dumps it
+    # like any other, which stays green because it holds only floats);
     # line_items -> description_raw, sku, unit; JSON -> modifiers, bbox.
     assert {
         "receipt_number",

@@ -58,5 +58,6 @@
     ],
     "receipt_is_inconsistent": false,
     "notes": "BIR sales invoice: pre-printed form, handwritten values. USER-VERIFIED 2026-07-28: the date is 3-25-26 = 2026-03-25 (the month glyph can read as 7). VATable Sales 1785.71 + VAT 214.29 = 2000.00 reconciles. qty x unit_price = 2000.01 vs the written 2000.00 (within tolerance). 'IDEAL SOURCE' is the BUYER (Sold to), not the merchant. The footer TIN 223-885-849-002 belongs to the PRINTER (A & C Printers), not the merchant."
-  }
+  },
+  "field_boxes": {}
 }

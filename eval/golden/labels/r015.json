@@ -63,5 +63,6 @@
     "unreadable_regions": [],
     "receipt_is_inconsistent": false,
     "notes": "Coffai Corporation DELIVERY RECEIPT (machine-printed, clean), DR Number 0001975, Channel offline, no Sales Invoice No. filled. Single line: product code FM-1L, FULLCREAM MILK-1L-LEMOO, qty 11 x 90.00 = 990.00. Subtotal 883.93 + 12% VAT 106.07 = 990.00 Total Amount Due (tax-inclusive); Less: Discount blank. 'Hey lucky cafe & co' (240 aguirre ave Bf homes paranaque) is the BUYER (Issued To). Footnote 'THIS DOCUMENT IS NOT VALID FOR CLAIM ANY INPUT TAXES.' Printer: RJPE Printing & Publishing Corp. A delivery receipt rather than a sales invoice."
-  }
+  },
+  "field_boxes": {}
 }

@@ -50,7 +50,12 @@
     "subtotal": "33.48",
     "tax": "4.02",
     "tax_breakdown": [
-      { "label": "VAT", "base": "33.48", "rate": "0.12", "amount": "4.02" }
+      {
+        "label": "VAT",
+        "base": "33.48",
+        "rate": "0.12",
+        "amount": "4.02"
+      }
     ],
     "discount": null,
     "total": "37.50",
@@ -70,5 +75,6 @@
     "unreadable_regions": [],
     "receipt_is_inconsistent": false,
     "notes": "SOUTH GROCER thermal POS, POS02. Two VATable lines 2x LM PC C/MNSI KSL0120 @18.75 = 37.50 Total Due. VATable 33.48 + VAT 4.02 = 37.50. Cash 100.00, Change 62.50. Customer block blank -> buyer null."
-  }
+  },
+  "field_boxes": {}
 }

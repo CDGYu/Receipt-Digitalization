@@ -6,7 +6,10 @@
     "tax_id": "008-196-741-00002",
     "phone": null
   },
-  "buyer": { "name": null, "tax_id": null },
+  "buyer": {
+    "name": null,
+    "tax_id": null
+  },
   "receipt": {
     "number": "00028711",
     "date": "2026-03-19",
@@ -34,7 +37,14 @@
   "totals": {
     "subtotal": "84.82",
     "tax": "10.18",
-    "tax_breakdown": [ { "label": "VAT", "base": "84.82", "rate": "0.12", "amount": "10.18" } ],
+    "tax_breakdown": [
+      {
+        "label": "VAT",
+        "base": "84.82",
+        "rate": "0.12",
+        "amount": "10.18"
+      }
+    ],
     "discount": null,
     "total": "95.00",
     "tender": "95.00",
@@ -53,5 +63,6 @@
     "unreadable_regions": [],
     "receipt_is_inconsistent": false,
     "notes": "AAB BAKING GOODS & SUPPLIES INC. thermal SALES INVOICE (CUSTOMER COPY), S.I. No. 00028711 (same merchant as r032/r045), Terminal 1, cashier RANOSA ANGELYN, Trans Date 03/19/26 13:02. Single line AAB 6 3/4 x 5 x (a baking pan) 95.00. VATable 84.82 + VAT 10.18 = 95.00 Total (tax-inclusive). Paid Credit Card 95.00 (Exp 03/2026); no card last-4 printed -> card_last4 null. Handwritten annotation '+10 grad. P10' in the buyer area. Buyer's Information block blank -> buyer null. POS provider JIMAC Incorporated."
-  }
+  },
+  "field_boxes": {}
 }

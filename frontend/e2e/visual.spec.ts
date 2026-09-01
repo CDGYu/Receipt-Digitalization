@@ -278,6 +278,7 @@ function fullReceipt(overrides: Partial<ReceiptDetail> = {}): ReceiptDetail {
       finding('R011', 'warn', 'date looks implausible'),
     ],
     not_rechecked: ['R001', 'R013', 'R060', 'R061', 'R070', 'R071'],
+    field_boxes: {},
     ...overrides,
   }
 }
@@ -352,20 +353,6 @@ function nullReceipt(): ReceiptDetail {
  *  ERROR and one WARN; `Severity` has a third member and nothing seeds it). One
  *  finding carries a `context` payload so the disclosure has something to open
  *  onto, and one is flagged `resolved_by_repair`. */
-function severitiesReceipt(): ReceiptDetail {
-  return fullReceipt({
-    findings: [
-      finding('R020', 'error', 'totals do not reconcile: 925.00 + 80.00 - 5.00 != 1000.00', {
-        context: { expected: '1000.00', computed: '1000.00', paths: ['totals.total'] },
-      }),
-      finding('R011', 'warn', 'date looks implausible: 2026-07-02 is in the future'),
-      finding('R002', 'info', 'merchant matched a known prior by name', {
-        resolved_by_repair: true,
-      }),
-    ],
-  })
-}
-
 function metrics(overrides: Partial<Metrics> = {}): Metrics {
   return {
     counts_by_status: { auto_approved: 128, needs_review: 9, reviewed: 74 },
@@ -1128,9 +1115,6 @@ async function stubbedReceiptDetail(page: Page, receipt: ReceiptDetail): Promise
 const formSection = (page: Page): Locator =>
   page.locator('section').filter({ has: page.getByRole('heading', { name: 'Receipt', exact: true }) })
 
-const findingsSection = (page: Page): Locator =>
-  page.locator('section').filter({ hasText: 'What the machine found at extraction time' })
-
 /** The line-items table's `overflow-x` wrapper -- the box a reviewer sees. */
 const scrollerOf = (page: Page): Locator =>
   page.locator('section').filter({ has: page.getByRole('table') })
@@ -1290,29 +1274,6 @@ test('the Results detail panel keeps the editor beside a loaded image', async ({
       await shot(page, 'receipts-detail-loaded-image', WIDE, theme, panel)
       record('receipts-detail-loaded-image', WIDE, theme, await measure(page))
     })
-  }
-})
-
-test('findings at all three severities', async ({ browser }, testInfo) => {
-  test.setTimeout(180_000)
-  const baseURL = baseURLOf(testInfo.project.use)
-  for (const viewport of ALL_WIDTHS) {
-    for (const theme of THEMES) {
-      await withPage(browser, baseURL, viewport, theme, async (page) => {
-        const s = await stubbedReview(page, severitiesReceipt())
-        for (const severity of ['error', 'warn', 'info']) {
-          await expect(page.getByText(severity, { exact: true }).first()).toBeVisible()
-        }
-        s.expectHits('receipt')
-        // One disclosure open, so the `context` payload is on screen too.
-        await page.locator('details').first().locator('summary').click()
-        await shot(page, 'findings-severities', viewport, theme)
-        record('findings-severities', viewport, theme, await measure(page))
-        if (viewport === MID) {
-          await shot(page, 'findings-panel', viewport, theme, findingsSection(page))
-        }
-      })
-    }
   }
 })
 
@@ -1612,15 +1573,6 @@ test('focus rings, as the browser actually paints them', async ({ browser }, tes
       await page.keyboard.press('Shift+Tab')
       await page.keyboard.press('Tab')
       await shot(page, 'focus-approve-button', MID, theme, approve)
-      // `<summary>` is **not** in `tokens.css`'s `:where(a, button, input, select,
-      // textarea):focus-visible` list, so the findings rows fall back to the
-      // browser's own ring. What that looks like is a claim only a picture can
-      // settle, so here is the picture.
-      const summary = page.locator('details summary').first()
-      await summary.focus()
-      await page.keyboard.press('Shift+Tab')
-      await page.keyboard.press('Tab')
-      await shot(page, 'focus-finding-summary', MID, theme, findingsSection(page))
       record('focus-rings', MID, theme, { focus: await focusWalk(page, 6) })
     })
   }

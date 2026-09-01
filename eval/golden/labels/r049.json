@@ -50,7 +50,12 @@
     "subtotal": "271.43",
     "tax": "32.57",
     "tax_breakdown": [
-      { "label": "VAT", "base": "271.43", "rate": "0.12", "amount": "32.57" }
+      {
+        "label": "VAT",
+        "base": "271.43",
+        "rate": "0.12",
+        "amount": "32.57"
+      }
     ],
     "discount": null,
     "total": "304.00",
@@ -70,5 +75,6 @@
     "unreadable_regions": [],
     "receipt_is_inconsistent": false,
     "notes": "SOUTH GROCER thermal POS, POS05. Two VATable lines 2x MISSION FOODS O&C270 @152.00 = 304.00 Total Due. VATable 271.43 + VAT 32.57 = 304.00. Paid PayMaya CC 304.00 (Trace 003056). Buyer RAYMOND VICENTE BRAGANZA (greencard, not transcribed). A handwritten 'BCRP' initials annotation on the receipt body."
-  }
+  },
+  "field_boxes": {}
 }

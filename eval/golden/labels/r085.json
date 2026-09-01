@@ -6,7 +6,10 @@
     "tax_id": null,
     "phone": null
   },
-  "buyer": { "name": null, "tax_id": null },
+  "buyer": {
+    "name": null,
+    "tax_id": null
+  },
   "receipt": {
     "number": "0823880912",
     "date": "2026-05-15",
@@ -53,5 +56,6 @@
     "unreadable_regions": [],
     "receipt_is_inconsistent": false,
     "notes": "CALTEX (Southgate Servicenter, Inc.) Maya QR payment/loyalty slip - it PRINTS 'THIS IS NOT AN OFFICIAL RECEIPT', so it is a payment confirmation, not the BIR sales invoice. One fuel line: pump 8, SlvTechron, 3.132 Liters @ 90.49 = 283.41 (reconciles). Total 283.41, Maya QR 283.41. NO VAT breakdown is printed (not an OR), so subtotal/tax are null - deliberately not back-computed. Loyalty block (GoRewardsClassic, Card # ..., Earned 0.60, New Balance 51.78) is NOT transcribed (loyalty PII, no schema field). Date/Time 05/15/26 12:57, Trans ID 19144076. A good 'not an official receipt' edge sample."
-  }
+  },
+  "field_boxes": {}
 }

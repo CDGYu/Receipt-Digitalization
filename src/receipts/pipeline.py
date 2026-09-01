@@ -861,6 +861,59 @@ def _apply_ocr_line_item_boxes(
             item.bbox = bbox
 
 
+#: The receipt-LEVEL fields the OCR grounding pass will try to place on the
+#: image, keyed by the dotted correction path the review UI edits them under
+#: (the same key ``ReceiptExtraction.field_boxes`` stores) and valued by a
+#: getter for that field's printed text.
+#:
+#: **Deliberately short, and not derived from the schema.** A spike over the
+#: golden set (measured 2026-09-01) placed ``merchant.name`` cleanly on ~64% of
+#: receipts and ``payment.method`` on most of the few that print it, while the
+#: numeric fields -- ``totals.total``, ``receipt.number`` -- placed on **none**:
+#: ``_tokens`` runs :func:`normalize_desc`, which strips digits and punctuation
+#: for line-item matching, so a purely numeric value tokenises to nothing and
+#: can never match through this path. Adding a numeric field here would not
+#: fail loudly; it would silently never highlight. So the map is the two text
+#: fields that actually locate, and grows only when a field is shown to.
+_GROUNDABLE_HEADER_FIELDS: dict[str, "Callable[[ReceiptExtraction], str | None]"] = {
+    "merchant.name": lambda e: e.merchant.name,
+    "payment.method": lambda e: e.payment.method,
+}
+
+
+def _apply_ocr_field_boxes(
+    extraction: ReceiptExtraction, layer: object | None
+) -> None:
+    """Fill ``extraction.field_boxes`` for whitelisted header fields.
+
+    The receipt-level twin of :func:`_apply_ocr_line_item_boxes`: same OCR
+    line candidates, same unambiguous-match rule, same 0-1 convention -- only
+    the target differs. A field is boxed only when its printed value covers
+    enough of exactly one image line and no equally good line competes; an
+    ambiguous or absent field simply gets no key, and the review UI then draws
+    no box rather than a wrong one. A model-supplied ``field_boxes`` entry (none
+    exists today -- the model is not asked for it) would be left untouched, for
+    symmetry with the line-item pass leaving model boxes alone.
+    """
+    if layer is None:
+        return
+
+    candidates = _ocr_line_candidates(layer)
+    if not candidates:
+        return
+
+    for path, getter in _GROUNDABLE_HEADER_FIELDS.items():
+        if path in extraction.field_boxes:
+            continue
+        tokens = _tokens(getter(extraction))
+        if not tokens:
+            continue
+
+        bbox = _matching_ocr_line_box(tokens, candidates)
+        if bbox is not None:
+            extraction.field_boxes[path] = bbox
+
+
 def _ground_in_ocr(
     ctx: ValidationContext,
     image: PreparedImage,
@@ -1211,9 +1264,11 @@ def process_receipt(
 
         try:
             _apply_ocr_line_item_boxes(outcome.extraction, ocr_layer)
+            _apply_ocr_field_boxes(outcome.extraction, ocr_layer)
         except Exception:
             log.warning(
-                "the OCR bbox mapping pass failed; line-item boxes will be omitted",
+                "the OCR bbox mapping pass failed; line-item and field boxes "
+                "will be omitted",
                 exc_info=True,
             )
 

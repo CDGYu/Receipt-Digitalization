@@ -6,7 +6,10 @@
     "tax_id": "000-123-826-018",
     "phone": "(02)8356-45-73"
   },
-  "buyer": { "name": null, "tax_id": null },
+  "buyer": {
+    "name": null,
+    "tax_id": null
+  },
   "receipt": {
     "number": "02263383",
     "date": "2026-05-07",
@@ -35,7 +38,12 @@
     "subtotal": "26.15",
     "tax": "0.00",
     "tax_breakdown": [
-      { "label": "VAT-Exempt", "base": "26.15", "rate": "0.00", "amount": "0.00" }
+      {
+        "label": "VAT-Exempt",
+        "base": "26.15",
+        "rate": "0.00",
+        "amount": "0.00"
+      }
     ],
     "discount": null,
     "total": "26.15",
@@ -43,7 +51,10 @@
     "change": "73.85",
     "prices_include_tax": true
   },
-  "payment": { "method": "CASH", "card_last4": null },
+  "payment": {
+    "method": "CASH",
+    "card_last4": null
+  },
   "meta": {
     "is_handwritten": false,
     "is_refund": false,
@@ -52,5 +63,6 @@
     "unreadable_regions": [],
     "receipt_is_inconsistent": false,
     "notes": "SOUTH GROCER thermal POS, POS02. Single VAT-exempt line TOMATO NATIVE (LW) 26.15 (E) = Total Due 26.15. Cash 100.00, Change 73.85. VAT-Exempt 26.15, VAT 0.00. Buyer block blank -> null."
-  }
+  },
+  "field_boxes": {}
 }

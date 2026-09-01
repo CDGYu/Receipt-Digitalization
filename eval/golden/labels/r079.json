@@ -6,7 +6,10 @@
     "tax_id": "000-123-826-018",
     "phone": "(02)8356-45-73"
   },
-  "buyer": { "name": null, "tax_id": null },
+  "buyer": {
+    "name": null,
+    "tax_id": null
+  },
   "receipt": {
     "number": "02265368",
     "date": "2026-05-23",
@@ -18,19 +21,40 @@
     "terminal": "POS02-SN:41-BXAP6"
   },
   "line_items": [
-    { "position": 0, "description_raw": "LETTUCE GREEN ICE", "sku": null, "qty": "1", "unit": null, "unit_price": "101.50", "line_total": "101.50", "modifiers": [], "bbox": null, "is_template_row": false }
+    {
+      "position": 0,
+      "description_raw": "LETTUCE GREEN ICE",
+      "sku": null,
+      "qty": "1",
+      "unit": null,
+      "unit_price": "101.50",
+      "line_total": "101.50",
+      "modifiers": [],
+      "bbox": null,
+      "is_template_row": false
+    }
   ],
   "totals": {
     "subtotal": "101.50",
     "tax": "0.00",
-    "tax_breakdown": [ { "label": "VAT-Exempt", "base": "101.50", "rate": "0.00", "amount": "0.00" } ],
+    "tax_breakdown": [
+      {
+        "label": "VAT-Exempt",
+        "base": "101.50",
+        "rate": "0.00",
+        "amount": "0.00"
+      }
+    ],
     "discount": null,
     "total": "101.50",
     "tender": "1000.00",
     "change": "898.50",
     "prices_include_tax": true
   },
-  "payment": { "method": "CASH", "card_last4": null },
+  "payment": {
+    "method": "CASH",
+    "card_last4": null
+  },
   "meta": {
     "is_handwritten": false,
     "is_refund": false,
@@ -39,5 +63,6 @@
     "unreadable_regions": [],
     "receipt_is_inconsistent": false,
     "notes": "SOUTH GROCER thermal POS, POS02. Single VAT-exempt line LETTUCE GREEN ICE 101.50 (E) = Total Due 101.50. Cash 1,000.00, Change 898.50. VAT-Exempt 101.50, VAT 0.00. Buyer block blank -> null."
-  }
+  },
+  "field_boxes": {}
 }

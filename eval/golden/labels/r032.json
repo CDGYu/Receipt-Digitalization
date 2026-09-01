@@ -86,7 +86,12 @@
     "subtotal": "1639.29",
     "tax": "196.71",
     "tax_breakdown": [
-      { "label": "VAT", "base": "1639.29", "rate": "0.12", "amount": "196.71" }
+      {
+        "label": "VAT",
+        "base": "1639.29",
+        "rate": "0.12",
+        "amount": "196.71"
+      }
     ],
     "discount": null,
     "total": "1836.00",
@@ -106,5 +111,6 @@
     "unreadable_regions": [],
     "receipt_is_inconsistent": false,
     "notes": "AAB BAKING GOODS & SUPPLIES INC. thermal SALES INVOICE, S.I. No. 00030071 (Transaction 00030078, Terminal 1). Five lines: AAB Pre-Cut Parc 140, Croco Aluminum F 750, 1.14x20x4 Colore 230, AAB Sayer Pitted 176, GH Prem. Baking 540; sum = 1836.00. VATable 1,639.29 + VAT 196.71 = 1836.00 Total (tax-inclusive). Cash 2,000.00, Change 164.00. Trans Date 04/19/26 13:50. Buyer's Information block blank -> buyer null. POS provider JIMAC Incorporated."
-  }
+  },
+  "field_boxes": {}
 }

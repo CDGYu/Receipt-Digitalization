@@ -38,7 +38,12 @@
     "subtotal": "446.43",
     "tax": "53.57",
     "tax_breakdown": [
-      { "label": "VAT", "base": "446.43", "rate": "0.12", "amount": "53.57" }
+      {
+        "label": "VAT",
+        "base": "446.43",
+        "rate": "0.12",
+        "amount": "53.57"
+      }
     ],
     "discount": null,
     "total": "500.00",
@@ -58,5 +63,6 @@
     "unreadable_regions": [],
     "receipt_is_inconsistent": false,
     "notes": "CALTEX (Achievers Fuel & Service Center Corp.) fuel thermal SALES INVOICE. One line: pump 05, Silver Disc(overy), 5.970 LTR @ 83.75/LTR = 500.00 (5.970x83.75=499.99, rounded to 500 target). Total 500.00, Visa Card (Manual) 500.00. Vatable 446.43 + VAT 53.57 = 500.00 (tax-inclusive). SI No 01-001378055, 03/17/26 13:57, POS 01. Supplier Diebold Nixdorf (Philippines) Inc. Buyer block blank -> null. A different Caltex dealer from r037/r057 (Southgate)."
-  }
+  },
+  "field_boxes": {}
 }

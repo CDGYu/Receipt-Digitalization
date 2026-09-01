@@ -50,7 +50,12 @@
     "subtotal": "80.80",
     "tax": "0.00",
     "tax_breakdown": [
-      { "label": "VAT-Exempt", "base": "80.80", "rate": "0.00", "amount": "0.00" }
+      {
+        "label": "VAT-Exempt",
+        "base": "80.80",
+        "rate": "0.00",
+        "amount": "0.00"
+      }
     ],
     "discount": null,
     "total": "80.80",
@@ -70,5 +75,6 @@
     "unreadable_regions": [],
     "receipt_is_inconsistent": false,
     "notes": "SOUTH GROCER thermal POS, POS02. Two VAT-exempt produce lines: LETTUCE GREEN ICE 54.60 (E), TOMATO (ORG OPT) 26.20 (E); 2 items = 80.80 Total Due. Cash 500.00, Change 419.20. VAT-Exempt 80.80, VAT 0.00. Handwritten 'Recorded' note at top. Customer block blank -> buyer null."
-  }
+  },
+  "field_boxes": {}
 }

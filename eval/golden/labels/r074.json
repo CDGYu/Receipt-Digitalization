@@ -6,7 +6,10 @@
     "tax_id": "000-123-826-018",
     "phone": "(02)8356-45-73"
   },
-  "buyer": { "name": "RAYMOND VICENTE BRAGANZA", "tax_id": null },
+  "buyer": {
+    "name": "RAYMOND VICENTE BRAGANZA",
+    "tax_id": null
+  },
   "receipt": {
     "number": "02257674",
     "date": "2026-03-19",
@@ -18,20 +21,52 @@
     "terminal": "POS02-SN:41-BXAP6"
   },
   "line_items": [
-    { "position": 0, "description_raw": "MARBY PIYAYA PLAIN-C", "sku": null, "qty": "1", "unit": null, "unit_price": "111.00", "line_total": "111.00", "modifiers": [], "bbox": null, "is_template_row": false },
-    { "position": 1, "description_raw": "GROWERS SAV HOT 80G", "sku": null, "qty": "1", "unit": null, "unit_price": "40.25", "line_total": "40.25", "modifiers": [], "bbox": null, "is_template_row": false }
+    {
+      "position": 0,
+      "description_raw": "MARBY PIYAYA PLAIN-C",
+      "sku": null,
+      "qty": "1",
+      "unit": null,
+      "unit_price": "111.00",
+      "line_total": "111.00",
+      "modifiers": [],
+      "bbox": null,
+      "is_template_row": false
+    },
+    {
+      "position": 1,
+      "description_raw": "GROWERS SAV HOT 80G",
+      "sku": null,
+      "qty": "1",
+      "unit": null,
+      "unit_price": "40.25",
+      "line_total": "40.25",
+      "modifiers": [],
+      "bbox": null,
+      "is_template_row": false
+    }
   ],
   "totals": {
     "subtotal": "135.04",
     "tax": "16.21",
-    "tax_breakdown": [ { "label": "VAT", "base": "135.04", "rate": "0.12", "amount": "16.21" } ],
+    "tax_breakdown": [
+      {
+        "label": "VAT",
+        "base": "135.04",
+        "rate": "0.12",
+        "amount": "16.21"
+      }
+    ],
     "discount": null,
     "total": "151.25",
     "tender": "151.25",
     "change": null,
     "prices_include_tax": true
   },
-  "payment": { "method": "PAYMAYA CC", "card_last4": null },
+  "payment": {
+    "method": "PAYMAYA CC",
+    "card_last4": null
+  },
   "meta": {
     "is_handwritten": false,
     "is_refund": false,
@@ -40,5 +75,6 @@
     "unreadable_regions": [],
     "receipt_is_inconsistent": false,
     "notes": "SOUTH GROCER thermal POS, POS02. Two VATable lines: MARBY PIYAYA PLAIN-C 111.00, GROWERS SAV HOT 80G 40.25 = 151.25 Total Due. VATable 135.04 + VAT 16.21 = 151.25. PayMaya CC 151.25 (Trace 004496). Buyer RAYMOND VICENTE BRAGANZA (greencard, not transcribed)."
-  }
+  },
+  "field_boxes": {}
 }

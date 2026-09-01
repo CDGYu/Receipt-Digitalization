@@ -86,8 +86,18 @@
     "subtotal": "86.85",
     "tax": "3.75",
     "tax_breakdown": [
-      { "label": "VATable", "base": "31.25", "rate": "0.12", "amount": "3.75" },
-      { "label": "VAT-Exempt", "base": "55.60", "rate": "0.00", "amount": "0.00" }
+      {
+        "label": "VATable",
+        "base": "31.25",
+        "rate": "0.12",
+        "amount": "3.75"
+      },
+      {
+        "label": "VAT-Exempt",
+        "base": "55.60",
+        "rate": "0.00",
+        "amount": "0.00"
+      }
     ],
     "discount": null,
     "total": "90.60",
@@ -107,5 +117,6 @@
     "unreadable_regions": [],
     "receipt_is_inconsistent": false,
     "notes": "SOUTH GROCER thermal POS, POS05. Five lines: CALLA FLORAL FRSH130 11.00 (V), 3x CRISPY FRY GRAVY 20G @8.00 (V), SABA (DAREN) 55.60 (E, VAT-exempt banana); sum = 90.60 Total Due. VATable 31.25 + VAT 3.75 = 35.00, plus VAT-Exempt 55.60 = 90.60. subtotal recorded as 86.85 (net of 3.75 VAT). Cash 1,000.00, Change 909.40. Customer block blank -> buyer null."
-  }
+  },
+  "field_boxes": {}
 }

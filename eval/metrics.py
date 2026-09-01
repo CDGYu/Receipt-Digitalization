@@ -120,6 +120,14 @@ def field_accuracy(
     tru = flatten(truth.model_dump())
     result: dict[str, bool] = {}
     for path in pred.keys() | tru.keys():
+        # The ``derived`` family (``field_boxes.*``) is grounding geometry the
+        # model never produces and the labels never declare, so it is not a
+        # thing this map scores at all -- dropped here, at the one shared source,
+        # rather than in every consumer. Keeping it out of the map is also what
+        # lets the tiling identity (``sum of classes == len(acc)``) stay true:
+        # a path scored here but counted in no class would break it.
+        if _group(path) == "derived":
+            continue
         if path not in pred or path not in tru:
             result[path] = False
         else:
@@ -151,6 +159,14 @@ class FieldBreakdown:
       * absent — truth not filled. Split three ways: ``hallucinated`` (the
         model produced a value anyway), ``correctly_empty``, and
         ``structural_mismatch``.
+
+    The ``derived`` family (``field_boxes.*`` grounding geometry, group
+    ``derived``) is counted in **none** of these — not transcription, not
+    self_report, not even ``hallucinated``. The model never produces it and the
+    labels never declare it, so a populated prediction box against a label that
+    carries none is not a fact this breakdown measures. :func:`field_accuracy`
+    drops it at the source, so it never reaches this split and cannot inflate or
+    deflate any class — nor the tiling identity that sums them.
 
     The classes tile the path set: nothing is dropped, it is only stopped from
     inflating a percentage.
@@ -217,6 +233,9 @@ def field_breakdown(
     tru = flatten(truth.model_dump())
 
     core_c = core_t = li_c = li_t = sr_c = sr_t = hall = empty = struct = 0
+    # ``field_accuracy`` has already dropped the ``derived`` family
+    # (``field_boxes.*``), so nothing here needs to skip it and the tiling
+    # identity ``sum of classes == len(acc)`` holds over the paths that remain.
     for path, ok in field_accuracy(predicted, truth).items():
         if not _is_filled(tru.get(path)):
             if _is_filled(pred.get(path)):

@@ -87,5 +87,6 @@
     "unreadable_regions": [],
     "receipt_is_inconsistent": false,
     "notes": "Worked example. Copy this file to labels/{id}.json and replace every value with what the receipt image actually shows. Money stays as JSON strings so the Decimal scale (e.g. \"761.60\") is preserved. Every field the schema declares appears here, including the ones a receipt often leaves empty -- write null rather than dropping the key, because a dropped key is filled by a schema default that then reads as truth."
-  }
+  },
+  "field_boxes": {}
 }

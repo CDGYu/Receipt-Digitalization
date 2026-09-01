@@ -6,7 +6,10 @@
     "tax_id": "000-123-826-018",
     "phone": "(02)8356-45-73"
   },
-  "buyer": { "name": null, "tax_id": null },
+  "buyer": {
+    "name": null,
+    "tax_id": null
+  },
   "receipt": {
     "number": "02262043",
     "date": "2026-04-26",
@@ -18,20 +21,52 @@
     "terminal": "POS02-SN:41-BXAP6"
   },
   "line_items": [
-    { "position": 0, "description_raw": "TOMATO NATIVE P&W", "sku": null, "qty": "1", "unit": null, "unit_price": "7.25", "line_total": "7.25", "modifiers": [], "bbox": null, "is_template_row": false },
-    { "position": 1, "description_raw": "SALE LETUCE(G/FRSH)", "sku": null, "qty": "1", "unit": null, "unit_price": "27.00", "line_total": "27.00", "modifiers": [], "bbox": null, "is_template_row": false }
+    {
+      "position": 0,
+      "description_raw": "TOMATO NATIVE P&W",
+      "sku": null,
+      "qty": "1",
+      "unit": null,
+      "unit_price": "7.25",
+      "line_total": "7.25",
+      "modifiers": [],
+      "bbox": null,
+      "is_template_row": false
+    },
+    {
+      "position": 1,
+      "description_raw": "SALE LETUCE(G/FRSH)",
+      "sku": null,
+      "qty": "1",
+      "unit": null,
+      "unit_price": "27.00",
+      "line_total": "27.00",
+      "modifiers": [],
+      "bbox": null,
+      "is_template_row": false
+    }
   ],
   "totals": {
     "subtotal": "34.25",
     "tax": "0.00",
-    "tax_breakdown": [ { "label": "VAT-Exempt", "base": "34.25", "rate": "0.00", "amount": "0.00" } ],
+    "tax_breakdown": [
+      {
+        "label": "VAT-Exempt",
+        "base": "34.25",
+        "rate": "0.00",
+        "amount": "0.00"
+      }
+    ],
     "discount": null,
     "total": "34.25",
     "tender": "100.00",
     "change": "65.75",
     "prices_include_tax": true
   },
-  "payment": { "method": "CASH", "card_last4": null },
+  "payment": {
+    "method": "CASH",
+    "card_last4": null
+  },
   "meta": {
     "is_handwritten": false,
     "is_refund": false,
@@ -40,5 +75,6 @@
     "unreadable_regions": [],
     "receipt_is_inconsistent": false,
     "notes": "SOUTH GROCER thermal POS, POS02. Two VAT-exempt produce lines: TOMATO NATIVE P&W 7.25 (E), SALE LETUCE(G/FRSH) 27.00 (E); 2 items = 34.25 Total Due. Cash 100.00, Change 65.75. VAT-Exempt 34.25, VAT 0.00. Buyer block blank -> null."
-  }
+  },
+  "field_boxes": {}
 }

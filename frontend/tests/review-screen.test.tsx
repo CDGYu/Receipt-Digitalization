@@ -158,6 +158,7 @@ const RECEIPT: ReceiptDetail = {
   ],
   current_findings: [],
   not_rechecked: ['R001', 'R013', 'R060', 'R061', 'R070', 'R071'],
+  field_boxes: {},
 }
 
 const CLAIMED_ROUTES = {
@@ -233,15 +234,16 @@ describe('ReviewScreen', () => {
     // neither findings nor the confidence breakdown, so both of these can only
     // have come from `GET /receipts/{id}`.
     expect(fetchMock.mock.calls.map(([path]) => path)).toContain('/receipts/a1')
-    expect(screen.getByText('R020')).toBeDefined()
     expect(screen.getByText('validation errors present')).toBeDefined()
     expect(screen.getByText('-0.35')).toBeDefined()
-    // Findings are what the extraction run found; nothing re-checks them when a
-    // reviewer edits, so neither the heading nor the note may imply current
-    // state. Both are asserted -- the note carries the part a heading cannot
-    // say, and was previously unpinned.
-    expect(screen.getByRole('heading', { name: /at extraction time/i })).toBeDefined()
-    expect(screen.getByText(/not re-checked when you edit/i)).toBeDefined()
+    // The API still carries findings, but the reviewer UI does not show a
+    // validation/findings panel. Non-developer users correct the receipt from
+    // the image and fields, without rule IDs or recheck caveats in the way.
+    expect(screen.queryByText('R020')).toBeNull()
+    expect(screen.queryByText('subtotal + tax does not equal total')).toBeNull()
+    expect(screen.queryByRole('heading', { name: 'Things to check' })).toBeNull()
+    expect(screen.queryByText(/current validation/i)).toBeNull()
+    expect(screen.queryByText(/not re-checked/i)).toBeNull()
     expect(screen.queryByRole('alert')).toBeNull()
   })
 
@@ -846,6 +848,31 @@ describe('ReviewScreen: editing and approval', () => {
 
     await user.click(screen.getByLabelText('Qty 3'))
 
+    expect(box!.className).toContain('highlightActive')
+  })
+
+  it('activates the receipt-image box for the focused header field', async () => {
+    const withBox: ReceiptDetail = {
+      ...RECEIPT,
+      field_boxes: { 'merchant.name': [0.1, 0.05, 0.6, 0.1] },
+    }
+    const fetchMock = stubApi({
+      ...CLAIMED_ROUTES,
+      'GET /receipts/a1': [200, withBox],
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const user = userEvent.setup()
+
+    const { container } = render(<ReviewScreen />)
+    await screen.findByAltText(/receipt/i)
+
+    // Nothing focused yet, so the header box is not drawn.
+    expect(container.querySelector('[data-field-path="merchant.name"]')).toBeNull()
+
+    await user.click(screen.getByLabelText('Merchant'))
+
+    const box = container.querySelector<HTMLElement>('[data-field-path="merchant.name"]')
+    expect(box).not.toBeNull()
     expect(box!.className).toContain('highlightActive')
   })
 })

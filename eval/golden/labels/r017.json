@@ -68,5 +68,6 @@
     "unreadable_regions": [],
     "receipt_is_inconsistent": false,
     "notes": "BEAN BLOCK COFFEE ROASTERS thermal SALES INVOICE, Receipt No. 007371 (machine-printed, clean). Same merchant/TIN (620-589-900-00001) as r012 (Bean Block Ventures Inc). Single line: 1 x Local/Sultan Kudarat Daguma/500g Whole Beans, P855.00 with a '(-5.0% incl.)' note recorded as a modifier with null amount (the discount is already folded into the 855 and no separate peso figure is printed). Subtotal 855.00; VATable Sales 763.39 + VAT (12%) incl. 91.61 = 855.00 Total (tax-inclusive); Cash Received 1000.00, Change 145.00. No date is printed in the body (POS footer shows an ISSUED date of the permit, not the sale) -> receipt.date null. Customer Name blank -> buyer null. POS provider: Kintoz IT Solutions."
-  }
+  },
+  "field_boxes": {}
 }

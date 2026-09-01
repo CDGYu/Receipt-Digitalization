@@ -11,7 +11,7 @@ export interface LineItemsTableProps {
   /** Server messages keyed by the same dotted paths as `fields`. */
   readonly errors?: Readonly<Record<string, string>>
   readonly activePosition?: number | null
-  readonly onActivePositionChange?: (position: number) => void
+  readonly onActivePositionChange?: (position: number | null) => void
 }
 
 /** One free-text cell, owning its error id. Extracted for the reason
@@ -146,6 +146,15 @@ export function LineItemsTable({
     onActivePositionChange?.(position)
   }
 
+  /** Clear the highlight when the pointer leaves a row. Focus and hover share
+   *  one active position, so a hovered-then-left row must fall back to nothing
+   *  rather than to a stale value; a row the reviewer is actually editing
+   *  re-activates through `onFocus` on its next interaction. */
+  function deactivate(): void {
+    setLocalActive(null)
+    onActivePositionChange?.(null)
+  }
+
   return (
     <section className={styles.scroller}>
       <table className={styles.table}>
@@ -169,6 +178,14 @@ export function LineItemsTable({
                 key={item.position}
                 className={styles.row}
                 onFocus={() => activate(item.position)}
+                // Hovering a row lights up its region on the photo, so a
+                // reviewer can find a line on the paper without clicking into
+                // it. Same active position as focus (design §5.2's highlight
+                // unit is the row), so the two never disagree: the pointer wins
+                // while it is over a row, and `onMouseLeave` hands the highlight
+                // back to whatever has focus on the row's next interaction.
+                onMouseEnter={() => activate(item.position)}
+                onMouseLeave={deactivate}
                 // **The colour is the swap this task owns; the mechanism is not.**
                 // `#fffbe6` stood here, and amber is WARN's reserved colour
                 // (ADR-0027 §2) -- a yellow row on an accounting screen reads as a

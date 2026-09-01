@@ -12,12 +12,14 @@ types, and asserts none of them is ``float``.
 
 Documented exception
 --------------------
-``LineItem.bbox`` holds normalised ``[x0, y0, x1, y1]`` spatial grounding
-coordinates (0-1). Those are explicitly NOT money -- they are pixel geometry --
-so ``float`` is the correct type and the field is allowlisted below. It is the
-only intentional float reachable from ``ReceiptExtraction``. Any *other* float,
-especially on a money field, is a real violation and fails this test. If a new
-float ever appears on a money field, this guard fails and that is the point.
+``LineItem.bbox`` and ``ReceiptExtraction.field_boxes`` hold normalised
+``[x0, y0, x1, y1]`` spatial grounding coordinates (0-1) -- for a line item and
+for a receipt-level field respectively. Those are explicitly NOT money -- they
+are pixel geometry -- so ``float`` is the correct type and both fields are
+allowlisted below. They are the only intentional floats reachable from
+``ReceiptExtraction``. Any *other* float, especially on a money field, is a real
+violation and fails this test. If a new float ever appears on a money field,
+this guard fails and that is the point.
 """
 
 from __future__ import annotations
@@ -33,6 +35,9 @@ from receipts.extract import schema
 # ``float`` because they are explicitly NOT part of the money path.
 _ALLOWED_FLOAT_FIELDS: set[tuple[str, str]] = {
     ("LineItem", "bbox"),  # normalised [x0,y0,x1,y1] grounding coords, not money
+    # Same grounding coordinates for receipt-LEVEL fields, keyed by correction
+    # path. `dict[str, list[float]]` -- the float is pixel geometry, not money.
+    ("ReceiptExtraction", "field_boxes"),
 }
 
 

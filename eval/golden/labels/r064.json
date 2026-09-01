@@ -38,7 +38,12 @@
     "subtotal": "178.57",
     "tax": "21.43",
     "tax_breakdown": [
-      { "label": "VAT", "base": "178.57", "rate": "0.12", "amount": "21.43" }
+      {
+        "label": "VAT",
+        "base": "178.57",
+        "rate": "0.12",
+        "amount": "21.43"
+      }
     ],
     "discount": null,
     "total": "200.00",
@@ -58,5 +63,6 @@
     "unreadable_regions": [],
     "receipt_is_inconsistent": false,
     "notes": "CITIHARDWARE (Citihardware Bacolod, Inc.) thermal SALES INVOICE, SI No. 000014298. Single line: SKU 10071880 OUTLET FOCUS AIRCON WIDE WHITE, 1 PC @ 200.00 = 200.00. VATable 178.57 + VAT 21.43 = 200.00 Total (tax-inclusive). Paid Debit Card 200.00 (BDO Unibank); no card last-4 printed -> card_last4 null. Customer JEFF (no TIN). Date/Time 2026-03-10 10:05:56. POS supplier Toril LCY Trading Corporation."
-  }
+  },
+  "field_boxes": {}
 }

@@ -80,6 +80,7 @@ const RECEIPT: ReceiptDetail = {
   ],
   current_findings: [],
   not_rechecked: [],
+  field_boxes: {},
 }
 
 function mount(overrides: Partial<Parameters<typeof ReceiptDetailPanel>[0]> = {}) {

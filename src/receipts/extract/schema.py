@@ -260,6 +260,23 @@ class ReceiptExtraction(BaseModel):
     totals: Totals = Field(default_factory=Totals)
     payment: Payment = Field(default_factory=Payment)
     meta: ExtractionMeta = Field(default_factory=ExtractionMeta)
+    field_boxes: dict[str, list[float]] = Field(
+        default_factory=dict,
+        description=(
+            "Where receipt-LEVEL fields sit on the image, keyed by the dotted "
+            "correction path they are edited under -- 'merchant.name', "
+            "'payment.method', etc. Each value is [x0,y0,x1,y1] normalised 0-1, "
+            "the same convention as LineItem.bbox (line items keep their own "
+            "`bbox` and are NOT duplicated here). Populated by the OCR grounding "
+            "pass when a field's printed value matches one image line cleanly; "
+            "the model is not asked for it. Empty is the ordinary case -- a field "
+            "the grounding pass could not place unambiguously has no key here, "
+            "and the review UI simply draws no box for it rather than a wrong one. "
+            "It is grounding metadata, not extraction truth: paths.group_of maps "
+            "it to the 'derived' family so eval/metrics.py scores it in no class, "
+            "and the golden labels carry it as an empty {} rather than as content."
+        ),
+    )
 
 
 # --------------------------------------------------------------------------- #

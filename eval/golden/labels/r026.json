@@ -63,5 +63,6 @@
     "unreadable_regions": [],
     "receipt_is_inconsistent": false,
     "notes": "SOUTH GROCER thermal POS, POS03. Single VAT-exempt line GLDEN FRSH GREEN ICE 79.90 (E). Total Due 79.90, Cash 500.00, Change 420.10. VATable 0, VAT-Exempt 79.90, VAT 0.00. Customer block blank -> buyer null."
-  }
+  },
+  "field_boxes": {}
 }

@@ -38,7 +38,12 @@
     "subtotal": "92.86",
     "tax": "11.14",
     "tax_breakdown": [
-      { "label": "VAT", "base": "92.86", "rate": "0.12", "amount": "11.14" }
+      {
+        "label": "VAT",
+        "base": "92.86",
+        "rate": "0.12",
+        "amount": "11.14"
+      }
     ],
     "discount": null,
     "total": "104.00",
@@ -58,5 +63,6 @@
     "unreadable_regions": [],
     "receipt_is_inconsistent": false,
     "notes": "AAB BAKING GOODS & SUPPLIES INC. thermal SALES INVOICE S.I. No. 00029667 (same merchant as r032), Terminal 1, cashier RANOSA ANGELYN, Trans Date 04/11/26 11:10. Single line Harvest Rolled O 104.00. VATable 92.86 + VAT 11.14 = 104.00 Total (tax-inclusive). Cash 500.00, Change 396.00, 1 item. Buyer's Information block blank -> buyer null. POS provider JIMAC Incorporated."
-  }
+  },
+  "field_boxes": {}
 }

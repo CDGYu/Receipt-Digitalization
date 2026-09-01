@@ -30,7 +30,10 @@
       "unit_price": "250.00",
       "line_total": "250.00",
       "modifiers": [
-        { "label": "Snr/PWD relief (48.21) net of Service charge (+46.43) and rounding", "amount": "-30.71" }
+        {
+          "label": "Snr/PWD relief (48.21) net of Service charge (+46.43) and rounding",
+          "amount": "-30.71"
+        }
       ],
       "bbox": null,
       "is_template_row": false
@@ -52,8 +55,18 @@
     "subtotal": "520.00",
     "tax": "0.00",
     "tax_breakdown": [
-      { "label": "VATable Sales", "base": "223.21", "rate": "0.12", "amount": "26.79" },
-      { "label": "VAT Exempt Sales", "base": "192.86", "rate": "0.00", "amount": "0.00" }
+      {
+        "label": "VATable Sales",
+        "base": "223.21",
+        "rate": "0.12",
+        "amount": "26.79"
+      },
+      {
+        "label": "VAT Exempt Sales",
+        "base": "192.86",
+        "rate": "0.00",
+        "amount": "0.00"
+      }
     ],
     "discount": "30.71",
     "total": "489.29",
@@ -73,5 +86,6 @@
     "unreadable_regions": [],
     "receipt_is_inconsistent": false,
     "notes": "The Wired Human Beings Inc (cafe) thermal INVOICE 127296. Two CAFE lines: OJ ESPRESSO TONIC @250x1 = 250.00; HEY LOVE++ SPANISH LATTE @270x1 with a 77.14 PWD discount -> line nets 192.86 (recorded as a -77.14 PWD modifier on the 270 line). Subtotal 520.00 (250+270). Tax breakdown: VATable 223.21 (VAT 26.79) + VAT Exempt 192.86 (the PWD-discounted item). Snr/PWD Discount 48.21 recorded as totals.discount; a Service charge 46.43 is also printed. TOTAL 489.29. Payment Card, Total Qty 2. Customer KATRINA BRAGANZA. This is a Senior/PWD-discounted cafe sale - a good tax-edge sample. POS provider Kintoz IT Solutions."
-  }
+  },
+  "field_boxes": {}
 }

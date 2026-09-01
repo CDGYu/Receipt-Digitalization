@@ -1,5 +1,11 @@
 {
-  "merchant": { "name": null, "branch": null, "address": null, "tax_id": null, "phone": null },
+  "merchant": {
+    "name": null,
+    "branch": null,
+    "address": null,
+    "tax_id": null,
+    "phone": null
+  },
   "buyer": {
     "name": "Hey Lucky Cafe",
     "tax_id": null
@@ -38,7 +44,10 @@
     "change": null,
     "prices_include_tax": null
   },
-  "payment": { "method": null, "card_last4": null },
+  "payment": {
+    "method": null,
+    "card_last4": null
+  },
   "meta": {
     "is_handwritten": true,
     "is_refund": false,
@@ -47,5 +56,6 @@
     "unreadable_regions": [],
     "receipt_is_inconsistent": false,
     "notes": "Generic blank handwritten sales pad No. 6021747 (same pad style as r014/r058), Date 05/09/26. 'Sold to Hey Lucky Cafe, BF Homes' is the BUYER. One line: 20x REVEL BAR @33 = 660.00 = TOTAL 660.00. No printed merchant identity -> merchant null."
-  }
+  },
+  "field_boxes": {}
 }

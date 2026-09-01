@@ -6,7 +6,10 @@
     "tax_id": "620-589-900-00001",
     "phone": null
   },
-  "buyer": { "name": null, "tax_id": null },
+  "buyer": {
+    "name": null,
+    "tax_id": null
+  },
   "receipt": {
     "number": "006547",
     "date": "2026-03-14",
@@ -35,7 +38,12 @@
     "subtotal": "625.00",
     "tax": "75.00",
     "tax_breakdown": [
-      { "label": "VAT (12%) incl.", "base": "625.00", "rate": "0.12", "amount": "75.00" }
+      {
+        "label": "VAT (12%) incl.",
+        "base": "625.00",
+        "rate": "0.12",
+        "amount": "75.00"
+      }
     ],
     "discount": null,
     "total": "700.00",
@@ -55,5 +63,6 @@
     "unreadable_regions": [],
     "receipt_is_inconsistent": false,
     "notes": "BEAN BLOCK COFFEE ROASTERS thermal SALES INVOICE, Receipt No. 006547 (same merchant/TIN as r012/r017/r030). One line: 1 x Local/Mountain Summit/500g Whole Beans P700.00. Subtotal 700.00; VATable 625.00 + VAT (12% incl.) 75.00 = 700.00 Total (tax-inclusive). Payment Method GCash. Sale date/time from the footer 14-03-2026 11:28:07. Customer block blank -> buyer null. POS provider Kintoz IT Solutions (Powered by Qashier)."
-  }
+  },
+  "field_boxes": {}
 }

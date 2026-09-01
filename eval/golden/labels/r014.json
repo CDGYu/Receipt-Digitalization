@@ -116,5 +116,6 @@
     "unreadable_regions": [],
     "receipt_is_inconsistent": false,
     "notes": "Generic blank handwritten sales pad (no merchant name/TIN printed - only a THANK YOU COME AGAIN footer and No. 6021741). 'Sold to HEY LUCKY CAFE, BF Homes' is the BUYER. Six lines of baked goods: 8x OATMEAL CHOCO @35=280, 6x S'MORES @35=210, 7x CHOCOCHIP @35=245, 4x BISCOFF @35=140, 3x RED VELVET @35=105, 6x REVEL BAR @26=156; sum=1136.00 matches the written TOTAL 1,136.00. A 'Consume before 03/07/26' note is on the pad; no VAT breakdown. Merchant is null because the pad prints no seller identity."
-  }
+  },
+  "field_boxes": {}
 }

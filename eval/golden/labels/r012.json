@@ -56,5 +56,6 @@
     "unreadable_regions": [],
     "receipt_is_inconsistent": false,
     "notes": "BIR OFFICIAL RECEIPT (pre-printed form, narrative style), photographed rotated 90 degrees. The 'Particulars/Amount' grid is entirely blank; only the narrative body is filled: 'Received from ___ engaged in the business style of ___ ... the sum of One thousand seven hundred forty three & 75/100 pesos (P 1743.75) in partial/full payment for Coffee beans', address at Paranaque. So there is one line item 'Coffee beans' with no qty/unit_price and total 1743.75. The written amount in words ('one thousand seven hundred forty three') plus the '.75' box gives 1743.75. No VAT breakdown is filled. BEAN BLOCK VENTURES INC. is the issuing MERCHANT; the Received-from (buyer) line is blank."
-  }
+  },
+  "field_boxes": {}
 }

@@ -56,5 +56,6 @@
     "unreadable_regions": [],
     "receipt_is_inconsistent": false,
     "notes": "BIR SALES INVOICE: pre-printed form, handwritten values. CASH box ticked. Date line is blank on the paper -> receipt.date and date_raw null. Single line: DSL-2 (diesel), qty 17.046 x 117.35 = 2000.35 vs written amount 2000.00. Vatable Sales 1785.71 + VAT Amount 214.29 = 2000.00 (tax-inclusive). 'IDEAL SOURCE' is the BUYER (Sold to). The sequential twin of r003 (Serv Central No. 31217). Footer names A & C Printers (printer), TIN 223-885-849-002-VAT is the printer's."
-  }
+  },
+  "field_boxes": {}
 }

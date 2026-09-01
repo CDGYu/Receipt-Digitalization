@@ -38,7 +38,12 @@
     "subtotal": "70.76",
     "tax": "8.49",
     "tax_breakdown": [
-      { "label": "VAT", "base": "70.76", "rate": "0.12", "amount": "8.49" }
+      {
+        "label": "VAT",
+        "base": "70.76",
+        "rate": "0.12",
+        "amount": "8.49"
+      }
     ],
     "discount": null,
     "total": "79.25",
@@ -58,5 +63,6 @@
     "unreadable_regions": [],
     "receipt_is_inconsistent": false,
     "notes": "SOUTH GROCER thermal POS, POS05, slightly faded. Single VATable line CLARA OLE TOM/SCE1KL 79.25 = Total Due 79.25. VATable 70.76 + VAT 8.49 = 79.25. Paid PayMaya CC 79.25 (Trace 002680). Buyer here is a DIFFERENT greencard customer, Cust Name reads 'D. IROJAN' (greencard 1790016793, not transcribed) - not the Braganza on the other South Grocer receipts."
-  }
+  },
+  "field_boxes": {}
 }

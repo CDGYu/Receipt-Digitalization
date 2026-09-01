@@ -98,8 +98,18 @@
     "subtotal": "782.63",
     "tax": "77.72",
     "tax_breakdown": [
-      { "label": "VATable", "base": "647.63", "rate": "0.12", "amount": "77.72" },
-      { "label": "VAT-Exempt", "base": "135.00", "rate": "0.00", "amount": "0.00" }
+      {
+        "label": "VATable",
+        "base": "647.63",
+        "rate": "0.12",
+        "amount": "77.72"
+      },
+      {
+        "label": "VAT-Exempt",
+        "base": "135.00",
+        "rate": "0.00",
+        "amount": "0.00"
+      }
     ],
     "discount": null,
     "total": "860.35",
@@ -119,5 +129,6 @@
     "unreadable_regions": [],
     "receipt_is_inconsistent": false,
     "notes": "SOUTH GROCER thermal POS, POS02. Six lines: 3x GUSTAZO L/GRLIC @172.30 (V), BASIC ALFALFA 125G 135.00 (E, VAT-exempt), CT CHUNKS WATER 72.75 (V), CHIZ BOY SHRED MOZZA 135.70 (V); sum = 860.35 Total Due. VATable 647.63 + VAT 77.72 = 725.35, plus VAT-Exempt 135.00 = 860.35. subtotal recorded as 782.63 (net of the 77.72 VAT). Cash 1,000.00, Change 139.65. Buyer RAYMOND VICENTE BRAGANZA (greencard, not transcribed)."
-  }
+  },
+  "field_boxes": {}
 }

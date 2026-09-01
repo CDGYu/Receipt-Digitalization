@@ -25,7 +25,12 @@
     "subtotal": "1983.30",
     "tax": "238.00",
     "tax_breakdown": [
-      { "label": "VAT", "base": "1983.30", "rate": "0.12", "amount": "238.00" }
+      {
+        "label": "VAT",
+        "base": "1983.30",
+        "rate": "0.12",
+        "amount": "238.00"
+      }
     ],
     "discount": null,
     "total": "2221.30",
@@ -41,9 +46,14 @@
     "is_handwritten": false,
     "is_refund": false,
     "legibility": "fair",
-    "ambiguous_fields": ["line_items"],
-    "unreadable_regions": ["most line-item amounts across a dense 17-item list"],
+    "ambiguous_fields": [
+      "line_items"
+    ],
+    "unreadable_regions": [
+      "most line-item amounts across a dense 17-item list"
+    ],
     "receipt_is_inconsistent": false,
     "notes": "SOUTH GROCER thermal POS, POS02, a long 17-item receipt (dense). Header totals are clear and recorded: Total Due 2,221.30, VATable 1,983.30 + VAT 238.00 = 2221.30, PayMaya (Trace 004064), buyer RAYMOND VICENTE BRAGANZA. line_items is LEFT EMPTY on purpose (same treatment as r033): a partial transcription of the confidently-read lines (6x D/ELENA SAR OLVE OIL @197.30, 3x MARBY SHRMP LUMPIA-C @98.25, 6x PF SF CHI/TOCINO220G @99) did NOT reconcile to 2,221.30 because a 'DM SWT CHILI 12OZ' line and a MARBY line at ~50.50 could not be read with confidence, and a partial line set makes R020 fire a false shortfall. Per the golden-set rule, the uncertain lines are omitted rather than guessed and the reliable header totals are the anchor."
-  }
+  },
+  "field_boxes": {}
 }

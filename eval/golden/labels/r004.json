@@ -56,5 +56,6 @@
     "unreadable_regions": [],
     "receipt_is_inconsistent": false,
     "notes": "BIR SALES INVOICE: pre-printed form, handwritten values. Single filled line: DIESEL, qty 7.752 x 129.00 = 1000.01 vs written amount 1000 (corroborates). The summary block (Total Sales VAT Inclusive / Less: VAT / Amount Net of VAT / Add: VAT / VATable / VAT-Exempt / Zero-Rated / VAT Amount) is entirely blank; only TOTAL AMOUNT DUE (P 1000) is filled, so subtotal/tax are null. 'IDEAL SOURCE' is the BUYER (Sold to). Merchant proprietor 'Rizza Rose K. Ko-Prop.' printed under the name. Footer names RDM Printing Services (printer), TIN 126-957-547-000 Non Vat is the printer's."
-  }
+  },
+  "field_boxes": {}
 }

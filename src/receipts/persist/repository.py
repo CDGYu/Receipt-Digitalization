@@ -30,6 +30,7 @@ from __future__ import annotations
 import math
 import re
 import uuid
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from datetime import date as date_cls
@@ -55,6 +56,7 @@ from .models import (
     ExtractionRun,
     LineItem,
     PassName,
+    ProcessedReceipt,
     Receipt,
     TaxBand,
     ValidationFinding,
@@ -68,6 +70,7 @@ __all__ = [
     "get_findings",
     "get_receipt",
     "mark_duplicate",
+    "mark_receipts_processed",
     "query_receipts",
     "redact_pan",
     "save_extraction",
@@ -653,6 +656,15 @@ def save_extraction(
         session.flush()
 
     receipt.confidence_reasons = _reasons_json(confidence_reasons)
+    # Set here, beside the other system-minted values and AFTER the redaction
+    # pass, deliberately: ``field_boxes`` is derived grounding geometry (a dict
+    # of paths to lists of floats), not model text, so it has nothing to redact
+    # and does not belong in front of the PAN pass. Set unconditionally on both
+    # the insert and update branches -- like ``line_items`` and
+    # ``confidence_reasons`` -- so a re-run refreshes the boxes rather than
+    # leaving a stale set from a previous attempt. ``dict(...)`` copies it off
+    # the extraction so the ORM does not alias the pydantic model's own dict.
+    receipt.field_boxes = dict(extraction.field_boxes)
     receipt.line_items = _build_line_items(extraction)
     receipt.tax_bands = _build_tax_bands(extraction)
 
@@ -935,6 +947,37 @@ def query_receipts(
 
     query = query.order_by(Receipt.created_at, Receipt.id).limit(limit).offset(offset)
     return list(session.scalars(query))
+
+
+def mark_receipts_processed(
+    session: Session,
+    receipt_ids: Iterable[uuid.UUID],
+    *,
+    processed_by: str | None = None,
+) -> list[ProcessedReceipt]:
+    """Archive receipts that have been successfully exported.
+
+    The caller owns the transaction. Existing archive rows are left alone, so a
+    retry after a response timeout can mark only the receipts that are still
+    active instead of failing on the first duplicate marker.
+    """
+    ids = list(dict.fromkeys(receipt_ids))
+    if not ids:
+        return []
+
+    existing = set(
+        session.scalars(
+            select(ProcessedReceipt.receipt_id).where(ProcessedReceipt.receipt_id.in_(ids))
+        )
+    )
+    rows = [
+        ProcessedReceipt(receipt_id=receipt_id, processed_by=processed_by)
+        for receipt_id in ids
+        if receipt_id not in existing
+    ]
+    session.add_all(rows)
+    session.flush()
+    return rows
 
 
 def find_stranded(

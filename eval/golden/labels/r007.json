@@ -56,5 +56,6 @@
     "unreadable_regions": [],
     "receipt_is_inconsistent": false,
     "notes": "BIR SALES INVOICE: pre-printed form, handwritten values. L.B. Ramos HEBRON, Antipolo branch (TIN ...00010). Single line 'Diesel' with unit cost 103.50 and amount 1,000; the Quantity column was left blank on the paper, so qty is null. Total Sales (VAT Inclusive) 1,000; Amount Net of VAT 892.86 + Add: VAT 107.14 = 1000 (tax-inclusive). 'Ideal Source' is the BUYER (Registered Name / Sold To)."
-  }
+  },
+  "field_boxes": {}
 }

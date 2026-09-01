@@ -56,5 +56,6 @@
     "unreadable_regions": [],
     "receipt_is_inconsistent": false,
     "notes": "Petron thermal POS SALES INVOICE, machine-printed but faded (fair) - a lightly degraded print. 'Diesel Max (P : 03)' code 03 kept out of description. Date reads 03/27/2026. qty 16.46 x 121.50 = 1999.89 vs printed 2,000.00. VATable 1,785.71 + VAT 214.29 = 2000.00 (tax-inclusive). 'IDEAL SOURCE' is the BUYER. Footer TIN 007-068-922-00000 belongs to WI-AIR PHILIPPINES INC (POS accreditation holder), not the dealer."
-  }
+  },
+  "field_boxes": {}
 }

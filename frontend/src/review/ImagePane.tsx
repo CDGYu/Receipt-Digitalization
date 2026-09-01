@@ -1,5 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
-import type { CSSProperties } from 'react'
+import type {
+  CSSProperties,
+  KeyboardEvent as ReactKeyboardEvent,
+  PointerEvent as ReactPointerEvent,
+} from 'react'
 import type { NormalizedBBox } from '../api/types'
 import styles from './ImagePane.module.css'
 
@@ -70,6 +74,14 @@ export interface ImagePaneProps {
   readonly fetchUrl: (id: string) => Promise<string>
   readonly lineItemBoxes?: readonly LineItemBox[]
   readonly activeLineItemPosition?: number | null
+  /** Where receipt-level fields sit on the image, keyed by the dotted path the
+   *  review form edits them under (`merchant.name`, ...) -- the receipt's
+   *  `field_boxes`. Only the field named by `activeFieldPath` is drawn: a
+   *  header highlight is a "show me where this one is" affordance, not the
+   *  all-boxes-at-once overlay the line items get. */
+  readonly fieldBoxes?: Readonly<Record<string, NormalizedBBox>>
+  /** The dotted path of the field the reviewer is editing, or `null`. */
+  readonly activeFieldPath?: string | null
 }
 
 export interface LineItemBox {
@@ -88,9 +100,26 @@ interface RenderedBox {
   readonly style: CSSProperties
 }
 
+interface Pan {
+  readonly x: number
+  readonly y: number
+}
+
+interface Drag {
+  readonly pointerId: number
+  readonly startX: number
+  readonly startY: number
+  readonly panX: number
+  readonly panY: number
+}
+
 const ZOOM_STEP = 1.25
+const MIN_ZOOM = 0.5
+const MAX_ZOOM = 4
 const QUARTER_TURN = 90
 const FULL_TURN = 360
+const PAN_KEY_STEP = 32
+const ORIGIN: Pan = { x: 0, y: 0 }
 
 /** Shared by the mount effect and the explicit retry -- both are "ask for a link
  *  from nothing", and a reviewer should not get two different sentences for the
@@ -149,19 +178,28 @@ function renderableBoxes(
   return boxes
 }
 
+function clampZoom(value: number): number {
+  return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, value))
+}
+
 export function ImagePane({
   receiptId,
   fetchUrl,
   lineItemBoxes = [],
   activeLineItemPosition = null,
+  fieldBoxes = {},
+  activeFieldPath = null,
 }: ImagePaneProps) {
   const [source, setSource] = useState<Source | null>(null)
   const [failure, setFailure] = useState<string | null>(null)
   const [zoom, setZoom] = useState(1)
   const [rotation, setRotation] = useState(0)
+  const [pan, setPan] = useState<Pan>(ORIGIN)
+  const [dragging, setDragging] = useState(false)
   /** Whether the one silent re-sign has already been spent. A ref, not state:
    *  two `error` events in one batch must not both read `false`. */
   const retried = useRef(false)
+  const drag = useRef<Drag | null>(null)
 
   useEffect(() => {
     // Reset rather than rely on the caller remounting us: a new receipt gets its
@@ -172,7 +210,12 @@ export function ImagePane({
     let live = true
     setSource(null)
     setFailure(null)
+    setZoom(1)
+    setRotation(0)
+    setPan(ORIGIN)
+    setDragging(false)
     retried.current = false
+    drag.current = null
     fetchUrl(receiptId).then(
       (url) => {
         if (live) {
@@ -220,7 +263,103 @@ export function ImagePane({
     })
   }
 
+  function zoomIn(): void {
+    setZoom((current) => clampZoom(current * ZOOM_STEP))
+  }
+
+  function zoomOut(): void {
+    setZoom((current) => clampZoom(current / ZOOM_STEP))
+  }
+
+  function rotateClockwise(): void {
+    setRotation((current) => (current + QUARTER_TURN) % FULL_TURN)
+  }
+
+  function resetView(): void {
+    setZoom(1)
+    setRotation(0)
+    setPan(ORIGIN)
+  }
+
+  function movePan(dx: number, dy: number): void {
+    setPan((current) => ({ x: current.x + dx, y: current.y + dy }))
+  }
+
+  function startDrag(event: ReactPointerEvent<HTMLDivElement>): void {
+    if (event.button !== 0 || event.isPrimary === false) {
+      return
+    }
+    event.preventDefault()
+    event.currentTarget.setPointerCapture?.(event.pointerId)
+    drag.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      panX: pan.x,
+      panY: pan.y,
+    }
+    setDragging(true)
+  }
+
+  function dragView(event: ReactPointerEvent<HTMLDivElement>): void {
+    const current = drag.current
+    if (current === null || current.pointerId !== event.pointerId) {
+      return
+    }
+    event.preventDefault()
+    setPan({
+      x: current.panX + event.clientX - current.startX,
+      y: current.panY + event.clientY - current.startY,
+    })
+  }
+
+  function stopDrag(event: ReactPointerEvent<HTMLDivElement>): void {
+    const current = drag.current
+    if (current === null || current.pointerId !== event.pointerId) {
+      return
+    }
+    if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+    drag.current = null
+    setDragging(false)
+  }
+
+  function panWithKeyboard(event: ReactKeyboardEvent<HTMLDivElement>): void {
+    switch (event.key) {
+      case 'ArrowLeft':
+        event.preventDefault()
+        movePan(-PAN_KEY_STEP, 0)
+        break
+      case 'ArrowRight':
+        event.preventDefault()
+        movePan(PAN_KEY_STEP, 0)
+        break
+      case 'ArrowUp':
+        event.preventDefault()
+        movePan(0, -PAN_KEY_STEP)
+        break
+      case 'ArrowDown':
+        event.preventDefault()
+        movePan(0, PAN_KEY_STEP)
+        break
+    }
+  }
+
   const boxes = renderableBoxes(lineItemBoxes, activeLineItemPosition)
+  // The one header field the reviewer is editing, if it was placed on the image
+  // and its coordinates are well-formed. Only the active field is ever drawn --
+  // unlike the line items, whose whole set is faintly outlined -- because a
+  // header highlight answers "where is this field" for the field in hand, and a
+  // page full of header boxes would just be noise over the same photo. A field
+  // with no entry (the grounding pass could not place it) or a malformed one
+  // yields `null` and draws nothing, so an unlocatable field is silently no-op
+  // rather than a misplaced rectangle.
+  const activeFieldStyle =
+    activeFieldPath !== null && activeFieldPath in fieldBoxes
+      ? styleForBox(fieldBoxes[activeFieldPath])
+      : null
+  const viewerClass = dragging ? `${styles.viewer} ${styles.viewerDragging}` : styles.viewer
 
   return (
     <div className={styles.pane}>
@@ -228,23 +367,26 @@ export function ImagePane({
         <button
           type="button"
           className={styles.button}
-          onClick={() => setZoom((current) => current * ZOOM_STEP)}
+          onClick={zoomIn}
         >
           Zoom in
         </button>
         <button
           type="button"
           className={styles.button}
-          onClick={() => setZoom((current) => current / ZOOM_STEP)}
+          onClick={zoomOut}
         >
           Zoom out
         </button>
         <button
           type="button"
           className={styles.button}
-          onClick={() => setRotation((current) => (current + QUARTER_TURN) % FULL_TURN)}
+          onClick={rotateClockwise}
         >
           Rotate
+        </button>
+        <button type="button" className={styles.button} onClick={resetView}>
+          Reset view
         </button>
       </div>
       {failure !== null ? (
@@ -262,34 +404,67 @@ export function ImagePane({
         <p className={styles.loading}>Loading the receipt image…</p>
       ) : (
         <div
-          className={styles.stage}
-          // Zoom, rotation and boxes share one coordinate plane. The transform
-          // lives on the stage so the photograph and its overlay move together.
-          style={{ transform: `scale(${zoom}) rotate(${rotation}deg)` }}
+          className={viewerClass}
+          role="region"
+          aria-label="Receipt image viewer"
+          tabIndex={0}
+          onKeyDown={panWithKeyboard}
+          onPointerDown={startDrag}
+          onPointerMove={dragView}
+          onPointerUp={stopDrag}
+          onPointerCancel={stopDrag}
+          onLostPointerCapture={stopDrag}
         >
-          <img
-            key={source.generation}
-            className={styles.image}
-            src={source.url}
-            alt="Receipt"
-            onError={handleError}
-          />
-          {boxes.length === 0 ? null : (
-            <div className={styles.highlights} aria-hidden="true">
-              {boxes.map((box) => (
-                <span
-                  key={box.position}
-                  className={
-                    box.active
-                      ? `${styles.highlight} ${styles.highlightActive}`
-                      : styles.highlight
-                  }
-                  data-line-item-position={box.position}
-                  style={box.style}
-                />
-              ))}
+          <div
+            className={styles.panLayer}
+            style={{ transform: `translate(${pan.x}px, ${pan.y}px)` }}
+          >
+            <div
+              className={styles.stage}
+              // Zoom, rotation and boxes share one coordinate plane. Panning is
+              // outside this stage so dragging stays screen-aligned after rotate.
+              style={{ transform: `scale(${zoom}) rotate(${rotation}deg)` }}
+            >
+              <img
+                key={source.generation}
+                className={styles.image}
+                src={source.url}
+                alt="Receipt"
+                onError={handleError}
+                draggable={false}
+              />
+              {boxes.length === 0 && activeFieldStyle === null ? null : (
+                <div className={styles.highlights} aria-hidden="true">
+                  {boxes.map((box) => (
+                    <span
+                      key={box.position}
+                      className={
+                        box.active
+                          ? `${styles.highlight} ${styles.highlightActive}`
+                          : styles.highlight
+                      }
+                      data-line-item-position={box.position}
+                      style={box.style}
+                    />
+                  ))}
+                  {activeFieldStyle === null ? null : (
+                    // Always the active style: this box is only ever the one
+                    // field the reviewer is on, so it reads like a focused
+                    // line-item box rather than the quiet outline the others
+                    // get. Keyed and tagged by the dotted path so a test (and a
+                    // debugger) can find it the way `data-line-item-position`
+                    // finds an item box.
+                    <span
+                      key={activeFieldPath ?? ''}
+                      className={`${styles.highlight} ${styles.highlightActive}`}
+                      data-field-path={activeFieldPath ?? undefined}
+                      style={activeFieldStyle}
+                    />
+                  )}
+                </div>
+              )}
             </div>
-          )}
+          </div>
         </div>
       )}
     </div>

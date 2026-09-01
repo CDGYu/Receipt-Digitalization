@@ -63,5 +63,6 @@
     "unreadable_regions": [],
     "receipt_is_inconsistent": false,
     "notes": "Google Tax Invoice, invoice number 5552760710, machine-printed. CURRENCY IS USD, not PHP - a deliberate non-PHP sample. Single line: Google Workspace Business Standard, Commitment, Interval Apr 1 - Apr 30, Qty 1, Amount $12.00. Subtotal in USD $12.00, VAT (0%) $0.00, Total in USD $12.00 (a struck-through $0.00 sits above the circled $12.00 total). No printed invoice date in the header rows shown -> receipt.date null. Handwritten annotation 'P1,600 April 2 May Bill' is a local note about the peso-equivalent payment and is kept in notes, not converted into any field (the invoice itself is in USD)."
-  }
+  },
+  "field_boxes": {}
 }

@@ -62,7 +62,12 @@
     "subtotal": "194.87",
     "tax": "23.38",
     "tax_breakdown": [
-      { "label": "VAT", "base": "194.87", "rate": "0.12", "amount": "23.38" }
+      {
+        "label": "VAT",
+        "base": "194.87",
+        "rate": "0.12",
+        "amount": "23.38"
+      }
     ],
     "discount": null,
     "total": "218.25",
@@ -82,5 +87,6 @@
     "unreadable_regions": [],
     "receipt_is_inconsistent": false,
     "notes": "SOUTH GROCER thermal POS, POS05. Three VATable lines 3x CT CHUNKS WATER 184 @72.75 = 218.25 (Total Due). VATable 194.87 + VAT 23.38 = 218.25. Cash 250.00, Change 31.75. Buyer RAYMOND VICENTE BRAGANZA (greencard 1790050002, not transcribed)."
-  }
+  },
+  "field_boxes": {}
 }

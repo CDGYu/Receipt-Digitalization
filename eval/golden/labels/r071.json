@@ -6,7 +6,10 @@
     "tax_id": "007-022-201-00000",
     "phone": "(02) 8862-0823 / (02) 8862-0963"
   },
-  "buyer": { "name": null, "tax_id": null },
+  "buyer": {
+    "name": null,
+    "tax_id": null
+  },
   "receipt": {
     "number": "125069",
     "date": "2026-03-11",
@@ -53,7 +56,10 @@
     "change": null,
     "prices_include_tax": true
   },
-  "payment": { "method": null, "card_last4": null },
+  "payment": {
+    "method": null,
+    "card_last4": null
+  },
   "meta": {
     "is_handwritten": true,
     "is_refund": false,
@@ -62,5 +68,6 @@
     "unreadable_regions": [],
     "receipt_is_inconsistent": false,
     "notes": "SKY LINE ALUMINUM & GLASS SUPPLY, INC. handwritten invoice No. 125069 (same merchant as r068), stamped PAID. Two lines: Angle 3/4 x 1 PCW qty 1 = 189.69; Sealant white qty 1 = 120. TOTAL AMOUNT DUE 309.69 (189.69 + 120 = 309.69 reconciles). VAT summary boxes blank on the form. Sold-To blank -> buyer null."
-  }
+  },
+  "field_boxes": {}
 }

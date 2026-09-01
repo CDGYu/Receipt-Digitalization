@@ -80,5 +80,6 @@
     "unreadable_regions": [],
     "receipt_is_inconsistent": false,
     "notes": "BIR sales invoice: pre-printed form, handwritten values. 'CASH' checkbox ticked. The summary block's first line is pre-printed 'Total Sales (VAT Inclusive)'. The form pre-prints THREE product rows (MaxiPower, MaxiGreen, DieselPlus) in that order, top to bottom, and only DieselPlus is filled in. qty x unit_price = 1999.85 vs the written 2,000.00 amount (within tolerance). 'Ideal source' is the BUYER (Sold To), not the merchant. The footer TIN 103-969-951-00000 belongs to the PRINTER (RJ Printing Press), not the merchant."
-  }
+  },
+  "field_boxes": {}
 }

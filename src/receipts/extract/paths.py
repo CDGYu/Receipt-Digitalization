@@ -107,6 +107,16 @@ def count_nulls(obj: Any) -> int:
 _META_PREFIX = "meta."
 _LINE_ITEMS = "line_items"
 
+#: The grounding side-map ``ReceiptExtraction.field_boxes`` (schema.py). It is
+#: neither transcription nor self-report: the model never produces it, the
+#: labels never declare it, and the OCR pass fills it AFTER the run from pixel
+#: geometry. So it is a fourth family -- ``derived`` -- that :func:`group_of`
+#: names and :func:`receipts`' eval (``eval/metrics.py``) counts in nothing.
+#: A prefix rather than a leaf name, and structural for the same reason the
+#: others are: it classifies every ``field_boxes.merchant.name`` sub-path a
+#: future field gains without anyone adding it here.
+_FIELD_BOXES = "field_boxes"
+
 #: The self-report leaves that do **not** live under ``meta.``. One declaration,
 #: read by :func:`group_of` and by nothing else.
 #:
@@ -126,15 +136,23 @@ SELF_REPORT_LEAVES = frozenset({"is_template_row"})
 
 
 def group_of(path: str) -> str:
-    """Which family a dotted path belongs to: ``self_report``, ``line_items`` or ``core``.
+    """Which family a dotted path belongs to: ``derived``, ``self_report``,
+    ``line_items`` or ``core``.
 
     Read from the path string alone — never from either side's value.
 
+    ``derived`` is checked first and is the whole of :data:`_FIELD_BOXES`'s
+    subtree: grounding geometry the model never reads and the labels never
+    declare, so it is scored in no class (``eval/metrics.py``). Checking it
+    first keeps a future ``field_boxes.meta.*`` path out of ``self_report``.
+
     ``self_report`` is reached two ways, and there are exactly these two:
     everything under the ``meta.`` prefix, and the leaves declared in
-    :data:`SELF_REPORT_LEAVES`. The set is checked **first**, because the
-    leaves in it live under prefixes that would otherwise claim them.
+    :data:`SELF_REPORT_LEAVES`. The set is checked before the ``meta.`` prefix,
+    because the leaves in it live under prefixes that would otherwise claim them.
     """
+    if path == _FIELD_BOXES or path.startswith(f"{_FIELD_BOXES}."):
+        return "derived"
     if path.rsplit(".", 1)[-1] in SELF_REPORT_LEAVES:
         return "self_report"
     if path.startswith(_META_PREFIX):

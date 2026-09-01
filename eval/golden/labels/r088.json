@@ -6,7 +6,10 @@
     "tax_id": "620-589-900-00001",
     "phone": null
   },
-  "buyer": { "name": null, "tax_id": null },
+  "buyer": {
+    "name": null,
+    "tax_id": null
+  },
   "receipt": {
     "number": "008628",
     "date": "2026-05-23",
@@ -18,17 +21,102 @@
     "terminal": null
   },
   "line_items": [
-    { "position": 0, "description_raw": "Local/Smooth Highlands/100g Whole Beans", "sku": null, "qty": "1", "unit": null, "unit_price": "180.50", "line_total": "180.50", "modifiers": [ { "label": "-5.0% incl.", "amount": null } ], "bbox": null, "is_template_row": false },
-    { "position": 1, "description_raw": "Local/Smooth Highlands/100g Whole Beans", "sku": null, "qty": "1", "unit": null, "unit_price": "180.50", "line_total": "180.50", "modifiers": [ { "label": "5.0% incl.", "amount": null } ], "bbox": null, "is_template_row": false },
-    { "position": 2, "description_raw": "Local/Smooth Highlands/100g Whole Beans", "sku": null, "qty": "1", "unit": null, "unit_price": "180.50", "line_total": "180.50", "modifiers": [ { "label": "5.0% incl.", "amount": null } ], "bbox": null, "is_template_row": false },
-    { "position": 3, "description_raw": "Local/Smooth Highlands/100g Whole Beans", "sku": null, "qty": "1", "unit": null, "unit_price": "180.50", "line_total": "180.50", "modifiers": [ { "label": "-5.0% incl.", "amount": null } ], "bbox": null, "is_template_row": false },
-    { "position": 4, "description_raw": "Local/Sultan Kudarat Daguma/100g Whole Beans", "sku": null, "qty": "1", "unit": null, "unit_price": "213.75", "line_total": "213.75", "modifiers": [ { "label": "-5.0% incl.", "amount": null } ], "bbox": null, "is_template_row": false }
+    {
+      "position": 0,
+      "description_raw": "Local/Smooth Highlands/100g Whole Beans",
+      "sku": null,
+      "qty": "1",
+      "unit": null,
+      "unit_price": "180.50",
+      "line_total": "180.50",
+      "modifiers": [
+        {
+          "label": "-5.0% incl.",
+          "amount": null
+        }
+      ],
+      "bbox": null,
+      "is_template_row": false
+    },
+    {
+      "position": 1,
+      "description_raw": "Local/Smooth Highlands/100g Whole Beans",
+      "sku": null,
+      "qty": "1",
+      "unit": null,
+      "unit_price": "180.50",
+      "line_total": "180.50",
+      "modifiers": [
+        {
+          "label": "5.0% incl.",
+          "amount": null
+        }
+      ],
+      "bbox": null,
+      "is_template_row": false
+    },
+    {
+      "position": 2,
+      "description_raw": "Local/Smooth Highlands/100g Whole Beans",
+      "sku": null,
+      "qty": "1",
+      "unit": null,
+      "unit_price": "180.50",
+      "line_total": "180.50",
+      "modifiers": [
+        {
+          "label": "5.0% incl.",
+          "amount": null
+        }
+      ],
+      "bbox": null,
+      "is_template_row": false
+    },
+    {
+      "position": 3,
+      "description_raw": "Local/Smooth Highlands/100g Whole Beans",
+      "sku": null,
+      "qty": "1",
+      "unit": null,
+      "unit_price": "180.50",
+      "line_total": "180.50",
+      "modifiers": [
+        {
+          "label": "-5.0% incl.",
+          "amount": null
+        }
+      ],
+      "bbox": null,
+      "is_template_row": false
+    },
+    {
+      "position": 4,
+      "description_raw": "Local/Sultan Kudarat Daguma/100g Whole Beans",
+      "sku": null,
+      "qty": "1",
+      "unit": null,
+      "unit_price": "213.75",
+      "line_total": "213.75",
+      "modifiers": [
+        {
+          "label": "-5.0% incl.",
+          "amount": null
+        }
+      ],
+      "bbox": null,
+      "is_template_row": false
+    }
   ],
   "totals": {
     "subtotal": "835.49",
     "tax": "100.26",
     "tax_breakdown": [
-      { "label": "VAT (12%) incl.", "base": "835.49", "rate": "0.12", "amount": "100.26" }
+      {
+        "label": "VAT (12%) incl.",
+        "base": "835.49",
+        "rate": "0.12",
+        "amount": "100.26"
+      }
     ],
     "discount": null,
     "total": "935.75",
@@ -36,7 +124,10 @@
     "change": null,
     "prices_include_tax": true
   },
-  "payment": { "method": "GCASH", "card_last4": null },
+  "payment": {
+    "method": "GCASH",
+    "card_last4": null
+  },
   "meta": {
     "is_handwritten": false,
     "is_refund": false,
@@ -45,5 +136,6 @@
     "unreadable_regions": [],
     "receipt_is_inconsistent": false,
     "notes": "BEAN BLOCK COFFEE ROASTERS thermal SALES INVOICE, Receipt No. 008628 (same merchant/TIN). Five lines: 4x Local/Smooth Highlands/100g @180.50, 1x Local/Sultan Kudarat Daguma/100g @213.75, each with a '-5% incl.' note (null-amount modifiers); 4x180.50 + 213.75 = 935.75. Subtotal 935.75; VATable 835.49 + VAT (12% incl.) 100.26 = 935.75 Total (tax-inclusive). Payment GCash. Sale date/time footer 23-05-2026 11:23:33. Customer block blank -> buyer null."
-  }
+  },
+  "field_boxes": {}
 }

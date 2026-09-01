@@ -52,9 +52,15 @@
     "is_handwritten": true,
     "is_refund": false,
     "legibility": "poor",
-    "ambiguous_fields": ["line_items[0].line_total", "line_items[0].qty"],
-    "unreadable_regions": ["line amount column"],
+    "ambiguous_fields": [
+      "line_items[0].line_total",
+      "line_items[0].qty"
+    ],
+    "unreadable_regions": [
+      "line amount column"
+    ],
     "receipt_is_inconsistent": false,
     "notes": "BIR SALES INVOICE: pre-printed form, sparse and messy handwriting (poor). Values are scattered across the article grid rather than aligned to columns: 'Diesel' with unit price 84.75 and qty read as 11.800, but the per-line AMOUNT cell is not clearly filled, so line_total is null. The only clear peso figure is 1800 written by the TOTAL AMOUNT DUE / Add: VAT area, recorded as total. The summary block (Total Sales / Net of VAT / VAT) is blank -> subtotal and tax null. Note qty x unit_price (11.8 x 84.75 = 1000.05) does not match the 1800 total, but the printed values are transcribed as-is rather than reconciled; the mismatch is a reading-confidence issue (flagged in ambiguous_fields), not a stated receipt inconsistency. 'IDEAL SOURCE' is the BUYER (Sold to). Footer TIN 126-957-547-00000 (RDM Printing Services) is the printer's."
-  }
+  },
+  "field_boxes": {}
 }

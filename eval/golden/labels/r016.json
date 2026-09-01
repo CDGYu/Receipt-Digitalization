@@ -92,5 +92,6 @@
     "unreadable_regions": [],
     "receipt_is_inconsistent": false,
     "notes": "BERRY GOODS INVOICE No. 0294 (machine-printed, clean, informal - no printed TIN, no VAT breakdown). Four lines: Frozen Strawberries 260, Frozen Broccoli 195, Frozen Spinach Balls 185, Frozen Mixed Veggies B 200; sum = 840.00 matches the printed Grand Total P840.00. 'Hey Lucky Cafe Corp.' (240 A. Aguirre Avenue, BF Homes, Paranaque City) is the BUYER (Issued To). The invoice prints a personal bank account and GCash number under BANK DETAILS (the vendor's payment details) - deliberately NOT transcribed into any field; there is no schema field for it and it is third-party financial PII. A handwritten note 'Gcash March 31, 2026' records payment by GCash, so payment.method = GCASH."
-  }
+  },
+  "field_boxes": {}
 }

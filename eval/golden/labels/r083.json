@@ -1,6 +1,15 @@
 {
-  "merchant": { "name": null, "branch": null, "address": null, "tax_id": null, "phone": null },
-  "buyer": { "name": "Hey Lucky Cafe", "tax_id": null },
+  "merchant": {
+    "name": null,
+    "branch": null,
+    "address": null,
+    "tax_id": null,
+    "phone": null
+  },
+  "buyer": {
+    "name": "Hey Lucky Cafe",
+    "tax_id": null
+  },
   "receipt": {
     "number": "6021744",
     "date": "2026-04-19",
@@ -12,11 +21,66 @@
     "terminal": null
   },
   "line_items": [
-    { "position": 0, "description_raw": "CHOCOCHIP", "sku": null, "qty": "8", "unit": null, "unit_price": "40.00", "line_total": "320.00", "modifiers": [], "bbox": null, "is_template_row": false },
-    { "position": 1, "description_raw": "OATMEAL CHOCO", "sku": null, "qty": "7", "unit": null, "unit_price": "40.00", "line_total": "280.00", "modifiers": [], "bbox": null, "is_template_row": false },
-    { "position": 2, "description_raw": "BISCOFF", "sku": null, "qty": "5", "unit": null, "unit_price": "40.00", "line_total": "200.00", "modifiers": [], "bbox": null, "is_template_row": false },
-    { "position": 3, "description_raw": "S'MORES", "sku": null, "qty": "6", "unit": null, "unit_price": "40.00", "line_total": "240.00", "modifiers": [], "bbox": null, "is_template_row": false },
-    { "position": 4, "description_raw": "REVEL BAR", "sku": null, "qty": "8", "unit": null, "unit_price": "33.00", "line_total": "264.00", "modifiers": [], "bbox": null, "is_template_row": false }
+    {
+      "position": 0,
+      "description_raw": "CHOCOCHIP",
+      "sku": null,
+      "qty": "8",
+      "unit": null,
+      "unit_price": "40.00",
+      "line_total": "320.00",
+      "modifiers": [],
+      "bbox": null,
+      "is_template_row": false
+    },
+    {
+      "position": 1,
+      "description_raw": "OATMEAL CHOCO",
+      "sku": null,
+      "qty": "7",
+      "unit": null,
+      "unit_price": "40.00",
+      "line_total": "280.00",
+      "modifiers": [],
+      "bbox": null,
+      "is_template_row": false
+    },
+    {
+      "position": 2,
+      "description_raw": "BISCOFF",
+      "sku": null,
+      "qty": "5",
+      "unit": null,
+      "unit_price": "40.00",
+      "line_total": "200.00",
+      "modifiers": [],
+      "bbox": null,
+      "is_template_row": false
+    },
+    {
+      "position": 3,
+      "description_raw": "S'MORES",
+      "sku": null,
+      "qty": "6",
+      "unit": null,
+      "unit_price": "40.00",
+      "line_total": "240.00",
+      "modifiers": [],
+      "bbox": null,
+      "is_template_row": false
+    },
+    {
+      "position": 4,
+      "description_raw": "REVEL BAR",
+      "sku": null,
+      "qty": "8",
+      "unit": null,
+      "unit_price": "33.00",
+      "line_total": "264.00",
+      "modifiers": [],
+      "bbox": null,
+      "is_template_row": false
+    }
   ],
   "totals": {
     "subtotal": null,
@@ -28,7 +92,10 @@
     "change": null,
     "prices_include_tax": null
   },
-  "payment": { "method": null, "card_last4": null },
+  "payment": {
+    "method": null,
+    "card_last4": null
+  },
   "meta": {
     "is_handwritten": true,
     "is_refund": false,
@@ -37,5 +104,6 @@
     "unreadable_regions": [],
     "receipt_is_inconsistent": false,
     "notes": "Generic blank handwritten sales pad No. 6021744 (same pad style as r014/r058), Date 04/19/26. 'Sold to Hey Lucky Cafe, BF Homes' is the BUYER. Five baked-goods lines: 8x CHOCOCHIP @40=320, 7x OATMEAL CHOCO @40=280, 5x BISCOFF @40=200, 6x S'MORES @40=240, 8x REVEL BAR @33=264; sum = 1304.00 matches TOTAL 1,304.00. Merchant null (no seller identity printed)."
-  }
+  },
+  "field_boxes": {}
 }

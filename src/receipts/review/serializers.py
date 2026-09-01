@@ -45,7 +45,14 @@ from ..extract.schema import LineItem as ExtractLineItem
 from ..extract.schema import Merchant as ExtractMerchant
 from ..extract.schema import Modifier as ExtractModifier
 from ..extract.schema import Payment as ExtractPayment
-from ..persist.models import Correction, LineItem, Receipt, ReviewTask, ValidationFinding
+from ..persist.models import (
+    Correction,
+    LineItem,
+    ProcessedReceipt,
+    Receipt,
+    ReviewTask,
+    ValidationFinding,
+)
 from ..score.confidence import ReceiptStatus
 from ..validate.context import ValidationContext
 from ..validate.report import Finding, Severity, ValidationReport
@@ -68,7 +75,9 @@ __all__ = [
 #: Receipt statuses ``query_export_receipts`` leaves out unless ``status=``
 #: names one of them explicitly (ambiguity resolution #4): a pending row is
 #: an upload in flight rather than a transaction, and a rejected one is a
-#: duplicate the pipeline deliberately keeps out of exports.
+#: duplicate the pipeline deliberately keeps out of exports. Receipts that
+#: already have a row in ``processed_receipts`` are omitted as well, regardless
+#: of status, because they have already left the active Results queue.
 _EXPORT_EXCLUDED_BY_DEFAULT = frozenset({ReceiptStatus.PENDING, ReceiptStatus.REJECTED})
 
 
@@ -370,6 +379,14 @@ def receipt_detail(
         # ordinary reading: most receipts do not say.
         "prices_include_tax": receipt.prices_include_tax,
         "line_items": [_line_item(item) for item in receipt.line_items],
+        # Where the whitelisted receipt-level fields sit on the image, keyed by
+        # the same dotted path the review form edits them under
+        # (``merchant.name`` ...). Grounding geometry, not a correctable value,
+        # so it is read-only here in the sense ``line_items[].bbox`` is: it has
+        # no key in ``_RECEIPT_FIELDS`` and no correction can reach it. Always
+        # an object, ``{}`` when the grounding pass placed nothing, so the
+        # client reads a map without a missing-key guard.
+        "field_boxes": receipt.field_boxes,
         "findings": [_finding(finding) for finding in findings],
         # Beside `findings`, never merged into it. `findings` is what the
         # extraction run recorded and is history; these are recomputed from the
@@ -406,7 +423,8 @@ def query_export_receipts(
     """Receipts for ``GET /export/xlsx``: the same filters as
     :func:`~receipts.persist.repository.query_receipts`, plus the
     export-only exclusion of ``PENDING``/``REJECTED`` unless ``status``
-    names one of them explicitly.
+    names one of them explicitly, and the durable exclusion of receipts already
+    archived in ``processed_receipts``.
 
     A dedicated query rather than a call to ``query_receipts`` because that
     function's ``status`` filter is a single equality -- it has no way to
@@ -445,6 +463,11 @@ def query_export_receipts(
         query = query.where(Receipt.txn_date <= date_to)
     if min_confidence is not None:
         query = query.where(Receipt.confidence >= min_confidence)
+    query = query.where(
+        ~select(ProcessedReceipt.receipt_id)
+        .where(ProcessedReceipt.receipt_id == Receipt.id)
+        .exists()
+    )
 
     query = query.order_by(Receipt.created_at, Receipt.id).limit(limit).offset(offset)
     return list(session.scalars(query))

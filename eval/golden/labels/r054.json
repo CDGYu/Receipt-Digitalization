@@ -86,7 +86,12 @@
     "subtotal": "422.77",
     "tax": "50.73",
     "tax_breakdown": [
-      { "label": "TAX", "base": "422.77", "rate": "0.12", "amount": "50.73" }
+      {
+        "label": "TAX",
+        "base": "422.77",
+        "rate": "0.12",
+        "amount": "50.73"
+      }
     ],
     "discount": null,
     "total": "473.50",
@@ -106,5 +111,6 @@
     "unreadable_regions": [],
     "receipt_is_inconsistent": false,
     "notes": "ONE STOP MART INC. thermal invoice No. 213943, cashier MARILOU (same merchant as r040, r042). This POS prints department 'GROCERY' rather than product names. Five amount lines: 95.25, 227.25 (annotated '3 PIECES X 75.75' = 227.25), 20.50, 20.50, 110.00; SUB TTL 473.50. NET SALE 422.77 + TAX TL 50.73 = TOTAL 473.50 (tax-inclusive). Cash 473.50, ITEM count 7 (the 227.25 line is 3 pieces, so 5 printed lines cover 7 units). POS provider Future Logic Corporation."
-  }
+  },
+  "field_boxes": {}
 }

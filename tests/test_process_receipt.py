@@ -992,6 +992,104 @@ def test_repeated_ocr_line_text_is_left_unboxed(
     assert by_position[0].bbox is None
 
 
+def test_ocr_field_boxes_locate_whitelisted_header_fields():
+    """The receipt-level twin of the line-item bbox pass, on the pure function.
+
+    ``merchant.name`` is a whitelisted header field; a clean single-line match
+    for its printed value lands a box under that dotted path, the same key the
+    review UI reads. A field with no matching line gets no key -- nothing is
+    guessed. Driven directly against ``_apply_ocr_field_boxes`` rather than the
+    full pipeline because the mapping is a pure function of the extraction and
+    the OCR layer; the end-to-end persistence of it is pinned separately.
+    """
+    extraction = _good()  # merchant.name == "SUPERMART INC."
+    layer = _Layer(
+        "SUPERMART INC.\nRICE 5KG\nTOTAL 224.00",
+        (
+            _Word("SUPERMART", (0.10, 0.05, 0.40, 0.09)),
+            _Word("INC.", (0.41, 0.05, 0.52, 0.09)),
+            _Word("RICE", (0.10, 0.20, 0.18, 0.24)),
+            _Word("TOTAL", (0.60, 0.80, 0.72, 0.84)),
+        ),
+    )
+
+    pipeline_module._apply_ocr_field_boxes(extraction, layer)
+
+    assert extraction.field_boxes["merchant.name"] == [0.10, 0.05, 0.52, 0.09]
+    # payment.method was never printed on this layer, so it earns no box.
+    assert "payment.method" not in extraction.field_boxes
+
+
+def test_ocr_field_boxes_leave_an_ambiguous_field_unboxed():
+    """Two equally good lines for the same value is a tie, and a tie is no box.
+
+    Same silence rule the line-item pass keeps: the review UI would rather draw
+    nothing than point at the wrong one of two identical merchant headers.
+    """
+    extraction = _good()
+    extraction.merchant.name = "SUPERMART"
+    layer = _Layer(
+        "SUPERMART\nSUPERMART\nTOTAL 224.00",
+        (
+            _Word("SUPERMART", (0.10, 0.05, 0.40, 0.09)),
+            _Word("SUPERMART", (0.10, 0.50, 0.40, 0.54)),
+            _Word("TOTAL", (0.60, 0.80, 0.72, 0.84)),
+        ),
+    )
+
+    pipeline_module._apply_ocr_field_boxes(extraction, layer)
+
+    assert "merchant.name" not in extraction.field_boxes
+
+
+def test_ocr_field_boxes_do_nothing_without_a_layer():
+    """No OCR layer means no boxes and no error -- grounding-off is the default."""
+    extraction = _good()
+
+    pipeline_module._apply_ocr_field_boxes(extraction, None)
+
+    assert extraction.field_boxes == {}
+
+
+def test_ocr_field_boxes_are_stored_on_the_receipt(
+    session_factory, storage, settings
+):
+    """The review screen can only highlight a header field that survives the DB.
+
+    The receipt-level twin of ``test_ocr_word_boxes_are_stored_for_matching_line_items``:
+    a clean match for the merchant name is placed on the extraction by the
+    grounding pass and must reach ``receipts.field_boxes`` so the review form
+    can point at it. Driven end to end through ``process_receipt`` so the
+    pipeline wiring and the persistence are both exercised, not just the pure
+    mapping.
+    """
+
+    def _reader(b64: str) -> _Layer:
+        return _Layer(
+            "SUPERMART INC.\nRICE 5KG\nTOTAL 224.00",
+            (
+                _Word("SUPERMART", (0.10, 0.05, 0.40, 0.09)),
+                _Word("INC.", (0.41, 0.05, 0.52, 0.09)),
+                _Word("RICE", (0.10, 0.20, 0.18, 0.24)),
+                _Word("TOTAL", (0.60, 0.80, 0.72, 0.84)),
+            ),
+        )
+
+    job = _job(storage)
+    _run(
+        job,
+        _Client([_triage(), _good()]),
+        session_factory,
+        storage,
+        _grounded(settings),
+        ocr_reader=_reader,
+    )
+
+    with session_factory() as session:
+        receipt = get_receipt(session, job.id)
+        assert receipt.field_boxes == {"merchant.name": [0.10, 0.05, 0.52, 0.09]}
+
+
 def test_broken_ocr_word_geometry_omits_boxes_not_the_receipt(
     session_factory, storage, settings
 ):

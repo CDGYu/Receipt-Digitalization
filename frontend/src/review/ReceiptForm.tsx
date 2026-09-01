@@ -151,6 +151,12 @@ export interface ReceiptFormProps {
   readonly onChange: (path: string, value: string | null) => void
   /** Server messages keyed by the same dotted paths as `fields`. */
   readonly errors?: Readonly<Record<string, string>>
+  /** The dotted path of the field a reviewer is editing, or `null`. Reported
+   *  on focus so `ReviewScreen` can light up that field's spot on the photo --
+   *  the header-field twin of `LineItemsTable`'s `onActivePositionChange`. Only
+   *  a field the grounding pass could place actually draws a box; the rest
+   *  report their path too and simply have nothing to highlight. */
+  readonly onActiveFieldPathChange?: (path: string | null) => void
 }
 
 /** One free-text control, owning its ids. Extracted because `useId` is a
@@ -245,12 +251,23 @@ function TextField({
  * that is `NULL` today stays `NULL` until the reviewer actually clicks it -- at
  * which point they have made a real edit and it is recorded as one.
  */
-export function ReceiptForm({ fields, onChange, errors }: ReceiptFormProps) {
+export function ReceiptForm({
+  fields,
+  onChange,
+  errors,
+  onActiveFieldPathChange,
+}: ReceiptFormProps) {
+  // React's `onFocus` is the bubbling `focusin`, so one handler on the wrapping
+  // cell covers whatever control it holds -- the same reason `LineItemsTable`
+  // puts `onFocus` on the row rather than each input. Reporting the path (even
+  // for a field with no box) means moving between fields always updates the
+  // active field rather than leaving a stale highlight from the last one.
+  const activate = (path: string) => () => onActiveFieldPathChange?.(path)
   return (
     <section className={styles.form}>
       <h2>Receipt</h2>
       {TEXT_FIELDS.map(([path, label]) => (
-        <div className={styles.fieldCell} key={path}>
+        <div className={styles.fieldCell} key={path} onFocus={activate(path)}>
           <TextField
             label={label}
             value={fields[path]}
@@ -261,7 +278,7 @@ export function ReceiptForm({ fields, onChange, errors }: ReceiptFormProps) {
       ))}
 
       {MONEY_FIELDS.map(([path, label]) => (
-        <div className={styles.fieldCell} key={path}>
+        <div className={styles.fieldCell} key={path} onFocus={activate(path)}>
           <MoneyInput
             label={label}
             value={fields[path]}
@@ -287,7 +304,12 @@ export function ReceiptForm({ fields, onChange, errors }: ReceiptFormProps) {
           reads both counts off the render and asserts the gap is exactly these
           three; repeating the numbers here would only give them somewhere to
           rot. */}
-      <label className={styles.field}>
+      {/* The three below report their path on focus like every other field.
+          None is whitelisted for grounding (they are `meta.*` self-report, not
+          something printed on the paper), so none has a key in `field_boxes` and
+          focusing one draws no box -- which also clears a highlight left by the
+          text field before it, since `ImagePane` keys on the active path. */}
+      <label className={styles.field} onFocus={activate('meta.legibility')}>
         Legibility
         <select
           className={styles.select}
@@ -301,7 +323,7 @@ export function ReceiptForm({ fields, onChange, errors }: ReceiptFormProps) {
           ))}
         </select>
       </label>
-      <label className={styles.check}>
+      <label className={styles.check} onFocus={activate('meta.is_handwritten')}>
         Handwritten
         <input
           className={styles.checkbox}
@@ -310,7 +332,7 @@ export function ReceiptForm({ fields, onChange, errors }: ReceiptFormProps) {
           onChange={(e) => onChange('meta.is_handwritten', String(e.target.checked))}
         />
       </label>
-      <label className={styles.check}>
+      <label className={styles.check} onFocus={activate('meta.receipt_is_inconsistent')}>
         Receipt is inconsistent
         <input
           className={styles.checkbox}

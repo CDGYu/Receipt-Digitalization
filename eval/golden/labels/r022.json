@@ -92,5 +92,6 @@
     "unreadable_regions": [],
     "receipt_is_inconsistent": false,
     "notes": "SMART COMMUNICATIONS Billing Invoice (telco bill), machine-printed, page 1 of 3, billing period Apr 1-30 2026. 'Total amount to pay P2,036.50' = Previous Charges 1,018.25 + current charges 1,018.25; recorded total is 2,036.50 (the amount due on the document). Current-charge lines: Plan Signature S+ 972.24, Entertainment Add-On 169.00, Others -122.99, Device/Call/Data Booster 0.00; these sum to 1,018.25. Current-charge VAT breakdown: Vatable 758.26, Octable (OCT) 169.00, Non-taxable 90.99, VAT 0.00. Customer MARIA KATRINA PAJARILLO (No TIN provided) is the buyer/account holder; account/mobile numbers not transcribed (PII, no schema field). Handwritten 'May 7 26' and 'Gcash + Maya, Ref: 5040586874200, pd.' note payment - method left null as it names two channels ambiguously."
-  }
+  },
+  "field_boxes": {}
 }

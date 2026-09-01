@@ -38,7 +38,12 @@
     "subtotal": "267.86",
     "tax": "32.14",
     "tax_breakdown": [
-      { "label": "VAT", "base": "267.86", "rate": "0.12", "amount": "32.14" }
+      {
+        "label": "VAT",
+        "base": "267.86",
+        "rate": "0.12",
+        "amount": "32.14"
+      }
     ],
     "discount": null,
     "total": "300.00",
@@ -58,5 +63,6 @@
     "unreadable_regions": [],
     "receipt_is_inconsistent": false,
     "notes": "CALTEX (Southgate Servicenter Inc.) fuel thermal SALES INVOICE. Single fuel line: Pump 8, V SlvTechron, 3.17 LTR @ 94.50/LTR = 300.00 (3.17x94.50=299.57, pump rounds to a 300 target). Total 300.00, paid Maya (Manual) 300.00, Approval 798. Vatable 267.86 + VAT 32.14 = 300.00 (tax-inclusive). SI No 1-0000022857, Date 18/04/26 13:25, POS 1. Supplier details: Chevron Philippines Inc (TIN 000-349-759-00000). Name/Address/TIN buyer block blank -> buyer null."
-  }
+  },
+  "field_boxes": {}
 }

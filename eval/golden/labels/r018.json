@@ -63,5 +63,6 @@
     "unreadable_regions": [],
     "receipt_is_inconsistent": false,
     "notes": "SOUTH GROCER (by Grand Union Supermarket, Inc.) thermal POS 'THIS SERVES AS SALES INVOICE'. Single line 1 PF ANGUS BEEF PAT684 474.00 (V=VATable). Total Due 474.00; VATable 423.21 + VAT 50.79 = 474.00 (tax-inclusive). Paid by PayMaya credit card (Trace 003017, ApprCode NQJ3QL); no card last-4 is printed so card_last4 is null. Buyer block: Cust Name RAYMOND VICENTE BRAGANZA with a GREENCARD loyalty number (1790050002) - loyalty number NOT transcribed (not a schema field, and it is buyer PII). POS provider ANSI Information Systems. VAT Reg TIN 000-123-826-018 is the merchant's."
-  }
+  },
+  "field_boxes": {}
 }

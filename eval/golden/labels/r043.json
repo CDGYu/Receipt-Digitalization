@@ -30,7 +30,10 @@
       "unit_price": "220.00",
       "line_total": "220.00",
       "modifiers": [
-        { "label": "PWD discount", "amount": "-62.86" }
+        {
+          "label": "PWD discount",
+          "amount": "-62.86"
+        }
       ],
       "bbox": null,
       "is_template_row": false
@@ -40,7 +43,12 @@
     "subtotal": "220.00",
     "tax": "0.00",
     "tax_breakdown": [
-      { "label": "VAT Exempt Sales", "base": "157.14", "rate": "0.00", "amount": "0.00" }
+      {
+        "label": "VAT Exempt Sales",
+        "base": "157.14",
+        "rate": "0.00",
+        "amount": "0.00"
+      }
     ],
     "discount": "62.86",
     "total": "157.14",
@@ -60,5 +68,6 @@
     "unreadable_regions": [],
     "receipt_is_inconsistent": false,
     "notes": "SAMA CAFE+DINER (Silverlake Foodies OPC) thermal SALES INVOICE 084147, Order Method Take Out. One line: Sourdough @220x1 with a 62.86 PWD discount -> line nets 157.14 (recorded as a -62.86 PWD modifier). Subtotal 220.00. Under Senior/PWD treatment the item becomes VAT Exempt (157.14) with VAT Amount 0.00; Snr/PWD Discount 39.29 (totals.discount) and VAT Exemption 23.57 are the split of the 62.86 relief. TOTAL 157.14. Payment Card, Qty 1. Customer Raymond Vicente E. Braganza. A PWD-discount VAT-edge sample. POS provider Kintoz IT Solutions."
-  }
+  },
+  "field_boxes": {}
 }

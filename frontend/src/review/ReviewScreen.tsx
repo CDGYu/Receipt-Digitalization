@@ -11,7 +11,6 @@ import {
 import type { SubmitOutcome } from '../api/review'
 import type { ReceiptDetail, ReviewTask } from '../api/types'
 import { ConfidenceRail } from './ConfidenceRail'
-import { FindingsPanel } from './FindingsPanel'
 import { ImagePane } from './ImagePane'
 import { LineItemsTable } from './LineItemsTable'
 import { ReceiptForm } from './ReceiptForm'
@@ -193,6 +192,10 @@ export function ReviewScreen() {
   const [phase, setPhase] = useState<Phase>({ kind: 'loading' })
   const [submit, setSubmit] = useState<Submit>({ kind: 'idle' })
   const [activeLineItemPosition, setActiveLineItemPosition] = useState<number | null>(null)
+  /** The dotted path of the header field the reviewer is editing, or `null`.
+   *  Drives the header-field highlight on the photo, the receipt-level twin of
+   *  `activeLineItemPosition`. */
+  const [activeFieldPath, setActiveFieldPath] = useState<string | null>(null)
   /** The task this reviewer already holds. Non-null means the queue has been
    *  charged for it and `fetchNext` must not be called again. */
   const claimed = useRef<ReviewTask | null>(null)
@@ -209,6 +212,7 @@ export function ReviewScreen() {
     setPhase({ kind: 'loading' })
     setSubmit({ kind: 'idle' })
     setActiveLineItemPosition(null)
+    setActiveFieldPath(null)
     try {
       let task = claimed.current
       if (task === null) {
@@ -574,14 +578,16 @@ export function ReviewScreen() {
         fetchUrl={fetchImageUrl}
         lineItemBoxes={lineItemBoxes}
         activeLineItemPosition={activeLineItemPosition}
-      />
-      <FindingsPanel
-        findings={receipt.findings}
-        currentFindings={receipt.current_findings}
-        notRechecked={receipt.not_rechecked}
+        fieldBoxes={receipt.field_boxes}
+        activeFieldPath={activeFieldPath}
       />
       <ConfidenceRail confidence={receipt.confidence} reasons={receipt.confidence_reasons} />
-      <ReceiptForm fields={fields} onChange={edit} errors={fieldErrors} />
+      <ReceiptForm
+        fields={fields}
+        onChange={edit}
+        errors={fieldErrors}
+        onActiveFieldPathChange={setActiveFieldPath}
+      />
       <LineItemsTable
         items={receipt.line_items}
         fields={fields}

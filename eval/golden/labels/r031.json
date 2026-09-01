@@ -38,7 +38,12 @@
     "subtotal": "139.00",
     "tax": "0.00",
     "tax_breakdown": [
-      { "label": "VAT-Exempt", "base": "139.00", "rate": "0.00", "amount": "0.00" }
+      {
+        "label": "VAT-Exempt",
+        "base": "139.00",
+        "rate": "0.00",
+        "amount": "0.00"
+      }
     ],
     "discount": null,
     "total": "139.00",
@@ -58,5 +63,6 @@
     "unreadable_regions": [],
     "receipt_is_inconsistent": false,
     "notes": "SOUTH GROCER thermal POS, POS04. Single VAT-exempt line GEMSUN LRGE EGGS12-C 139.00 (E). Total Due 139.00, Cash 1,000.00, Change 861.00. VAT-Exempt 139.00, VAT 0.00. Customer block blank -> buyer null."
-  }
+  },
+  "field_boxes": {}
 }

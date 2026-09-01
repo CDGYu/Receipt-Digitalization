@@ -50,7 +50,12 @@
     "subtotal": "79.30",
     "tax": "0.00",
     "tax_breakdown": [
-      { "label": "VAT-Exempt", "base": "79.30", "rate": "0.00", "amount": "0.00" }
+      {
+        "label": "VAT-Exempt",
+        "base": "79.30",
+        "rate": "0.00",
+        "amount": "0.00"
+      }
     ],
     "discount": null,
     "total": "79.30",
@@ -70,5 +75,6 @@
     "unreadable_regions": [],
     "receipt_is_inconsistent": false,
     "notes": "SOUTH GROCER thermal POS, POS04. Two VAT-exempt lines: GINGER (LONGWOODS) 33.30 (E), NESFOOD B SUGAR 1/2K 46.00 (E); 2 items = 79.30 Total Due. Cash 500.00, Change 420.70. VAT-Exempt 79.30, VAT 0.00. Customer block blank -> buyer null."
-  }
+  },
+  "field_boxes": {}
 }

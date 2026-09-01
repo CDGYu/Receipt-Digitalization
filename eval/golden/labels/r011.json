@@ -56,5 +56,6 @@
     "unreadable_regions": [],
     "receipt_is_inconsistent": false,
     "notes": "BIR SALES INVOICE: pre-printed form, handwritten values. L.B. Ramos HEBRON, Marikina branch (TIN ...00016). Single line DIESEL, qty 12.30 x 81.30 = 999.99 vs written 1,000 (corroborates). Net 892.86 on the 'Total Sales (VAT Inclusive)' line, Add: VAT 107.14, Total Amount Due 1,000; 892.86 + 107.14 = 1000.00 (tax-inclusive). 'IDEAL SOURCE' is the BUYER."
-  }
+  },
+  "field_boxes": {}
 }

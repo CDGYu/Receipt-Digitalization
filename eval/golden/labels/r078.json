@@ -1,5 +1,11 @@
 {
-  "merchant": { "name": null, "branch": null, "address": null, "tax_id": null, "phone": null },
+  "merchant": {
+    "name": null,
+    "branch": null,
+    "address": null,
+    "tax_id": null,
+    "phone": null
+  },
   "buyer": {
     "name": "Hey Lucky Cafe",
     "tax_id": null
@@ -38,7 +44,10 @@
     "change": null,
     "prices_include_tax": null
   },
-  "payment": { "method": null, "card_last4": null },
+  "payment": {
+    "method": null,
+    "card_last4": null
+  },
   "meta": {
     "is_handwritten": true,
     "is_refund": false,
@@ -47,5 +56,6 @@
     "unreadable_regions": [],
     "receipt_is_inconsistent": false,
     "notes": "Generic blank handwritten sales pad No. 0011288 (same style as r024), Date 04-30-2026. 'Sold to Hey Lucky Cafe, 240 Aguirre' is the BUYER. One line: qty 6, 'Rounds' (coffee rounds), amount 270; TOTAL 270. A scrawled annotation 'MOTU/TBM DELIVER' spans the middle rows (a delivery note), not a line item. No unit_price written. Merchant null (no seller identity printed)."
-  }
+  },
+  "field_boxes": {}
 }

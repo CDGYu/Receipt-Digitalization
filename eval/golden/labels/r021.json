@@ -56,5 +56,6 @@
     "unreadable_regions": [],
     "receipt_is_inconsistent": false,
     "notes": "HEY LUCKY CAFE & CO INVOICE No. 0031, machine-printed. Here Hey Lucky Cafe is the SELLER/merchant (the PAY TO block, TIN 681-186-802-00000); 'Kindred Health Inc' (Serendra Mall, BGC, Taguig; TIN 601-084-491-0000) is the BUYER (Issued To). Single line: JUICE PACK - Lemon Ginger Ferment, unit price 120 x qty 100 = 12,000. Subtotal PHP 12,000, Total PHP 12,000. Marked 'PRICES ARE VAT-EXEMPT / NON-VAT REGISTERED' so tax is null (not 0 tax on a VATable base). Handwritten: Instapay Ref# 999363, Security Bank, May 7 2026 02:22pm -> payment INSTAPAY. The PAY TO personal account name/number is the seller's payment detail, not transcribed into a field."
-  }
+  },
+  "field_boxes": {}
 }

@@ -75,5 +75,6 @@
     "unreadable_regions": [],
     "receipt_is_inconsistent": false,
     "notes": "MR DIY (Bricolage Philippines Inc.) thermal SALES INVOICE. Two lines: OMNI SURFACE MOUNTED CONVENIENCE SWITCH 1 x 44.00 = 44.00; SWING TYPE PLUG 10A 250V 2 x 39.00 = 78.00. Item(s) 2, Qty(s) 3. Subtotal 122.00; VATable Sales 108.93 + VAT AMT 13.07 = 122.00 Total (tax-inclusive). Paid Maya One - QR 122.00. Customer block blank -> buyer null. POS provider ABZTRAK INC."
-  }
+  },
+  "field_boxes": {}
 }

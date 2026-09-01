@@ -46,6 +46,50 @@ describe('ImagePane', () => {
     expect(quiet!.className).not.toContain('highlightActive')
   })
 
+  it('draws the box for the focused header field, and only that one', async () => {
+    const fetchUrl = vi.fn().mockResolvedValue('/receipts/r1/image/blob?sig=s')
+    const { container } = render(
+      <ImagePane
+        receiptId="r1"
+        fetchUrl={fetchUrl}
+        fieldBoxes={{
+          'merchant.name': [0.1, 0.05, 0.6, 0.1],
+          'payment.method': [0.1, 0.8, 0.4, 0.85],
+        }}
+        activeFieldPath="merchant.name"
+      />,
+    )
+
+    await screen.findByAltText(/receipt/i)
+
+    const active = container.querySelector<HTMLElement>('[data-field-path="merchant.name"]')
+    expect(active).not.toBeNull()
+    expect(active!.getAttribute('style')).toBe(
+      'left: 10%; top: 5%; width: 50%; height: 5%;',
+    )
+    expect(active!.className).toContain('highlightActive')
+    // Only the focused field is drawn -- payment.method has a box but is not
+    // active, so it is not painted over the photo.
+    expect(container.querySelector('[data-field-path="payment.method"]')).toBeNull()
+  })
+
+  it('draws no header box when the focused field was never placed', async () => {
+    const fetchUrl = vi.fn().mockResolvedValue('/receipts/r1/image/blob?sig=s')
+    const { container } = render(
+      <ImagePane
+        receiptId="r1"
+        fetchUrl={fetchUrl}
+        fieldBoxes={{ 'merchant.name': [0.1, 0.05, 0.6, 0.1] }}
+        // The reviewer is on a field the grounding pass could not locate.
+        activeFieldPath="buyer.name"
+      />,
+    )
+
+    await screen.findByAltText(/receipt/i)
+
+    expect(container.querySelector('[data-field-path]')).toBeNull()
+  })
+
   it('drops malformed line-item boxes instead of painting guessed geometry', async () => {
     const fetchUrl = vi.fn().mockResolvedValue('/receipts/r1/image/blob?sig=s')
     const { container } = render(
@@ -224,13 +268,15 @@ describe('ImagePane', () => {
     expect(screen.queryByRole('alert')).toBeNull()
   })
 
-  it('zooms and rotates the image it is showing', async () => {
+  it('zooms, rotates, and resets the image it is showing', async () => {
     const fetchUrl = vi.fn().mockResolvedValue('/receipts/r1/image/blob?sig=s')
     render(<ImagePane receiptId="r1" fetchUrl={fetchUrl} />)
 
     const image = await screen.findByAltText(/receipt/i)
     const stage = image.parentElement as HTMLElement
+    const panLayer = stage.parentElement as HTMLElement
     expect(stage.getAttribute('style')).toBe('transform: scale(1) rotate(0deg);')
+    expect(panLayer.getAttribute('style')).toBe('transform: translate(0px, 0px);')
     expect(image.getAttribute('style')).toBeNull()
 
     fireEvent.click(screen.getByRole('button', { name: 'Zoom in' }))
@@ -239,5 +285,72 @@ describe('ImagePane', () => {
     expect(stage.getAttribute('style')).toBe(
       'transform: scale(1.25) rotate(90deg);',
     )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Reset view' }))
+
+    expect(stage.getAttribute('style')).toBe('transform: scale(1) rotate(0deg);')
+    expect(panLayer.getAttribute('style')).toBe('transform: translate(0px, 0px);')
+  })
+
+  it('keeps zoom controls within a useful viewer scale', async () => {
+    const fetchUrl = vi.fn().mockResolvedValue('/receipts/r1/image/blob?sig=s')
+    render(<ImagePane receiptId="r1" fetchUrl={fetchUrl} />)
+
+    const image = await screen.findByAltText(/receipt/i)
+    const stage = image.parentElement as HTMLElement
+
+    for (let i = 0; i < 8; i += 1) {
+      fireEvent.click(screen.getByRole('button', { name: 'Zoom out' }))
+    }
+
+    expect(stage.getAttribute('style')).toBe('transform: scale(0.5) rotate(0deg);')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Reset view' }))
+    for (let i = 0; i < 8; i += 1) {
+      fireEvent.click(screen.getByRole('button', { name: 'Zoom in' }))
+    }
+
+    expect(stage.getAttribute('style')).toBe('transform: scale(4) rotate(0deg);')
+  })
+
+  it('pans the image with a primary pointer drag', async () => {
+    const fetchUrl = vi.fn().mockResolvedValue('/receipts/r1/image/blob?sig=s')
+    render(<ImagePane receiptId="r1" fetchUrl={fetchUrl} />)
+
+    const image = await screen.findByAltText(/receipt/i)
+    const stage = image.parentElement as HTMLElement
+    const panLayer = stage.parentElement as HTMLElement
+    const viewer = screen.getByRole('region', { name: 'Receipt image viewer' })
+
+    fireEvent.pointerDown(viewer, {
+      pointerId: 7,
+      button: 0,
+      isPrimary: true,
+      clientX: 100,
+      clientY: 200,
+    })
+    fireEvent.pointerMove(viewer, { pointerId: 7, clientX: 130, clientY: 180 })
+
+    expect(panLayer.getAttribute('style')).toBe('transform: translate(30px, -20px);')
+
+    fireEvent.pointerUp(viewer, { pointerId: 7, clientX: 130, clientY: 180 })
+    fireEvent.pointerMove(viewer, { pointerId: 7, clientX: 160, clientY: 160 })
+
+    expect(panLayer.getAttribute('style')).toBe('transform: translate(30px, -20px);')
+  })
+
+  it('pans the focused image viewer with arrow keys', async () => {
+    const fetchUrl = vi.fn().mockResolvedValue('/receipts/r1/image/blob?sig=s')
+    render(<ImagePane receiptId="r1" fetchUrl={fetchUrl} />)
+
+    const image = await screen.findByAltText(/receipt/i)
+    const stage = image.parentElement as HTMLElement
+    const panLayer = stage.parentElement as HTMLElement
+    const viewer = screen.getByRole('region', { name: 'Receipt image viewer' })
+
+    fireEvent.keyDown(viewer, { key: 'ArrowRight' })
+    fireEvent.keyDown(viewer, { key: 'ArrowUp' })
+
+    expect(panLayer.getAttribute('style')).toBe('transform: translate(32px, -32px);')
   })
 })
