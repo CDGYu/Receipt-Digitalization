@@ -45,7 +45,7 @@ import { ProcessingListScreen } from './processing/ProcessingListScreen'
 import { ReceiptsScreen } from './receipts/ReceiptsScreen'
 import { ReviewQueue } from './review/ReviewQueue'
 import { ReviewScreen } from './review/ReviewScreen'
-import { SignOutControl } from './SignOutControl'
+import { SettingsMenu } from './SettingsMenu'
 import { UploadScreen } from './upload/UploadScreen'
 
 /** No routing library: these paths do not need one.
@@ -73,8 +73,9 @@ import { UploadScreen } from './upload/UploadScreen'
  * it React unmounts the tree and the reviewer gets a blank page; `request` is an
  * unchecked cast, so a reply missing a field really can throw inside render.
  *
- * The signed-in screen carries a `<header>` above the screen holding
- * `SignOutControl`, so ending the session is reachable from any review.
+ * The signed-in screen carries a `<header>` above the screen holding the
+ * `SettingsMenu`, whose panel nests `SignOutControl`, so ending the session --
+ * and choosing the processing mode -- is reachable from any review.
  *
  * ## Which screen, and who is asking
  *
@@ -152,7 +153,11 @@ function App() {
           <img className={navStyles.brandMark} src="/app/logo-lockup.svg" alt="Receipt Digitalization" />
         </a>
         <Nav identity={identity} route={route} />
-        <SignOutControl />
+        {/* Ending the session is a settings action, not a primary control, so
+         * it lives inside this menu rather than beside the nav. `identity`
+         * decides whether the processing-mode picker is editable (admin) or
+         * shown read-only (reviewer). */}
+        <SettingsMenu identity={identity} />
       </header>
       {route === 'admin' ? (
         <AdminScreen identity={identity} now={Date.now()} />

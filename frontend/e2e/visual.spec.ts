@@ -194,6 +194,7 @@ function lineItem(position: number, values: Partial<LineItem> = {}): LineItem {
     unit: null,
     unit_price: null,
     line_total: null,
+    is_handwritten: null,
     is_template_row: null,
     modifiers: [],
     bbox: null,

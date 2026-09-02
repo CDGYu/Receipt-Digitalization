@@ -48,6 +48,7 @@ from sqlalchemy.orm import Session
 from ..extract.clients.base import VLMResponse
 from ..extract.paths import flatten
 from ..extract.schema import Legibility, ReceiptExtraction
+from ..extract.schema import LineItem as ExtractedLineItem
 from ..ingest.ingest import ReceiptJob
 from ..score.confidence import ReceiptStatus
 from ..validate.report import ValidationReport
@@ -745,6 +746,13 @@ def _build_line_items(extraction: ReceiptExtraction) -> list[LineItem]:
     positions = [item.position for item in extraction.line_items]
     use_list_order = len(set(positions)) != len(positions)
 
+    def handwritten(item: ExtractedLineItem) -> bool:
+        if item.is_handwritten is not None:
+            return item.is_handwritten
+        if item.is_template_row:
+            return False
+        return extraction.meta.is_handwritten
+
     return [
         LineItem(
             position=index if use_list_order else item.position,
@@ -778,6 +786,7 @@ def _build_line_items(extraction: ReceiptExtraction) -> list[LineItem]:
                 [modifier.model_dump(mode="json") for modifier in item.modifiers]
             ),
             bbox=list(item.bbox) if item.bbox is not None else None,
+            is_handwritten=handwritten(item),
             # A blank pre-printed product row: transcribed so nothing on the
             # paper is lost, but not a purchase. Copied rather than recomputed
             # -- the extractor decides what is blank ON THE PAPER, and this
@@ -1413,6 +1422,7 @@ _LINE_ITEM_FIELDS: dict[str, tuple[str, Callable[[Any], Any]]] = {
     "unit": ("unit", _coerce_optional_text),
     "unit_price": ("unit_price", _coerce_money),
     "line_total": ("line_total", _coerce_money),
+    "is_handwritten": ("is_handwritten", _coerce_bool),
     # ``_coerce_bool`` is the same coercion the two boolean paths in
     # ``_RECEIPT_FIELDS`` use, shared rather than re-derived: a screen that
     # sends ``"false"`` as a JSON string must not read as true here while

@@ -437,6 +437,7 @@ visual change, load `/app/` and look at it.
 | the worker exits complaining it cannot connect to Redis | Redis is not running | step 3 — `redis-server`, then `redis-cli ping` |
 | the UI only ever shows the sign-in form | no account exists | step 5 |
 | `/app/` refuses to start / 404s | `SERVE_SPA=true` with no build | step 6, or set `SERVE_SPA=false` |
+| the one-click launcher shows an old UI after editing `frontend/src` | the served bundle in `frontend/dist` was stale | nothing with the launcher — `scripts/launch_app.py` now rebuilds `dist` before starting the API whenever the source is newer. Building by hand instead? re-run `npm run build` (or `npx vite build`) in `frontend/` |
 | `/app/` logs two 401s on load | `/auth/me` and `/metrics` fired anonymously | nothing — expected, ADR-0026 |
 | a receipt sits at `stage: triage` forever | either the model was never pulled, or it is simply slow | `ollama list`, then watch Ollama's CPU — a busy process means it is working |
 | a receipt reaches `needs_review`, every field `null`, `confidence 0.000`, `review_tasks.priority 1`, reason `processing was interrupted at …` | the sweep stranded it on a `started_cutoff` derived from `VLM_TIMEOUT_S`; the worker may still be working it | check the worker's log for a killed job before concluding it died — §6 step 9. **Not** the job ceiling |

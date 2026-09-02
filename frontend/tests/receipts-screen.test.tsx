@@ -241,7 +241,7 @@ describe('the table renders the row shape the serializer sends', () => {
       'Merchant',
       'Total',
       'Status',
-      'Confidence',
+      'Accuracy',
       'Detail',
     ])
   })
@@ -298,7 +298,7 @@ describe('the table renders the row shape the serializer sends', () => {
     expect(cellUnder(row, table, 'Date').textContent).toContain('2026-08-14')
     expect(cellUnder(row, table, 'Merchant').textContent).toContain('Summit Fuel')
     expect(cellUnder(row, table, 'Status').textContent).toContain('reviewed')
-    expect(cellUnder(row, table, 'Confidence').textContent).toContain('0.940')
+    expect(cellUnder(row, table, 'Accuracy').textContent).toContain('94%')
     // The amount and the currency share one cell -- design section 6's
     // "`total` with `currency`". Asserted as two `toContain`s rather than one
     // literal, because the space between them is a CSS margin and `css: false`
@@ -346,7 +346,7 @@ describe('the table renders the row shape the serializer sends', () => {
     }
     // The confidence cell's own null treatment: the neutral band chip reading
     // "no score", not a blank cell.
-    expect(cellUnder(row, table, 'Confidence').textContent).toContain('no score')
+    expect(cellUnder(row, table, 'Accuracy').textContent).toContain('no score')
   })
 
   it('renders an empty-string status as not-extracted, because the cast is unchecked', async () => {
@@ -534,6 +534,35 @@ describe('one role="alert" region, whatever went wrong', () => {
     expect(alert.textContent).toMatch(/export/i)
   })
 
+  it('refreshes the filtered results after a successful export', async () => {
+    stubPages([
+      { items: [rowFixture({ merchant_name_raw: 'Initial' })], has_more: false },
+      {
+        items: [rowFixture({ merchant_name_raw: 'Filtered', status: 'needs_review' })],
+        has_more: false,
+      },
+      { items: [], has_more: false },
+    ])
+    const user = userEvent.setup()
+
+    render(<ReceiptsScreen identity={ADMIN} />)
+    await screen.findByText('Initial')
+    await user.selectOptions(screen.getByLabelText(/status/i), 'needs_review')
+    await screen.findByText('Filtered')
+
+    await user.click(screen.getByRole('button', { name: /export/i }))
+
+    await screen.findByText(/no receipts are in scope/i)
+    expect(api.downloadExportWorkbook).toHaveBeenCalledExactlyOnceWith({
+      status: 'needs_review',
+    })
+    expect(api.fetchExportReceipts.mock.calls[2]?.[0]).toEqual({
+      limit: PAGE_SIZE,
+      offset: 0,
+      status: 'needs_review',
+    })
+  })
+
   it('does not fire a second download while one is in flight', async () => {
     stubPage({ items: [rowFixture()], has_more: false })
     const download = stubSlowDownload()
@@ -687,7 +716,7 @@ describe('the status and confidence filters (P5.T2)', () => {
     await screen.findByRole('table')
 
     await userEvent.selectOptions(
-      screen.getByLabelText(/confidence/i),
+      screen.getByLabelText(/accuracy/i),
       '0.90',
     )
 
@@ -707,7 +736,7 @@ describe('the status and confidence filters (P5.T2)', () => {
     await screen.findByRole('table')
 
     await userEvent.selectOptions(screen.getByLabelText(/status/i), 'needs_review')
-    await userEvent.selectOptions(screen.getByLabelText(/confidence/i), '0.90')
+    await userEvent.selectOptions(screen.getByLabelText(/accuracy/i), '0.90')
 
     // The route ANDs its filters, so both must arrive together. Sending only
     // the most recent one is a screen that silently widens the result set the

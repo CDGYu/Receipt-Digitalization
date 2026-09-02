@@ -1,5 +1,6 @@
 import type { JSX } from 'react'
 import { Chip } from './Chip'
+import { accuracyPercent } from './accuracy'
 
 /** A confidence score rendered as a banded status chip -- shared by the review
  * queue and the results list so both read the same, and the bands live in one
@@ -7,8 +8,8 @@ import { Chip } from './Chip'
  *
  * ## Five fixed bands, lowest first
  *
- * `0.00-0.20`, `0.21-0.40`, `0.41-0.60`, `0.61-0.80`, `0.81-1.00` -- the owner's
- * even 0.20 buckets for triage, deliberately independent of where the pipeline
+ * `0-20%`, `21-40%`, `41-60%`, `61-80%`, `81-100%` -- the owner's even 0.20
+ * buckets for triage, deliberately independent of where the pipeline
  * auto-approves (0.85) or routes to review (0.60). Lowest is the loudest (error
  * tone, a full gauge glyph) because it most needs a human; highest is the
  * calmest (positive, an empty ring). Each band differs by TONE and by how much
@@ -20,9 +21,9 @@ import { Chip } from './Chip'
  * `confidence` is a `Money`-branded decimal string, and `Number("0.850")` both
  * drops precision (ADR-0001) and trips the repository's no-float guard. The band
  * is chosen by comparing the value against each band's lower bound AS A STRING
- * (:func:`decimalAtLeast`), and the exact string is what the chip shows -- so no
- * precision is invented or lost. A `null` score is the neutral "--" placeholder
- * rather than a guessed band.
+ * (:func:`decimalAtLeast`). The chip then moves the decimal point as text so
+ * `0.940` reads as `94%` without introducing a float. A `null` score is the
+ * neutral "--" placeholder rather than a guessed band.
  */
 
 /** Whether decimal string `a` is `>=` decimal string `b`, WITHOUT a float.
@@ -100,11 +101,11 @@ const BANDS: readonly {
   readonly fill: 0 | 1 | 2 | 3 | 4 | 5
   readonly label: string
 }[] = [
-  { min: '0.81', tone: 'positive', fill: 0, label: '0.81-1.00' },
-  { min: '0.61', tone: 'info', fill: 2, label: '0.61-0.80' },
-  { min: '0.41', tone: 'neutral', fill: 3, label: '0.41-0.60' },
-  { min: '0.21', tone: 'warn', fill: 4, label: '0.21-0.40' },
-  { min: '0.00', tone: 'error', fill: 5, label: '0.00-0.20' },
+  { min: '0.81', tone: 'positive', fill: 0, label: '81-100%' },
+  { min: '0.61', tone: 'info', fill: 2, label: '61-80%' },
+  { min: '0.41', tone: 'neutral', fill: 3, label: '41-60%' },
+  { min: '0.21', tone: 'warn', fill: 4, label: '21-40%' },
+  { min: '0.00', tone: 'error', fill: 5, label: '0-20%' },
 ]
 
 function bandFor(confidence: string | null): {
@@ -118,13 +119,19 @@ function bandFor(confidence: string | null): {
   }
   const band =
     BANDS.find((candidate) => decimalAtLeast(confidence, candidate.min)) ?? BANDS[BANDS.length - 1]
-  return { tone: band.tone, icon: <GlyphGauge fill={band.fill} />, label: band.label, value: confidence }
+  return {
+    tone: band.tone,
+    icon: <GlyphGauge fill={band.fill} />,
+    label: band.label,
+    value: accuracyPercent(confidence),
+  }
 }
 
-/** Render a confidence score as its banded chip. `null` shows the neutral "--".
+/** Render a confidence score as an accuracy chip. `null` shows the neutral "--".
  *
- * The exact score leads and the band range follows in parentheses, so a reviewer
- * reads the precise number and sees which bucket the tone and gauge stand for. */
+ * The percent score leads and the band range follows in parentheses, so a
+ * reviewer reads the precise number and sees which bucket the tone and gauge
+ * stand for. */
 export function ConfidenceChip({ confidence }: { confidence: string | null }) {
   const band = bandFor(confidence)
   return (

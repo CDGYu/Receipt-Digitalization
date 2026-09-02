@@ -42,6 +42,7 @@ import pytest
 from eval.metrics import FieldBreakdown
 from receipts.export.xlsx import ReceiptExportRow
 from receipts.extract.clients.factory import PassClients
+from receipts.persist.overrides import EditableSetting
 from receipts.persist.repository import _PlannedChange
 from receipts.pipeline import (
     BatchResult,
@@ -66,6 +67,7 @@ FROZEN_RESULT_TYPES = (
     FieldBreakdown,
     ReceiptExportRow,
     PassClients,
+    EditableSetting,
     _PlannedChange,
     PassAttempt,
     RunOutcome,

@@ -31,6 +31,7 @@
       "line_total": "205.00",
       "modifiers": [],
       "bbox": null,
+      "is_handwritten": false,
       "is_template_row": false
     },
     {
@@ -43,6 +44,7 @@
       "line_total": "99.00",
       "modifiers": [],
       "bbox": null,
+      "is_handwritten": false,
       "is_template_row": false
     },
     {
@@ -55,6 +57,7 @@
       "line_total": "99.00",
       "modifiers": [],
       "bbox": null,
+      "is_handwritten": false,
       "is_template_row": false
     },
     {
@@ -67,6 +70,7 @@
       "line_total": "99.00",
       "modifiers": [],
       "bbox": null,
+      "is_handwritten": false,
       "is_template_row": false
     },
     {
@@ -79,6 +83,7 @@
       "line_total": "95.00",
       "modifiers": [],
       "bbox": null,
+      "is_handwritten": false,
       "is_template_row": false
     },
     {
@@ -91,6 +96,7 @@
       "line_total": "95.00",
       "modifiers": [],
       "bbox": null,
+      "is_handwritten": false,
       "is_template_row": false
     },
     {
@@ -103,6 +109,7 @@
       "line_total": "95.00",
       "modifiers": [],
       "bbox": null,
+      "is_handwritten": false,
       "is_template_row": false
     },
     {
@@ -115,6 +122,7 @@
       "line_total": "117.00",
       "modifiers": [],
       "bbox": null,
+      "is_handwritten": false,
       "is_template_row": false
     },
     {
@@ -127,6 +135,7 @@
       "line_total": "104.00",
       "modifiers": [],
       "bbox": null,
+      "is_handwritten": false,
       "is_template_row": false
     },
     {
@@ -139,6 +148,7 @@
       "line_total": "104.00",
       "modifiers": [],
       "bbox": null,
+      "is_handwritten": false,
       "is_template_row": false
     },
     {
@@ -151,6 +161,7 @@
       "line_total": "104.00",
       "modifiers": [],
       "bbox": null,
+      "is_handwritten": false,
       "is_template_row": false
     }
   ],

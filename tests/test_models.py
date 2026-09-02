@@ -53,6 +53,9 @@ EXPECTED_TABLES = {
     "tax_bands",
     # Added with the export archive: one marker per receipt already downloaded.
     "processed_receipts",
+    # Added with the header settings menu: operator-editable runtime knobs as
+    # (key, value) rows. The first key is `processing_mode`.
+    "app_settings",
 }
 
 

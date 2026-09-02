@@ -44,7 +44,7 @@ describe('ConfidenceRail', () => {
     ] as ConfidenceReason[]
     render(<ConfidenceRail confidence={'1.000' as Money} reasons={reasons} />)
 
-    expect(screen.getByText('1.000')).toBeDefined()
+    expect(screen.getByText('100%')).toBeDefined()
     expect(screen.getByText('0.05')).toBeDefined()
     expect(screen.getByText('-0.160')).toBeDefined()
   })

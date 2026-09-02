@@ -31,6 +31,7 @@
       "line_total": "197.30",
       "modifiers": [],
       "bbox": null,
+      "is_handwritten": false,
       "is_template_row": false
     },
     {
@@ -43,6 +44,7 @@
       "line_total": "120.30",
       "modifiers": [],
       "bbox": null,
+      "is_handwritten": false,
       "is_template_row": false
     }
   ],

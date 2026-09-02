@@ -73,6 +73,9 @@ EXPECTED_TABLES = {
     "tax_bands",
     # Added with `8b2f0c9d4e11`: receipts already exported from the Results queue.
     "processed_receipts",
+    # Added with `1f2a3b4c5d60`: operator-editable runtime knobs as (key, value)
+    # rows. The first key is `processing_mode` (local / cloud / hybrid).
+    "app_settings",
 }
 
 #: A URL that is never connected to. Alembic's ``--sql`` (offline) mode resolves

@@ -338,6 +338,10 @@ class LineItem(Base):
     modifiers: Mapped[Any] = mapped_column(_jsonb(), nullable=False, default=list)
     bbox: Mapped[Any | None] = mapped_column(_jsonb(), nullable=True, default=None)
     line_confidence: Mapped[Decimal] = mapped_column(_RATIO, nullable=False, default=Decimal("0"))
+    #: Whether the line item's visible values were handwritten rather than
+    #: machine-printed. Nullable because receipts processed before the column
+    #: existed cannot be backfilled honestly.
+    is_handwritten: Mapped[bool | None] = mapped_column(sa.Boolean, nullable=True)
     #: A pre-printed product row left blank on the form -- transcribed so nothing
     #: on the paper is lost, but NOT a purchase (mirrors
     #: :attr:`receipts.extract.schema.LineItem.is_template_row`).
@@ -542,37 +546,6 @@ class ReviewTask(Base):
 
 
 # --------------------------------------------------------------------------- #
-# 6.9 processed_receipts (export archive)
-# --------------------------------------------------------------------------- #
-
-
-class ProcessedReceipt(Base):
-    """One receipt that has already left the active Results export queue.
-
-    Exporting is the point where the operator has a workbook copy, so the row is
-    archived here and omitted from the Results/export scope on future default
-    exports. The original receipt and all child audit rows stay in place; this
-    table is a durable marker, not a destructive move.
-    """
-
-    __tablename__ = "processed_receipts"
-
-    id: Mapped[uuid.UUID] = mapped_column(sa.Uuid, primary_key=True, default=uuid.uuid4)
-    receipt_id: Mapped[uuid.UUID] = mapped_column(
-        sa.Uuid, ForeignKey("receipts.id", ondelete="CASCADE"), nullable=False, unique=True
-    )
-    processed_at: Mapped[datetime] = mapped_column(
-        sa.DateTime(timezone=True),
-        nullable=False,
-        server_default=sa.func.now(),
-        default=lambda: datetime.now(UTC),
-    )
-    processed_by: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
-
-    receipt: Mapped[Receipt] = relationship(back_populates="processed_export")
-
-
-# --------------------------------------------------------------------------- #
 # 6.8 users (added with the review API, P4.T3)
 # --------------------------------------------------------------------------- #
 
@@ -604,5 +577,82 @@ class User(Base):
         sa.DateTime(timezone=True),
         nullable=False,
         server_default=sa.func.now(),
+        onupdate=sa.func.now(),
+    )
+
+
+# --------------------------------------------------------------------------- #
+# 6.9 processed_receipts (export archive)
+# --------------------------------------------------------------------------- #
+
+
+class ProcessedReceipt(Base):
+    """One receipt that has already left the active Results export queue.
+
+    Exporting is the point where the operator has a workbook copy, so the row is
+    archived here and omitted from the Results/export scope on future default
+    exports. The original receipt and all child audit rows stay in place; this
+    table is a durable marker, not a destructive move.
+    """
+
+    __tablename__ = "processed_receipts"
+
+    id: Mapped[uuid.UUID] = mapped_column(sa.Uuid, primary_key=True, default=uuid.uuid4)
+    receipt_id: Mapped[uuid.UUID] = mapped_column(
+        sa.Uuid, ForeignKey("receipts.id", ondelete="CASCADE"), nullable=False, unique=True
+    )
+    processed_at: Mapped[datetime] = mapped_column(
+        sa.DateTime(timezone=True),
+        nullable=False,
+        server_default=sa.func.now(),
+        default=lambda: datetime.now(UTC),
+    )
+    processed_by: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
+
+    receipt: Mapped[Receipt] = relationship(back_populates="processed_export")
+
+
+# --------------------------------------------------------------------------- #
+# 6.10 app_settings (runtime operator preferences)
+# --------------------------------------------------------------------------- #
+
+
+class AppSetting(Base):
+    """A single operator-editable runtime knob, stored as a ``(key, value)`` row.
+
+    **Why the database and not the environment.** Every other model knob lives
+    in :class:`config.settings.Settings` and arrives as an environment variable
+    set once at deploy time. Those cannot change without a restart, and they are
+    not editable from the review UI. The processing mode -- pure-local,
+    pure-cloud, or hybrid -- is a choice an operator makes *while the system is
+    running*, so it needs a home that a running process can re-read and a route
+    can write. This table is that home.
+
+    A key/value table rather than a column-per-setting on purpose: this is the
+    first such knob and almost certainly not the last, and a wide singleton row
+    would need a migration for every new one. ``value`` is ``Text`` and the
+    meaning of each key is owned by the module that reads it
+    (:mod:`receipts.persist.app_settings`), the same way
+    :mod:`receipts.persist.users` owns role validation -- the DB stores the
+    token, Python validates it. There is no DB ENUM here for the same reason
+    ``User.role`` is a ``String``: the migration drift guard runs on SQLite only
+    and cannot see a new ENUM member.
+
+    ``updated_by`` records which account last changed a setting, so a mode switch
+    is not anonymous -- the review UI's audit trail is a load-bearing property of
+    this system, and a global toggle that changes how every subsequent receipt is
+    processed is exactly the kind of thing that should name its author.
+    """
+
+    __tablename__ = "app_settings"
+
+    key: Mapped[str] = mapped_column(sa.String(64), primary_key=True)
+    value: Mapped[str] = mapped_column(sa.Text, nullable=False)
+    updated_by: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        sa.DateTime(timezone=True),
+        nullable=False,
+        server_default=sa.func.now(),
+        default=lambda: datetime.now(UTC),
         onupdate=sa.func.now(),
     )

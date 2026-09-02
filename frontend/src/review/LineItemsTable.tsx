@@ -167,6 +167,7 @@ export function LineItemsTable({
             <th>Unit</th>
             <th>Unit price</th>
             <th>Line total</th>
+            <th>Handwritten</th>
             <th>Template</th>
           </tr>
         </thead>
@@ -266,7 +267,17 @@ export function LineItemsTable({
                     onChange={(value) => onChange(`${at}.line_total`, value)}
                   />
                 </td>
-                <td>
+                <td className={styles.checkCell}>
+                  <input
+                    type="checkbox"
+                    aria-label={`Handwritten row ${item.position}`}
+                    checked={fields[`${at}.is_handwritten`] === 'true'}
+                    onChange={(e) =>
+                      onChange(`${at}.is_handwritten`, String(e.target.checked))
+                    }
+                  />
+                </td>
+                <td className={styles.checkCell}>
                   {/* The one control here that is not a text box, and the
                       reason it exists is ISSUE-006: a flagged row leaves the
                       export's review sheet and drops out of every arithmetic

@@ -66,16 +66,43 @@ import styles from './ReviewQueue.module.css'
  * Re-sorting in the browser would make the list disagree with the queue.
  */
 
-/** ISO 8601 to a stable, locale-independent minute.
+const PHILIPPINE_TIMESTAMP = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'Asia/Manila',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  hourCycle: 'h23',
+})
+
+/** ISO 8601 to a stable Philippine-time minute.
  *
- *  Not `toLocaleString`: its output moves with the runtime's locale and time
- *  zone, which makes it untestable without pinning both, and this column exists
- *  to be *compared between rows* rather than read as a wall clock. Not a
- *  relative "2h ago" either -- that needs `Date.now()` at render time, which is
- *  a value React did not schedule the render for and a moving target in tests.
+ *  The old version sliced the timestamp, so `2026-08-25T09:00:00+00:00` showed
+ *  as `09:00` instead of the receipt's Philippine-time upload minute, `17:00`.
+ *  The backend may also hand SQLite timestamps back without an offset; those
+ *  are UTC in this system, so the parser says that explicitly before converting
+ *  to Asia/Manila. Invalid input is shown unchanged rather than turned into
+ *  "Invalid Date".
  */
 function uploadedAt(iso: string): string {
-  return iso.slice(0, 16).replace('T', ' ')
+  const instant = new Date(/(?:Z|[+-]\d{2}:?\d{2})$/i.test(iso) ? iso : `${iso}Z`)
+  if (Number.isNaN(instant.getTime())) {
+    return iso
+  }
+
+  const parts = Object.fromEntries(
+    PHILIPPINE_TIMESTAMP
+      .formatToParts(instant)
+      .filter((part) => part.type !== 'literal')
+      .map((part) => [part.type, part.value]),
+  )
+  const { year, month, day, hour, minute } = parts
+  if (year === undefined || month === undefined || day === undefined || hour === undefined || minute === undefined) {
+    return iso
+  }
+
+  return `${year}-${month}-${day} ${hour}:${minute} PHT`
 }
 
 interface Row {
@@ -269,10 +296,10 @@ function QueueTable({
               Total
             </th>
             <th scope="col" className={styles.confidence}>
-              Confidence
+              Accuracy
             </th>
             <th scope="col">Why</th>
-            <th scope="col">Uploaded</th>
+            <th scope="col">Uploaded (PHT)</th>
             {/* A visible word, not `className="sr-only"` -- **this app defines
                 no such class**, so that span rendered in full while claiming to
                 be hidden. Seen in a browser; `grep -rn "sr-only" src

@@ -136,6 +136,7 @@ from .extract.clients.base import VLMClient
 from .extract.clients.factory import make_extract_ladder
 from .ingest.ingest import ReceiptJob, ingest_file
 from .ingest.storage import StorageBackend, make_storage
+from .persist.app_settings import settings_for_run
 from .persist.models import Merchant, Receipt
 from .persist.repository import (
     create_pending_receipt,
@@ -921,6 +922,12 @@ def cmd_process(
         triage_fallback = None
         fallback = None
     else:
+        # Fold the operator's saved processing mode into the settings before the
+        # ladder is built, so `receipts process` honours it exactly like the
+        # worker does -- the injected-factory seam above deliberately does not,
+        # a scripted test must not acquire rungs from this machine's DB. Reads
+        # the DB once, falls back to the pre-feature default when unreadable.
+        settings = settings_for_run(settings, session_factory)
         # The triage rungs and extract fallback (full-timeout / cloud) are shared
         # across jobs; the per-job factory builds the primary extract probe rung
         # fresh for thread isolation, the way this path always built its per-job
@@ -1048,6 +1055,7 @@ def cmd_reprocess(
         triage_fallback = None
         fallback = None
     else:
+        settings = settings_for_run(settings, session_factory)
         triage_client, triage_fallback, _primary, fallback = make_extract_ladder(settings)
         client_factory = lambda: make_extract_ladder(settings)[2]  # noqa: E731
     result = process_receipt(

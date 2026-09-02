@@ -119,6 +119,7 @@ const ITEMS: LineItem[] = [
     unit: 'L',
     unit_price: '102.04' as Money,
     line_total: '1000.00' as Money,
+    is_handwritten: null,
     is_template_row: null,
     modifiers: [],
     bbox: null,
@@ -133,6 +134,7 @@ const ITEMS: LineItem[] = [
     unit: null,
     unit_price: null,
     line_total: null,
+    is_handwritten: null,
     is_template_row: null,
     modifiers: [],
     bbox: null,
@@ -194,23 +196,22 @@ describe("design section 4's input half, over every control that is rendered", (
     // `position` is read-only and is a `<td>`, not a control, so it is not in
     // the count. Every other correctable column is.
     //
-    // **The template-row checkbox cannot carry the mark, and that is a real
-    // gap rather than an oversight.** A checkbox has no placeholder, so an
-    // `is_template_row` of `null` renders identically to `false` -- design
-    // section 4's `null` is not `0` is not empty, defeated by the control
-    // type. It is listed here rather than excused, exactly as `Handwritten`
-    // and `Receipt is inconsistent` are listed in the ReceiptForm pin above,
-    // and ISSUE-006 records it. The pre-existing precedent is why this is not
-    // a new class of defect: `meta.is_handwritten` has had the same shape
-    // since the form was built.
+    // **The line-item checkboxes cannot carry the mark, and that is a real
+    // gap rather than an oversight.** A checkbox has no placeholder, so a null
+    // boolean renders identically to `false` -- design section 4's `null` is
+    // not `0` is not empty, defeated by the control type. They are listed here
+    // rather than excused, exactly as `Handwritten` and `Receipt is
+    // inconsistent` are listed in the ReceiptForm pin above.
     const { container } = render(
       <LineItemsTable items={ITEMS} fields={NOTHING_EXTRACTED} onChange={() => {}} />,
     )
 
     const all = controlsIn(container)
-    expect(all).toHaveLength(ITEMS.length * 7)
+    expect(all).toHaveLength(ITEMS.length * 8)
     expect(all.filter(honoursPlaceholder)).toHaveLength(ITEMS.length * 6)
     expect(cannotCarryAMark(container).sort()).toEqual([
+      'input[type=checkbox] Handwritten row 0',
+      'input[type=checkbox] Handwritten row 1',
       'input[type=checkbox] Template row 0',
       'input[type=checkbox] Template row 1',
     ])
@@ -278,7 +279,7 @@ describe("the confidence score goes through the primitive that owns section 4's 
     render(<ConfidenceRail confidence={'0.000' as Money} reasons={[]} />)
 
     expect(screen.queryByRole('img', { name: 'not extracted' })).toBeNull()
-    expect(screen.getByText('0.000')).toBeDefined()
+    expect(screen.getByText('0%')).toBeDefined()
   })
 })
 

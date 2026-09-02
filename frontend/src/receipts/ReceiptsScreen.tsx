@@ -7,6 +7,7 @@ import { Button } from '../ui/Button'
 import type { JSX } from 'react'
 import { Chip } from '../ui/Chip'
 import { ConfidenceChip } from '../ui/ConfidenceChip'
+import { accuracyPercent } from '../ui/accuracy'
 import { Value } from '../ui/Value'
 import { ReceiptDetailPanel } from './ReceiptDetailPanel'
 import styles from './ReceiptsScreen.module.css'
@@ -379,7 +380,7 @@ export function ReceiptsScreen({ identity }: ReceiptsScreenProps) {
     setExporting(true)
     setExportFailure(null)
     try {
-      await downloadExportWorkbook()
+      await downloadExportWorkbook(queryFor(filters))
       await load(filters)
     } catch (caught) {
       setExportFailure(messageOf(caught, 'the export did not reach the API'))
@@ -446,7 +447,7 @@ export function ReceiptsScreen({ identity }: ReceiptsScreenProps) {
         </label>
 
         <label className={styles.filterLabel} htmlFor="receipts-filter-confidence">
-          Confidence
+          Accuracy
           <select
             id="receipts-filter-confidence"
             className={styles.filterControl}
@@ -455,10 +456,10 @@ export function ReceiptsScreen({ identity }: ReceiptsScreenProps) {
               applyFilters({ ...filters, minConfidence: event.target.value })
             }
           >
-            <option value="">Any confidence</option>
+            <option value="">Any accuracy</option>
             {CONFIDENCE_OPTIONS.map((value) => (
               <option key={value} value={value}>
-                {value} and above
+                {accuracyPercent(value)} and above
               </option>
             ))}
           </select>
@@ -510,7 +511,7 @@ export function ReceiptsScreen({ identity }: ReceiptsScreenProps) {
                 <th scope="col">Merchant</th>
                 <th scope="col" className={styles.number}>Total</th>
                 <th scope="col">Status</th>
-                <th scope="col" className={styles.confidence}>Confidence</th>
+                <th scope="col" className={styles.confidence}>Accuracy</th>
                 {/* A real header rather than an empty cell: a column with no
                     name is a column a screen reader announces as nothing, and
                     the row's action needs saying once here instead of being

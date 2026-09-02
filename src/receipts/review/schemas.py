@@ -35,8 +35,13 @@ __all__ = [
     "ErrorDetail",
     "ExportReceiptListResponse",
     "HealthStatus",
+    "EditableSettingOut",
     "MetricsResponse",
+    "ProcessingModePatch",
+    "ProcessingModeResponse",
     "QueueStatsOut",
+    "SettingsPatch",
+    "SettingsResponse",
     "ReceiptListResponse",
     "ReviewTaskListResponse",
     "ThresholdsOut",
@@ -47,6 +52,88 @@ class HealthStatus(BaseModel):
     """``GET /health`` -- liveness only, nothing about the deployment."""
 
     status: str
+
+
+class EditableSettingOut(BaseModel):
+    """One row of ``GET /settings`` -- an operator-editable knob and its state.
+
+    Everything is typed for a non-developer form: ``value`` and ``default`` are
+    ``str | bool | None`` because a decimal crosses the wire as a string
+    (ADR-0001) while a checkbox is a real boolean, and a blank text field is
+    ``None``. ``kind`` tells the UI which control to render; ``label``/``help``
+    are the plain-language text; ``source`` is ``"override"`` when an operator
+    has set it and ``"default"`` otherwise, which is what gates a "reset" button.
+    """
+
+    field: str
+    label: str
+    help: str
+    kind: str
+    group: str
+    minimum: str | None
+    maximum: str | None
+    value: str | bool | None
+    default: str | bool | None
+    source: str
+
+
+class SettingsResponse(BaseModel):
+    """``GET /settings`` and the body ``PATCH /settings`` echoes back.
+
+    ``editable`` is whether the caller may change these (an admin). A reviewer
+    gets the same rows so they can *see* how the system is configured, with
+    ``editable`` false so the UI renders them read-only -- the same read/write
+    split ``/processing-mode`` takes.
+    """
+
+    settings: list[EditableSettingOut]
+    editable: bool
+
+
+class SettingsPatch(BaseModel):
+    """``PATCH /settings`` -- a map of field name to new value. Admin only.
+
+    Every value is a **string** (or ``null`` to clear a text field): the client
+    sends what the user typed, and the server coerces and validates each against
+    the real ``Settings`` type. A JSON number is accepted too and stringified,
+    so a checkbox sending ``true`` or a number box sending ``0.95`` both work;
+    the coercion layer owns the one definition of what each field accepts.
+    """
+
+    overrides: dict[str, str | bool | int | float | None]
+
+
+class ProcessingModeResponse(BaseModel):
+    """``GET /processing-mode`` -- the current mode and what the UI may offer.
+
+    ``mode`` is the stored (or default) processing mode. ``modes`` is every mode
+    the UI lists, in offer order, so the client does not hard-code the vocabulary
+    the server owns. ``available`` is the subset that is actually *distinct* for
+    this deployment: with no cloud model configured, ``local``, ``cloud`` and
+    ``hybrid`` all build the same single local rung, and a client should present
+    the ones outside this set as disabled rather than as live choices that
+    silently do nothing. See :func:`receipts.persist.app_settings.available_modes`.
+
+    All three are plain string tokens, not an enum, for the same reason
+    ``Identity.role`` is: the server validates on write, and a Literal here would
+    be a claim about the wire that a future mode would silently violate.
+    """
+
+    mode: str
+    modes: list[str]
+    available: list[str]
+
+
+class ProcessingModePatch(BaseModel):
+    """``PATCH /processing-mode`` -- set the mode. Admin only (route-guarded).
+
+    ``mode`` is validated against the server's vocabulary in the route (an
+    unknown value is a 400 carrying the message
+    :mod:`receipts.persist.app_settings` chose), not here: keeping the one rule
+    in one place is the same choice ``_RegisterBody`` makes for ``role``.
+    """
+
+    mode: str
 
 
 class ErrorDetail(BaseModel):
@@ -260,6 +347,7 @@ class _LineItemPatch(BaseModel):
     unit: str | None = None
     unit_price: MoneyPatch = None
     line_total: MoneyPatch = None
+    is_handwritten: bool | None = None
     #: ISSUE-009: correctable through the route since `is_template_row` shipped,
     #: and absent from the published schema until 2026-08-25.
     is_template_row: bool | None = None

@@ -27,6 +27,7 @@ import { ApiError } from '../api/client'
 import { fetchMetrics } from '../api/admin'
 import type { Metrics } from '../api/admin'
 import { StatTiles } from '../admin/StatTiles'
+import { accuracyPercent } from '../ui/accuracy'
 import styles from './HomeScreen.module.css'
 
 interface Destination {
@@ -113,13 +114,17 @@ export function HomeScreen() {
               and there as an em dash. One component, one answer. */}
           <StatTiles metrics={metrics} />
 
-          <section className={styles.panel} aria-label="Where the confidence line sits">
+          <section className={styles.panel} aria-label="Where the accuracy threshold sits">
             <h2 className={styles.panelHeading}>Auto-approval</h2>
             <p className={styles.thresholds}>
               A receipt is approved without a human at{' '}
-              <span className={styles.figure}>{metrics.thresholds.auto_approve}</span> confidence or
-              better, and is sent for review below{' '}
-              <span className={styles.figure}>{metrics.thresholds.review}</span>.
+              <span className={styles.figure}>
+                {accuracyPercent(metrics.thresholds.auto_approve)}
+              </span>{' '}
+              accuracy or better, and is sent for review below{' '}
+              <span className={styles.figure}>
+                {accuracyPercent(metrics.thresholds.review)}
+              </span>.
             </p>
             {/* The rate is already a tile above; what is NOT above is what it is
                 a rate against, and a percentage with no threshold beside it

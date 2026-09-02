@@ -169,6 +169,7 @@ def _line_item(item: LineItem) -> dict[str, Any]:
         "unit": item.unit,
         "unit_price": money(item.unit_price),
         "line_total": money(item.line_total),
+        "is_handwritten": item.is_handwritten,
         "is_template_row": item.is_template_row,
         "modifiers": item.modifiers,
         "bbox": item.bbox,

@@ -47,6 +47,7 @@ from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response, U
 from fastapi.responses import JSONResponse
 from sqlalchemy import func, select, text
 from sqlalchemy.exc import DBAPIError
+from sqlalchemy.orm import Session
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.staticfiles import StaticFiles
 
@@ -54,7 +55,20 @@ from config.settings import Settings, get_settings
 
 from ..export.xlsx import export_workbook
 from ..ingest.ingest import ReceiptJob, ingest_bytes
+from ..persist.app_settings import (
+    PROCESSING_MODES,
+    available_modes,
+    get_processing_mode,
+    set_processing_mode,
+)
 from ..persist.models import Receipt, ReviewState, ReviewTask
+from ..persist.overrides import (
+    apply_overrides,
+    clear_override,
+    get_overrides,
+    list_effective,
+    set_override,
+)
 from ..persist.repository import (
     apply_corrections,
     create_pending_receipt,
@@ -93,8 +107,12 @@ from .schemas import (
     ExportReceiptListResponse,
     HealthStatus,
     MetricsResponse,
+    ProcessingModePatch,
+    ProcessingModeResponse,
     ReceiptListResponse,
     ReviewTaskListResponse,
+    SettingsPatch,
+    SettingsResponse,
 )
 from .serializers import (
     build_export_rows,
@@ -254,6 +272,27 @@ def _install_error_handlers(app: FastAPI) -> None:
 # --------------------------------------------------------------------------- #
 
 
+def _effective_settings(request: Request, session: Session) -> Settings:
+    """``app.state.settings`` with the operator's live overrides applied.
+
+    **Why the API needs this at all.** ``app.state.settings`` is frozen at boot;
+    an admin editing a threshold or the buyer name through ``PATCH /settings``
+    writes to the database, not to that frozen object. Any read path that
+    *surfaces* one of those values -- the thresholds on ``/metrics``, the buyer
+    identity on a receipt detail -- must therefore overlay the stored overrides
+    per request, or it would show the boot-time value while the worker (which
+    rebuilds its settings per receipt) is already using the new one. This is the
+    read-side twin of ``settings_for_run`` on the worker side: one overlay, two
+    processes, no restart.
+
+    The override overlay is best-effort by construction (``apply_overrides`` skips
+    anything it cannot coerce), so a bad stored value degrades to the boot value
+    rather than failing the request.
+    """
+    base: Settings = request.app.state.settings
+    return apply_overrides(base, get_overrides(session))
+
+
 def _task_summary(task: ReviewTask, *, uploaded_at: datetime | None = None) -> dict[str, Any]:
     """A :class:`~receipts.persist.models.ReviewTask` row as JSON.
 
@@ -381,7 +420,10 @@ def _install_read_routes(app: FastAPI) -> None:
             if receipt is None:
                 raise HTTPException(status_code=404, detail=f"no receipt with id {receipt_id}")
             findings = get_findings(session, receipt_id)
-            settings: Settings = request.app.state.settings
+            # Effective, not boot-time, so a buyer name an admin set through
+            # PATCH /settings is the one this detail compares against -- matching
+            # what the worker used when it validated the receipt.
+            settings = _effective_settings(request, session)
             return receipt_detail(
                 receipt,
                 findings,
@@ -530,8 +572,12 @@ def _install_read_routes(app: FastAPI) -> None:
         carry one -- and it would mislead precisely when P8 calibration moves
         the cut-off.
         """
-        settings: Settings = request.app.state.settings
         with request.app.state.session_factory() as session:
+            # Effective, not boot-time: an admin who just lowered the auto-approve
+            # threshold through PATCH /settings must see the new figure here, on
+            # the very screen an operator reads to reason about it -- the worker
+            # is already routing on it. See `_effective_settings`.
+            settings = _effective_settings(request, session)
             stats = queue_stats(session)
             counts = dict(
                 session.execute(select(Receipt.status, func.count()).group_by(Receipt.status))
@@ -567,6 +613,53 @@ def _install_read_routes(app: FastAPI) -> None:
                 "review": str(settings.review_threshold),
             },
         }
+
+    @app.get("/processing-mode", response_model=ProcessingModeResponse)
+    def processing_mode(
+        request: Request,
+        user: Annotated[SessionUser, Depends(require_user)],
+    ) -> Any:
+        """The current processing mode and the modes the UI may offer.
+
+        Readable by any signed-in user -- a reviewer needs to see how receipts
+        are being processed even though only an admin may change it, the same
+        split ``PATCH /receipts`` (any user) and ``POST /release`` (admin) take.
+
+        ``available`` narrows ``modes`` to those that are genuinely distinct for
+        this deployment's model configuration: with no cloud model configured
+        all three modes build the same local rung, and the client disables the
+        rest rather than offering a switch that would silently do nothing.
+        """
+        settings: Settings = request.app.state.settings
+        with request.app.state.session_factory() as session:
+            mode = get_processing_mode(session)
+        return {
+            "mode": mode,
+            "modes": list(PROCESSING_MODES),
+            "available": list(available_modes(settings)),
+        }
+
+    @app.get("/settings", response_model=SettingsResponse)
+    def read_settings(
+        request: Request,
+        user: Annotated[SessionUser, Depends(require_user)],
+    ) -> Any:
+        """The operator-editable system settings and their current values.
+
+        Readable by any signed-in user; only an admin may change them (the
+        ``PATCH`` below is role-gated), so ``editable`` tells the client which
+        to render. A reviewer seeing the current thresholds and buyer identity
+        read-only is deliberate -- it is context for their work, the same
+        read/write split ``/processing-mode`` and ``/metrics`` take.
+
+        Each row's ``value`` is what is *in force now* (the operator's override
+        if one is stored, otherwise the ``.env``/default value the process
+        booted with), so this is honest about the running system rather than
+        about the file on disk.
+        """
+        with request.app.state.session_factory() as session:
+            rows = list_effective(session, request.app.state.settings)
+        return {"settings": rows, "editable": user.role == ROLE_ADMIN}
 
     @app.get("/review/tasks", response_model=ReviewTaskListResponse)
     def list_review_tasks(
@@ -836,7 +929,9 @@ def _install_write_routes(app: FastAPI) -> None:
                 session, receipt_id, raw_patch, corrected_by=user.username
             )
             findings = get_findings(session, receipt_id)
-            settings: Settings = request.app.state.settings
+            # Effective settings, so a buyer identity set through PATCH /settings
+            # is reflected here immediately -- see `_effective_settings`.
+            settings = _effective_settings(request, session)
             return receipt_detail(
                 receipt,
                 findings,
@@ -1150,6 +1245,100 @@ def _install_write_routes(app: FastAPI) -> None:
                 admin.username,
             )
         return payload
+
+    @app.patch("/processing-mode", response_model=ProcessingModeResponse)
+    def patch_processing_mode(
+        patch: ProcessingModePatch,
+        request: Request,
+        admin: Annotated[SessionUser, Depends(require_role(ROLE_ADMIN))],
+    ) -> Any:
+        """Set the processing mode. **Admin only.**
+
+        A global toggle that changes how every subsequent receipt is routed --
+        pure-local, pure-cloud, or the local-then-cloud ladder -- is a
+        deployment decision, not a per-reviewer one, so it takes the same
+        declarative ``require_role(ROLE_ADMIN)`` gate as ``POST /release`` and
+        the export. Any signed-in user may *read* the mode; only an admin writes
+        it.
+
+        An unknown mode is a **400**: ``set_processing_mode`` raises
+        ``ValueError`` with the vocabulary it accepts, and the shared handler
+        renders that as ``{"error": {"message": ...}}`` -- the same one-place
+        validation ``/auth/register`` uses for a role.
+
+        The change takes effect for receipts processed *after* it lands: the
+        worker and CLI read the stored mode when they build the extract ladder
+        for each run (see ``receipts.persist.app_settings.apply_processing_mode``
+        and its three call sites). It does not disturb receipts already in
+        flight, and it does not require a restart.
+
+        Returns the same body as ``GET /processing-mode`` so the client's
+        signed-in path needs no second shape, and ``available`` is recomputed
+        from this deployment's settings.
+        """
+        settings: Settings = request.app.state.settings
+        with request.app.state.session_factory() as session:
+            mode = set_processing_mode(session, patch.mode, updated_by=admin.username)
+            session.commit()
+        logger.info("processing mode set to %s by admin %s", mode, admin.username)
+        return {
+            "mode": mode,
+            "modes": list(PROCESSING_MODES),
+            "available": list(available_modes(settings)),
+        }
+
+    @app.patch("/settings", response_model=SettingsResponse)
+    def patch_settings(
+        patch: SettingsPatch,
+        request: Request,
+        admin: Annotated[SessionUser, Depends(require_role(ROLE_ADMIN))],
+    ) -> Any:
+        """Change one or more system settings. **Admin only.**
+
+        These knobs decide how every receipt is approved and validated, so
+        editing them is a deployment decision -- the same ``require_role(ROLE_
+        ADMIN)`` gate the mode and the export take. A reviewer may read them;
+        only an admin writes.
+
+        Each value in ``overrides`` is validated against the real ``Settings``
+        type and its advisory bounds before anything is stored; the first value
+        that fails is a **400** carrying a message in operator terms (``"'Auto-
+        approve confidence' must be at most 1"``), and **nothing is written** --
+        the whole patch is applied in one transaction that commits only if every
+        field validates, so a bad field never leaves the settings half-changed.
+        A field outside the editable allow-list is a 400 for the same reason: it
+        is not a settable knob.
+
+        **Clearing a value** (sending ``null`` or an empty string for a text
+        field) removes the override, so the setting falls back to what the
+        process booted with. That is how an operator undoes a change without
+        knowing the original number.
+
+        The change is live with no restart: the worker rebuilds its settings per
+        receipt and picks these up on the next one, and this API overlays them
+        per request (see ``_effective_settings``). Returns the full refreshed
+        settings so the client updates in one round trip.
+        """
+        with request.app.state.session_factory() as session:
+            for field, raw in patch.overrides.items():
+                if raw is None or (isinstance(raw, str) and raw.strip() == ""):
+                    # An empty value clears the override. `clear_override` only
+                    # rejects a field outside the allow-list, which is the one
+                    # error worth raising here.
+                    clear_override(session, field)
+                else:
+                    # `set_override` coerces the string/number/bool, validates it
+                    # against the model and the bounds, and raises ValueError
+                    # (-> 400) on anything it will not accept.
+                    set_override(session, field, str(raw), updated_by=admin.username)
+            rows = list_effective(session, request.app.state.settings)
+            session.commit()
+        logger.info(
+            "system settings changed by admin %s: %s",
+            admin.username,
+            ", ".join(sorted(patch.overrides)),
+        )
+        return {"settings": rows, "editable": True}
 
     @app.get("/export/xlsx")
     def export_xlsx(

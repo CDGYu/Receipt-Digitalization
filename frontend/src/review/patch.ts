@@ -69,6 +69,7 @@ function lineItemFields(fields: FieldMap, receipt: ReceiptDetail): void {
     fields[`${at}.unit`] = item.unit
     fields[`${at}.unit_price`] = item.unit_price
     fields[`${at}.line_total`] = item.line_total
+    fields[`${at}.is_handwritten`] = boolText(item.is_handwritten)
     // Through `boolText`, not `String(...)`: `null` must stay `null` so an
     // untouched row sends no correction. `String(null)` is `"null"`, which
     // differs from every stored value and would make `buildPatch` report an

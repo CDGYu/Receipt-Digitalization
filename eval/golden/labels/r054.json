@@ -31,6 +31,7 @@
       "line_total": "95.25",
       "modifiers": [],
       "bbox": null,
+      "is_handwritten": false,
       "is_template_row": false
     },
     {
@@ -43,6 +44,7 @@
       "line_total": "227.25",
       "modifiers": [],
       "bbox": null,
+      "is_handwritten": false,
       "is_template_row": false
     },
     {
@@ -55,6 +57,7 @@
       "line_total": "20.50",
       "modifiers": [],
       "bbox": null,
+      "is_handwritten": false,
       "is_template_row": false
     },
     {
@@ -67,6 +70,7 @@
       "line_total": "20.50",
       "modifiers": [],
       "bbox": null,
+      "is_handwritten": false,
       "is_template_row": false
     },
     {
@@ -79,6 +83,7 @@
       "line_total": "110.00",
       "modifiers": [],
       "bbox": null,
+      "is_handwritten": false,
       "is_template_row": false
     }
   ],

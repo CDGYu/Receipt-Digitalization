@@ -129,6 +129,67 @@ describe('the review queue list', () => {
     expect(screen.getByText('Tesco')).toBeTruthy()
   })
 
+  it('shows the uploaded instant in Philippine time', async () => {
+    const routes = {
+      [TASKS_PATH]: [
+        200,
+        {
+          items: [
+            task({
+              id: 't-ph',
+              receipt_id: 'r-ph',
+              uploaded_at: '2026-08-25T09:00:00+00:00',
+            }),
+          ],
+          has_more: false,
+        },
+      ],
+      [RECEIPTS_PATH]: [
+        200,
+        {
+          items: [receipt({ id: 'r-ph', merchant_name_raw: 'Jollibee' })],
+          has_more: false,
+        },
+      ],
+    } as Record<string, readonly [number, unknown]>
+
+    await renderQueue(routes)
+
+    const row = screen.getByText('Jollibee').closest('tr') as HTMLTableRowElement
+    expect(row.textContent).toContain('2026-08-25 17:00 PHT')
+    expect(row.textContent).not.toContain('2026-08-25 09:00')
+  })
+
+  it('treats a naive uploaded timestamp as UTC before showing Philippine time', async () => {
+    const routes = {
+      [TASKS_PATH]: [
+        200,
+        {
+          items: [
+            task({
+              id: 't-naive',
+              receipt_id: 'r-naive',
+              uploaded_at: '2026-08-25T23:30:00',
+            }),
+          ],
+          has_more: false,
+        },
+      ],
+      [RECEIPTS_PATH]: [
+        200,
+        {
+          items: [receipt({ id: 'r-naive', merchant_name_raw: 'Makati Store' })],
+          has_more: false,
+        },
+      ],
+    } as Record<string, readonly [number, unknown]>
+
+    await renderQueue(routes)
+
+    const row = screen.getByText('Makati Store').closest('tr') as HTMLTableRowElement
+    expect(row.textContent).toContain('2026-08-26 07:30 PHT')
+  })
+
   it('keeps the queue order the server sent rather than re-sorting', async () => {
     // `list_tasks` orders by `priority, opened_at, id` -- the same total order
     // `_claim_stmt` claims in -- so the first backlog row is genuinely the row

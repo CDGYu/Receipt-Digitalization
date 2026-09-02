@@ -19,6 +19,7 @@ const ITEMS: LineItem[] = [
     unit: 'L',
     unit_price: '102.04' as Money,
     line_total: '1000.00' as Money,
+    is_handwritten: false,
     is_template_row: false,
     modifiers: [],
     bbox: null,
@@ -32,6 +33,7 @@ const ITEMS: LineItem[] = [
     unit: null,
     unit_price: null,
     line_total: '80.00' as Money,
+    is_handwritten: true,
     // Null qty, null unit, null unit price, a printed line total: the blank
     // pre-printed row shape ISSUE-003 describes, so `true` is the honest value.
     is_template_row: true,
@@ -270,6 +272,7 @@ describe('LineItemsTable', () => {
       'Unit',
       'Unit price',
       'Line total',
+      'Handwritten',
       'Template',
     ])
     expect((screen.getByLabelText('Description 0') as HTMLInputElement).value).toBe('DIESEL')
@@ -289,10 +292,10 @@ describe('LineItemsTable', () => {
     expect(rows).toHaveLength(2)
     for (const [index, row] of rows.entries()) {
       expect(within(row).getAllByRole('textbox')).toHaveLength(6)
-      // The seventh editable column is a checkbox, which is not a `textbox`
-      // role -- so the count above would stay 6 whether or not it renders, and
-      // asserting it separately is what makes this row's claim true.
-      expect(within(row).getAllByRole('checkbox')).toHaveLength(1)
+      // The two flag columns are checkboxes, which are not `textbox` roles --
+      // so the count above would stay 6 whether or not they render, and
+      // asserting them separately is what makes this row's claim true.
+      expect(within(row).getAllByRole('checkbox')).toHaveLength(2)
       expect(within(row).getAllByRole('cell')[0].textContent).toBe(String(index))
     }
   })
@@ -342,6 +345,22 @@ describe('LineItemsTable', () => {
     expect(onChange).toHaveBeenLastCalledWith('line_items[1].is_template_row', 'false')
   })
 
+  it('shows the handwritten-row flag as an editable control, ticked from stored state', async () => {
+    const onChange = renderTable()
+    const printed = screen.getByLabelText('Handwritten row 0') as HTMLInputElement
+    const handwritten = screen.getByLabelText('Handwritten row 1') as HTMLInputElement
+    expect(printed.type).toBe('checkbox')
+    expect(printed.checked).toBe(false)
+    expect(handwritten.checked).toBe(true)
+
+    await userEvent.click(printed)
+    expect(onChange).toHaveBeenLastCalledWith('line_items[0].is_handwritten', 'true')
+    expect((screen.getByLabelText('Handwritten row 0') as HTMLInputElement).checked).toBe(true)
+
+    await userEvent.click(handwritten)
+    expect(onChange).toHaveBeenLastCalledWith('line_items[1].is_handwritten', 'false')
+  })
+
   it('leaves an undecided flag null, so an untouched row sends no correction', () => {
     // `boolText`, not `String(...)`. `String(null)` is `"null"`, which differs
     // from every stored value, and `buildPatch` would then report an edit on
@@ -350,9 +369,10 @@ describe('LineItemsTable', () => {
     // from `false` and that is the whole distinction being pinned.
     const fields = fieldsFromReceipt({
       ...RECEIPT,
-      line_items: [{ ...ITEMS[0], is_template_row: null }],
+      line_items: [{ ...ITEMS[0], is_template_row: null, is_handwritten: null }],
     })
     expect(fields['line_items[0].is_template_row']).toBeNull()
+    expect(fields['line_items[0].is_handwritten']).toBeNull()
   })
 
   it('highlights the whole row when any cell in it takes focus', async () => {

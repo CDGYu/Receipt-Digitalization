@@ -56,6 +56,11 @@ export interface LineItem {
   unit: string | null
   unit_price: Money | null
   line_total: Money | null
+  /** Whether this line's item text or numeric values are handwritten.
+   *
+   *  `null` means the row was recorded before item-level handwriting existed,
+   *  or the image could not support a row-level judgement. */
+  is_handwritten: boolean | null
   /** A blank pre-printed row the form supplies, not something bought.
    *
    *  It decides whether the row reaches the accounting ledger (`_purchases`,

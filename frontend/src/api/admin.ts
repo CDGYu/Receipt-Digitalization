@@ -184,3 +184,103 @@ export function releaseTask(taskId: string): Promise<ReleasedTask> {
 export function fetchMetrics(): Promise<Metrics> {
   return request('/metrics')
 }
+
+/** How receipts are processed: pure-local, pure-cloud, or the hybrid ladder.
+ *
+ * The literal union is a convenience for callers, but the fields are typed
+ * `string`/`string[]` because -- exactly like `Identity.role` -- `request<T>` is
+ * an unchecked cast and the server owns the vocabulary. A future mode arrives as
+ * a plain string the UI can still render rather than a value that type-checks as
+ * impossible.
+ *
+ * `modes` is every mode the UI may list, in offer order. `available` is the
+ * subset that is genuinely distinct for this deployment: with no cloud model
+ * configured all three build the same local rung, so the UI shows the rest
+ * disabled rather than as live choices that silently do nothing.
+ */
+export type ProcessingMode = 'local' | 'cloud' | 'hybrid'
+
+export interface ProcessingModeState {
+  mode: string
+  modes: string[]
+  available: string[]
+}
+
+/** Read the current processing mode. **Readable by any signed-in user.**
+ *
+ * `GET /processing-mode` is guarded by `require_user`, not `require_role`: a
+ * reviewer may see how receipts are being processed even though only an admin
+ * may change it -- the same read/write split `PATCH /receipts` and
+ * `POST /release` take.
+ */
+export function fetchProcessingMode(): Promise<ProcessingModeState> {
+  return request('/processing-mode')
+}
+
+/** Set the processing mode. **Admin only; a reviewer gets 403.**
+ *
+ * `PATCH /processing-mode` takes `Depends(require_role(ROLE_ADMIN))`, so a
+ * reviewer's write is refused with 403 -- the UI hides the control for a
+ * reviewer as a courtesy, not as the gate. An unknown mode is a 400 carrying
+ * the server's own message, which `request` turns into an `ApiError`. Returns
+ * the same shape as `fetchProcessingMode`, so a successful write refreshes the
+ * whole state in one round trip.
+ */
+export function setProcessingMode(mode: string): Promise<ProcessingModeState> {
+  return request('/processing-mode', { method: 'PATCH', body: JSON.stringify({ mode }) })
+}
+
+/** One operator-editable system setting, as `GET /settings` returns it.
+ *
+ * `kind` picks the control the UI renders (`bool` a checkbox, the rest a text
+ * box). `value` and `default` are `string | boolean | null`: a decimal crosses
+ * the wire as a string (ADR-0001), a checkbox as a real boolean, and a blank
+ * text field as `null`. `source` is `'override'` when an operator has set it and
+ * `'default'` otherwise -- which is what shows a "reset" affordance. `min`/`max`
+ * are advisory hints for a number field.
+ */
+export interface EditableSetting {
+  field: string
+  label: string
+  help: string
+  kind: 'decimal' | 'int' | 'bool' | 'text'
+  group: string
+  minimum: string | null
+  maximum: string | null
+  value: string | boolean | null
+  default: string | boolean | null
+  source: 'override' | 'default'
+}
+
+export interface SettingsState {
+  settings: EditableSetting[]
+  /** Whether the signed-in user (an admin) may change these. Reviewers get the
+   *  same rows with `editable` false so the UI renders them read-only. */
+  editable: boolean
+}
+
+/** Read the operator-editable system settings. **Any signed-in user.**
+ *
+ * `GET /settings` is `require_user`, like `/processing-mode` and `/metrics`: a
+ * reviewer sees how the system is configured, an admin may change it (the
+ * `editable` flag says which). Each row's `value` is what is in force now -- the
+ * override if one is stored, else the value the process booted with.
+ */
+export function fetchSettings(): Promise<SettingsState> {
+  return request('/settings')
+}
+
+/** Change one or more system settings. **Admin only; a reviewer gets 403.**
+ *
+ * `PATCH /settings` takes a map of field name to new value. A blank string or
+ * `null` clears a setting back to its default. The server validates every value
+ * against its real type and bounds and applies the whole patch atomically -- the
+ * first bad value is a 400 (with an operator-facing message) and nothing is
+ * written. Returns the full refreshed settings so the caller updates in one
+ * round trip.
+ */
+export function saveSettings(
+  overrides: Record<string, string | boolean | null>,
+): Promise<SettingsState> {
+  return request('/settings', { method: 'PATCH', body: JSON.stringify({ overrides }) })
+}

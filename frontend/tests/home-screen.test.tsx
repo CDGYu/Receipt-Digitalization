@@ -87,7 +87,7 @@ describe('the queue depth', () => {
     })
   })
 
-  it('names the confidence line the auto-approval rate is a rate against', async () => {
+  it('names the accuracy threshold the auto-approval rate is a rate against', async () => {
     // A percentage with no threshold beside it cannot be acted on: raising the
     // bar lowers the rate, and that trade is the decision this screen informs.
     // Both numbers come from the response, so this cannot pass by agreeing with
@@ -100,9 +100,9 @@ describe('the queue depth', () => {
     )
     render(<HomeScreen />)
 
-    const panel = await screen.findByRole('region', { name: 'Where the confidence line sits' })
-    expect(panel.textContent).toContain('0.91')
-    expect(panel.textContent).toContain('0.55')
+    const panel = await screen.findByRole('region', { name: 'Where the accuracy threshold sits' })
+    expect(panel.textContent).toContain('91%')
+    expect(panel.textContent).toContain('55%')
   })
 
   it('lists the statuses that have receipts, commonest first, and drops the empty ones', async () => {

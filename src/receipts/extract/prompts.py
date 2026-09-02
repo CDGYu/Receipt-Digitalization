@@ -96,6 +96,9 @@ RULES, in priority order:
    - Do NOT create line items for: subtotal, tax, total, change, cashier name,
      store slogans, loyalty points, barcodes, or footer text.
    - If quantity is not printed, leave qty null - do not assume 1.
+   - Set line_items[].is_handwritten true when the row's item name or numeric
+     values are handwritten, false when they are printed/POS text, and null only
+     when the image does not support an item-level judgement.
 
 6. DATES AND TIMES.
    - receipt.date must be ISO 8601 YYYY-MM-DD. receipt.time must be HH:MM, 24-hour.
@@ -196,11 +199,13 @@ Work top to bottom through the receipt. Before returning, verify:
       row from below the items grid, and never a footer line
   (b) is_template_row is set only where the paper is blank, never where you
       merely could not read what was written
-  (c) if the form has a "SOLD TO" / "Sold to:" / "Registered Name" block, the
+  (c) is_handwritten on each line item says whether that row's item name or
+      numeric values are handwritten, not whether the whole receipt is mixed
+  (d) if the form has a "SOLD TO" / "Sold to:" / "Registered Name" block, the
       buyer came from THAT block, and buyer.tax_id is not the printer's TIN
       from the footer
-  (d) you have not invented any number that is not printed
-  (e) every field you were unsure about is listed in meta.ambiguous_fields
+  (e) you have not invented any number that is not printed
+  (f) every field you were unsure about is listed in meta.ambiguous_fields
 
 Return JSON only.
 """

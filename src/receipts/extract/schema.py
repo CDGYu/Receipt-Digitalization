@@ -96,6 +96,15 @@ class LineItem(BaseModel):
     bbox: list[float] | None = Field(
         default=None, description="[x0,y0,x1,y1] normalised 0-1 if model supports grounding"
     )
+    is_handwritten: bool | None = Field(
+        default=None,
+        description=(
+            "Whether this line's visible values are handwritten rather than "
+            "machine-printed. Use true for a hand-filled item row, false for a "
+            "printed/POS row, and leave null when the image does not support an "
+            "item-level judgement."
+        ),
+    )
     is_template_row: bool = Field(
         default=False,
         description=(

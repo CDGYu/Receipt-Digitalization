@@ -444,6 +444,13 @@ _LINE_ITEM_COLUMN_TO_DETAIL_KEY = {
     # shown a value you cannot edit is safe, overwriting one you were never
     # shown is not.
     "is_template_row": "is_template_row",
+    # Per-line handwriting, correctable through the dotted PATCH path
+    # (``_LINE_ITEM_FIELDS``) since the handwriting milestone and readable in
+    # the detail through ``_line_item`` -- the same read/write pairing the flag
+    # above has. It decides which rows a handwritten-receipt confidence penalty
+    # and the self-consistency pass apply to, so a reviewer overwriting one they
+    # were never shown is the exact defect this property guards against.
+    "is_handwritten": "is_handwritten",
 }
 
 

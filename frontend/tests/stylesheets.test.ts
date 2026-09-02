@@ -307,6 +307,43 @@ const CENSUS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
     '.link:hover': 'color',
     '.current': 'border-bottom-color, color',
   },
+  // The header settings menu (a disclosure button and its floating panel) and
+  // the processing-mode picker inside it. Derived by running `censusFor` against
+  // the file, the same mechanical way as every entry here.
+  'SettingsMenu.module.css': {
+    '.root': 'position: relative, display: inline-flex, font-family, font-size',
+    '.trigger':
+      'min-height, min-width, padding, border, border-radius, background, color, font-family, font-size, font-weight, line-height, cursor: pointer, transition',
+    '.trigger:hover': 'border-color',
+    '.panel':
+      'position: absolute, top, right, z-index, display: flex, flex-direction: column, gap, min-width, max-width, max-height, overflow-y: auto, padding, border, border-radius, background, box-shadow',
+    '.section': 'display: flex, flex-direction: column, gap, margin, padding, border',
+    '.sectionTitle':
+      'margin, padding, color, font-family, font-size, font-weight, letter-spacing, text-transform: uppercase',
+    '.modeOption': 'display: flex, align-items: start, gap, padding, cursor: pointer',
+    '.modeText': 'display: flex, flex-direction: column, gap',
+    '.modeLabel': 'color, font-size, font-weight',
+    '.readonlyValue': 'margin, color, font-size, font-weight',
+    '.hint': 'color, font-size, line-height',
+    '.error': 'color, font-size',
+    '.button':
+      'min-height, min-width, padding, border, border-radius, background, color, font-family, font-size, font-weight, line-height, cursor: pointer, transition',
+    '.button:hover:not(:disabled)': 'border-color',
+    '.button:disabled': 'opacity, cursor: not-allowed',
+    '.settingsGroup': 'display: flex, flex-direction: column, gap, margin, padding, border',
+    '.settingsGroupTitle': 'margin, padding, color, font-family, font-size, font-weight',
+    '.settingRow': 'display: flex, flex-direction: column, gap',
+    '.settingLabelRow': 'display: flex, align-items: center, gap',
+    '.settingLabel': 'color, font-size, font-weight',
+    '.settingReadonly': 'color, font-family, font-size',
+    '.settingInput':
+      'min-height, padding, border, border-radius, background, color, font-family, font-size',
+    '.settingInput:hover:not(:disabled)': 'border-color',
+    '.settingReset':
+      'align-self: start, padding, border, background: none, color, font-family, font-size, cursor: pointer',
+    '.settingsActions': 'display: flex, flex-wrap: wrap, align-items: center, gap',
+    '.settingsSaved': 'color, font-size',
+  },
   // Derived by applying `censusOf`'s own rule to the file, not transcribed by
   // eye -- the header above calls this mechanical, and doing it by hand is how
   // a census drifts from the stylesheet it is supposed to guard.
@@ -505,11 +542,19 @@ const CENSUS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
     '.head th:nth-child(5)': 'width',
     '.head th:nth-child(6)': 'width, text-align: right',
     '.head th:nth-child(7)': 'width, text-align: right',
+    // The two flag columns -- Handwritten and Template row -- added with the
+    // per-line handwriting checkbox. Centered because they carry a checkbox, not
+    // a value or a figure, so neither left (labels) nor right (money) fits.
+    '.head th:nth-child(8)': 'width, text-align: center',
+    '.head th:nth-child(9)': 'width, text-align: center',
     '.row > td': 'padding, border-top, vertical-align: top',
     '.row:nth-child(even)': 'background',
     '.rowActive:nth-child(even), .rowActive': 'background',
     '.position': 'font-family, font-variant-numeric: tabular-nums, color, text-align: right',
     '.money': 'text-align: right',
+    // Centers the checkbox in a flag column, the cell twin of the two
+    // `nth-child` header rules above.
+    '.checkCell': 'text-align: center',
     '.cell':
       'width, min-height, box-sizing: border-box, padding, border, border-radius, background, color, font-family, font-size',
     '.cell::placeholder': 'color, opacity',
@@ -898,13 +943,15 @@ describe('the census reads what is there, not what it hopes for', () => {
 
   it('is reading the real tree, not an empty one', () => {
     const files = stylesheets()
-    // 24 since `review/TaxBands.module.css` was added on 2026-08-25. The
-    // number is deliberate here, unlike in the parser's docblock next door: the
-    // point is that the walk found the real tree rather than an empty one, and
-    // an exact count is what makes "found nothing" and "found one" both fail.
-    // It is expected to move whenever a stylesheet is added, and the census
-    // entry that must accompany it is the other half of the same step.
-    expect(files.length, 'no stylesheets found -- the whole census is vacuous').toBe(24)
+    // 25 since `SettingsMenu.module.css` was added with the header settings
+    // menu (2026-09-02); 24 before, since `review/TaxBands.module.css` on
+    // 2026-08-25. The number is deliberate here, unlike in the parser's docblock
+    // next door: the point is that the walk found the real tree rather than an
+    // empty one, and an exact count is what makes "found nothing" and "found
+    // one" both fail. It is expected to move whenever a stylesheet is added, and
+    // the census entry that must accompany it is the other half of the same
+    // step.
+    expect(files.length, 'no stylesheets found -- the whole census is vacuous').toBe(25)
     let rules = 0
     let declarations = 0
     for (const file of files) {

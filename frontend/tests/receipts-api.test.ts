@@ -165,6 +165,15 @@ describe('downloadExportWorkbook', () => {
     expect(anchor.download).toBe('receipts-export.xlsx')
   })
 
+  it('forwards workbook filters under the same names as the preview list', async () => {
+    const fetchMock = stub(blobResponse(200, 'x'))
+    spyOnAnchorClick()
+    await downloadExportWorkbook({ status: 'needs_review', minConfidence: '0.75' })
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      '/export/xlsx?status=needs_review&min_confidence=0.75',
+    )
+  })
+
   it('revokes the object URL it created', async () => {
     stub(blobResponse(200, 'x'))
     const revoke = vi.spyOn(URL, 'revokeObjectURL')

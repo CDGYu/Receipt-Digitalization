@@ -36,6 +36,7 @@
         }
       ],
       "bbox": null,
+      "is_handwritten": false,
       "is_template_row": false
     },
     {
@@ -48,6 +49,7 @@
       "line_total": "270.00",
       "modifiers": [],
       "bbox": null,
+      "is_handwritten": false,
       "is_template_row": false
     }
   ],

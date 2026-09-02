@@ -76,13 +76,13 @@
 .table {
   width: 100%;
   /* The floor that makes the scroller reachable. Eight columns are laid out
-   * against *this*: the first is `3rem`, the next six are percentages of it, and
-   * the eighth takes what is left (`0.15W - 48`, so 57.5px here). Below the
-   * floor the money columns stop lining up on the
+ * against *this*: the first is `3rem`, the next eight are percentages of it, and
+ * the flag columns keep explicit room for their checkboxes. Below the
+ * floor the money columns stop lining up on the
    * decimal -- the property Fira Code's tabular figures exist to make visible
    * (§3.1) -- and a description wraps to four lines. Scrolling is the honest
    * failure mode; squeezing is the silent one. */
-  min-width: 44rem;
+  min-width: 52rem;
   table-layout: fixed;
   border-collapse: collapse;
   background: var(--color-surface);
@@ -138,30 +138,40 @@
 }
 
 .head th:nth-child(2) {
-  width: 24%;
+  width: 23%;
 }
 
 .head th:nth-child(3) {
-  width: 12%;
+  width: 10%;
 }
 
 .head th:nth-child(4) {
-  width: 12%;
+  width: 10%;
   text-align: right;
 }
 
 .head th:nth-child(5) {
-  width: 9%;
+  width: 8%;
 }
 
 .head th:nth-child(6) {
-  width: 14%;
+  width: 12%;
   text-align: right;
 }
 
 .head th:nth-child(7) {
-  width: 14%;
+  width: 12%;
   text-align: right;
+}
+
+.head th:nth-child(8) {
+  width: 11%;
+  text-align: center;
+}
+
+.head th:nth-child(9) {
+  width: 8%;
+  text-align: center;
 }
 
 .row > td {
@@ -214,6 +224,10 @@
  * when the cell holds anything else. */
 .money {
   text-align: right;
+}
+
+.checkCell {
+  text-align: center;
 }
 
 /* The free-text cells. `--text-base` is §3.1's floor for an editable value and

@@ -36,6 +36,7 @@
         }
       ],
       "bbox": null,
+      "is_handwritten": false,
       "is_template_row": false
     },
     {
@@ -53,6 +54,7 @@
         }
       ],
       "bbox": null,
+      "is_handwritten": false,
       "is_template_row": false
     },
     {
@@ -70,6 +72,7 @@
         }
       ],
       "bbox": null,
+      "is_handwritten": false,
       "is_template_row": false
     },
     {
@@ -87,6 +90,7 @@
         }
       ],
       "bbox": null,
+      "is_handwritten": false,
       "is_template_row": false
     },
     {
@@ -104,6 +108,7 @@
         }
       ],
       "bbox": null,
+      "is_handwritten": false,
       "is_template_row": false
     }
   ],

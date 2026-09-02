@@ -18,6 +18,15 @@ behaviour to the app itself:
   * **the review API** -- `uvicorn receipts.asgi:app`, which serves both the
     JSON API and, with `SERVE_SPA=true`, the built UI under `/app`.
 
+Before the API starts, and only when `SERVE_SPA=true`, it also **rebuilds the
+review UI if its source has changed** (`ensure_frontend_built`). The API serves
+a *built* bundle from `frontend/dist`, so an edit to `frontend/src` is invisible
+until that bundle is regenerated -- the "I changed the UI but the app still shows
+the old one" trap. This step is a fast no-op when the build is already current,
+skipped entirely for an API-only deployment, and falls back to the last good
+build (with a warning) if a rebuild cannot happen. It is still not new
+behaviour: it runs the same `vite build` a developer runs by hand.
+
 Everything each process needs it reads from `.env` through `config.settings`,
 exactly as it does when started by hand. This script sets no configuration and
 holds no secret; it reads `.env` only to learn *where* things are (the Redis
@@ -67,6 +76,19 @@ for _root in (str(REPO_ROOT), str(REPO_ROOT / "src")):
 VENDORED_REDIS = REPO_ROOT / "vendor" / "redis" / "redis-server.exe"
 VENDORED_REDIS_CONF = REPO_ROOT / "vendor" / "redis" / "launcher.conf"
 REDIS_DATA_DIR = REPO_ROOT / "var" / "redis"
+
+#: Where the review UI's source and its built output live, relative to the repo.
+#: The build reads the first and writes the second; the API serves the second
+#: when ``SERVE_SPA=true``. ``FRONTEND_DIST`` in ``.env`` can point the API at a
+#: different build, but this launcher owns the standard checkout layout and
+#: builds into it -- an operator who has redirected ``FRONTEND_DIST`` elsewhere
+#: is doing something bespoke the launcher does not try to guess (see
+#: ``ensure_frontend_built``).
+FRONTEND_DIR = REPO_ROOT / "frontend"
+FRONTEND_SRC = FRONTEND_DIR / "src"
+FRONTEND_DIST = FRONTEND_DIR / "dist"
+FRONTEND_DIST_INDEX = FRONTEND_DIST / "index.html"
+FRONTEND_NODE_MODULES = FRONTEND_DIR / "node_modules"
 
 #: How long to wait for each service to come up before giving up and reporting.
 REDIS_BOOT_TIMEOUT_S = 20
@@ -176,6 +198,174 @@ def ensure_redis(host: str, port: int, procs: list[subprocess.Popen]) -> bool:
         time.sleep(0.3)
 
     _say(f"Redis did not start listening within {REDIS_BOOT_TIMEOUT_S}s.")
+    return False
+
+
+# --------------------------------------------------------------------------- #
+# Frontend build -- keep the served UI in step with the source
+# --------------------------------------------------------------------------- #
+
+
+def _find_npm() -> str | None:
+    """The npm command to use, or ``None`` if Node/npm is not on PATH.
+
+    ``npm`` on Windows is ``npm.cmd``; ``shutil.which`` finds either. Returns the
+    resolved path so the ``subprocess`` call does not depend on shell resolution
+    (``shell=False`` cannot find a bare ``npm`` on Windows without the ``.cmd``).
+    """
+    import shutil
+
+    for candidate in ("npm.cmd", "npm"):
+        found = shutil.which(candidate)
+        if found:
+            return found
+    return None
+
+
+def _latest_mtime(root: Path) -> float:
+    """The newest modification time under ``root``, or ``0.0`` if it is absent.
+
+    Walks every file so a change anywhere in the source tree -- a new component,
+    an edited stylesheet -- counts. ``node_modules`` never appears under ``src``,
+    so there is nothing large to skip here.
+    """
+    latest = 0.0
+    if not root.exists():
+        return latest
+    for path in root.rglob("*"):
+        try:
+            if path.is_file():
+                latest = max(latest, path.stat().st_mtime)
+        except OSError:
+            continue
+    return latest
+
+
+def _frontend_needs_build() -> bool:
+    """Whether the built UI is missing or older than the source that feeds it.
+
+    ``true`` when there is no ``dist/index.html`` at all, or when anything under
+    ``src`` (or the two build-config files that change output without touching
+    ``src``) is newer than that built ``index.html``. This is what makes an edit
+    to a component show up on the next launch without forcing a full rebuild --
+    which costs seconds -- on every launch that changed nothing.
+    """
+    if not FRONTEND_DIST_INDEX.is_file():
+        return True
+    built_at = FRONTEND_DIST_INDEX.stat().st_mtime
+    newest_source = _latest_mtime(FRONTEND_SRC)
+    # `index.html` and `vite.config.ts` shape the output but live outside `src`.
+    for config in (FRONTEND_DIR / "index.html", FRONTEND_DIR / "vite.config.ts"):
+        if config.is_file():
+            newest_source = max(newest_source, config.stat().st_mtime)
+    return newest_source > built_at
+
+
+def ensure_frontend_built(settings: Any) -> bool:
+    """Build the review UI when the source is newer than the served bundle.
+
+    **Only relevant when ``SERVE_SPA=true``.** That is the one configuration in
+    which the API serves the built UI from ``frontend/dist`` (see
+    ``receipts.asgi``); an API-only deployment (``SERVE_SPA=false``) has no UI to
+    build and this returns immediately. It also steps aside when ``FRONTEND_DIST``
+    has been pointed somewhere other than the standard ``frontend/dist`` -- that
+    is a bespoke deployment choice, and rebuilding the checkout's ``dist`` would
+    not be what such an operator asked for.
+
+    When a build is needed it runs ``vite build`` (through the app's own
+    ``tsc -b tsconfig.app.json`` first, so a real UI type error is caught) rather
+    than ``npm run build``. The difference is deliberate: ``npm run build`` type-
+    checks the whole project including the test and e2e sources, and a type error
+    that lives only in a test must not stop the UI a user is waiting for from
+    building. The app project is what ships, and it is what is verified here.
+
+    Failure handling mirrors ``ensure_redis`` and ``ensure_account``: with
+    ``SERVE_SPA=true`` the API refuses to boot without a built ``index.html``, so
+    a build that cannot happen is a blocker, reported plainly with the two ways
+    out (install Node, or set ``SERVE_SPA=false``) -- **unless a previous build
+    already exists**, in which case a failed rebuild is a warning and the app
+    comes up on the last good bundle rather than refusing to start over a change
+    the user may not even have made.
+    """
+    if not settings.serve_spa:
+        _say("SERVE_SPA is false; the UI is not served from here, so no build is needed.")
+        return True
+
+    # An operator who redirected FRONTEND_DIST is running something custom; do
+    # not build the checkout's dist under them. The API's own boot check still
+    # guards whatever they pointed at.
+    configured_dist = Path(settings.frontend_dist)
+    if configured_dist.resolve() != FRONTEND_DIST.resolve():
+        _say(
+            f"FRONTEND_DIST points at {settings.frontend_dist!r}, not the standard "
+            "frontend/dist; leaving the UI build to you."
+        )
+        return True
+
+    if not _frontend_needs_build():
+        _say("The review UI is already built and up to date.")
+        return True
+
+    have_existing = FRONTEND_DIST_INDEX.is_file()
+    npm = _find_npm()
+    if npm is None:
+        if have_existing:
+            _say(
+                "WARNING: the UI source changed but Node/npm is not installed, so "
+                "it cannot be rebuilt. Serving the previous build. Install Node "
+                "(https://nodejs.org) to pick up UI changes."
+            )
+            return True
+        _say(
+            "The review UI has not been built and Node/npm is not installed to "
+            "build it. Install Node from https://nodejs.org and start again, or "
+            "set SERVE_SPA=false in .env to run the API without the UI."
+        )
+        return False
+
+    # A missing node_modules means dependencies were never installed here -- do
+    # it once. `npm install` is a no-op when they are already present and current.
+    if not FRONTEND_NODE_MODULES.is_dir():
+        _say("Installing the UI's dependencies (one time; needs internet) ...")
+        if subprocess.run([npm, "install"], cwd=str(FRONTEND_DIR)).returncode != 0:
+            return _frontend_build_failed(
+                have_existing, "the UI dependencies could not be installed"
+            )
+
+    _say("Building the review UI (a few seconds) ...")
+    # `npm exec --` runs the project-local tsc/vite without depending on a global
+    # install. The app project is type-checked; the test/e2e projects (which may
+    # carry unrelated type errors) are deliberately not part of the shipped UI.
+    typecheck = subprocess.run(
+        [npm, "exec", "--", "tsc", "-b", "tsconfig.app.json"], cwd=str(FRONTEND_DIR)
+    )
+    if typecheck.returncode != 0:
+        return _frontend_build_failed(have_existing, "the UI failed to type-check")
+
+    build = subprocess.run([npm, "exec", "--", "vite", "build"], cwd=str(FRONTEND_DIR))
+    if build.returncode != 0:
+        return _frontend_build_failed(have_existing, "the UI failed to build")
+
+    _say("The review UI is built.")
+    return True
+
+
+def _frontend_build_failed(have_existing: bool, reason: str) -> bool:
+    """Report a failed build and decide whether it is a blocker.
+
+    A failed rebuild when a previous build exists is a warning -- the app comes
+    up on the last good bundle. With nothing to fall back on it is a blocker,
+    because ``SERVE_SPA=true`` makes an unbuilt UI a refusal to boot anyway; here
+    it is at least explained.
+    """
+    if have_existing:
+        _say(f"WARNING: {reason}. Serving the previous build; see the output above.")
+        return True
+    _say(
+        f"Cannot start: {reason}, and there is no earlier build to fall back on. "
+        "See the output above for the cause, or set SERVE_SPA=false in .env to "
+        "run the API without the UI."
+    )
     return False
 
 
@@ -523,11 +713,21 @@ def main() -> int:
         shutdown(procs)
         return 1
 
-    # 4. Worker, then API.
+    # 4. Build the review UI if its source changed since the last build. Runs
+    #    before the API, because with SERVE_SPA=true the API refuses to boot
+    #    without a built index.html -- building here turns "the .exe shows the
+    #    old UI" and "the API won't start" into one handled step. A no-op when
+    #    SERVE_SPA=false or when the build is already current.
+    if not ensure_frontend_built(settings):
+        _say("Cannot continue without the review UI. Nothing was left running.")
+        shutdown(procs)
+        return 1
+
+    # 5. Worker, then API.
     start_worker(procs)
     api = start_api(procs)
 
-    # 5. Wait for health, then open the browser at the UI.
+    # 6. Wait for health, then open the browser at the UI.
     if not wait_for_api(api):
         _say("The app did not come up. Stopping everything.")
         return 1
@@ -542,7 +742,7 @@ def main() -> int:
     _say("Everything is running. Leave this window open while you work.")
     _say("Close it (or press Ctrl-C) to stop the app.")
 
-    # 6. Supervise: stay alive until a child dies or the user stops us.
+    # 7. Supervise: stay alive until a child dies or the user stops us.
     try:
         while True:
             for proc in list(procs):

@@ -1,4 +1,5 @@
 import type { ConfidenceReason, Money } from '../api/types'
+import { accuracyPercent } from '../ui/accuracy'
 import { Value } from '../ui/Value'
 import styles from './ConfidenceRail.module.css'
 
@@ -139,21 +140,26 @@ export function ConfidenceRail({ confidence, reasons }: ConfidenceRailProps) {
   const band = bandFor(confidence)
   return (
     <aside className={styles.rail}>
-      <h2 className={styles.heading}>Confidence</h2>
-      {/* The score as the API sent it. An em dash, not "0" or "0.00": a score
-          that was never recorded is not a recorded zero (`money()` keeps that
-          distinction on the way out -- see `money()` in review/serializers.py).
+      <h2 className={styles.heading}>Accuracy</h2>
+      {/* The stored score shown as a percentage. An em dash, not "0%" or "0.00":
+          a score that was never recorded is not a recorded zero (`money()` keeps
+          that distinction on the way out -- see `money()` in
+          review/serializers.py).
 
           Through `Value` rather than through a bare `{confidence ?? '—'}`, which
           is what stood here and was an uncoordinated second copy of half of
           design §4's rule: the same glyph, but with no accessible name, no
           `--color-null` and no hairline border, so a screen reader heard "em
           dash" or nothing at all and a sighted scan had nothing to find. ADR-0027
-          names this line as the one place the rule was duplicated. `confidence`
-          is `Money | null`, and `Money` is `string & {...}`, so it is assignable
-          to `Value`'s `string | null` without a cast. */}
+          names this line as the one place the rule was duplicated. Non-null
+          scores go through `accuracyPercent`, which moves the decimal point as
+          text rather than using a float. */}
       <p className={styles.score}>
-        <Value value={confidence} kind="money" />
+        {confidence === null ? (
+          <Value value={confidence} kind="money" />
+        ) : (
+          accuracyPercent(confidence)
+        )}
       </p>
       {/* §5.3's band. **Never colour alone** -- the tool's Colour Only rule is
           High severity and red/amber/green is the exact failure case it names,
@@ -180,7 +186,7 @@ export function ConfidenceRail({ confidence, reasons }: ConfidenceRailProps) {
       {reasons === null ? (
         <p className={styles.note}>Breakdown not recorded for this receipt.</p>
       ) : reasons.length === 0 ? (
-        <p className={styles.note}>Nothing lowered the score.</p>
+        <p className={styles.note}>Nothing lowered the accuracy score.</p>
       ) : (
         <ul className={styles.list}>
           {reasons.map((entry, index) => (

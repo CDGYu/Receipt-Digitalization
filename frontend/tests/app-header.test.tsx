@@ -1,13 +1,22 @@
 import { screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-/** Is the sign-out control actually wired into the tree `main.tsx` renders?
+/** Is the settings menu -- and the sign-out control it now nests -- actually
+ * wired into the tree `main.tsx` renders?
  *
- * `sign-out.test.tsx` proves the component works; it says nothing about whether
- * anything renders it. Measured before this file existed: deleting
- * `<header><SignOutControl /></header>` and its import from `main.tsx` left the
- * whole suite green and `tsc -b` at exit 0 -- the milestone's first named
- * deliverable could vanish without a word.
+ * `sign-out.test.tsx` proves the sign-out component works and
+ * `settings-menu.test.tsx` proves the menu opens; neither says anything about
+ * whether anything renders them in the header. Measured before this file
+ * existed: deleting `<header><SignOutControl /></header>` and its import from
+ * `main.tsx` left the whole suite green and `tsc -b` at exit 0 -- the
+ * milestone's first named deliverable could vanish without a word.
+ *
+ * Sign out moved inside the settings menu (a `Settings` disclosure button whose
+ * panel holds the mode picker and the sign-out control), so this file now
+ * asserts the `Settings` button is in the header and that opening it reveals
+ * `Sign out`. The guarantee is unchanged -- ending the session is reachable from
+ * the header -- only the path to it is.
  *
  * `app-root.test.tsx` cannot see it: that file mocks the same screen with a
  * component that throws, so the boundary replaces the entire tree and the header
@@ -54,23 +63,31 @@ afterEach(() => {
 })
 
 describe('the app header', () => {
-  it('renders the sign-out control above the landing screen when signed in', async () => {
+  it('renders the settings menu above the landing screen when signed in, and sign out lives in it', async () => {
     // jsdom serves "/", which is the not-/app/login case.
     await import('../src/main')
 
-    expect(await screen.findByRole('button', { name: 'Sign out' })).toBeDefined()
+    // The Settings button is in the header...
+    const settings = await screen.findByRole('button', { name: 'Settings' })
     // ...above the screen it belongs to, not instead of it.
     expect(screen.getByText('the home screen')).toBeDefined()
+
+    // Sign out is not a bare header control any more: it is reached by opening
+    // the menu. Closed, it is absent; opened, it is there.
+    expect(screen.queryByRole('button', { name: 'Sign out' })).toBeNull()
+    await userEvent.click(settings)
+    expect(await screen.findByRole('button', { name: 'Sign out' })).toBeDefined()
   })
 
-  it('renders no sign-out control on the login page', async () => {
+  it('renders no settings menu or sign-out control on the login page', async () => {
     window.history.pushState({}, '', '/app/login')
 
     await import('../src/main')
 
     // Positively: the login page is what rendered. Without this the absence
-    // assertion below would also pass on an empty document.
+    // assertions below would also pass on an empty document.
     expect(await screen.findByRole('heading', { name: 'Sign in' })).toBeDefined()
+    expect(screen.queryByRole('button', { name: 'Settings' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Sign out' })).toBeNull()
   })
 })

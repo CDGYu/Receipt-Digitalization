@@ -39,6 +39,7 @@ from .extract.clients.base import VLMClient
 from .extract.clients.factory import make_extract_ladder
 from .ingest.ingest import ReceiptJob
 from .ingest.storage import LocalStorage, S3Storage, StorageBackend
+from .persist.app_settings import settings_for_run
 from .persist.session import make_engine, make_session_factory
 from .pipeline import ProcessResult, ProgressSink, process_receipt
 from .validate.context import ValidationContext
@@ -254,6 +255,14 @@ def build_deps(settings: Settings | None = None) -> WorkerDeps:
         )
 
     engine = make_engine(settings.database_url)
+    session_factory = make_session_factory(engine)
+    # The operator's saved processing mode (local / cloud / hybrid) is folded
+    # into the settings before the ladder is built, so the choice reaches the
+    # rungs through the one construction site rather than a second path. Reads
+    # the DB once here (per worker), falls back to the pre-feature default if
+    # the row or table is not there. See
+    # `receipts.persist.app_settings.settings_for_run`.
+    settings = settings_for_run(settings, session_factory)
     # **All three rungs are built here now, not just in the eval path.** The
     # builder had no code caller anywhere -- it was named in one `pipeline.py`
     # docstring and nothing else -- so `VLM_MODEL_EXTRACT_FALLBACK` was a setting
@@ -281,7 +290,7 @@ def build_deps(settings: Settings | None = None) -> WorkerDeps:
         triage_client=triage,
         triage_fallback_client=triage_fallback,
         storage=storage,
-        session_factory=make_session_factory(engine),
+        session_factory=session_factory,
         settings=settings,
         # A real worker reached this process through Redis, so the same
         # connection is available to narrate what it is doing. Bound to these
