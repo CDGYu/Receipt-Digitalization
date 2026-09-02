@@ -207,8 +207,77 @@ def test_settings_for_run_applies_an_override(session_factory, settings):
 
 
 # --------------------------------------------------------------------------- #
+# The model fields, and how they compose with the processing mode
+# --------------------------------------------------------------------------- #
+
+
+def test_a_model_override_reaches_the_run(session_factory, settings):
+    """Switching the reading model in the UI is what the next run's ladder is
+    built from -- the whole point of making it editable."""
+    with session_factory() as session:
+        set_override(session, "vlm_model_extract", "granite3.2-vision:9b")
+        set_override(session, "vlm_model_triage", "granite3.2-vision:9b")
+        session.commit()
+    tuned = settings_for_run(settings, session_factory)
+    assert tuned.vlm_model_extract == "granite3.2-vision:9b"
+    assert tuned.vlm_model_triage == "granite3.2-vision:9b"
+
+
+def test_a_blank_model_clears_back_to_the_configured_value(session_factory, settings):
+    """A model field is text: blank means unset, which falls back to the .env
+    value rather than an empty model id that would build a broken rung."""
+    base = settings.model_copy(update={"vlm_model_extract": "configured-local"})
+    with session_factory() as session:
+        set_override(session, "vlm_model_extract", "")
+        session.commit()
+    with session_factory() as session:
+        effective = apply_overrides(base, get_overrides(session))
+    # The blank override is None, so the base value stands.
+    assert effective.vlm_model_extract == "configured-local"
+
+
+def test_model_overrides_compose_with_each_mode(settings):
+    """The override sets *which* models exist; the mode decides which run. The two
+    controls are complementary, and the overlay order (override then mode) is what
+    makes that true."""
+    from receipts.persist.app_settings import apply_processing_mode
+
+    overridden = apply_overrides(
+        settings.model_copy(
+            update={
+                "vlm_model_extract": "local-x",
+                "vlm_model_extract_fallback": "cloud-x",
+                "vlm_model_triage": "local-x",
+                "vlm_model_triage_fallback": "cloud-x",
+            }
+        ),
+        {},
+    )
+    hybrid = apply_processing_mode(overridden, "hybrid")
+    assert (hybrid.vlm_model_extract, hybrid.vlm_model_extract_fallback) == ("local-x", "cloud-x")
+
+    local = apply_processing_mode(overridden, "local")
+    assert (local.vlm_model_extract, local.vlm_model_extract_fallback) == ("local-x", None)
+
+    cloud = apply_processing_mode(overridden, "cloud")
+    assert (cloud.vlm_model_extract, cloud.vlm_model_extract_fallback) == ("cloud-x", None)
+
+
+# --------------------------------------------------------------------------- #
 # The routes
 # --------------------------------------------------------------------------- #
+
+
+def test_an_admin_changes_a_model_through_the_route(admin_client):
+    write = admin_client.patch(
+        "/settings", json={"overrides": {"vlm_model_extract": "granite3.2-vision:9b"}}
+    )
+    assert write.status_code == 200
+    row = next(r for r in write.json()["settings"] if r["field"] == "vlm_model_extract")
+    assert row["value"] == "granite3.2-vision:9b"
+    assert row["source"] == "override"
+    assert row["kind"] == "model"
+    assert row["group"] == "Models (advanced)"
 
 
 def test_a_reviewer_reads_settings_but_cannot_edit(reviewer_client):

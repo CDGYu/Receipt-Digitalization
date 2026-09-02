@@ -21,9 +21,13 @@ const REVIEWER: Identity = { username: 'rob', role: 'reviewer' }
 
 const MODES = ['hybrid', 'local', 'cloud']
 
-/** The two editable settings the tests exercise, in the server's row shape.
- *  A small fixed set keeps the assertions legible; the real list is longer. */
-function settingsRows(threshold: string, thresholdSource: 'default' | 'override') {
+/** The editable settings the tests exercise, in the server's row shape. A small
+ *  fixed set keeps the assertions legible; the real list is longer. */
+function settingsRows(
+  threshold: string,
+  thresholdSource: 'default' | 'override',
+  model: string | null = null,
+) {
   return [
     {
       field: 'auto_approve_threshold',
@@ -49,6 +53,18 @@ function settingsRows(threshold: string, thresholdSource: 'default' | 'override'
       default: false,
       source: 'default',
     },
+    {
+      field: 'vlm_model_extract',
+      label: 'Reading model (this computer)',
+      help: 'The model this computer uses to read receipts. Must match a served model.',
+      kind: 'model',
+      group: 'Models (advanced)',
+      minimum: null,
+      maximum: null,
+      value: model,
+      default: 'granite3.2-vision:2b',
+      source: model === null ? 'default' : 'override',
+    },
   ]
 }
 
@@ -65,6 +81,7 @@ function stubApi(options?: {
   const editable = options?.editable ?? true
   let threshold = options?.threshold ?? '0.95'
   let thresholdSource: 'default' | 'override' = 'default'
+  let model: string | null = null
 
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input)
@@ -81,7 +98,10 @@ function stubApi(options?: {
 
     if (url.endsWith('/settings')) {
       if (method === 'GET') {
-        return jsonResponse(200, { settings: settingsRows(threshold, thresholdSource), editable })
+        return jsonResponse(200, {
+          settings: settingsRows(threshold, thresholdSource, model),
+          editable,
+        })
       }
       const body = JSON.parse(String(init!.body)) as {
         overrides: Record<string, string | null>
@@ -97,7 +117,14 @@ function stubApi(options?: {
         threshold = String(next)
         thresholdSource = 'override'
       }
-      return jsonResponse(200, { settings: settingsRows(threshold, thresholdSource), editable })
+      if ('vlm_model_extract' in body.overrides) {
+        const m = body.overrides.vlm_model_extract
+        model = m === null || m === '' ? null : String(m)
+      }
+      return jsonResponse(200, {
+        settings: settingsRows(threshold, thresholdSource, model),
+        editable,
+      })
     }
 
     return jsonResponse(404, { error: { message: `unexpected ${url}` } })
@@ -228,6 +255,30 @@ describe('the system settings editor', () => {
     expect(await screen.findByText(/must be at most 1/)).toBeTruthy()
     // The rejected edit is still in the box for the user to correct.
     expect(((await screen.findByLabelText('Auto-approve confidence')) as HTMLInputElement).value).toBe('2')
+  })
+
+  it('lets an admin change the reading model', async () => {
+    const fetchMock = stubApi()
+    render(<SettingsMenu identity={ADMIN} />)
+    await openMenu()
+
+    const input = await screen.findByLabelText('Reading model (this computer)')
+    // Its placeholder shows the configured default so the operator sees what is
+    // in force before typing.
+    expect((input as HTMLInputElement).placeholder).toBe('granite3.2-vision:2b')
+
+    await userEvent.type(input, 'granite3.2-vision:9b')
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    const patch = fetchMock.mock.calls.find(
+      ([url, init]) => String(url).endsWith('/settings') && (init as RequestInit)?.method === 'PATCH',
+    )
+    expect(JSON.parse(String((patch![1] as RequestInit).body))).toEqual({
+      overrides: { vlm_model_extract: 'granite3.2-vision:9b' },
+    })
+    expect(
+      ((await screen.findByLabelText('Reading model (this computer)')) as HTMLInputElement).value,
+    ).toBe('granite3.2-vision:9b')
   })
 
   it('shows a reviewer the settings read-only with no save button', async () => {

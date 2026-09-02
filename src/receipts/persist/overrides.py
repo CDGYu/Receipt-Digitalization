@@ -95,7 +95,7 @@ class EditableSetting:
     field: str
     label: str
     help: str
-    kind: str  # "decimal" | "int" | "bool" | "text"
+    kind: str  # "decimal" | "int" | "bool" | "text" | "model"
     group: str
     minimum: str | None = None
     maximum: str | None = None
@@ -211,6 +211,65 @@ EDITABLE: tuple[EditableSetting, ...] = (
         group="Accuracy",
         minimum="0",
     ),
+    # The four model ids. Editable because switching to a newly pulled Ollama
+    # model should not need a developer or a restart -- the worker rebuilds its
+    # settings per receipt, so a change here is live on the next one. They sit in
+    # their own "Models" group with a warning because they are the highest-impact
+    # knobs in the file: a name that does not match a model the provider actually
+    # serves makes every receipt fail extraction and land in review until it is
+    # corrected, where a wrong threshold merely shifts the approval rate. The
+    # provider validates the name, not this layer -- there is no way from here to
+    # know what Ollama has pulled -- so the help points a reader at `ollama list`.
+    #
+    # "Local" and "online" match the processing-mode picker's language rather than
+    # "primary/fallback": the mode overlay runs AFTER these overrides, so it reads
+    # whatever model id is set here and then decides which rung(s) run. The two
+    # controls are complementary -- these say *which* models, the mode says which
+    # of them are used.
+    EditableSetting(
+        field="vlm_model_extract",
+        label="Reading model (this computer)",
+        help=(
+            "The model this computer uses to read receipts. Must exactly match a "
+            "model the provider has available — for local Ollama, run “ollama "
+            "list” to see the names. A wrong name makes every receipt fail and go "
+            "to review."
+        ),
+        kind="model",
+        group="Models (advanced)",
+    ),
+    EditableSetting(
+        field="vlm_model_triage",
+        label="Sorting model (this computer)",
+        help=(
+            "The model this computer uses to first look at a receipt and decide "
+            "how to handle it. Same rules as the reading model above; leave blank "
+            "to reuse the reading model for this step too."
+        ),
+        kind="model",
+        group="Models (advanced)",
+    ),
+    EditableSetting(
+        field="vlm_model_extract_fallback",
+        label="Reading model (online service)",
+        help=(
+            "The online model used to read a receipt when this computer is too "
+            "slow or cannot read it (Hybrid mode), or for every receipt (Online "
+            "mode). Leave blank if there is no online service set up."
+        ),
+        kind="model",
+        group="Models (advanced)",
+    ),
+    EditableSetting(
+        field="vlm_model_triage_fallback",
+        label="Sorting model (online service)",
+        help=(
+            "The online model used to sort a receipt when this computer is too "
+            "slow (Hybrid mode). Leave blank to keep sorting on this computer."
+        ),
+        kind="model",
+        group="Models (advanced)",
+    ),
 )
 
 #: Field name -> its :class:`EditableSetting`, for O(1) allow-list checks.
@@ -239,9 +298,14 @@ def coerce_value(field: str, raw: str) -> Any:
         raise ValueError(f"{field!r} is not an editable setting")
 
     text = raw.strip()
-    if item.kind == "text":
-        # A blank text field means "unset" -- the same as never having set it,
-        # which turns the associated check off. Stored as empty; applied as None.
+    if item.kind in ("text", "model"):
+        # A blank field means "unset" -- the same as never having set it, which
+        # turns the associated check off (text) or falls back to the .env value
+        # (model). Stored as empty; applied as None. `model` coerces exactly like
+        # `text` -- a model id is a plain string the provider validates, not this
+        # layer -- and is only a distinct kind so the UI can group and warn about
+        # it (a wrong name makes every receipt fail extraction, unlike a wrong
+        # threshold).
         return text or None
     if item.kind == "bool":
         lowered = text.lower()
@@ -396,12 +460,23 @@ def apply_overrides(settings: Settings, overrides: dict[str, str]) -> Settings:
         return settings
     update: dict[str, Any] = {}
     for field, raw in overrides.items():
-        if field not in _BY_FIELD:
+        item = _BY_FIELD.get(field)
+        if item is None:
             continue
         try:
-            update[field] = coerce_value(field, raw)
+            value = coerce_value(field, raw)
         except ValueError:
             continue
+        # A blank `model` override must NOT overwrite the configured model with
+        # `None` -- that would build a rung with no model and fail every receipt.
+        # Blank means "unset the override", i.e. fall back to the .env value, so
+        # it is skipped here. (Through the route a blank already deletes the row;
+        # this guards a blank string that reaches the overlay by any path.) A
+        # blank `text` field is different: `None` there is the intended "off",
+        # so it still applies.
+        if item.kind == "model" and value is None:
+            continue
+        update[field] = value
     if not update:
         return settings
     return settings.model_copy(update=update)

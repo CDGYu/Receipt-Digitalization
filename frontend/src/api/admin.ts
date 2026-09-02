@@ -243,7 +243,7 @@ export interface EditableSetting {
   field: string
   label: string
   help: string
-  kind: 'decimal' | 'int' | 'bool' | 'text'
+  kind: 'decimal' | 'int' | 'bool' | 'text' | 'model'
   group: string
   minimum: string | null
   maximum: string | null
