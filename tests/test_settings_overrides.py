@@ -111,9 +111,9 @@ def test_coerce_maps_strings_to_the_field_type():
     assert coerce_value("consistency_enabled", "true") is True
     assert coerce_value("consistency_enabled", "off") is False
     assert coerce_value("consistency_runs", "5") == 5
-    # A blank text field means "unset".
-    assert coerce_value("expected_buyer_name", "") is None
-    assert coerce_value("expected_buyer_name", "Acme") == "Acme"
+    # A blank model/text field means "unset".
+    assert coerce_value("vlm_model_extract", "") is None
+    assert coerce_value("vlm_model_extract", "granite3.2-vision:9b") == "granite3.2-vision:9b"
 
 
 def test_a_decimal_override_never_becomes_a_float(session_factory, settings):
@@ -165,12 +165,12 @@ def test_clear_reverts_to_default(session_factory, settings):
 
 def test_list_effective_marks_source_and_default(session_factory, settings):
     with session_factory() as session:
-        set_override(session, "expected_buyer_name", "Acme Inc", updated_by="bob")
+        set_override(session, "vlm_model_extract", "granite3.2-vision:9b", updated_by="bob")
         session.commit()
     with session_factory() as session:
         rows = {row["field"]: row for row in list_effective(session, settings)}
-    assert rows["expected_buyer_name"]["value"] == "Acme Inc"
-    assert rows["expected_buyer_name"]["source"] == "override"
+    assert rows["vlm_model_extract"]["value"] == "granite3.2-vision:9b"
+    assert rows["vlm_model_extract"]["source"] == "override"
     # A threshold nobody set is the default, reported as a string (ADR-0001).
     assert rows["auto_approve_threshold"]["source"] == "default"
     assert rows["auto_approve_threshold"]["value"] == "0.95"
@@ -199,11 +199,11 @@ def test_settings_for_run_applies_an_override(session_factory, settings):
     run's settings carry."""
     with session_factory() as session:
         set_override(session, "auto_approve_threshold", "0.90")
-        set_override(session, "expected_buyer_name", "Acme Inc")
+        set_override(session, "consistency_enabled", "true")
         session.commit()
     tuned = settings_for_run(settings, session_factory)
     assert tuned.auto_approve_threshold == Decimal("0.90")
-    assert tuned.expected_buyer_name == "Acme Inc"
+    assert tuned.consistency_enabled is True
 
 
 # --------------------------------------------------------------------------- #
@@ -339,7 +339,7 @@ def test_a_patch_is_atomic_when_one_field_is_bad(admin_client):
         "/settings",
         json={
             "overrides": {
-                "expected_buyer_name": "Acme Inc",  # valid
+                "vlm_model_extract": "granite3.2-vision:9b",  # valid
                 "auto_approve_threshold": "2.0",  # invalid
             }
         },
@@ -347,15 +347,19 @@ def test_a_patch_is_atomic_when_one_field_is_bad(admin_client):
     assert response.status_code == 400
     rows = {r["field"]: r for r in admin_client.get("/settings").json()["settings"]}
     # The valid field did NOT stick -- the bad one rolled the whole thing back.
-    assert rows["expected_buyer_name"]["source"] == "default"
+    assert rows["vlm_model_extract"]["source"] == "default"
 
 
 def test_clearing_via_the_route_reverts_to_default(admin_client):
-    admin_client.patch("/settings", json={"overrides": {"expected_buyer_name": "Acme Inc"}})
-    admin_client.patch("/settings", json={"overrides": {"expected_buyer_name": None}})
+    # `vlm_model_triage_fallback` has no configured value in the test settings, so
+    # its default is None -- which makes the cleared value observable.
+    admin_client.patch(
+        "/settings", json={"overrides": {"vlm_model_triage_fallback": "gemma4:cloud"}}
+    )
+    admin_client.patch("/settings", json={"overrides": {"vlm_model_triage_fallback": None}})
     rows = {r["field"]: r for r in admin_client.get("/settings").json()["settings"]}
-    assert rows["expected_buyer_name"]["source"] == "default"
-    assert rows["expected_buyer_name"]["value"] is None
+    assert rows["vlm_model_triage_fallback"]["source"] == "default"
+    assert rows["vlm_model_triage_fallback"]["value"] is None
 
 
 def test_reading_settings_requires_a_session(app):

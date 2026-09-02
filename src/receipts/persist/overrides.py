@@ -134,50 +134,6 @@ EDITABLE: tuple[EditableSetting, ...] = (
         maximum="1",
     ),
     EditableSetting(
-        field="expected_buyer_name",
-        label="Your business name",
-        help=(
-            "The name your receipts should be addressed to. When set, the system "
-            "flags receipts whose “sold to” name does not match. Leave blank to "
-            "turn that check off."
-        ),
-        kind="text",
-        group="Your business",
-    ),
-    EditableSetting(
-        field="expected_buyer_tax_id",
-        label="Your tax ID",
-        help=(
-            "Your business's tax identification number, checked against the "
-            "receipt the same way as the name above. Leave blank to turn the "
-            "check off."
-        ),
-        kind="text",
-        group="Your business",
-    ),
-    EditableSetting(
-        field="default_currency",
-        label="Default currency",
-        help=(
-            "The currency to assume when a receipt does not state one (e.g. PHP, "
-            "USD). Leave blank to make no assumption."
-        ),
-        kind="text",
-        group="Your business",
-    ),
-    EditableSetting(
-        field="max_cost_usd_per_receipt",
-        label="Spending limit per receipt (USD)",
-        help=(
-            "The most the online service may spend reading a single receipt before "
-            "the system stops and sends it for review instead. Set to 0 to remove "
-            "the limit. Only matters when the online service is used."
-        ),
-        kind="decimal",
-        group="Cost & speed",
-        minimum="0",
-    ),
-    EditableSetting(
         field="consistency_enabled",
         label="Double-check handwritten receipts",
         help=(
